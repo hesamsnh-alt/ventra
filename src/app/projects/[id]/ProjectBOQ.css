@@ -1,0 +1,182 @@
+.boq-panel {
+  margin-top: 25px;
+  padding: 24px;
+
+  background: #101010;
+  border: 1px solid #242424;
+  border-radius: 22px;
+}
+
+.boq-header {
+  margin-bottom: 22px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.boq-header span {
+  color: #ffd400;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.boq-header h2 {
+  margin: 7px 0 0;
+
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.boq-header button {
+  min-height: 44px;
+  padding: 0 17px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  color: #050505;
+  background: #ffd400;
+
+  border: none;
+  border-radius: 12px;
+
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.boq-table-wrap {
+  overflow-x: auto;
+
+  border: 1px solid #252525;
+  border-radius: 16px;
+}
+
+.boq-table {
+  width: 100%;
+  min-width: 900px;
+
+  border-collapse: collapse;
+}
+
+.boq-table th,
+.boq-table td {
+  padding: 14px;
+
+  text-align: left;
+
+  border-bottom: 1px solid #242424;
+}
+
+.boq-table th {
+  color: #898989;
+  background: #151515;
+
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.boq-table td {
+  color: #ffffff;
+  background: #101010;
+}
+
+.boq-table tr:last-child td {
+  border-bottom: none;
+}
+
+.boq-table input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+
+  color: #ffffff;
+  background: #151515;
+
+  border: 1px solid #292929;
+  border-radius: 10px;
+
+  font-family: inherit;
+  outline: none;
+}
+
+.boq-table input:focus {
+  border-color: #ffd400;
+
+  box-shadow: 0 0 0 3px rgba(255, 212, 0, 0.08);
+}
+
+.boq-table strong {
+  color: #ffd400;
+  white-space: nowrap;
+}
+
+.boq-delete {
+  width: 36px;
+  height: 36px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #848484;
+  background: transparent;
+
+  border: 1px solid #2d2d2d;
+  border-radius: 10px;
+
+  cursor: pointer;
+}
+
+.boq-delete:hover {
+  color: #ff7777;
+  background: rgba(255, 85, 85, 0.08);
+  border-color: rgba(255, 85, 85, 0.45);
+}
+
+.boq-total {
+  margin-top: 18px;
+  padding: 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  background: #151515;
+
+  border: 1px solid rgba(255, 212, 0, 0.24);
+  border-radius: 16px;
+}
+
+.boq-total span {
+  color: #9a9a9a;
+  font-size: 13px;
+}
+
+.boq-total strong {
+  color: #ffd400;
+  font-size: 26px;
+}
+
+@media (max-width: 700px) {
+  .boq-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .boq-header button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .boq-total {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

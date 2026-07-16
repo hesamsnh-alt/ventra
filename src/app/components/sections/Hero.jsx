@@ -1,56 +1,47 @@
+import Link from "next/link";
+import { ArrowUpRight, Play } from "lucide-react";
 import "./Hero.css";
 
 export default function Hero() {
   return (
-    <section className="hero" id="home">
+    <section className="hero">
       <div className="hero-overlay" />
 
-      <div className="hero-container">
-        <div className="hero-content">
-          <div className="hero-badge">
-            <span className="hero-badge-dot" />
-            AI Construction Intelligence Platform
-          </div>
+      <div className="hero-content">
+        <p className="hero-eyebrow">
+          AI Construction Intelligence Platform
+        </p>
 
-          <h1 className="hero-title">
-  From Drawings to
-  <span>Construction Intelligence.</span>
-</h1>
+        <h1 className="hero-title">
+          From Drawings to
+          <span>Construction Intelligence.</span>
+        </h1>
 
-          <p className="hero-description">
-            Analyze drawings, generate BOQs, estimate UAE construction costs,
-            create professional quotations and intelligently manage every stage
-            of your project.
-          </p>
+        <p className="hero-description">
+          Analyze drawings, generate BOQs, estimate UAE construction costs,
+          create professional quotations and manage every stage of your project
+          from one intelligent workspace.
+        </p>
 
-          <div className="hero-actions">
-            <a href="#project-overview" className="hero-button primary-button">
-              Start Free
-              <span className="button-arrow">→</span>
-            </a>
+        <div className="hero-actions">
+          <Link href="#upload" className="hero-primary-btn">
+            Start Free
+            <ArrowUpRight size={18} />
+          </Link>
 
-            <button type="button" className="hero-button secondary-button">
-              <span className="play-icon">▶</span>
-              Watch Demo
-            </button>
-          </div>
+          <button type="button" className="hero-secondary-btn">
+            <span className="hero-play-icon">
+              <Play size={15} fill="currentColor" />
+            </span>
 
-          <div className="hero-benefits">
-            <div>
-              <span>✓</span>
-              No installation
-            </div>
+            Watch Demo
+          </button>
+        </div>
 
-            <div>
-              <span>✓</span>
-              UAE cost intelligence
-            </div>
-
-            <div>
-              <span>✓</span>
-              Built for construction teams
-            </div>
-          </div>
+        <div className="hero-features">
+          <span>Plan analysis</span>
+          <span>UAE cost intelligence</span>
+          <span>BOQ and quotations</span>
         </div>
       </div>
     </section>

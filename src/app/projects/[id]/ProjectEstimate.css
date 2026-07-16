@@ -1,0 +1,123 @@
+.estimate-panel{
+
+margin-top:25px;
+
+padding:24px;
+
+background:#101010;
+
+border:1px solid #242424;
+
+border-radius:22px;
+
+}
+
+.estimate-header span{
+
+color:#FFD400;
+
+font-size:11px;
+
+font-weight:700;
+
+letter-spacing:.2em;
+
+}
+
+.estimate-header h2{
+
+margin-top:8px;
+
+color:white;
+
+}
+
+.estimate-grid{
+
+margin-top:25px;
+
+display:grid;
+
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+
+gap:18px;
+
+}
+
+.estimate-card{
+
+padding:18px;
+
+background:#151515;
+
+border:1px solid #252525;
+
+border-radius:16px;
+
+}
+
+.estimate-card label{
+
+display:block;
+
+margin-bottom:10px;
+
+color:#999;
+
+font-size:13px;
+
+text-transform:capitalize;
+
+}
+
+.estimate-card input{
+
+width:100%;
+
+height:45px;
+
+padding:0 12px;
+
+background:#0f0f0f;
+
+border:1px solid #333;
+
+border-radius:10px;
+
+color:white;
+
+}
+
+.estimate-total{
+
+margin-top:30px;
+
+padding:22px;
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:center;
+
+background:#151515;
+
+border:1px solid #FFD40055;
+
+border-radius:18px;
+
+}
+
+.estimate-total span{
+
+color:#999;
+
+}
+
+.estimate-total strong{
+
+font-size:28px;
+
+color:#FFD400;
+
+}

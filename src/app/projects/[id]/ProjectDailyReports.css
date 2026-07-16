@@ -1,0 +1,289 @@
+.daily-reports-panel {
+  margin-top: 25px;
+  padding: 24px;
+
+  background: #101010;
+  border: 1px solid #242424;
+  border-radius: 22px;
+}
+
+.daily-reports-header {
+  margin-bottom: 22px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.daily-reports-header span {
+  color: #ffd400;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+
+.daily-reports-header h2 {
+  margin: 7px 0 0;
+
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.daily-reports-header button {
+  min-height: 44px;
+  padding: 0 17px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  color: #050505;
+  background: #ffd400;
+
+  border: none;
+  border-radius: 12px;
+
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.daily-report-form {
+  margin-bottom: 24px;
+  padding: 22px;
+
+  background: #151515;
+  border: 1px solid #292929;
+  border-radius: 18px;
+}
+
+.daily-report-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.daily-report-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+
+  color: #d8d8d8;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-report-form input,
+.daily-report-form textarea {
+  width: 100%;
+  padding: 14px 15px;
+
+  color: #ffffff;
+  background: #0d0d0d;
+
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+
+  font-family: inherit;
+  outline: none;
+}
+
+.daily-report-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.daily-report-form input:focus,
+.daily-report-form textarea:focus {
+  border-color: #ffd400;
+
+  box-shadow: 0 0 0 3px rgba(255, 212, 0, 0.08);
+}
+
+.daily-report-full-field {
+  grid-column: 1 / -1;
+}
+
+.daily-report-form-actions {
+  margin-top: 18px;
+
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.daily-report-form-actions button {
+  min-height: 43px;
+  padding: 0 17px;
+
+  border-radius: 11px;
+
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.daily-report-cancel {
+  color: #ffffff;
+  background: transparent;
+  border: 1px solid #303030;
+}
+
+.daily-report-save {
+  color: #050505;
+  background: #ffd400;
+  border: 1px solid #ffd400;
+}
+
+.daily-report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.daily-report-card {
+  padding: 20px;
+
+  background: #151515;
+
+  border: 1px solid #262626;
+  border-radius: 18px;
+}
+
+.daily-report-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.daily-report-card-top span {
+  color: #828282;
+  font-size: 12px;
+}
+
+.daily-report-card-top h3 {
+  margin: 6px 0 0;
+
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.daily-report-card-top > strong {
+  color: #7de39d;
+  font-size: 13px;
+}
+
+.daily-report-metrics {
+  margin-top: 20px;
+
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.daily-report-metrics > div {
+  padding: 14px;
+
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 10px;
+  align-items: center;
+
+  background: #101010;
+
+  border: 1px solid #242424;
+  border-radius: 14px;
+}
+
+.daily-report-metrics svg {
+  grid-row: 1 / 3;
+  color: #ffd400;
+}
+
+.daily-report-metrics span {
+  color: #777777;
+  font-size: 11px;
+}
+
+.daily-report-metrics strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.daily-report-details {
+  margin-top: 16px;
+
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.daily-report-details > div {
+  padding: 14px;
+
+  display: flex;
+  gap: 11px;
+
+  background: #101010;
+
+  border: 1px solid #242424;
+  border-radius: 14px;
+}
+
+.daily-report-details svg {
+  flex-shrink: 0;
+  color: #ffd400;
+}
+
+.daily-report-details span {
+  color: #7e7e7e;
+  font-size: 11px;
+}
+
+.daily-report-details p {
+  margin: 6px 0 0;
+
+  color: #d4d4d4;
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.daily-report-photos {
+  margin-top: 16px;
+  min-height: 42px;
+  padding: 0 15px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  color: #ffffff;
+  background: transparent;
+
+  border: 1px solid #303030;
+  border-radius: 11px;
+
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.daily-report-photos:hover {
+  color: #050505;
+  background: #ffd400;
+  border-color: #ffd400;
+}
+
+@media (max-width: 800px) {
+  .daily-report-form-grid,
+  .daily-report-metrics,
+  .daily-report-details {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-report-full-field {
+    grid-column: auto;
+  }
+}
