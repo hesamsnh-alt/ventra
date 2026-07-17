@@ -2,15 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Save } from "lucide-react";
+import {
+  useParams,
+  useRouter,
+} from "next/navigation";
+import {
+  ArrowLeft,
+  Save,
+} from "lucide-react";
 
 import {
   fetchProjectById,
   updateProject,
 } from "@/services/projectService";
 
-import "../../new/CreateProject.css";
+import "./EditProject.css";
 
 export default function EditProjectPage() {
   const params = useParams();
@@ -29,49 +35,91 @@ export default function EditProjectPage() {
     progress: 0,
   });
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadProject() {
-      if (!projectId) return;
-
-      setLoading(true);
-      setErrorMessage("");
-
-      const { project, error } =
-        await fetchProjectById(projectId);
-
-      if (error || !project) {
-        setErrorMessage(
-          error?.message || "Project could not be found."
-        );
-
-        setLoading(false);
+      if (!projectId) {
         return;
       }
 
-      setForm({
-        name: project.name || "",
-        client: project.client || "",
-        location: project.location || "",
-        budget: project.budget ?? "",
-        start_date: project.start_date || "",
-        deadline: project.deadline || "",
-        status: project.status || "Planning",
-        progress: project.progress ?? 0,
-      });
+      try {
+        setLoading(true);
+        setErrorMessage("");
 
-      setLoading(false);
+        const {
+          project,
+          error,
+        } = await fetchProjectById(
+          projectId
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (error || !project) {
+          setErrorMessage(
+            error?.message ||
+              "Project could not be found."
+          );
+
+          return;
+        }
+
+        setForm({
+          name: project.name || "",
+          client: project.client || "",
+          location:
+            project.location || "",
+          budget:
+            project.budget ?? "",
+          start_date:
+            project.start_date || "",
+          deadline:
+            project.deadline || "",
+          status:
+            project.status || "Planning",
+          progress:
+            project.progress ?? 0,
+        });
+      } catch (error) {
+        console.error(
+          "Load project error:",
+          error
+        );
+
+        if (isMounted) {
+          setErrorMessage(
+            "An unexpected error occurred while loading the project."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     }
 
     loadProject();
+
+    return () => {
+      isMounted = false;
+    };
   }, [projectId]);
 
   function updateField(field, value) {
-    setForm((current) => ({
-      ...current,
+    setForm((currentForm) => ({
+      ...currentForm,
       [field]: value,
     }));
   }
@@ -80,130 +128,188 @@ export default function EditProjectPage() {
     event.preventDefault();
 
     if (!form.name.trim()) {
-      setErrorMessage("Project name is required.");
-      return;
-    }
-
-    setSaving(true);
-    setErrorMessage("");
-
-    const updates = {
-      name: form.name.trim(),
-      client: form.client.trim() || null,
-      location: form.location.trim() || null,
-      budget: Number(form.budget) || 0,
-      start_date: form.start_date || null,
-      deadline: form.deadline || null,
-      status: form.status,
-      progress: Math.min(
-        100,
-        Math.max(0, Number(form.progress) || 0)
-      ),
-    };
-
-    const { project, error } = await updateProject(
-      projectId,
-      updates
-    );
-
-    setSaving(false);
-
-    if (error || !project) {
       setErrorMessage(
-        error?.message || "Could not update project."
+        "Project name is required."
       );
+
       return;
     }
 
-    router.push(`/projects/${project.id}`);
-    router.refresh();
+    try {
+      setSaving(true);
+      setErrorMessage("");
+
+      const updates = {
+        name: form.name.trim(),
+
+        client:
+          form.client.trim() || null,
+
+        location:
+          form.location.trim() || null,
+
+        budget:
+          Number(form.budget) || 0,
+
+        start_date:
+          form.start_date || null,
+
+        deadline:
+          form.deadline || null,
+
+        status: form.status,
+
+        progress: Math.min(
+          100,
+          Math.max(
+            0,
+            Number(form.progress) || 0
+          )
+        ),
+      };
+
+      const {
+        project,
+        error,
+      } = await updateProject(
+        projectId,
+        updates
+      );
+
+      if (error || !project) {
+        setErrorMessage(
+          error?.message ||
+            "Could not update project."
+        );
+
+        return;
+      }
+
+      router.push(
+        `/projects/${project.id}`
+      );
+
+      router.refresh();
+    } catch (error) {
+      console.error(
+        "Update project error:",
+        error
+      );
+
+      setErrorMessage(
+        "An unexpected error occurred while saving the project."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) {
     return (
-      <main className="create-project">
-        <section className="create-card">
+      <main className="vt-edit-page">
+        <div className="vt-edit-loading">
+          <div className="vt-edit-spinner" />
+
           <p>Loading project...</p>
-        </section>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="create-project">
-      <section className="create-card">
+    <main className="vt-edit-page">
+      <section className="vt-edit-card">
         <Link
           href={`/projects/${projectId}`}
-          className="create-back-link"
+          className="vt-edit-back"
         >
-          <ArrowLeft size={17} />
+          <ArrowLeft size={18} />
           Back to Project
         </Link>
 
-        <span className="create-badge">
-          PROJECT SETTINGS
-        </span>
+        <header className="vt-edit-header">
+          <span className="vt-edit-badge">
+            Project settings
+          </span>
 
-        <h1>Edit Project</h1>
+          <h1>Edit Project</h1>
 
-        <p>
-          Update the project information stored in Supabase.
-        </p>
+          <p>
+            Update the project information
+            stored in your Ventra workspace.
+          </p>
+        </header>
 
         <form
-          className="project-form"
+          className="vt-edit-form"
           onSubmit={handleSubmit}
         >
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Project Name</label>
+          <div className="vt-edit-grid">
+            <label className="vt-edit-field">
+              <span>Project Name</span>
 
               <input
+                type="text"
                 value={form.name}
                 onChange={(event) =>
-                  updateField("name", event.target.value)
+                  updateField(
+                    "name",
+                    event.target.value
+                  )
                 }
                 required
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Client</label>
+            <label className="vt-edit-field">
+              <span>Client</span>
 
               <input
+                type="text"
                 value={form.client}
                 onChange={(event) =>
-                  updateField("client", event.target.value)
+                  updateField(
+                    "client",
+                    event.target.value
+                  )
                 }
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Location</label>
+            <label className="vt-edit-field">
+              <span>Location</span>
 
               <input
+                type="text"
                 value={form.location}
                 onChange={(event) =>
-                  updateField("location", event.target.value)
+                  updateField(
+                    "location",
+                    event.target.value
+                  )
                 }
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Budget (AED)</label>
+            <label className="vt-edit-field">
+              <span>Budget (AED)</span>
 
               <input
                 type="number"
                 min="0"
+                step="0.01"
                 value={form.budget}
                 onChange={(event) =>
-                  updateField("budget", event.target.value)
+                  updateField(
+                    "budget",
+                    event.target.value
+                  )
                 }
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Start Date</label>
+            <label className="vt-edit-field">
+              <span>Start Date</span>
 
               <input
                 type="date"
@@ -215,10 +321,10 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Deadline</label>
+            <label className="vt-edit-field">
+              <span>Deadline</span>
 
               <input
                 type="date"
@@ -230,27 +336,44 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </div>
+            </label>
 
-            <div className="form-group">
-              <label>Status</label>
+            <label className="vt-edit-field">
+              <span>Status</span>
 
               <select
                 value={form.status}
                 onChange={(event) =>
-                  updateField("status", event.target.value)
+                  updateField(
+                    "status",
+                    event.target.value
+                  )
                 }
               >
-                <option value="Planning">Planning</option>
-                <option value="On Track">On Track</option>
-                <option value="At Risk">At Risk</option>
-                <option value="Delayed">Delayed</option>
-                <option value="Completed">Completed</option>
-              </select>
-            </div>
+                <option value="Planning">
+                  Planning
+                </option>
 
-            <div className="form-group">
-              <label>Progress (%)</label>
+                <option value="On Track">
+                  On Track
+                </option>
+
+                <option value="At Risk">
+                  At Risk
+                </option>
+
+                <option value="Delayed">
+                  Delayed
+                </option>
+
+                <option value="Completed">
+                  Completed
+                </option>
+              </select>
+            </label>
+
+            <label className="vt-edit-field">
+              <span>Progress (%)</span>
 
               <input
                 type="number"
@@ -258,27 +381,47 @@ export default function EditProjectPage() {
                 max="100"
                 value={form.progress}
                 onChange={(event) =>
-                  updateField("progress", event.target.value)
+                  updateField(
+                    "progress",
+                    event.target.value
+                  )
                 }
               />
-            </div>
+            </label>
           </div>
 
           {errorMessage && (
-            <p className="create-form-error">
+            <p className="vt-edit-error">
               {errorMessage}
             </p>
           )}
 
-          <button
-            type="submit"
-            className="create-submit-button"
-            disabled={saving}
-          >
-            <Save size={18} />
+          <div className="vt-edit-actions">
+            <button
+              type="button"
+              className="vt-edit-cancel"
+              onClick={() =>
+                router.push(
+                  `/projects/${projectId}`
+                )
+              }
+              disabled={saving}
+            >
+              Cancel
+            </button>
 
-            {saving ? "Saving Changes..." : "Save Changes"}
-          </button>
+            <button
+              type="submit"
+              className="vt-edit-save"
+              disabled={saving}
+            >
+              <Save size={18} />
+
+              {saving
+                ? "Saving Changes..."
+                : "Save Changes"}
+            </button>
+          </div>
         </form>
       </section>
     </main>

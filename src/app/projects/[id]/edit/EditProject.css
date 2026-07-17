@@ -1,15 +1,15 @@
 /* =====================================================
-   VENTRA CREATE PROJECT PAGE
+   VENTRA EDIT PROJECT PAGE
 ===================================================== */
 
-.create-project-page,
-.create-project-page *,
-.create-project-page *::before,
-.create-project-page *::after {
+.vt-edit-page,
+.vt-edit-page *,
+.vt-edit-page *::before,
+.vt-edit-page *::after {
   box-sizing: border-box;
 }
 
-.create-project-page {
+.vt-edit-page {
   width: 100%;
   min-height: 100vh;
 
@@ -21,12 +21,12 @@
 
   background:
     radial-gradient(
-      circle at 80% 10%,
+      circle at 82% 10%,
       rgba(255, 212, 0, 0.08),
       transparent 30%
     ),
     radial-gradient(
-      circle at 15% 80%,
+      circle at 12% 90%,
       rgba(255, 212, 0, 0.04),
       transparent 28%
     ),
@@ -40,45 +40,84 @@
     sans-serif;
 }
 
+.vt-edit-page a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.vt-edit-page button,
+.vt-edit-page input,
+.vt-edit-page select {
+  font: inherit;
+}
+
 /* =====================================================
-   MAIN CONTAINER
+   CARD
 ===================================================== */
 
-.create-project-container {
+.vt-edit-card {
   width: 100%;
   max-width: 980px;
 
-  padding: 48px;
+  padding: 46px;
 
   background:
     linear-gradient(
       145deg,
-      rgba(20, 20, 20, 0.96),
-      rgba(11, 11, 11, 0.96)
+      rgba(20, 20, 20, 0.97),
+      rgba(10, 10, 10, 0.97)
     );
 
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid
+    rgba(255, 255, 255, 0.08);
+
   border-radius: 28px;
 
   box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 212, 0, 0.02);
+    0 30px 80px rgba(0, 0, 0, 0.52),
+    0 0 0 1px
+      rgba(255, 212, 0, 0.02);
 
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
 
 /* =====================================================
+   BACK LINK
+===================================================== */
+
+.vt-edit-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-bottom: 28px;
+
+  color: #969696;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.vt-edit-back:hover {
+  color: #ffd400;
+  transform: translateX(-2px);
+}
+
+/* =====================================================
    HEADER
 ===================================================== */
 
-.create-project-header {
+.vt-edit-header {
   margin-bottom: 38px;
 }
 
-.create-project-eyebrow {
+.vt-edit-badge {
   display: inline-flex;
-  align-items: center;
 
   margin-bottom: 14px;
   padding: 7px 12px;
@@ -86,7 +125,9 @@
   color: #ffd400;
   background: rgba(255, 212, 0, 0.08);
 
-  border: 1px solid rgba(255, 212, 0, 0.17);
+  border: 1px solid
+    rgba(255, 212, 0, 0.17);
+
   border-radius: 999px;
 
   font-size: 11px;
@@ -95,18 +136,23 @@
   text-transform: uppercase;
 }
 
-.create-project-header h1 {
+.vt-edit-header h1 {
   margin: 0 0 12px;
 
   color: #ffffff;
 
-  font-size: clamp(34px, 5vw, 50px);
+  font-size: clamp(
+    34px,
+    5vw,
+    50px
+  );
+
   font-weight: 800;
   letter-spacing: -1.5px;
   line-height: 1.08;
 }
 
-.create-project-header p {
+.vt-edit-header p {
   max-width: 620px;
 
   margin: 0;
@@ -121,26 +167,33 @@
    FORM
 ===================================================== */
 
-.create-project-form {
+.vt-edit-form {
+  width: 100%;
+}
+
+.vt-edit-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
   gap: 22px;
 }
 
-.create-project-field {
+.vt-edit-field {
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
 
-.create-project-field span {
+.vt-edit-field span {
   color: #d8d8d8;
 
   font-size: 13px;
   font-weight: 700;
 }
 
-.create-project-field input {
+.vt-edit-field input,
+.vt-edit-field select {
   width: 100%;
   height: 56px;
 
@@ -162,67 +215,48 @@
     background 0.2s ease;
 }
 
-.create-project-field input::placeholder {
-  color: #626262;
-}
-
-.create-project-field input:hover {
+.vt-edit-field input:hover,
+.vt-edit-field select:hover {
   border-color: #3a3a3a;
 }
 
-.create-project-field input:focus {
+.vt-edit-field input:focus,
+.vt-edit-field select:focus {
   background: #171717;
   border-color: #ffd400;
 
   box-shadow:
-    0 0 0 3px rgba(255, 212, 0, 0.11);
+    0 0 0 3px
+      rgba(255, 212, 0, 0.11);
 }
 
-.create-project-field input[type="date"] {
+.vt-edit-field input[type="date"] {
   color-scheme: dark;
 }
 
-.create-project-field input[type="number"] {
-  appearance: textfield;
-  -moz-appearance: textfield;
+.vt-edit-field select {
+  cursor: pointer;
 }
 
-.create-project-field
-  input[type="number"]::-webkit-inner-spin-button,
-.create-project-field
-  input[type="number"]::-webkit-outer-spin-button {
-  margin: 0;
-
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-/* =====================================================
-   DATE FIELDS
-===================================================== */
-
-.create-project-dates {
-  grid-column: 1 / -1;
-
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
+.vt-edit-field select option {
+  color: #ffffff;
+  background: #171717;
 }
 
 /* =====================================================
    ERROR
 ===================================================== */
 
-.create-form-error {
-  grid-column: 1 / -1;
-
-  margin: 0;
+.vt-edit-error {
+  margin: 22px 0 0;
   padding: 13px 15px;
 
   color: #ff8585;
   background: rgba(255, 74, 74, 0.08);
 
-  border: 1px solid rgba(255, 74, 74, 0.18);
+  border: 1px solid
+    rgba(255, 74, 74, 0.18);
+
   border-radius: 12px;
 
   font-size: 13px;
@@ -231,27 +265,31 @@
 }
 
 /* =====================================================
-   BUTTONS
+   ACTIONS
 ===================================================== */
 
-.create-project-actions {
-  grid-column: 1 / -1;
-
+.vt-edit-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
 
-  margin-top: 12px;
+  margin-top: 32px;
   padding-top: 26px;
 
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid
+    rgba(255, 255, 255, 0.07);
 }
 
-.create-project-cancel,
-.create-project-submit {
-  min-width: 150px;
+.vt-edit-cancel,
+.vt-edit-save {
+  min-width: 155px;
   height: 52px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
 
   padding: 0 22px;
 
@@ -270,62 +308,84 @@
     opacity 0.2s ease;
 }
 
-.create-project-cancel {
+.vt-edit-cancel {
   color: #ffffff;
   background: #171717;
 
   border: 1px solid #303030;
 }
 
-.create-project-cancel:hover {
+.vt-edit-cancel:hover {
   background: #1d1d1d;
   border-color: #414141;
 
   transform: translateY(-1px);
 }
 
-.create-project-submit {
+.vt-edit-save {
   color: #080808;
   background: #ffd400;
 
   border: 1px solid #ffd400;
 
   box-shadow:
-    0 10px 25px rgba(255, 212, 0, 0.14);
+    0 10px 25px
+      rgba(255, 212, 0, 0.14);
 }
 
-.create-project-submit:hover {
+.vt-edit-save:hover {
   background: #ffe033;
   border-color: #ffe033;
 
   transform: translateY(-1px);
 
   box-shadow:
-    0 14px 32px rgba(255, 212, 0, 0.2);
+    0 14px 32px
+      rgba(255, 212, 0, 0.2);
 }
 
-.create-project-cancel:active,
-.create-project-submit:active {
-  transform: scale(0.98);
-}
-
-.create-project-cancel:disabled,
-.create-project-submit:disabled {
+.vt-edit-cancel:disabled,
+.vt-edit-save:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
 }
 
 /* =====================================================
-   CHECKING USER STATE
+   LOADING
 ===================================================== */
 
-.create-project-page > p {
+.vt-edit-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+
+  color: #909090;
+}
+
+.vt-edit-loading p {
   margin: 0;
+}
 
-  color: #9c9c9c;
+.vt-edit-spinner {
+  width: 36px;
+  height: 36px;
 
-  font-size: 14px;
+  border: 3px solid
+    rgba(255, 255, 255, 0.1);
+
+  border-top-color: #ffd400;
+  border-radius: 50%;
+
+  animation:
+    vt-edit-spin 0.8s linear infinite;
+}
+
+@keyframes vt-edit-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* =====================================================
@@ -333,58 +393,54 @@
 ===================================================== */
 
 @media (max-width: 760px) {
-  .create-project-page {
+  .vt-edit-page {
     align-items: flex-start;
 
     padding: 24px 14px;
   }
 
-  .create-project-container {
+  .vt-edit-card {
     padding: 30px 20px;
 
     border-radius: 20px;
   }
 
-  .create-project-header {
+  .vt-edit-header {
     margin-bottom: 28px;
   }
 
-  .create-project-header h1 {
+  .vt-edit-header h1 {
     font-size: 34px;
   }
 
-  .create-project-form {
+  .vt-edit-grid {
     grid-template-columns: 1fr;
     gap: 18px;
   }
 
-  .create-project-dates {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
-  .create-project-actions {
+  .vt-edit-actions {
     flex-direction: column-reverse;
     align-items: stretch;
   }
 
-  .create-project-cancel,
-  .create-project-submit {
+  .vt-edit-cancel,
+  .vt-edit-save {
     width: 100%;
     min-width: 0;
   }
 }
 
 @media (max-width: 420px) {
-  .create-project-container {
+  .vt-edit-card {
     padding: 25px 16px;
   }
 
-  .create-project-header h1 {
+  .vt-edit-header h1 {
     font-size: 30px;
   }
 
-  .create-project-field input {
+  .vt-edit-field input,
+  .vt-edit-field select {
     height: 52px;
   }
 }

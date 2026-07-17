@@ -2,27 +2,75 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, X, ArrowUpRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Menu,
+  X,
+  ArrowUpRight,
+} from "lucide-react";
+
+import {
+  getCurrentUser,
+  signOutUser,
+} from "@/services/authService";
+
 import "./Header.css";
 
 const mainMenu = [
-  { label: "Products", href: "#products" },
-  { label: "Pricing", href: "#pricing" },
+  {
+    label: "Products",
+    href: "#products",
+  },
+  {
+    label: "Pricing",
+    href: "#pricing",
+  },
 ];
 
 const sideMenu = [
-  { label: "Home", href: "/" },
-  { label: "AI Estimator", href: "#estimator" },
-  { label: "BOQ Generator", href: "#boq" },
-  { label: "Dashboard", href: "#dashboard" },
-  { label: "Resources", href: "#resources" },
-  { label: "Contact", href: "#contact" },
-  { label: "Login", href: "/login" },
+  {
+    label: "Home",
+    href: "/",
+  },
+  {
+    label: "AI Estimator",
+    href: "#estimator",
+  },
+  {
+    label: "BOQ Generator",
+    href: "#boq",
+  },
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+  },
+  {
+    label: "Resources",
+    href: "#resources",
+  },
+  {
+    label: "Contact",
+    href: "#contact",
+  },
 ];
 
 export default function Header() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const router = useRouter();
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [scrolled, setScrolled] =
+    useState(false);
+
+  const [user, setUser] =
+    useState(null);
+
+  const [loadingUser, setLoadingUser] =
+    useState(true);
+
+  const [loggingOut, setLoggingOut] =
+    useState(false);
 
   useEffect(() => {
     function handleScroll() {
@@ -31,30 +79,141 @@ export default function Header() {
 
     handleScroll();
 
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener(
+      "scroll",
+      handleScroll
+    );
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener(
+        "scroll",
+        handleScroll
+      );
     };
   }, []);
 
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
+    document.body.style.overflow =
+      menuOpen ? "hidden" : "";
 
     return () => {
       document.body.style.overflow = "";
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadCurrentUser() {
+      try {
+        setLoadingUser(true);
+
+        const result =
+          await getCurrentUser();
+
+        const currentUser =
+          result?.user ||
+          result?.data?.user ||
+          result ||
+          null;
+
+        if (active) {
+          setUser(currentUser);
+        }
+      } catch (error) {
+        console.error(
+          "Header user error:",
+          error
+        );
+
+        if (active) {
+          setUser(null);
+        }
+      } finally {
+        if (active) {
+          setLoadingUser(false);
+        }
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   function closeMenu() {
     setMenuOpen(false);
   }
+
+  function getUserName() {
+    if (!user) {
+      return "User";
+    }
+
+    const metadata =
+      user.user_metadata || {};
+
+    const fullName =
+      metadata.full_name ||
+      metadata.name ||
+      metadata.display_name ||
+      metadata.username;
+
+    if (fullName) {
+      return fullName;
+    }
+
+    if (user.email) {
+      return user.email.split("@")[0];
+    }
+
+    return "User";
+  }
+
+  async function handleLogout(event) {
+    event?.preventDefault();
+
+    try {
+      setLoggingOut(true);
+
+      const result =
+        await signOutUser();
+
+      if (result?.error) {
+        console.error(
+          "Logout error:",
+          result.error
+        );
+
+        return;
+      }
+
+      setUser(null);
+      setMenuOpen(false);
+
+      router.push("/");
+      router.refresh();
+    } catch (error) {
+      console.error(
+        "Logout error:",
+        error
+      );
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  const userName = getUserName();
 
   return (
     <>
       <header
         className={`vt-header ${
-          scrolled ? "vt-header--scrolled" : ""
+          scrolled
+            ? "vt-header--scrolled"
+            : ""
         }`}
       >
         <div className="vt-header__bar">
@@ -63,10 +222,15 @@ export default function Header() {
             className="vt-header__brand"
             aria-label="Ventra home"
           >
-            <span className="vt-header__mark">V</span>
+            <span className="vt-header__mark">
+              V
+            </span>
 
             <span className="vt-header__brand-text">
-              <span className="vt-header__name">Ventra</span>
+              <span className="vt-header__name">
+                Ventra
+              </span>
+
               <span className="vt-header__tagline">
                 AI Construction Intelligence
               </span>
@@ -78,26 +242,50 @@ export default function Header() {
             aria-label="Primary navigation"
           >
             {mainMenu.map((item) => (
-              <Link key={item.label} href={item.href}>
+              <Link
+                key={item.label}
+                href={item.href}
+              >
                 {item.label}
               </Link>
             ))}
           </nav>
 
           <div className="vt-header__actions">
-            <Link href="/login" className="vt-header__login">
-              Login
-            </Link>
+            {!loadingUser && user ? (
+          <Link
 
-            <Link href="/register" className="vt-header__start">
-              Get Started
-              <ArrowUpRight size={17} />
-            </Link>
+  href="/dashboard"
+  className="vt-header__login"
+>
+  Hello, {userName}
+</Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="vt-header__login"
+                >
+                  Login
+                </Link>
+
+                <Link
+                  href="/register"
+                  className="vt-header__start"
+                >
+                  Get Started
+
+                  <ArrowUpRight size={17} />
+                </Link>
+              </>
+            )}
 
             <button
               type="button"
               className="vt-header__menu-button"
-              onClick={() => setMenuOpen(true)}
+              onClick={() =>
+                setMenuOpen(true)
+              }
               aria-label="Open navigation menu"
               aria-expanded={menuOpen}
               aria-controls="ventra-side-menu"
@@ -111,7 +299,9 @@ export default function Header() {
       <button
         type="button"
         className={`vt-menu-overlay ${
-          menuOpen ? "vt-menu-overlay--open" : ""
+          menuOpen
+            ? "vt-menu-overlay--open"
+            : ""
         }`}
         onClick={closeMenu}
         aria-label="Close navigation menu"
@@ -121,7 +311,9 @@ export default function Header() {
       <aside
         id="ventra-side-menu"
         className={`vt-side-menu ${
-          menuOpen ? "vt-side-menu--open" : ""
+          menuOpen
+            ? "vt-side-menu--open"
+            : ""
         }`}
         aria-hidden={!menuOpen}
       >
@@ -139,25 +331,50 @@ export default function Header() {
         </div>
 
         <nav className="vt-side-menu__links">
-          {sideMenu.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              onClick={closeMenu}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+  {sideMenu.map((item) => (
+    <Link
+      key={item.label}
+      href={item.href}
+      onClick={closeMenu}
+    >
+      {item.label}
+    </Link>
+  ))}
 
-        <Link
-          href="/register"
-          className="vt-side-menu__cta"
-          onClick={closeMenu}
-        >
-          Start with Ventra
-          <ArrowUpRight size={18} />
-        </Link>
+  {user && (
+    <>
+      <Link
+        href="/profile"
+        onClick={closeMenu}
+      >
+        My Profile
+      </Link>
+
+      <a
+        href="/"
+        onClick={handleLogout}
+        aria-disabled={loggingOut}
+      >
+        {loggingOut
+          ? "Logging out..."
+          : "Logout"}
+      </a>
+    </>
+  )}
+</nav>
+        
+
+        {!user && (
+          <Link
+            href="/register"
+            className="vt-side-menu__cta"
+            onClick={closeMenu}
+          >
+            Start with Ventra
+
+            <ArrowUpRight size={18} />
+          </Link>
+        )}
       </aside>
     </>
   );
