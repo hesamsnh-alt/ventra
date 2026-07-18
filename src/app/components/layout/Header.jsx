@@ -27,7 +27,7 @@ const mainMenu = [
   },
 ];
 
-const sideMenu = [
+const publicSideMenu = [
   {
     label: "Home",
     href: "/",
@@ -39,10 +39,6 @@ const sideMenu = [
   {
     label: "BOQ Generator",
     href: "#boq",
-  },
-  {
-    label: "Dashboard",
-    href: "/dashboard",
   },
   {
     label: "Resources",
@@ -175,6 +171,10 @@ export default function Header() {
   async function handleLogout(event) {
     event?.preventDefault();
 
+    if (loggingOut) {
+      return;
+    }
+
     try {
       setLoggingOut(true);
 
@@ -252,15 +252,16 @@ export default function Header() {
           </nav>
 
           <div className="vt-header__actions">
-            {!loadingUser && user ? (
-          <Link
+            {!loadingUser && user && (
+              <Link
+                href="/dashboard"
+                className="vt-header__login"
+              >
+                Hello, {userName}
+              </Link>
+            )}
 
-  href="/dashboard"
-  className="vt-header__login"
->
-  Hello, {userName}
-</Link>
-            ) : (
+            {!loadingUser && !user && (
               <>
                 <Link
                   href="/login"
@@ -330,41 +331,68 @@ export default function Header() {
           </button>
         </div>
 
-        <nav className="vt-side-menu__links">
-  {sideMenu.map((item) => (
-    <Link
-      key={item.label}
-      href={item.href}
-      onClick={closeMenu}
-    >
-      {item.label}
-    </Link>
-  ))}
+        <nav
+          className="vt-side-menu__links"
+          aria-label="Mobile navigation"
+        >
+          {publicSideMenu.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              onClick={closeMenu}
+            >
+              {item.label}
+            </Link>
+          ))}
 
-  {user && (
-    <>
-      <Link
-        href="/profile"
-        onClick={closeMenu}
-      >
-        My Profile
-      </Link>
+          {!loadingUser && !user && (
+            <>
+              <Link
+                href="/login"
+                onClick={closeMenu}
+              >
+                Login
+              </Link>
 
-      <a
-        href="/"
-        onClick={handleLogout}
-        aria-disabled={loggingOut}
-      >
-        {loggingOut
-          ? "Logging out..."
-          : "Logout"}
-      </a>
-    </>
-  )}
-</nav>
-        
+              <Link
+                href="/register"
+                onClick={closeMenu}
+              >
+                Register
+              </Link>
+            </>
+          )}
 
-        {!user && (
+          {!loadingUser && user && (
+            <>
+              <Link
+                href="/dashboard"
+                onClick={closeMenu}
+              >
+                Dashboard
+              </Link>
+
+              <Link
+                href="/profile"
+                onClick={closeMenu}
+              >
+                My Profile
+              </Link>
+
+              <a
+                href="/"
+                onClick={handleLogout}
+                aria-disabled={loggingOut}
+              >
+                {loggingOut
+                  ? "Logging out..."
+                  : "Logout"}
+              </a>
+            </>
+          )}
+        </nav>
+
+        {!loadingUser && !user && (
           <Link
             href="/register"
             className="vt-side-menu__cta"
