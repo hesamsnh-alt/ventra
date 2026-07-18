@@ -2,18 +2,18 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
-console.log({
-  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  hasPublishable: !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-  hasSecret: !!process.env.SUPABASE_SECRET_KEY,
-});
+export const dynamic = "force-dynamic";
 
 export async function POST(request) {
   try {
-    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey =
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const stripeSecretKey =
+      process.env.STRIPE_SECRET_KEY;
+
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const supabasePublishableKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
     const priceId =
       process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID;
@@ -22,9 +22,11 @@ export async function POST(request) {
       return Response.json(
         {
           error:
-            "STRIPE_SECRET_KEY is missing from .env.local",
+            "STRIPE_SECRET_KEY is missing from the environment variables.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -32,19 +34,23 @@ export async function POST(request) {
       return Response.json(
         {
           error:
-            "NEXT_PUBLIC_SUPABASE_URL is missing from .env.local",
+            "NEXT_PUBLIC_SUPABASE_URL is missing from the environment variables.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    if (!supabaseAnonKey) {
+    if (!supabasePublishableKey) {
       return Response.json(
         {
           error:
-            "NEXT_PUBLIC_SUPABASE_ANON_KEY is missing from .env.local",
+            "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is missing from the environment variables.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -52,31 +58,20 @@ export async function POST(request) {
       return Response.json(
         {
           error:
-            "NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID is missing from .env.local",
+            "NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID is missing from the environment variables.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
-
-    const stripe = new Stripe(stripeSecretKey);
-
-    const supabaseServer = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
 
     const authorizationHeader =
       request.headers.get("authorization");
 
     const accessToken =
       authorizationHeader?.startsWith("Bearer ")
-        ? authorizationHeader.slice(7)
+        ? authorizationHeader.slice(7).trim()
         : null;
 
     if (!accessToken) {
@@ -85,9 +80,23 @@ export async function POST(request) {
           error:
             "You must be signed in to start the trial.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
+
+    const supabaseServer = createClient(
+      supabaseUrl,
+      supabasePublishableKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+      }
+    );
 
     const {
       data: { user },
@@ -95,18 +104,52 @@ export async function POST(request) {
     } = await supabaseServer.auth.getUser(accessToken);
 
     if (userError || !user) {
+      console.error(
+        "Supabase Checkout authentication error:",
+        {
+          message: userError?.message,
+          code: userError?.code,
+          status: userError?.status,
+        }
+      );
+
       return Response.json(
         {
           error:
+            userError?.message ||
             "Your login session is invalid. Please sign in again.",
+          code: userError?.code || null,
+          status: userError?.status || 401,
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
+    if (!user.email) {
+      return Response.json(
+        {
+          error:
+            "Your Ventra account does not have a valid email address.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey);
+
+    const requestOrigin =
+      request.headers.get("origin");
+
+    const configuredSiteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL;
+
     const origin =
-      request.headers.get("origin") ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
+      requestOrigin ||
+      configuredSiteUrl ||
       "http://localhost:3000";
 
     const checkoutSession =
@@ -140,9 +183,10 @@ export async function POST(request) {
 
         success_url:
           `${origin}/pricing/success` +
-          `?session_id={CHECKOUT_SESSION_ID}`,
+          "?session_id={CHECKOUT_SESSION_ID}",
 
-        cancel_url: `${origin}/pricing?canceled=1`,
+        cancel_url:
+          `${origin}/pricing?canceled=1`,
 
         billing_address_collection: "auto",
 
@@ -155,15 +199,25 @@ export async function POST(request) {
           error:
             "Stripe did not return a checkout URL.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    return Response.json({
-      url: checkoutSession.url,
-    });
+    return Response.json(
+      {
+        url: checkoutSession.url,
+      },
+      {
+        status: 200,
+      }
+    );
   } catch (error) {
-    console.error("Stripe Checkout error:", error);
+    console.error(
+      "Stripe Checkout API error:",
+      error
+    );
 
     return Response.json(
       {
@@ -171,7 +225,9 @@ export async function POST(request) {
           error?.message ||
           "Checkout session could not be created.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
