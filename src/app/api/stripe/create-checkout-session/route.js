@@ -2,6 +2,11 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
+console.log({
+  url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  hasPublishable: !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  hasSecret: !!process.env.SUPABASE_SECRET_KEY,
+});
 
 export async function POST(request) {
   try {
