@@ -2,216 +2,214 @@ import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
-
-function unixToIso(timestamp) {
-  if (!timestamp) {
-    return null;
-  }
-
-  return new Date(timestamp * 1000).toISOString();
-}
-
-function createSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-
-  if (!supabaseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_SUPABASE_URL is missing from .env.local"
-    );
-  }
-
-  if (!supabaseSecretKey) {
-    throw new Error(
-      "SUPABASE_SECRET_KEY is missing from .env.local"
-    );
-  }
-
-  return createClient(supabaseUrl, supabaseSecretKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-}
-
-async function saveSubscription({
-  stripe,
-  supabaseAdmin,
-  subscription,
-}) {
-  const supabaseUserId =
-    subscription.metadata?.supabase_user_id;
-
-  if (!supabaseUserId) {
-    throw new Error(
-      "Supabase user ID is missing from Stripe subscription metadata."
-    );
-  }
-
-  const customerId =
-    typeof subscription.customer === "string"
-      ? subscription.customer
-      : subscription.customer?.id;
-
-  const priceId =
-    subscription.items?.data?.[0]?.price?.id || null;
-
-  const { error } = await supabaseAdmin
-    .from("subscriptions")
-    .upsert(
-      {
-        user_id: supabaseUserId,
-
-        stripe_customer_id: customerId || null,
-
-        stripe_subscription_id: subscription.id,
-
-        stripe_price_id: priceId,
-
-        plan_name:
-          subscription.metadata?.ventra_plan || "starter",
-
-        status: subscription.status,
-
-        trial_start: unixToIso(subscription.trial_start),
-
-        trial_end: unixToIso(subscription.trial_end),
-
-        current_period_start: unixToIso(
-          subscription.current_period_start
-        ),
-
-        current_period_end: unixToIso(
-          subscription.current_period_end
-        ),
-
-        cancel_at_period_end:
-          subscription.cancel_at_period_end || false,
-      },
-      {
-        onConflict: "user_id",
-      }
-    );
-
-  if (error) {
-    throw error;
-  }
-}
+export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!stripeSecretKey) {
-    return new Response(
-      "STRIPE_SECRET_KEY is missing from .env.local",
-      {
-        status: 500,
-      }
-    );
-  }
-
-  if (!webhookSecret) {
-    return new Response(
-      "STRIPE_WEBHOOK_SECRET is missing from .env.local",
-      {
-        status: 500,
-      }
-    );
-  }
-
-  const stripe = new Stripe(stripeSecretKey);
-  const supabaseAdmin = createSupabaseAdmin();
-
-  const signature = request.headers.get("stripe-signature");
-
-  if (!signature) {
-    return new Response("Stripe signature is missing.", {
-      status: 400,
-    });
-  }
-
-  let event;
-
   try {
-    const rawBody = await request.text();
+    const stripeSecretKey =
+      process.env.STRIPE_SECRET_KEY;
 
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      webhookSecret
-    );
-  } catch (error) {
-    console.error(
-      "Stripe webhook signature error:",
-      error
-    );
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-    return new Response(
-      `Webhook signature verification failed: ${
-        error?.message || "Unknown error"
-      }`,
-      {
-        status: 400,
-      }
-    );
-  }
+    const supabasePublicKey =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const checkoutSession = event.data.object;
+    const priceId =
+      process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID;
 
-        if (
-          checkoutSession.mode !== "subscription" ||
-          !checkoutSession.subscription
-        ) {
-          break;
+    if (!stripeSecretKey) {
+      return Response.json(
+        {
+          error:
+            "STRIPE_SECRET_KEY is missing from the environment variables.",
+        },
+        {
+          status: 500,
         }
+      );
+    }
 
-        const subscription =
-          await stripe.subscriptions.retrieve(
-            checkoutSession.subscription
-          );
+    if (!supabaseUrl) {
+      return Response.json(
+        {
+          error:
+            "NEXT_PUBLIC_SUPABASE_URL is missing from the environment variables.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
 
-        await saveSubscription({
-          stripe,
-          supabaseAdmin,
-          subscription,
-        });
+    if (!supabasePublicKey) {
+      return Response.json(
+        {
+          error:
+            "Supabase publishable or anon key is missing from the environment variables.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
 
-        break;
+    if (!priceId) {
+      return Response.json(
+        {
+          error:
+            "NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID is missing from the environment variables.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    const authorizationHeader =
+      request.headers.get("authorization");
+
+    const accessToken =
+      authorizationHeader?.startsWith("Bearer ")
+        ? authorizationHeader.substring(7).trim()
+        : null;
+
+    if (!accessToken) {
+      return Response.json(
+        {
+          error:
+            "You must be signed in to start the trial.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const supabaseServer = createClient(
+      supabaseUrl,
+      supabasePublicKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
       }
+    );
 
-      case "customer.subscription.created":
-      case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseServer.auth.getUser(accessToken);
 
-        await saveSubscription({
-          stripe,
-          supabaseAdmin,
-          subscription,
-        });
+    if (userError || !user) {
+      console.error(
+        "Supabase Checkout authentication error:",
+        userError
+      );
 
-        break;
-      }
+      return Response.json(
+        {
+          error:
+            "Your login session is invalid. Please sign in again.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
 
-      default: {
-        console.log(
-          `Unhandled Stripe event: ${event.type}`
-        );
-      }
+    if (!user.email) {
+      return Response.json(
+        {
+          error:
+            "Your Ventra account does not have a valid email address.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const stripe = new Stripe(stripeSecretKey);
+
+    const requestOrigin =
+      request.headers.get("origin");
+
+    const configuredSiteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL;
+
+    const origin =
+      requestOrigin ||
+      configuredSiteUrl ||
+      "http://localhost:3000";
+
+    const checkoutSession =
+      await stripe.checkout.sessions.create({
+        mode: "subscription",
+
+        customer_email: user.email,
+
+        client_reference_id: user.id,
+
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+
+        subscription_data: {
+          trial_period_days: 7,
+
+          metadata: {
+            supabase_user_id: user.id,
+            ventra_plan: "starter",
+          },
+        },
+
+        metadata: {
+          supabase_user_id: user.id,
+          ventra_plan: "starter",
+        },
+
+        success_url:
+          `${origin}/pricing/success` +
+          "?session_id={CHECKOUT_SESSION_ID}",
+
+        cancel_url: `${origin}/pricing?canceled=1`,
+
+        billing_address_collection: "auto",
+
+        allow_promotion_codes: true,
+      });
+
+    if (!checkoutSession.url) {
+      return Response.json(
+        {
+          error:
+            "Stripe did not return a checkout URL.",
+        },
+        {
+          status: 500,
+        }
+      );
     }
 
     return Response.json({
-      received: true,
+      url: checkoutSession.url,
     });
   } catch (error) {
     console.error(
-      "Stripe webhook processing error:",
+      "Stripe Checkout API error:",
       error
     );
 
@@ -219,7 +217,7 @@ export async function POST(request) {
       {
         error:
           error?.message ||
-          "Webhook could not be processed.",
+          "Checkout session could not be created.",
       },
       {
         status: 500,
