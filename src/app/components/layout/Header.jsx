@@ -19,14 +19,13 @@ import "./Header.css";
 const mainMenu = [
   {
     label: "Products",
-    href: "#products",
+    href: "/products",
   },
   {
     label: "Pricing",
-    href: "#pricing",
+    href: "/pricing",
   },
 ];
-
 const publicSideMenu = [
   {
     label: "Home",
