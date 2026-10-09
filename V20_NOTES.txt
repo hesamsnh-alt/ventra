@@ -1,0 +1,27 @@
+VENTRA V20 PLAN FIDELITY ENGINE
+
+Only changed file:
+src/app/api/ai/design-3d/route.js
+
+Purpose:
+- Improve JPG/PNG/WebP plan fidelity before the 3D viewer receives the scene.
+
+Changes:
+1. Second-pass geometry audit against the ORIGINAL image.
+2. Printed dimensions are treated as hard constraints by the refinement prompt.
+3. Room adjacency / internal walls / entrance recesses / Store / Baths / openings are re-checked.
+4. roomHint is authoritative for detected furniture placement.
+5. Residential generic furniture is NOT injected when Vision already detected enough furniture.
+6. Bathroom completeness remains active.
+7. Viewer / save / persistence / source switching / BOQ / APS / DWG untouched.
+
+Expected logs:
+[VENTRA PLAN FIDELITY AUDIT v20]
+[VENTRA GENERIC FLOORPLAN SUCCESS v20]
+
+After replacement:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Then Analyze the JPG again because this patch changes scene generation.

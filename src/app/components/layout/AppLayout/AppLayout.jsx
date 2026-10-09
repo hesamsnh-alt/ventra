@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./AppLayout.css";
 
 import Sidebar from "../Sidebar";
@@ -5,20 +7,20 @@ import Header from "../Header";
 
 export default function AppLayout({ children }) {
   return (
-    <div className="app-layout">
+    <LocalizedElement as="div" className="app-layout">
 
       <Sidebar />
 
-      <div className="app-main">
+      <LocalizedElement as="div" className="app-main">
 
         <Header />
 
-        <main className="app-content">
+        <LocalizedElement as="main" className="app-content">
           {children}
-        </main>
+        </LocalizedElement>
 
-      </div>
+      </LocalizedElement>
 
-    </div>
+    </LocalizedElement>
   );
 }

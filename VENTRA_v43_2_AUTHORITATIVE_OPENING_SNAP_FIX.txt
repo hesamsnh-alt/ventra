@@ -1,0 +1,28 @@
+Ventra v43.2 - Authoritative Door/Window Placement
+
+The current Takeoff reports:
+- 17 doors
+- 26 windows
+
+Previous 3D versions incorrectly derived opening objects from primitive CAD
+line counts. v43.2 changes the source of truth:
+
+1. One opening candidate per Takeoff object_details door/window object.
+2. Uses the object's APS centroid when present.
+3. Centroid is assigned to the nearest detected storey.
+4. Opening is projected/snapped to the nearest VERIFIED wall line.
+5. Opening orientation follows that wall line.
+6. Width uses measured object width/length/area when architecturally plausible,
+   otherwise a standard fallback is used.
+7. Door/window primitive lines are used only as a centroid fallback for older
+   saved takeoffs with missing object centroids.
+8. No primitive line can create an extra door/window.
+9. UI reports rendered/expected counts, e.g. Doors 17/17, Windows 26/26.
+10. Slab compatibility fix (old THREE amount + depth) is preserved.
+
+No API routes changed.
+No Analyze Drawing required.
+No OpenAI call.
+
+Expected marker:
+[VENTRA ARCHITECTURAL 3D v43.2]

@@ -1,0 +1,28 @@
+VENTRA V17 - INTERIOR COMPLETENESS
+
+Generic, not hard-coded to one plan.
+
+Bathroom/WC completeness rules:
+- toilet is required
+- sink/vanity is required
+- mirror is required
+- wet fixture is required
+  - larger bathroom: bathtub
+  - smaller WC/toilet: shower
+
+Missing fixtures are added only inside the detected bathroom polygon and use
+the existing room-lock / wall-snap rules.
+
+Viewer upgrades:
+- mirror is wall-mounted at realistic height
+- sink renders as a vanity with basin + faucet
+- bathtub gets clearer basin/faucet detail
+
+Expected log:
+[VENTRA INTERIOR COMPLETENESS v17]
+
+Replace:
+src/app/api/ai/design-3d/route.js
+src/app/projects/[id]/Project3DViewer.jsx
+
+After replacement, re-run Analyze on the image so the new completed scene is saved.

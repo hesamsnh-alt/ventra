@@ -1,0 +1,313 @@
+.ventra-model-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.ventra-model-header,
+.ventra-model-toolbar,
+.ventra-model-message,
+.ventra-model-inspector {
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(10,14,24,.88);
+  border-radius: 14px;
+}
+
+.ventra-model-header {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ventra-model-header span,
+.ventra-model-inspector > span {
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: #d7b600;
+  font-weight: 800;
+}
+
+.ventra-model-header h2 {
+  margin: 5px 0 4px;
+}
+
+.ventra-model-header p,
+.ventra-model-inspector p {
+  margin: 0;
+  opacity: .72;
+}
+
+.ventra-model-status {
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255,255,255,.08);
+}
+
+.ventra-model-status-ready {
+  color: #7ee2a8;
+}
+
+.ventra-model-status-error {
+  color: #ff8d8d;
+}
+
+.ventra-model-toolbar {
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ventra-model-toolbar button,
+.ventra-model-toolbar select {
+  min-height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: #111827;
+  color: inherit;
+  padding: 0 12px;
+}
+
+.ventra-model-toolbar button {
+  cursor: pointer;
+}
+
+.ventra-model-toolbar button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.ventra-model-message {
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
+.ventra-model-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  min-height: 650px;
+}
+
+.ventra-model-canvas-shell {
+  min-width: 0;
+  min-height: 650px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: #0a0e18;
+}
+
+.ventra-model-canvas {
+  width: 100%;
+  height: 650px;
+  position: relative;
+}
+
+.ventra-model-empty {
+  min-height: 650px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 32px;
+}
+
+.ventra-model-inspector {
+  padding: 16px;
+  overflow: auto;
+  max-height: 650px;
+}
+
+.ventra-model-inspector h3 {
+  margin: 8px 0 3px;
+}
+
+.ventra-model-properties {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ventra-model-properties > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.045);
+}
+
+.ventra-model-properties small {
+  opacity: .62;
+}
+
+.ventra-model-properties strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .ventra-model-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ventra-model-inspector {
+    max-height: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ventra-model-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ventra-model-canvas,
+  .ventra-model-canvas-shell,
+  .ventra-model-empty {
+    height: 520px;
+    min-height: 520px;
+  }
+}
+
+
+.ventra-model-reconstruction-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(215, 182, 0, .34);
+  border-radius: 12px;
+  background: rgba(215, 182, 0, .07);
+}
+
+.ventra-model-reconstruction-summary strong {
+  color: #d7b600;
+  letter-spacing: .08em;
+  font-size: 11px;
+}
+
+.ventra-model-reconstruction-summary span {
+  font-size: 13px;
+  opacity: .86;
+}
+
+.ventra-design-studio {
+  border: 1px solid rgba(215, 182, 0, .28);
+  background: linear-gradient(135deg, rgba(13,18,29,.96), rgba(18,23,35,.9));
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.ventra-design-studio-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ventra-design-studio-heading span {
+  font-size: 11px;
+  letter-spacing: .14em;
+  color: #d7b600;
+  font-weight: 800;
+}
+
+.ventra-design-studio-heading h3 {
+  margin: 5px 0 4px;
+}
+
+.ventra-design-studio-heading p {
+  margin: 0;
+  opacity: .7;
+  font-size: 13px;
+}
+
+.ventra-design-source {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ventra-design-studio textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 94px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: #0c1320;
+  color: inherit;
+  padding: 12px 14px;
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+}
+
+.ventra-design-studio textarea:focus {
+  border-color: rgba(215, 182, 0, .65);
+  box-shadow: 0 0 0 3px rgba(215, 182, 0, .08);
+}
+
+.ventra-design-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ventra-design-actions button {
+  min-height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(215, 182, 0, .55);
+  background: #d7b600;
+  color: #090b10;
+  font-weight: 800;
+  padding: 0 13px;
+  cursor: pointer;
+}
+
+.ventra-design-actions button.secondary {
+  border-color: rgba(255,255,255,.12);
+  background: #111827;
+  color: inherit;
+}
+
+.ventra-design-actions button.danger {
+  border-color: rgba(255,120,120,.35);
+  background: rgba(120,25,25,.25);
+  color: #ffb0b0;
+}
+
+.ventra-design-actions button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.ventra-design-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  opacity: .86;
+}
+
+.ventra-design-summary strong {
+  color: #d7b600;
+}
+
+.ventra-camera-dock { display:flex; flex-wrap:wrap; align-items:center; gap:8px; width:100%; padding:12px; border:1px solid #343a46; border-radius:12px; background:#111827; }
+.ventra-camera-dock strong { width:100%; color:#facc15; }
+.ventra-camera-dock button { min-height:40px; min-width:64px; padding:8px 12px; cursor:pointer; touch-action:manipulation; }
+.ventra-camera-dock button[aria-pressed="true"] { background:#facc15; color:#111; }
+.ventra-camera-dock small { display:block; width:100%; color:#cbd5e1; }
+.ventra-model-canvas > canvas { pointer-events:auto; touch-action:none; cursor:grab; }
+.ventra-schematic-overlay-controls { position:absolute; top:12px; left:12px; z-index:4; display:flex; flex-wrap:wrap; gap:6px; max-width:calc(100% - 24px); pointer-events:none; }
+.ventra-schematic-overlay-controls button { pointer-events:auto; min-width:42px; min-height:36px; border-radius:8px; color:#fff; background:#15202de8; border:1px solid #56616e; cursor:pointer; }
+.ventra-schematic-overlay-controls button.is-active { color:#ffd900; border-color:#ffd900; }

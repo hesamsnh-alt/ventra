@@ -1,4 +1,6 @@
 "use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,14 +13,9 @@ import "./CreateProject.css";
 export default function CreateProjectPage() {
   const router = useRouter();
 
-  const [checkingUser, setCheckingUser] =
-    useState(true);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [checkingUser, setCheckingUser] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -26,7 +23,7 @@ export default function CreateProjectPage() {
     location: "",
     budget: "",
     start_date: "",
-    deadline: "",
+    end_date: "",
   });
 
   useEffect(() => {
@@ -34,16 +31,10 @@ export default function CreateProjectPage() {
 
     async function checkUser() {
       try {
-        const {
-          user,
-          error,
-        } = await getCurrentUser();
+        const { user, error } = await getCurrentUser();
 
         if (error) {
-          console.error(
-            "User checking error:",
-            error.message
-          );
+          console.error("User checking error:", error.message);
         }
 
         if (!user) {
@@ -55,11 +46,7 @@ export default function CreateProjectPage() {
           setCheckingUser(false);
         }
       } catch (error) {
-        console.error(
-          "Authentication check error:",
-          error
-        );
-
+        console.error("Authentication check error:", error);
         router.replace("/login");
       }
     }
@@ -82,10 +69,18 @@ export default function CreateProjectPage() {
     event.preventDefault();
 
     if (!form.name.trim()) {
-      setErrorMessage(
-        "Project name is required."
-      );
+      setErrorMessage("Project name is required.");
+      return;
+    }
 
+    if (
+      form.start_date &&
+      form.end_date &&
+      form.end_date < form.start_date
+    ) {
+      setErrorMessage(
+        "The deadline cannot be earlier than the start date."
+      );
       return;
     }
 
@@ -93,39 +88,56 @@ export default function CreateProjectPage() {
       setLoading(true);
       setErrorMessage("");
 
-      const {
-        project,
-        error,
-      } = await createProject(form);
+      const projectData = {
+        name: form.name.trim(),
+        client: form.client.trim() || null,
+        location: form.location.trim() || null,
+        budget: form.budget === "" ? null : Number(form.budget),
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+      };
+
+      const result = await createProject(projectData);
+
+      /*
+       * Supports both possible service formats:
+       *
+       * 1. { project, error }
+       * 2. Direct project object
+       */
+      const project = result?.project ?? result;
+      const error = result?.error ?? null;
 
       if (error) {
+        console.error("Create project service error:", error);
+
         setErrorMessage(
-          error.message ||
-            "Could not create project."
+          error.message || "Could not create project."
         );
 
         return;
       }
 
       if (!project?.id) {
+        console.error(
+          "Create project returned no project ID:",
+          result
+        );
+
         setErrorMessage(
-          "Project was created, but no project ID was returned."
+          "Project could not be created because no project ID was returned."
         );
 
         return;
       }
 
-      router.push(
-        `/projects/${project.id}`
-      );
+      router.push(`/projects/${project.id}`);
     } catch (error) {
-      console.error(
-        "Project creation error:",
-        error
-      );
+      console.error("Project creation error:", error);
 
       setErrorMessage(
-        "An unexpected error occurred while creating the project."
+        error?.message ||
+          "An unexpected error occurred while creating the project."
       );
     } finally {
       setLoading(false);
@@ -134,151 +146,143 @@ export default function CreateProjectPage() {
 
   if (checkingUser) {
     return (
-      <main className="create-project-page">
-        <p>Checking your account...</p>
-      </main>
+      <LocalizedElement as="main" className="create-project-page">
+        <LocalizedElement as="p">Checking your account...</LocalizedElement>
+      </LocalizedElement>
     );
   }
 
   return (
-    <main className="create-project-page">
-      <div className="create-project-container">
-        <div className="create-project-header">
-          <span className="create-project-eyebrow">
+    <LocalizedElement as="main" className="create-project-page">
+      <LocalizedElement as="div" className="create-project-container">
+        <LocalizedElement as="div" className="create-project-header">
+          <LocalizedElement as="span" className="create-project-eyebrow">
             New workspace
-          </span>
+          </LocalizedElement>
 
-          <h1>Create Project</h1>
+          <LocalizedElement as="h1">Create Project</LocalizedElement>
 
-          <p>
-            Add the basic project information.
-            You can complete the remaining details
-            later.
-          </p>
-        </div>
+          <LocalizedElement as="p">
+            Add the basic project information. You can complete
+            the remaining details later.
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <form
+        <LocalizedElement as="form"
           onSubmit={handleSubmit}
           className="create-project-form"
         >
-          <label className="create-project-field">
-            <span>Project name</span>
+          <LocalizedElement as="label" className="create-project-field">
+            <LocalizedElement as="span">Project name</LocalizedElement>
 
-            <input
+            <LocalizedElement as="input"
               type="text"
               placeholder="Example: Villa Renovation"
-              value={form.name}
+              value={form.name ?? ""}
               onChange={(event) =>
-                updateField(
-                  "name",
-                  event.target.value
-                )
+                updateField("name", event.target.value)
               }
               required
+              disabled={loading}
             />
-          </label>
+          </LocalizedElement>
 
-          <label className="create-project-field">
-            <span>Client</span>
+          <LocalizedElement as="label" className="create-project-field">
+            <LocalizedElement as="span">Client</LocalizedElement>
 
-            <input
+            <LocalizedElement as="input"
               type="text"
-              placeholder="Client name"
-              value={form.client}
+              placeholder="Client"
+              value={form.client ?? ""}
               onChange={(event) =>
-                updateField(
-                  "client",
-                  event.target.value
-                )
+                updateField("client", event.target.value)
               }
+              disabled={loading}
             />
-          </label>
+          </LocalizedElement>
 
-          <label className="create-project-field">
-            <span>Location</span>
+          <LocalizedElement as="label" className="create-project-field">
+            <LocalizedElement as="span">Location</LocalizedElement>
 
-            <input
+            <LocalizedElement as="input"
               type="text"
               placeholder="Example: Dubai, UAE"
-              value={form.location}
+              value={form.location ?? ""}
               onChange={(event) =>
-                updateField(
-                  "location",
-                  event.target.value
-                )
+                updateField("location", event.target.value)
               }
+              disabled={loading}
             />
-          </label>
+          </LocalizedElement>
 
-          <label className="create-project-field">
-            <span>Budget</span>
+          <LocalizedElement as="label" className="create-project-field">
+            <LocalizedElement as="span">Budget</LocalizedElement>
 
-            <input
+            <LocalizedElement as="input"
               type="number"
               min="0"
               step="0.01"
               placeholder="Project budget in AED"
-              value={form.budget}
+              value={form.budget ?? ""}
               onChange={(event) =>
-                updateField(
-                  "budget",
-                  event.target.value
-                )
+                updateField("budget", event.target.value)
               }
+              disabled={loading}
             />
-          </label>
+          </LocalizedElement>
 
-          <div className="create-project-dates">
-            <label className="create-project-field">
-              <span>Start date</span>
+          <LocalizedElement as="div" className="create-project-dates">
+            <LocalizedElement as="label" className="create-project-field">
+              <LocalizedElement as="span">Start date</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="date"
-                value={form.start_date}
+                value={form.start_date ?? ""}
                 onChange={(event) =>
                   updateField(
                     "start_date",
                     event.target.value
                   )
                 }
+                disabled={loading}
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="create-project-field">
-              <span>Deadline</span>
+            <LocalizedElement as="label" className="create-project-field">
+              <LocalizedElement as="span">Deadline</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="date"
-                value={form.deadline}
+                value={form.end_date ?? ""}
+                min={form.start_date || undefined}
                 onChange={(event) =>
                   updateField(
-                    "deadline",
+                    "end_date",
                     event.target.value
                   )
                 }
+                disabled={loading}
               />
-            </label>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
           {errorMessage && (
-            <p className="create-form-error">
+            <LocalizedElement as="p" className="create-form-error" role="alert">
               {errorMessage}
-            </p>
+            </LocalizedElement>
           )}
 
-          <div className="create-project-actions">
-            <button
+          <LocalizedElement as="div" className="create-project-actions">
+            <LocalizedElement as="button"
               type="button"
               className="create-project-cancel"
-              onClick={() =>
-                router.push("/dashboard")
-              }
+              onClick={() => router.push("/dashboard")}
               disabled={loading}
             >
               Cancel
-            </button>
+            </LocalizedElement>
 
-            <button
+            <LocalizedElement as="button"
               type="submit"
               className="create-project-submit"
               disabled={loading}
@@ -286,10 +290,10 @@ export default function CreateProjectPage() {
               {loading
                 ? "Creating project..."
                 : "Create Project"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

@@ -1,0 +1,14 @@
+Ventra v43.4 - Single Parent Wall Opening Fix
+
+- Each snapped door/window stores exactly one parentWallKey.
+- During reconstruction an opening cuts only that exact wall line.
+- Removes the previous fuzzy distance<=0.18 multi-wall cut behavior.
+- Deduplicates snapped opening objects before cuts/rendering.
+- Header/sill are generated once per unique opening.
+- Preserves real wall gaps, authoritative Takeoff counts, slabs, storey stacking,
+  source-sheet removal and existing APIs.
+- No Analyze Drawing required.
+- No OpenAI call.
+
+Expected marker:
+[VENTRA ARCHITECTURAL 3D v43.4 SINGLE PARENT WALL]

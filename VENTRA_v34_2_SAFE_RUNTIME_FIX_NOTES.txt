@@ -1,0 +1,25 @@
+Ventra v34.2 SAFE Runtime Fix
+
+v34/v34.1 introduced a custom member-row path and the BOQ API still returned 500.
+
+v34.2 removes the entire complex member-row implementation and replaces it with
+one dependency-free path for the only currently verified structural member:
+
+Current verified takeoff:
+- column_volume = 4.21 m3
+- columns.volumeMeasured = true
+- 16/16 columns complete
+- column_formwork_area = 17.02 m2
+
+Behavior:
+- Adds VSTR-COLUMN-CONC with the measured column volume.
+- Quantity is measured.
+- Grade/rate remains pending.
+- Row is excluded from commercial total until rate/grade is confirmed.
+- No regex, helper lookup, price lookup, normalizeUnit, or duplicate detector is
+  used in this code path.
+- Beam/slab/foundation rows are not added because their measured volumes are zero.
+
+Expected:
+[VENTRA CONCRETE MEMBER BOQ v34.2 SAFE] { quantity: 4.21, ... }
+POST /api/ai/generate-boq 200

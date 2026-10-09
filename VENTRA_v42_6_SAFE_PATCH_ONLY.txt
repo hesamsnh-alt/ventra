@@ -1,0 +1,13 @@
+Ventra v42.6 SAFE PATCH ONLY
+
+Contains only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Does not touch API routes, APS token routes, BOQ, Estimate, Quotation,
+Supabase/auth, page.js, or geometry extraction.
+
+Purpose:
+Apply only the v42.6 source-sheet removal/restore behavior.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.6]

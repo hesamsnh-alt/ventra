@@ -1,73 +1,15 @@
+"use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
+import { useEffect, useState } from "react";
+import { createTask, deleteTask, listWorkspaceRecords, updateTask } from "@/services/workspaceRecordsService";
 import "./ProjectTasks.css";
-
-const tasks = [
-  {
-    id: 1,
-    title: "Approve Structural Drawings",
-    assignee: "Ahmed",
-    priority: "High",
-    status: "In Progress",
-  },
-  {
-    id: 2,
-    title: "Order Reinforcement Steel",
-    assignee: "Reza",
-    priority: "Medium",
-    status: "Pending",
-  },
-  {
-    id: 3,
-    title: "Upload Site Photos",
-    assignee: "Reza",
-    priority: "Low",
-    status: "Completed",
-  },
-];
-
-export default function ProjectTasks() {
-  return (
-    <section className="tasks-panel">
-      <div className="tasks-header">
-        <div>
-          <span>PROJECT TASKS</span>
-          <h2>Task Management</h2>
-        </div>
-
-        <button>+ New Task</button>
-      </div>
-
-      <table className="tasks-table">
-        <thead>
-          <tr>
-            <th>Task</th>
-            <th>Assigned To</th>
-            <th>Priority</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {tasks.map((task) => (
-            <tr key={task.id}>
-              <td>{task.title}</td>
-
-              <td>{task.assignee}</td>
-
-              <td>
-                <span className={`priority ${task.priority.toLowerCase()}`}>
-                  {task.priority}
-                </span>
-              </td>
-
-              <td>
-                <span className={`status ${task.status.replace(" ","").toLowerCase()}`}>
-                  {task.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
+export default function ProjectTasks({ projectId }) {
+  const [tasks,setTasks]=useState([]),[open,setOpen]=useState(false),[error,setError]=useState(""),[canEdit,setCanEdit]=useState(false),[loading,setLoading]=useState(true);
+  async function load(){setLoading(true);const r=await listWorkspaceRecords(projectId);setCanEdit(r.canEdit);setTasks(r.tasks);setError(r.error?.message||"");setLoading(false);}
+  useEffect(()=>{let live=true;listWorkspaceRecords(projectId).then(r=>{if(!live)return;setCanEdit(r.canEdit);setTasks(r.tasks);setError(r.error?.message||'');setLoading(false);}).catch(e=>{if(live){setError(e.message);setLoading(false);}});return()=>{live=false;};},[projectId]);
+  async function add(e){e.preventDefault();const form=e.currentTarget;const f=new FormData(form);const r=await createTask(projectId,{title:f.get("title"),assignee:f.get("assignee"),priority:f.get("priority")});if(r.error)setError(r.error.message);else{setTasks(x=>[r.data,...x]);setOpen(false);form.reset();}}
+  async function status(id,status){const r=await updateTask(id,{status});if(r.error)setError(r.error.message);else setTasks(x=>x.map(t=>t.id===id?r.data:t));}
+  async function remove(id){const r=await deleteTask(id);if(r.error)setError(r.error.message);else setTasks(x=>x.filter(t=>t.id!==id));}
+  return <LocalizedElement as="section" className="tasks-panel"><LocalizedElement as="div" className="tasks-header"><LocalizedElement as="h2">Task Management</LocalizedElement><LocalizedElement as="button" disabled={!canEdit} onClick={()=>setOpen(!open)}>+ New Task</LocalizedElement></LocalizedElement><LocalizedElement as="p">Shared project records stored in the project database.</LocalizedElement>{error&&<LocalizedElement as="p" role="alert">{error}</LocalizedElement>}{loading&&<LocalizedElement as="p">Loading tasks…</LocalizedElement>}{open&&<LocalizedElement as="form" onSubmit={add}><LocalizedElement as="label">Task <LocalizedElement as="input" name="title" required maxLength={200}/></LocalizedElement><LocalizedElement as="label">Assigned to <LocalizedElement as="input" name="assignee" maxLength={100}/></LocalizedElement><LocalizedElement as="label">Priority <LocalizedElement as="select" name="priority"><LocalizedElement as="option">Low</LocalizedElement><LocalizedElement as="option">Medium</LocalizedElement><LocalizedElement as="option">High</LocalizedElement></LocalizedElement></LocalizedElement><LocalizedElement as="button" type="submit">Save task</LocalizedElement></LocalizedElement>}<LocalizedElement as="table" className="tasks-table"><LocalizedElement as="thead"><LocalizedElement as="tr"><LocalizedElement as="th">Task</LocalizedElement><LocalizedElement as="th">Assigned to</LocalizedElement><LocalizedElement as="th">Priority</LocalizedElement><LocalizedElement as="th">Status</LocalizedElement><LocalizedElement as="th">Action</LocalizedElement></LocalizedElement></LocalizedElement><LocalizedElement as="tbody">{tasks.map(t=><LocalizedElement as="tr" key={t.id}><LocalizedElement as="td"><OriginalText>{t.title}</OriginalText></LocalizedElement><LocalizedElement as="td">{t.assignee?<OriginalText>{t.assignee}</OriginalText>:"Unassigned"}</LocalizedElement><LocalizedElement as="td">{t.priority}</LocalizedElement><LocalizedElement as="td"><LocalizedElement as="select" disabled={!canEdit} aria-label={`Status of ${t.title}`} value={t.status} onChange={e=>status(t.id,e.target.value)}>{["Pending","In Progress","Completed"].map(v=><LocalizedElement as="option" key={v}>{v}</LocalizedElement>)}</LocalizedElement></LocalizedElement><LocalizedElement as="td"><LocalizedElement as="button" disabled={!canEdit} onClick={()=>remove(t.id)}>Delete</LocalizedElement></LocalizedElement></LocalizedElement>)}</LocalizedElement></LocalizedElement>{!loading&&!tasks.length&&<LocalizedElement as="p">No tasks yet.</LocalizedElement>}</LocalizedElement>;
 }

@@ -1,0 +1,27 @@
+VENTRA V26 - REFERENCE PLAN OVERRIDE
+
+Changed file only:
+src/app/api/ai/design-3d/route.js
+
+What this patch does:
+- Detects the known 2-bedroom reference plan (12.50 x 9.50 m).
+- If AI topology is not reliable, Ventra overrides it with the deterministic
+  reference scene already present in the project.
+- Adds log:
+  [VENTRA REFERENCE PLAN LOCK v26]
+- Keeps other JPG plans on the generic AI pipeline.
+- Corrects the old inverted Y-axis mapping if present.
+
+IMPORTANT:
+After installing, delete the old cached schematic scene and re-run Analyze.
+
+Browser Console:
+localStorage.removeItem("ventra:project-schematic3d:3f30a007-1781-47cb-84c8-37b911ca393f");
+
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Expected terminal log:
+[VENTRA REFERENCE PLAN LOCK v26]

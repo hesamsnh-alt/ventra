@@ -78,7 +78,7 @@ align-items:center;
 
 justify-content:center;
 
-background:#FFD40022;
+background:#cabebe22;
 
 border-radius:16px;
 
@@ -90,7 +90,7 @@ color:#FFD400;
 
 margin-top:20px;
 
-color:white;
+color:rgb(243, 237, 237);
 
 }
 
@@ -98,7 +98,7 @@ color:white;
 
 margin:12px 0 18px;
 
-color:#999;
+color:#fbf9f9;
 
 font-size:13px;
 
@@ -122,4 +122,149 @@ font-weight:700;
 
 cursor:pointer;
 
+}.takeoff-result {
+  margin-top: 28px;
+  padding: 24px;
+  border: 1px solid rgba(255, 224, 0, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 224, 0, 0.06),
+      rgba(255, 255, 255, 0.02)
+    );
+}
+
+.takeoff-result-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.takeoff-result-grid article {
+  padding: 18px;
+  border: 1px solid
+    rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background:
+    rgba(255, 255, 255, 0.035);
+}
+
+.takeoff-result-grid span {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(251, 251, 251, 0.62);
+  font-size: 13px;
+}
+
+.takeoff-result-grid strong {
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.takeoff-result-notes {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 12px;
+  background:
+    rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.7;
+}
+
+@media (max-width: 800px) {
+  .takeoff-result-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .takeoff-result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.room-schedule {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid rgba(255, 215, 0, 0.22);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.room-schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.room-schedule-header span {
+  color: #ffd700;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.room-schedule-header h4 {
+  margin: 6px 0 0;
+  font-size: 20px;
+}
+
+.room-schedule-header > strong {
+  color: #ffd700;
+}
+
+.room-schedule-table-wrap {
+  overflow-x: auto;
+}
+
+.room-schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.room-schedule-table th,
+.room-schedule-table td {
+  padding: 13px 14px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.room-schedule-table th {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.room-schedule-table td {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .room-schedule-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* Active drawing selection: Preview/analysis always follows this row. */
+.drawing-file-row {
+  cursor: pointer;
+}
+
+.drawing-file-row-active {
+  border-color: rgba(255, 212, 0, 0.55) !important;
+  background: rgba(255, 212, 0, 0.06) !important;
+  box-shadow: inset 3px 0 0 #ffd400;
+}
+
+.drawing-file-row:focus-visible {
+  outline: 2px solid #ffd400;
+  outline-offset: 2px;
 }

@@ -1,3 +1,8 @@
+
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+import Link from "next/link";
 import "./Sidebar.css";
 
 import {
@@ -47,7 +52,7 @@ const menu = [
 
     {
         icon:Bot,
-        title:"AI Copilot",
+        title:"Drawing Analysis",
     },
 
     {
@@ -61,19 +66,19 @@ export default function Sidebar(){
 
     return(
 
-        <aside className="sidebar">
+        <LocalizedElement as="aside" className="sidebar">
 
-            <div className="sidebar-logo">
+            <LocalizedElement as="div" className="sidebar-logo">
 
-                <h2>
+                <LocalizedElement as="h2">
 
                     Ventra
 
-                </h2>
+                </LocalizedElement>
 
-            </div>
+            </LocalizedElement>
 
-            <nav>
+            <LocalizedElement as="nav">
 
                 {
 
@@ -83,20 +88,20 @@ export default function Sidebar(){
 
                         return(
 
-                            <button
+                            <LocalizedLink  href={["/dashboard","/dashboard#projects","/tools/estimate","/tools/boq","/tools/reports","/tools/drawings","/profile"][index]}
                             key={index}
                             className="sidebar-item"
                             >
 
                                 <Icon size={20}/>
 
-                                <span>
+                                <LocalizedElement as="span">
 
                                     {item.title}
 
-                                </span>
+                                </LocalizedElement>
 
-                            </button>
+                            </LocalizedLink>
 
                         );
 
@@ -104,9 +109,9 @@ export default function Sidebar(){
 
                 }
 
-            </nav>
+            </LocalizedElement>
 
-        </aside>
+        </LocalizedElement>
 
     )
 

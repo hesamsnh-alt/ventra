@@ -1,0 +1,22 @@
+Ventra v40 - Refresh + Save Rebuild
+
+PDF from v38 remains unchanged.
+
+REFRESH:
+- Reads localStorage directly on every click.
+- Fails loudly if the estimate key is missing/invalid.
+- Forces React state through null -> new object on requestAnimationFrame.
+- Persists a last-refresh diagnostic record.
+- Shows green REFRESHED message with total/quality/benchmark.
+
+SAVE:
+- Writes the full quotation JSON.
+- Reads the exact key back immediately.
+- Verifies total AND updatedAt.
+- Creates a second immutable snapshot key on every successful save.
+- Shows the snapshot key on screen.
+- Shows green SAVED message with total/time.
+- Fails loudly in red if any step fails.
+
+This version is intentionally explicit. A user can now tell whether the button
+worked without opening DevTools.

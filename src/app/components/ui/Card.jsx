@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Card.css";
 
 export default function Card({
@@ -7,23 +9,23 @@ export default function Card({
   padding = "md",
 }) {
   return (
-    <div className={`vt-card vt-card-${padding}`}>
+    <LocalizedElement as="div" className={`vt-card vt-card-${padding}`}>
       {title && (
-        <div className="vt-card-header">
+        <LocalizedElement as="div" className="vt-card-header">
 
-          <h3>{title}</h3>
+          <LocalizedElement as="h3">{title}</LocalizedElement>
 
           {subtitle && (
-            <p>{subtitle}</p>
+            <LocalizedElement as="p">{subtitle}</LocalizedElement>
           )}
 
-        </div>
+        </LocalizedElement>
       )}
 
-      <div className="vt-card-body">
+      <LocalizedElement as="div" className="vt-card-body">
         {children}
-      </div>
+      </LocalizedElement>
 
-    </div>
+    </LocalizedElement>
   );
 }

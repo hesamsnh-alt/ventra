@@ -1,0 +1,17 @@
+VENTRA V18.3 - JPG 3D VISIBILITY + REAL DOORS + FLOOR CLIPPING
+
+Only Project3DViewer.jsx is changed.
+
+Fixes:
+- removes duplicate schematic lighting that caused white/overexposed 3D
+- floor pattern lines are clipped to actual room polygons
+- internal/entrance doors render as upright 3D panels with jambs/header/handle
+- door swing arc remains visible at floor level
+- lower cutaway wall heights improve furniture visibility
+- camera returns to a clearer dollhouse angle
+- no changes to route.js, Analyze, save, JPG persistence, source switching, BOQ, APS, DWG
+
+Install:
+Replace src/app/projects/[id]/Project3DViewer.jsx
+Then clear .next and restart Next.js.
+No Analyze rerun is required for the visibility/door renderer changes.

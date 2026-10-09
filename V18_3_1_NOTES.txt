@@ -1,0 +1,20 @@
+VENTRA V18.3.1 DUPLICATE FUNCTION HOTFIX
+
+Fixes the exact Next.js compile error:
+the name `ventraPointInsidePolygon2D` is defined multiple times
+
+Only one file is changed:
+src/app/projects/[id]/Project3DViewer.jsx
+
+No changes to:
+- route.js
+- Analyze
+- JPG save/persistence
+- source switching
+- BOQ / Estimate / Quotation
+- APS / DWG
+
+After replacing:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev

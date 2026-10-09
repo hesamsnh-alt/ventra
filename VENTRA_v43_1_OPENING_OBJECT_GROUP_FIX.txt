@@ -1,0 +1,24 @@
+Ventra v43.1 - Opening Object Grouping Fix
+
+Problem seen in v43:
+382 doors / 866 windows were reported because every primitive line belonging to
+door/window dbIds was being rendered as a separate opening. Some huge line
+segments produced giant vertical geometry.
+
+Fix:
+- Group door/window primitives by dbId.
+- One dbId can create at most one architectural opening marker.
+- Build a local metre bounding envelope for each object.
+- Door plausible width: 0.55m to 1.80m.
+- Window plausible width: 0.40m to 3.60m.
+- If envelope is distorted by a symbol/swing arc, longest verified primitive
+  line is tried as a secondary width.
+- Objects still outside architectural ranges are rejected, not silently clamped.
+- UI reports rejected opening objects.
+- Marker userData retains dbId, type, width and source.
+- Slab/storey/wall/source-sheet behavior from v43 remains unchanged.
+- No OpenAI call.
+- No Analyze Drawing required.
+
+Expected marker:
+[VENTRA ARCHITECTURAL 3D v43.1]

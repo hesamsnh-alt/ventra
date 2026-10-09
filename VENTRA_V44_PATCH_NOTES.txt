@@ -1,0 +1,17 @@
+VENTRA V44 - AUDIT GUARD + V43 METRIC ROLLBACK
+
+Base: V42 image-grounded pipeline, not V43 metric room rectification.
+
+Why V43 regressed:
+- V43 independently re-centered and resized rectangular rooms from OCR dimensions.
+- That broke shared-wall adjacency and room topology because neighboring rooms were mutated independently.
+- The renderer was not the primary cause of that regression.
+
+V44 changes:
+1. Removes V43 room-by-room metric rectification entirely by restoring the V42 image-grounded compile path.
+2. Keeps the strict OpenAI schema fix, footprint/holes support, image-axis conversion, image-grounded assets, viewer floor protection, and duplicate request coalescing from V42.
+3. Makes scene health stricter for room coverage, gaps, and overlaps.
+4. Adds an audit acceptance gate. A second-pass visual audit cannot replace the first pass if it creates materially more gap/overlap, changes footprint too much, or destabilizes room/wall topology.
+5. Logs [VENTRA JPG AUDIT DECISION v44] with accepted true/false and quality metrics.
+
+Protected engineering paths remain untouched: DWG/DXF/IFC/RVT APS/geometry engineering, BOQ, Estimate, Quotation, Supabase/Auth, Takeoff, Dashboard, persistence/export.

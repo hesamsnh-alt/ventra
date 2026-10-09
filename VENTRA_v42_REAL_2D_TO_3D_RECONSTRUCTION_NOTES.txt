@@ -1,0 +1,35 @@
+Ventra v42 - Real 2D -> 3D Reconstruction Foundation
+
+This version does NOT extrude every line in the drawing.
+
+Geometry extractor now persists:
+- wallLineSegments
+- doorLineSegments
+- windowLineSegments
+- wall/door/window circular arcs
+
+3D Model tab:
+- Reconstruct 3D button.
+- Uses only APS-classified wall centerline geometry.
+- Converts verified drawing units using the saved meterFactor.
+- Extrudes wall centerlines to 3D boxes.
+- Default wall thickness: 0.15 m.
+- Wall height uses saved wall_height when available, otherwise 3.0 m.
+- Adds floor polygons when the APS geometry engine has a verified floor polygon.
+- Adds the reconstruction as an Autodesk Viewer overlay, preserving the original
+  2D drawing underneath.
+- Attempts perspective/orbit navigation after reconstruction.
+- Hide Reconstruction returns to the source Autodesk view.
+- No OpenAI call.
+
+IMPORTANT:
+The existing saved takeoff predates wallLineSegments. After installing v42,
+run Analyze Drawing ONCE so the new verified wall segment arrays are persisted.
+Then open 3D Model and click Reconstruct 3D.
+
+Next stages after this foundation:
+- proper wall thickness inference/pairing
+- door/window voids
+- multiple levels / storey elevations
+- columns and slabs
+- room-based materials and BOQ object linking

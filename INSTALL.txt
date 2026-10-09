@@ -1,0 +1,13 @@
+Ventra v44
+
+راهنمای اصلی: README-START-HERE-FA.md
+
+۱. از پروژه و دیتابیس پشتیبان بگیرید.
+۲. فایل‌های این بسته را جایگزین و .env.local خودتان را نگه دارید.
+۳. scripts/INSTALL-VENTRA-v44.sql را در SQL Editor دیتابیس Supabase موجود اجرا کنید.
+۴. npm ci
+۵. npm test
+۶. npm run build -- --webpack
+۷. npm run dev
+
+ترجمهٔ کامل هنوز تمام نشده است؛ وضعیت و آزمون بعد از نصب در راهنمای اصلی توضیح داده شده‌اند.

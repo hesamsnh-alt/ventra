@@ -1,0 +1,21 @@
+Ventra v42.2 - Floor Polygon Sanitizer
+
+Fixes THREE.Shape duplicate-point and polygon triangulation warnings during
+2D -> 3D reconstruction.
+
+Before ShapeGeometry each floor polygon now:
+- converts points to finite numeric coordinates
+- removes consecutive duplicate / near-duplicate points
+- removes duplicated closing point
+- removes near-collinear intermediate vertices
+- rejects self-intersecting polygons
+- rejects near-zero-area polygons
+- validates that ShapeGeometry produced actual vertices
+
+Invalid floor polygons are skipped instead of poisoning the reconstruction.
+Wall reconstruction continues normally.
+
+The reconstruction summary now reports skipped invalid floor polygons.
+No re-analysis is required.
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.2]

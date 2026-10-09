@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./ProjectOverview.css";
 
 const chartData = [
@@ -11,141 +13,141 @@ const chartData = [
 
 export default function ProjectOverview() {
   return (
-    <section className="project-overview" id="dashboard">
-      <div className="project-overview__glow" />
-      <div className="project-overview__grid" />
+    <LocalizedElement as="section" className="project-overview" id="dashboard">
+      <LocalizedElement as="div" className="project-overview__glow" />
+      <LocalizedElement as="div" className="project-overview__grid" />
 
-      <div className="project-overview__heading">
-        <span>AI Project Intelligence</span>
+      <LocalizedElement as="div" className="project-overview__heading">
+        <LocalizedElement as="span">AI Project Intelligence</LocalizedElement>
 
-        <h2>
+        <LocalizedElement as="h2">
           Control every stage of your
-          <strong> construction project.</strong>
-        </h2>
+          <LocalizedElement as="strong"> construction project.</LocalizedElement>
+        </LocalizedElement>
 
-        <p>
+        <LocalizedElement as="p">
           Track project progress, estimated costs, BOQs, payments and delay
           risks from one intelligent workspace.
-        </p>
-      </div>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <div className="project-overview__stage">
-        <article className="overview-float overview-float--boq">
-          <div className="overview-float__icon overview-float__icon--yellow">
+      <LocalizedElement as="div" className="project-overview__stage">
+        <LocalizedElement as="article" className="overview-float overview-float--boq">
+          <LocalizedElement as="div" className="overview-float__icon overview-float__icon--yellow">
             AI
-          </div>
+          </LocalizedElement>
 
-          <div>
-            <span>BOQ Generated</span>
-            <strong>1,248 Items</strong>
-          </div>
-        </article>
+          <LocalizedElement as="div">
+            <LocalizedElement as="span">BOQ Generated</LocalizedElement>
+            <LocalizedElement as="strong">1,248 Items</LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <div className="overview-dashboard">
-          <div className="overview-dashboard__header">
-            <div>
-              <span className="overview-dashboard__eyebrow">
-                Project Overview
-              </span>
+        <LocalizedElement as="div" className="overview-dashboard">
+          <LocalizedElement as="div" className="overview-dashboard__header">
+            <LocalizedElement as="div">
+              <LocalizedElement as="span" className="overview-dashboard__eyebrow">
+                Sample Workspace Preview
+              </LocalizedElement>
 
-              <h3>AL SIRATCONTRACTING</h3>
-            </div>
+              <LocalizedElement as="h3">AL SIRATCONTRACTING</LocalizedElement>
+            </LocalizedElement>
 
-            <div className="overview-dashboard__status">
-              <span />
+            <LocalizedElement as="div" className="overview-dashboard__status">
+              <LocalizedElement as="span" />
               Active
-            </div>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="overview-dashboard__stats">
-            <div className="overview-stat">
-              <span>Project Progress</span>
-              <strong>68%</strong>
+          <LocalizedElement as="div" className="overview-dashboard__stats">
+            <LocalizedElement as="div" className="overview-stat">
+              <LocalizedElement as="span">Project Progress</LocalizedElement>
+              <LocalizedElement as="strong">68%</LocalizedElement>
 
-              <div className="overview-stat__progress">
-                <div />
-              </div>
+              <LocalizedElement as="div" className="overview-stat__progress">
+                <LocalizedElement as="div" />
+              </LocalizedElement>
 
-              <small>+12% vs last month</small>
-            </div>
+              <LocalizedElement as="small">+12% vs last month</LocalizedElement>
+            </LocalizedElement>
 
-            <div className="overview-stat">
-              <span>Estimated Cost</span>
-              <strong>AED 4.2M</strong>
+            <LocalizedElement as="div" className="overview-stat">
+              <LocalizedElement as="span">Estimated Cost</LocalizedElement>
+              <LocalizedElement as="strong">AED 4.2M</LocalizedElement>
 
-              <div className="overview-stat__updated">
-                <span />
+              <LocalizedElement as="div" className="overview-stat__updated">
+                <LocalizedElement as="span" />
                 Updated today
-              </div>
-            </div>
-          </div>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="overview-performance">
-            <div className="overview-performance__header">
-              <div>
-                <strong>Project Performance</strong>
-                <span>Planned progress</span>
-              </div>
+          <LocalizedElement as="div" className="overview-performance">
+            <LocalizedElement as="div" className="overview-performance__header">
+              <LocalizedElement as="div">
+                <LocalizedElement as="strong">Project Performance</LocalizedElement>
+                <LocalizedElement as="span">Planned progress</LocalizedElement>
+              </LocalizedElement>
 
-              <button type="button">Last 6 months⌄</button>
-            </div>
+              <LocalizedElement as="span">Sample: Jan - Jun</LocalizedElement>
+            </LocalizedElement>
 
-            <div className="overview-chart">
-              <div className="overview-chart__levels">
-                <span>100%</span>
-                <span>50%</span>
-                <span>0%</span>
-              </div>
+            <LocalizedElement as="div" className="overview-chart">
+              <LocalizedElement as="div" className="overview-chart__levels">
+                <LocalizedElement as="span">100%</LocalizedElement>
+                <LocalizedElement as="span">50%</LocalizedElement>
+                <LocalizedElement as="span">0%</LocalizedElement>
+              </LocalizedElement>
 
-              <div className="overview-chart__content">
-                <div className="overview-chart__lines">
-                  <span />
-                  <span />
-                  <span />
-                </div>
+              <LocalizedElement as="div" className="overview-chart__content">
+                <LocalizedElement as="div" className="overview-chart__lines">
+                  <LocalizedElement as="span" />
+                  <LocalizedElement as="span" />
+                  <LocalizedElement as="span" />
+                </LocalizedElement>
 
-                <div className="overview-chart__columns">
+                <LocalizedElement as="div" className="overview-chart__columns">
                   {chartData.map((item) => (
-                    <div
+                    <LocalizedElement as="div"
                       className="overview-chart__column"
                       key={item.month}
                     >
-                      <div
+                      <LocalizedElement as="div"
                         className="overview-chart__bar"
                         style={{ height: `${item.value}%` }}
                       />
 
-                      <span>{item.month}</span>
-                    </div>
+                      <LocalizedElement as="span">{item.month}</LocalizedElement>
+                    </LocalizedElement>
                   ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <article className="overview-float overview-float--payment">
-          <div className="overview-float__icon overview-float__icon--green">
+        <LocalizedElement as="article" className="overview-float overview-float--payment">
+          <LocalizedElement as="div" className="overview-float__icon overview-float__icon--green">
             AED
-          </div>
+          </LocalizedElement>
 
-          <div>
-            <span>Payment Due</span>
-            <strong>AED 186,500</strong>
-          </div>
-        </article>
+          <LocalizedElement as="div">
+            <LocalizedElement as="span">Payment Due</LocalizedElement>
+            <LocalizedElement as="strong">AED 186,500</LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <article className="overview-float overview-float--delay">
-          <div className="overview-float__icon overview-float__icon--red">
+        <LocalizedElement as="article" className="overview-float overview-float--delay">
+          <LocalizedElement as="div" className="overview-float__icon overview-float__icon--red">
             !
-          </div>
+          </LocalizedElement>
 
-          <div>
-            <span>Delay Risk</span>
-            <strong>2 Activities</strong>
-          </div>
-        </article>
-      </div>
-    </section>
+          <LocalizedElement as="div">
+            <LocalizedElement as="span">Delay Risk</LocalizedElement>
+            <LocalizedElement as="strong">2 Activities</LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

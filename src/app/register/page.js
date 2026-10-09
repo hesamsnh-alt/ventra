@@ -1,4 +1,8 @@
 "use client";
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useState } from "react";
 import Link from "next/link";
@@ -129,29 +133,29 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="vt-register">
-      <section className="vt-register__card">
-        <Link href="/" className="vt-register__logo">
-          <span className="vt-register__logo-icon">V</span>
-          <span>Ventra</span>
-        </Link>
+    <LocalizedElement as="main" className="vt-register">
+      <LocalizedElement as="section" className="vt-register__card">
+        <LocalizedLink  href="/" className="vt-register__logo">
+          <LocalizedElement as="span" className="vt-register__logo-icon">V</LocalizedElement>
+          <LocalizedElement as="span">Ventra</LocalizedElement>
+        </LocalizedLink>
 
-        <div className="vt-register__heading">
-          <span>Create your account</span>
-          <h1>Start building smarter</h1>
+        <LocalizedElement as="div" className="vt-register__heading">
+          <LocalizedElement as="span">Create your account</LocalizedElement>
+          <LocalizedElement as="h1">Start building smarter</LocalizedElement>
 
-          <p>
+          <LocalizedElement as="p">
             Register your Ventra account and continue to select your
             subscription plan.
-          </p>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <form className="vt-register__form" onSubmit={handleSubmit}>
-          <div className="vt-register__row">
-            <label className="vt-register__field">
-              <span>Full name *</span>
+        <LocalizedElement as="form" className="vt-register__form" onSubmit={handleSubmit}>
+          <LocalizedElement as="div" className="vt-register__row">
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Full name *</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="text"
                 name="fullName"
                 value={form.fullName}
@@ -159,12 +163,12 @@ export default function RegisterPage() {
                 placeholder="Your full name"
                 autoComplete="name"
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-register__field">
-              <span>Company name</span>
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Company name</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="text"
                 name="companyName"
                 value={form.companyName}
@@ -172,14 +176,14 @@ export default function RegisterPage() {
                 placeholder="Your company"
                 autoComplete="organization"
               />
-            </label>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="vt-register__row">
-            <label className="vt-register__field">
-              <span>Phone number</span>
+          <LocalizedElement as="div" className="vt-register__row">
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Phone number</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="tel"
                 name="phone"
                 value={form.phone}
@@ -187,12 +191,12 @@ export default function RegisterPage() {
                 placeholder="+971 50 000 0000"
                 autoComplete="tel"
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-register__field">
-              <span>Email address *</span>
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Email address *</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="email"
                 name="email"
                 value={form.email}
@@ -200,15 +204,15 @@ export default function RegisterPage() {
                 placeholder="name@company.com"
                 autoComplete="email"
               />
-            </label>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="vt-register__row">
-            <label className="vt-register__field">
-              <span>Password *</span>
+          <LocalizedElement as="div" className="vt-register__row">
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Password *</LocalizedElement>
 
-              <div className="vt-register__password">
-                <input
+              <LocalizedElement as="div" className="vt-register__password">
+                <LocalizedElement as="input"
                   type={showPassword ? "text" : "password"}
                   name="password"
                   value={form.password}
@@ -217,19 +221,19 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                 />
 
-                <button
+                <LocalizedElement as="button"
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
                 >
                   {showPassword ? "Hide" : "Show"}
-                </button>
-              </div>
-            </label>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
 
-            <label className="vt-register__field">
-              <span>Confirm password *</span>
+            <LocalizedElement as="label" className="vt-register__field">
+              <LocalizedElement as="span">Confirm password *</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type={showPassword ? "text" : "password"}
                 name="confirmPassword"
                 value={form.confirmPassword}
@@ -237,42 +241,42 @@ export default function RegisterPage() {
                 placeholder="Repeat password"
                 autoComplete="new-password"
               />
-            </label>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <label className="vt-register__terms">
-            <input
+          <LocalizedElement as="label" className="vt-register__terms">
+            <LocalizedElement as="input"
               type="checkbox"
               checked={acceptedTerms}
               onChange={(event) => setAcceptedTerms(event.target.checked)}
             />
 
-            <span>
+            <LocalizedElement as="span">
               I agree to the Terms of Service and Privacy Policy.
-            </span>
-          </label>
+            </LocalizedElement>
+          </LocalizedElement>
 
           {message && (
-            <div
+            <LocalizedElement as="div"
               className={`vt-register__message vt-register__message--${messageType}`}
             >
               {message}
-            </div>
+            </LocalizedElement>
           )}
 
-          <button
+          <LocalizedElement as="button"
             type="submit"
             className="vt-register__submit"
             disabled={loading}
           >
             {loading ? "Creating account..." : "Create account"}
-          </button>
-        </form>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <p className="vt-register__signin">
-          Already have an account? <Link href="/login">Sign in</Link>
-        </p>
-      </section>
-    </main>
+        <LocalizedElement as="p" className="vt-register__signin">
+          Already have an account? <LocalizedLink  href="/login">Sign in</LocalizedLink>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

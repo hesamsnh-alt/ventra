@@ -275,8 +275,8 @@
 
 .vt-header--scrolled .vt-header__bar {
   min-height: 62px;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-inline-start: 16px;
+  padding-inline-end: 16px;
 
   background: rgba(7, 7, 7, 0.8);
   border-color: rgba(255, 255, 255, 0.14);
@@ -343,7 +343,7 @@
 
   background: rgba(8, 8, 8, 0.97);
 
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.1);
 
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
@@ -417,11 +417,11 @@
 
   transition:
     color 0.25s ease,
-    padding-left 0.25s ease;
+    padding-inline-start 0.25s ease;
 }
 
 .vt-side-menu__links a:hover {
-  padding-left: 8px;
+  padding-inline-start: 8px;
   color: #ffd400;
 }
 

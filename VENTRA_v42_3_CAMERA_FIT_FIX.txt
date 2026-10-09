@@ -1,0 +1,23 @@
+Ventra v42.3 - Reconstruction Camera Fit
+
+Problem:
+The 3D wall meshes were successfully built (232 verified wall segments) but the
+Autodesk camera remained fitted to the underlying 2D sheet.
+
+Fix:
+- Calculates a THREE.Box3 bounding box from every reconstructed wall/floor mesh.
+- Stores the reconstruction bounds with the reconstruction result.
+- Immediately switches the Viewer to perspective mode.
+- Positions the camera in an isometric-style view around the reconstruction
+  bounding box.
+- Uses Z as the camera up vector.
+- Activates Orbit.
+- Fit to View now targets the reconstructed 3D bounds when reconstruction exists.
+- Home also returns to the reconstructed 3D view when reconstruction exists.
+- Original Autodesk fitToView remains the fallback when there is no reconstruction.
+
+No Analyze Drawing is required.
+No OpenAI call.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.3]

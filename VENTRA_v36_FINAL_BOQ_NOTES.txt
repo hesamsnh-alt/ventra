@@ -1,0 +1,29 @@
+Ventra v36 - Final BOQ pass
+
+Goal: stop iterating on the current BOQ blocker and produce a commercially usable
+measured column-concrete row without OpenAI.
+
+Verified project evidence:
+- 15 semantic rooms
+- 91 electrical items (28 lighting, 44 sockets, 19 switches)
+- 16 columns
+- measured column concrete volume = 4.21 m3
+- measured column formwork = 17.02 m2
+- BOQ API already returns HTTP 200
+
+v36:
+- Keeps APS 4.21 m3 as authoritative column quantity.
+- Searches the existing Ventra UAE price catalog deterministically for concrete
+  m3 rates.
+- Prefers C25 / reinforced / structural / section-03 candidates.
+- Uses the best conservative catalog candidate and includes the measured column
+  concrete in the commercial subtotal.
+- Does NOT use OpenAI.
+- If no safe catalog candidate exists, fails closed to measured_rate_pending.
+- Keeps provisional beam/foundation/slab allowances provisional because the
+  drawing does not contain verified measurements for those members.
+- Keeps v35 subtotal safety: provisional rows do not enter verified commercial total.
+
+Expected terminal marker:
+[VENTRA FINAL COLUMN CONCRETE v36]
+with quantity 4.21, a positive rate, positive amount, and commercial:true.

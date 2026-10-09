@@ -1,0 +1,16 @@
+const fs = require('fs');
+const assert = require('assert');
+const route = fs.readFileSync('src/app/api/ai/design-3d/route.js', 'utf8');
+const viewer = fs.readFileSync('src/app/projects/[id]/Project3DViewer.jsx', 'utf8');
+const center = fs.readFileSync('src/app/projects/[id]/ProjectDrawingCenter.jsx', 'utf8');
+assert(route.includes('generic-floorplan-engine-v43-metric-constraint'));
+assert(route.includes('measuredWidthMeters'));
+assert(route.includes('measuredDepthMeters'));
+assert(route.includes('printed_room_dimensions_v43'));
+assert(route.includes('vision_exact_center_v43'));
+assert(!route.includes('VENTRA JPG REFERENCE REGRESSION'));
+assert(!route.includes('twoBedroomApartmentFallback'));
+assert(viewer.includes('schematic_footprint_floor_v36'));
+assert(viewer.includes('["shaft", "courtyard"]'));
+assert(center.includes('VENTRA JPG 3D REQUEST COALESCED v42'));
+console.log('VENTRA V43 static invariants: PASS');

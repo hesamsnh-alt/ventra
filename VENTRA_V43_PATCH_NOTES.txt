@@ -1,0 +1,40 @@
+VENTRA V43 - IMAGE-GROUNDED METRIC CONSTRAINT PATCH
+Authoritative base reviewed: ventra(20260913-102936).zip
+
+Purpose
+- Improve JPG/PNG/WebP plan fidelity without touching engineering reconstruction.
+- Use printed room dimensions as guarded metric constraints.
+- Preserve furniture/fixture centers from the image instead of moving them aggressively.
+- Keep footprint/hole protections and duplicate-request coalescing.
+
+Changed source files
+1) src/app/api/ai/design-3d/route.js
+2) src/app/projects/[id]/Project3DViewer.jsx
+3) src/app/projects/[id]/ProjectDrawingCenter.jsx
+
+Key changes
+- Strict OpenAI structured-output schema remains self-validated.
+- Raster plan analysis is one shared geometry + assets pass, followed by an image-grounded visual audit.
+- Each room now returns shapeKind, measuredWidthMeters, measuredDepthMeters.
+- Clearly rectangular rooms with reliable printed dimensions are dimension-locked only when the measurement is reasonably consistent with the visual polygon (0.65x..1.45x guard).
+- Furniture/fixtures keep exact detected image centers. If an item falls just outside a room because of wall thickness, it is moved only minimally inward. No metre-scale wall snapping, centroid relocation or invented fixtures.
+- No hard-coded 2-bedroom reference template.
+- Only shaft/courtyard may cut the raster floor plate.
+- Duplicate 3D analyze requests for the same raster drawing are coalesced.
+
+Not changed
+- DWG/DXF/IFC/RVT engineering reconstruction
+- APS token/viewer engineering path
+- BOQ / Estimate / Quotation
+- Takeoff / Geometry Extractor
+- Supabase/Auth
+- Dashboard / persistence / export
+
+Validation performed in sandbox
+- node --check src/app/api/ai/design-3d/route.js : PASS
+- source invariants/static assertions : PASS
+- hard-coded reference-regression scan : PASS (absent)
+- patch tree verified : PASS
+
+Important
+A visual end-to-end OpenAI run cannot be reproduced inside the offline sandbox because it would require the user's live API/environment. The patch is syntax/static tested, not falsely claimed as a live vision-result test.

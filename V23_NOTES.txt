@@ -1,0 +1,31 @@
+VENTRA V23 - DIMENSION + FOOTPRINT LOCK
+
+Changed files:
+- src/app/api/ai/design-3d/route.js
+- src/app/projects/[id]/Project3DViewer.jsx
+
+What V23 changes:
+1. Adds a dedicated printed-dimension/footprint extraction pass from the original JPG/PNG/WebP.
+2. Uses clearly printed room dimensions as conservative room polygon locks.
+3. Preserves the real outer footprint/recess polygon in the saved schematic scene.
+4. Viewer uses the real footprint polygon for the base slab instead of always drawing one full rectangle.
+   This removes large grey exterior/void rectangles where the plan has entrance recesses or empty exterior areas.
+5. Keeps V20/V21 topology refinement and V22 symbol fidelity.
+6. Does not change BOQ, Estimate, Quotation, APS reconstruction, DWG path, authentication, or JPG persistence keys.
+
+Expected logs after a fresh Analyze:
+[VENTRA PLAN FIDELITY AUDIT v20]
+[VENTRA TOPOLOGY LOCK v21]
+[VENTRA PRINTED DIMENSION LOCK v23]
+[VENTRA FOOTPRINT CONSTRAINT LOCK v23]
+[VENTRA GENERIC FLOORPLAN SUCCESS v23]
+[VENTRA JPG FOOTPRINT FLOOR v23]
+
+Install:
+Replace only the two files in this patch.
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+A fresh JPG Analyze is required because V23 stores a new scene footprint and dimension-locked room polygons.

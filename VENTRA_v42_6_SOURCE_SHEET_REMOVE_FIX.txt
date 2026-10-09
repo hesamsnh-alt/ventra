@@ -1,0 +1,12 @@
+Ventra v42.6 - Source Sheet Removal
+
+- Keeps the reconstructed overlay independent.
+- Unloads the entire Autodesk 2D source model from the render scene while 3D reconstruction is active.
+- Falls back to model visibility controls if unload is unavailable.
+- Reports Source sheet removed/hidden/visible in the reconstruction summary.
+- Hide Reconstruction reloads the original Autodesk view when the model was unloaded.
+- No Analyze Drawing required.
+- No OpenAI call.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.6]

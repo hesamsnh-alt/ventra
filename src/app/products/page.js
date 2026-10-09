@@ -1,3 +1,7 @@
+
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import Link from "next/link";
 import {
   Brain,
@@ -58,84 +62,84 @@ const products = [
 
 export default function ProductsPage() {
   return (
-    <main className="vt-products">
-      <header className="vt-products__header">
-        <Link href="/" className="vt-products__logo">
-          <span className="vt-products__logo-mark">V</span>
-          <span>Ventra</span>
-        </Link>
+    <LocalizedElement as="main" className="vt-products">
+      <LocalizedElement as="header" className="vt-products__header">
+        <LocalizedLink  href="/" className="vt-products__logo">
+          <LocalizedElement as="span" className="vt-products__logo-mark">V</LocalizedElement>
+          <LocalizedElement as="span">Ventra</LocalizedElement>
+        </LocalizedLink>
 
-        <nav className="vt-products__nav">
-          <Link href="/products">Products</Link>
-          <Link href="/pricing">Pricing</Link>
-        </nav>
-      </header>
+        <LocalizedElement as="nav" className="vt-products__nav">
+          <LocalizedLink  href="/products">Products</LocalizedLink>
+          <LocalizedLink  href="/pricing">Pricing</LocalizedLink>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <section className="vt-products__hero">
-        <span className="vt-products__eyebrow">
+      <LocalizedElement as="section" className="vt-products__hero">
+        <LocalizedElement as="span" className="vt-products__eyebrow">
           Ventra Products
-        </span>
+        </LocalizedElement>
 
-        <h1>
+        <LocalizedElement as="h1">
           One platform.
-          <br />
+          <LocalizedElement as="br" />
           Every construction workflow.
-        </h1>
+        </LocalizedElement>
 
-        <p>
+        <LocalizedElement as="p">
           Ventra brings estimating, BOQ generation, scheduling,
           project management and UAE cost intelligence into one
           connected construction platform.
-        </p>
+        </LocalizedElement>
 
-        <div className="vt-products__actions">
-          <Link href="/pricing" className="vt-products__primary">
+        <LocalizedElement as="div" className="vt-products__actions">
+          <LocalizedLink  href="/pricing" className="vt-products__primary">
             Start 7-Day Free Trial
             <ArrowRight size={18} />
-          </Link>
+          </LocalizedLink>
 
-          <Link href="/dashboard" className="vt-products__secondary">
+          <LocalizedLink  href="/dashboard" className="vt-products__secondary">
             Open Dashboard
-          </Link>
-        </div>
-      </section>
+          </LocalizedLink>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <section className="vt-products__grid">
+      <LocalizedElement as="section" className="vt-products__grid">
         {products.map((product) => {
           const Icon = product.icon;
 
           return (
-            <article
+            <LocalizedElement as="article"
               key={product.title}
               className="vt-products__card"
             >
-              <div className="vt-products__icon">
+              <LocalizedElement as="div" className="vt-products__icon">
                 <Icon size={24} />
-              </div>
+              </LocalizedElement>
 
-              <h2>{product.title}</h2>
+              <LocalizedElement as="h2">{product.title}</LocalizedElement>
 
-              <p>{product.text}</p>
-            </article>
+              <LocalizedElement as="p">{product.text}</LocalizedElement>
+            </LocalizedElement>
           );
         })}
-      </section>
+      </LocalizedElement>
 
-      <section className="vt-products__cta">
-        <div>
-          <span>Ready to begin?</span>
-          <h2>Try Ventra free for 7 days.</h2>
-          <p>
+      <LocalizedElement as="section" className="vt-products__cta">
+        <LocalizedElement as="div">
+          <LocalizedElement as="span">Ready to begin?</LocalizedElement>
+          <LocalizedElement as="h2">Try Ventra free for 7 days.</LocalizedElement>
+          <LocalizedElement as="p">
             Add your payment method today and pay nothing until
             the trial ends.
-          </p>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <Link href="/pricing">
+        <LocalizedLink  href="/pricing">
           View Pricing
           <ArrowRight size={18} />
-        </Link>
-      </section>
-    </main>
+        </LocalizedLink>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

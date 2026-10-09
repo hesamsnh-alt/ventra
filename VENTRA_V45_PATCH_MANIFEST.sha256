@@ -1,0 +1,3 @@
+cdd4725713b062ae211af0607abe6c265996dd776b9cb0f6f29aa7092026b509  src/app/api/ai/design-3d/route.js
+62a5f8deed5d09ee939121a93df1457a0f6806aff4a969b624e124df6d084266  src/app/projects/[id]/Project3DViewer.jsx
+d4a9cf0403e74d099533dc4ce3e0fab47eeb532913cc6751e7152de08a370015  src/app/projects/[id]/ProjectDrawingCenter.jsx

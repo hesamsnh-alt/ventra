@@ -1,0 +1,13 @@
+Ventra v43.3 - Real Wall Openings
+
+- Doors/windows are actual gaps in reconstructed wall geometry.
+- Wall lines are split around snapped opening intervals.
+- Doors keep header wall above the opening.
+- Windows keep sill wall below glazing and header wall above glazing.
+- Thin door panels/glazing remain visual elements inside the true gap.
+- No CSG dependency; compatible with Autodesk old THREE runtime.
+- Preserves authoritative Takeoff counts, slab fix, storey stacking and source-sheet removal.
+- API routes untouched. No Analyze Drawing. No OpenAI.
+
+Expected marker:
+[VENTRA ARCHITECTURAL 3D v43.3 REAL OPENINGS]

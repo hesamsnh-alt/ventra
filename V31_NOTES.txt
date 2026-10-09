@@ -1,0 +1,30 @@
+VENTRA V31 - REFERENCE FLOOR SAFE FIX
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Why V30 was wrong:
+The four-rectangle base-floor workaround produced large dark exterior pockets and
+made the reference plan look like it contained extra empty rooms.
+
+V31:
+- Starts from the stable V29 Viewer.
+- Removes ONLY the concave footprint base mesh for the verified 12.50 x 9.50 reference plan.
+- Keeps the actual per-room floors, walls, windows, doors and furniture.
+- Avoids THREE r71 concave-polygon triangulation entirely.
+- Other JPG plans keep their existing generic footprint rendering.
+- No route.js change.
+- No new Analyze is required.
+
+Install:
+Replace only Project3DViewer.jsx.
+
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Refresh the project page.
+
+Expected browser log:
+[VENTRA JPG REFERENCE FLOOR SAFE v31]

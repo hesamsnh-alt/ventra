@@ -1,0 +1,2 @@
+export function validatedProgress(value){if(value===null||value===undefined||String(value).trim()==="")throw new Error("Enter a progress percentage.");const n=Number(value);if(!Number.isFinite(n)||n<0||n>100)throw new Error("Progress must be between 0 and 100.");return Math.round(n*100)/100;}
+export function meanProjectProgress(projects){const values=projects.map(p=>p.progress).filter(v=>v!==null&&v!==undefined&&String(v).trim()!=="").map(Number).filter(v=>Number.isFinite(v)&&v>=0&&v<=100);return values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):null;}

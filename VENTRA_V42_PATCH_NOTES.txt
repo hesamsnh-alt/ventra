@@ -1,0 +1,29 @@
+VENTRA V42 JPG/PNG/WebP 3D IMAGE-GROUNDED CONSENSUS FIX
+Authoritative base: ventra(20260913-102936).zip
+
+Changed source files only:
+1) src/app/api/ai/design-3d/route.js
+2) src/app/projects/[id]/Project3DViewer.jsx
+3) src/app/projects/[id]/ProjectDrawingCenter.jsx
+
+Key fixes:
+- Removed plan-specific hard-coded 2-bedroom regression substitution.
+- Every raster plan is now compiled from its own image-grounded geometry.
+- Unified geometry + furniture/fixtures in the same structured vision pass.
+- Preserved strict structured-output schema compatibility.
+- Preserved real footprint and only allows real shaft/courtyard holes.
+- Corrected image-Y to metric-Y coordinate conversion consistently.
+- Prevents synthetic furniture/fixture invention.
+- Preserves detected assets when room-lock can resolve them.
+- Always performs a second image-grounded visual audit pass.
+- Strengthened audit against false rooms from furniture, door arcs, closets, and dimension graphics.
+- Viewer renders uncovered footprint circulation as floor, not black void.
+- Viewer ignores generic/uncertain holes and only renders shaft/courtyard voids.
+- Coalesces duplicate /api/ai/design-3d calls for the same drawing, preventing two competing scenes from upload + Analyze.
+- DWG/DXF/IFC/RVT engineering path untouched.
+- BOQ / Estimate / Quotation / Supabase / Auth / APS / Takeoff / Geometry Extractor / Dashboard / persistence / export untouched.
+
+Validation performed:
+- node --check passed for route.js.
+- Static invariants passed for V42 version, no hard-coded reference scene, no synthetic assets, image-grounded footprint/holes, Y flip, visual audit, request coalescing, and viewer hole filtering.
+- Full npm ci/build was attempted but dependency installation timed out in the sandbox; therefore full Next.js build is NOT claimed as passed.

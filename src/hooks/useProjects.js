@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchProjects } from "@/services/projectService";
+import { getProjects } from "@/services/projectService";
 
 export default function useProjects() {
   const [projects, setProjects] = useState([]);
@@ -13,7 +13,7 @@ export default function useProjects() {
     setErrorMessage("");
 
     const { projects: projectData, error } =
-      await fetchProjects();
+      await getProjects();
 
     if (error) {
       setProjects([]);
@@ -29,8 +29,29 @@ export default function useProjects() {
   }, []);
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    let cancelled = false;
+
+    getProjects().then(({ projects: projectData, error }) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setProjects([]);
+        setErrorMessage(
+          error.message || "Could not load projects."
+        );
+      } else {
+        setProjects(projectData);
+      }
+
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return {
     projects,

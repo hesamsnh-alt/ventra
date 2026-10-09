@@ -1,0 +1,30 @@
+VENTRA V17.3 WHITE SCREEN + VIEWER LIFECYCLE HOTFIX
+
+Observed errors:
+- TypeError: Cannot read properties of null (reading 'createOverlayScene')
+- JPG schematic turns completely white / blank.
+
+Root causes fixed:
+1. JPG schematic source was no longer isolated from a stored APS/DWG URN.
+2. renderSchematicScene assumed viewer.impl was alive.
+3. Prompt/Edit could render into a disposed Autodesk Viewer instance.
+4. Project3DViewer was not listening for ventra:3d-source-updated.
+
+This patch:
+- honors ventra:project-active-3d-source:<projectId>
+- prevents APS URN from overriding active JPG schematic
+- adds live source update listener
+- waits for viewer.impl initialization
+- safely reloads after Prompt/Edit if Autodesk lifecycle was disposed
+- never calls createOverlayScene on null impl
+
+Replace only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+No need to re-run Analyze just to recover the white screen.
+Open the project 3D page first. Re-run Analyze only if you want a newly generated scene.

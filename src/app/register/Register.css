@@ -139,7 +139,7 @@
 }
 
 .vt-register__password input {
-  padding-right: 70px;
+  padding-inline-end: 70px;
 }
 
 .vt-register__password button {

@@ -1,0 +1,22 @@
+VENTRA V15.1 PROJECT ROUTE RESTORE
+
+Fixes:
+GET /projects/<id> 404
+
+This patch restores:
+- src/app/projects/[id]/page.js
+
+And keeps the V15 generic JPG floor-plan engine:
+- src/app/projects/[id]/Project3DViewer.jsx
+- src/app/api/ai/design-3d/route.js
+
+It intentionally does NOT replace ProjectDrawingCenter.jsx, BOQ, Estimate,
+Quotation, APS token, calibration, or other healthy project components.
+
+After replacing:
+1. Ctrl + C
+2. Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+3. npm run dev
+
+Expected:
+GET /projects/<project-id> 200

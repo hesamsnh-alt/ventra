@@ -1,0 +1,36 @@
+VENTRA JPG GENERIC FLOORPLAN ENGINE V15
+
+PURPOSE
+-------
+Remove plan-specific hard-coded fallback behavior from the normal JPG workflow.
+
+NEW PIPELINE
+------------
+1. Geometry pass reads arbitrary floor-plan images in a normalized 0..1000 image coordinate system.
+2. Separate asset pass detects furniture/fixtures/equipment from the same image.
+3. Server converts image coordinates into real metres using printed plan dimensions.
+4. Doors/windows snap to the nearest valid detected wall when AI wallId is missing/wrong.
+5. Room polygons/wall lengths/coverage are validated before 3D is accepted.
+6. Furniture outside valid room polygons is rejected.
+7. If geometry confidence is poor, Ventra returns HTTP 422 FLOORPLAN_NEEDS_REVIEW instead of inventing a two-bedroom fallback.
+
+IMPORTANT
+---------
+No computer-vision system can guarantee exact reconstruction for every arbitrary raster plan. V15 is designed to fail closed rather than silently create the wrong building.
+
+FILES TO REPLACE
+----------------
+src/app/api/ai/design-3d/route.js
+src/app/projects/[id]/Project3DViewer.jsx
+
+ENV OVERRIDES (optional)
+------------------------
+OPENAI_FLOORPLAN_GEOMETRY_MODEL=...
+OPENAI_FLOORPLAN_ASSET_MODEL=...
+
+Expected success log:
+[VENTRA GENERIC FLOORPLAN SUCCESS v15]
+
+Rejected unreliable analysis:
+[VENTRA GENERIC FLOORPLAN REJECTED v15]
+HTTP 422 code FLOORPLAN_NEEDS_REVIEW

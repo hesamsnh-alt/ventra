@@ -1,0 +1,114 @@
+[
+  {
+    "path": "README-v40.txt",
+    "sha256": "3057a9a5fa90d5bde8cc4a51b9c32c1694c79ad8c00731a6cb07fa3232cb5c2f"
+  },
+  {
+    "path": "README-v41.txt",
+    "sha256": "46e8b21193d45032c75d1fb12855d984b90d2d2e7dd9d0bfd7896d5c36cbcd89"
+  },
+  {
+    "path": "README-v42.txt",
+    "sha256": "038b48ac749e1262fa5f22754e76beca1e339d6ccdc531ce1cfb80f4376ac52c"
+  },
+  {
+    "path": "scripts/Ventra-Database-Check.sql",
+    "sha256": "8f92dfff4896d9674625d88f80c5d2f2dfbeffea3b0a92e131187603b1bb55d5"
+  },
+  {
+    "path": "src/app/api/ai/dwg-evidence/route.js",
+    "sha256": "bb20b63bc82b8ed0d47b2874247fb7ef297a5d376a1aa8209e9a3fba2ee4014c"
+  },
+  {
+    "path": "src/app/api/ai/generate-boq/route.js",
+    "sha256": "f0976a2de73fdb1a1bf684377611d51c32413e84867691af7549183da569d130"
+  },
+  {
+    "path": "src/app/demo/DemoClient.jsx",
+    "sha256": "b50b964c4f68711f59eba633f82739f12983f83af7b23ca739a1ab89055b3801"
+  },
+  {
+    "path": "src/app/projects/[id]/Project3DViewer.css",
+    "sha256": "248f3736845b713f4c94c160263d613f70e86684028f8bc178b410888fe0d660"
+  },
+  {
+    "path": "src/app/projects/[id]/Project3DViewer.jsx",
+    "sha256": "10f4216d4329a01a283f98ddf6736ae7263565269503ffe6ef9326d88f583202"
+  },
+  {
+    "path": "src/app/projects/[id]/ProjectBOQ.jsx",
+    "sha256": "d88ac57c97088189c3bae1b92f2a7413076a5d1392694324eba536d922134e74"
+  },
+  {
+    "path": "src/app/projects/[id]/ProjectDrawingCenter.jsx",
+    "sha256": "0c7b5378840f4b0ee0c6fcc8e49a365653b1b48f1e368c37946712fe93da2639"
+  },
+  {
+    "path": "src/lib/demoReport.mjs",
+    "sha256": "b9775c3ac6cf6ac3954c69a11a9b364a7b92ad9b04e55355f916d3f39a4f75a7"
+  },
+  {
+    "path": "src/lib/drawingEvidence.mjs",
+    "sha256": "1e39b2ae47d2071f56bab89da764e620a941183d454ed7aac947303068bfc2e6"
+  },
+  {
+    "path": "src/lib/dwgCalibration.mjs",
+    "sha256": "f95aba107e0bf7f36cd6b60b19cbe24fc60b56db13c5cff0e64ccb1739aaaf15"
+  },
+  {
+    "path": "src/lib/dwgSchedule.mjs",
+    "sha256": "e8724b7afe4f498a02a1777282846f6cab49f00e064d443858c46e6516eb90a8"
+  },
+  {
+    "path": "src/lib/orbitCamera.mjs",
+    "sha256": "02f9b1cccde6b679d2247ea6dd82bad6354dd8604d14db40cda28236906e1a1e"
+  },
+  {
+    "path": "src/lib/projectCameraInputs.mjs",
+    "sha256": "dae929b03e23902f2bb3b87dd0165b24dcca2a3b2f7d030b35d58adb4d6e6c0a"
+  },
+  {
+    "path": "src/lib/sceneStyle.mjs",
+    "sha256": "c7bd5ebe1b4f2e64db6188781b62f48e44cfea71b9342e2e29289ccbaaa328c2"
+  },
+  {
+    "path": "src/services/takeoffService.js",
+    "sha256": "6d6ccb90805175bdafacf499b92e80ad29c3d6de34c83fd94743cdbfa132e8a2"
+  },
+  {
+    "path": "supabase/migrations/20261007_boq_schedule_plans.sql",
+    "sha256": "d3ae8477a4e529e3e1cc29d31414a813a2af0af51e35b9027242ee50c5b2c00f"
+  },
+  {
+    "path": "tests/demo-report.test.mjs",
+    "sha256": "8466373c10ac57f2a424fc29fcda8c6a85ec7bd9bc87e322bce2fcec3bbb3dfb"
+  },
+  {
+    "path": "tests/drawing-evidence.test.mjs",
+    "sha256": "75a21aa92fae1cddec718973a43e0baf432b5f202d3ae1e3c1904ab809092063"
+  },
+  {
+    "path": "tests/dwg-calibration.test.mjs",
+    "sha256": "79ded6780de21cd7b21e3717484f0e3afae96eb560e6e82e313cbeb292889721"
+  },
+  {
+    "path": "tests/dwg-schedule.test.mjs",
+    "sha256": "a016ac0f226a1f0446259c1fe7215323b82adf0b80c413f8402cf0943623ee5d"
+  },
+  {
+    "path": "tests/orbit-camera.test.mjs",
+    "sha256": "15068921b379610b219c1472a106e08387614a186a6cfa505cdfd5e4127a3b0f"
+  },
+  {
+    "path": "tests/project-camera-inputs.test.mjs",
+    "sha256": "334fa8fac019dda5450aacde2da9ff86e88939e7d122678aff56af3c7f9d9c42"
+  },
+  {
+    "path": "tests/scene-style-render.test.mjs",
+    "sha256": "c5f869f5888c210d4023f51eedd835517b7d0d9ae79ee3252e44ec316421f15b"
+  },
+  {
+    "path": "tests/scene-style-source.test.mjs",
+    "sha256": "d98cbff3504aa59d333d95e7df79902a0d60c105536db49756fce29c157348a1"
+  }
+]

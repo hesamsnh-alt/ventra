@@ -1,0 +1,28 @@
+Ventra v43 - Architectural 3D Mix
+
+Adds:
+- existing verified wall reconstruction
+- two-storey stacking
+- source sheet removal
+- door geometry markers from verified door dbIds / saved door segments
+- window/glazing geometry markers from verified window dbIds / saved window segments
+- one structural slab per detected storey
+- slab is generated from the convex hull of the verified storey wall geometry
+- door default height 2.10 m
+- window default sill 0.90 m / height 1.20 m
+- slab thickness 0.18 m
+- all geometry uses the local metre coordinate system
+- no OpenAI call
+- no Analyze Drawing required when legacy dbIds/line geometry exist
+
+Important honesty:
+Door/window markers are verified by source geometry/dbId where available, but
+v43 does NOT yet boolean-cut the reconstructed walls. They visually identify
+opening locations. Actual wall void subtraction is the next geometry stage.
+
+Slabs are provisional_convex_hull, not claimed to be measured floor polygons.
+This avoids the corrupt raw floor topology that previously caused
+THREE triangulation failures.
+
+Expected marker:
+[VENTRA ARCHITECTURAL 3D v43]

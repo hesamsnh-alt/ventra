@@ -1,0 +1,26 @@
+VENTRA V17.1 GEOMETRIC LAYOUT + REAL DOOR FIX
+
+Core fix:
+- The old standalone schematic renderer ignored scene.walls and scene.rooms.
+- It drew only one outer rectangle and a single slab, so the 3D could never truly match the plan.
+
+This patch changes the viewer renderer to:
+1) draw room floors from scene.rooms polygons
+2) draw actual walls from scene.walls
+3) cut openings from the real walls using opening.wallId
+4) render windows in the correct wall opening
+5) render a real door leaf (panel) instead of showing only the opening/swing idea
+6) keep assets visible on top of the corrected plan geometry
+
+Replace:
+- src/app/projects/[id]/Project3DViewer.jsx
+
+Expected console log:
+- [VENTRA SCHEMATIC GEOMETRY FIX v17.1]
+
+After replacing the file:
+1) stop dev server
+2) Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+3) npm run dev
+4) re-open project page
+5) click Analyze again so the latest schematic scene is regenerated if needed

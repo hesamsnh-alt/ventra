@@ -1,0 +1,56 @@
+{
+  "build": "raster-bounded-correction-20260916",
+  "releaseCertified": false,
+  "changedExistingFiles": [
+    "src/app/api/ai/design-3d/route.js",
+    "src/app/projects/[id]/ProjectDrawingCenter.jsx",
+    "src/app/projects/[id]/Project3DViewer.jsx"
+  ],
+  "addedFiles": [
+    "src/lib/rasterFloorplanGeometry.mjs",
+    "src/app/projects/[id]/RasterTraceReview.jsx",
+    "tests/raster-floorplan-geometry.test.mjs",
+    "scripts/verify-raster-renderer.mjs",
+    "scripts/replay-raster-report.mjs",
+    "RASTER_GEOMETRY_REVIEW.md",
+    "tests/fixtures/rejected-raster-20260916.json",
+    "src/lib/rasterVisionRequest.mjs",
+    "tests/raster-vision-request.test.mjs",
+    "src/lib/rasterReviewSession.mjs",
+    "tests/raster-review-session.test.mjs",
+    "tests/raster-observed-request.test.mjs",
+    "tests/fixtures/accepted-raster-20260916.json"
+  ],
+  "sha256": {
+    "src/app/api/ai/design-3d/route.js": "5106667939a37dd5fb50a3c224960cb75d9a49cda66ffa2db9e5d39cb08819c5",
+    "src/app/projects/[id]/ProjectDrawingCenter.jsx": "892f30eadc7a510396edc1401a5c1859e1dfef96b10b51ff151e18feb2967c0a",
+    "src/app/projects/[id]/Project3DViewer.jsx": "f848374aa2f033b99875e5396b8e7ebca292627088b015e9077b823b63e3ddc7",
+    "src/lib/rasterFloorplanGeometry.mjs": "5793394ae9e9f67e352de5ee6b74c5dde88971fb30eab2c144afaa3cf02cd176",
+    "src/app/projects/[id]/RasterTraceReview.jsx": "860d7e87dc044b1f516ba9da49bc5c1353c50e840dc7b6288b016dab59363bb3",
+    "tests/raster-floorplan-geometry.test.mjs": "546207e1b6520f712bbcfdaa486e5120aeea82343c731a95c61b4963fb170b6f",
+    "scripts/verify-raster-renderer.mjs": "05c660c910ffafb31ce3e8288e7efc2d1135e63a35d3c9c8836d0ac540c43f51",
+    "scripts/replay-raster-report.mjs": "ee2550ab4db32e51c7e33e6b3114555e31a96fc73a4a4b790cad23b12c6971eb",
+    "RASTER_GEOMETRY_REVIEW.md": "12e0e5ff145eb13b6e7da0bd2e1eb5754732267b443b6eed0b6f6b681d592fa2",
+    "tests/fixtures/rejected-raster-20260916.json": "4ac759a9da7253afca6e50aee2b116d4e1413ddf0cb7572a6e50b583a3457fcf",
+    "src/lib/rasterVisionRequest.mjs": "51a209d4123196e43b5fb86a30ee1770c2121c782a4d4a2a3667e9cec141bac2",
+    "tests/raster-vision-request.test.mjs": "8d0c0345691cd8bc78b7e89327f47c020b1cf131162d6ad2b7445ee16baa4d36",
+    "src/lib/rasterReviewSession.mjs": "aec5cd056fa491e4cd7262dec14cd95036ce6f122588bb8f5bd7a5b97fdc6008",
+    "tests/raster-review-session.test.mjs": "5ada5e2d2fe4d8ded5b7f7ab3806ae411735059d26aa45234e749a7c4855169a",
+    "tests/raster-observed-request.test.mjs": "6dad203723d0955ac677a9689f66a820c6e279ac166e17e799df5eacbac95314",
+    "tests/fixtures/accepted-raster-20260916.json": "f2f03bf5420542185a4ccb25f1a2453244da73d18a0cf233e23fda8dc9bb5914"
+  },
+  "verification": {
+    "geometryAndControllerTests": 24,
+    "legacyRendererComparisons": 24,
+    "nextCompile": "passed; design-3d registered",
+    "submittedFailureReplay": "CONFLICTING_SCALE and isolated WALL_CROSSES_ROOM reproduced",
+    "liveReferenceImage": "not validated; latest user r2 trace unavailable",
+    "requestLifecycleTests": 4,
+    "reviewSessionTests": 2,
+    "streamAndDiagnosticTests": 5,
+    "totalTests": 36,
+    "consensusScale": "passed submitted report replay; outlier measurements retained as rejected evidence",
+    "traceFixture": "latest user report compiles 7 rooms; 6 openings omitted with reasons; bounded correction policy is tested"
+  },
+  "packageRevision": "bounded-correction-v1-20260916"
+}

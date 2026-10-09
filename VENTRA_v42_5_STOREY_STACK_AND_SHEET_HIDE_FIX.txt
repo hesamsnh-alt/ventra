@@ -1,0 +1,26 @@
+Ventra v42.5 - Storey Stack + Full Sheet Hide
+
+Observed in v42.4:
+- 232 wall segments reconstruct successfully.
+- Two floor plans from the A1 layout were reconstructed side-by-side.
+- Parts of the Autodesk 2D sheet remained visible.
+
+v42.5:
+- Detects a strong spatial gap between substantial wall clusters.
+- Splits the wall geometry into storey clusters only when the gap is >= 1.25 m
+  and both groups contain a meaningful number of wall segments.
+- Each storey gets its own centered local coordinate frame.
+- Storey 2 is stacked above Storey 1 instead of remaining beside it.
+- Storey spacing defaults to max(wallHeight + 0.25 m, 3.25 m).
+- Camera bounds include all stacked storeys.
+- Autodesk source hiding is strengthened with model visibility, visibility
+  manager, recursive dbId hiding, and root hiding.
+- Hide Reconstruction restores the source sheet.
+- UI reports storey count, storey height, footprint, coordinate space, split
+  axis and split gap.
+
+No Analyze Drawing required.
+No OpenAI call.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.5]

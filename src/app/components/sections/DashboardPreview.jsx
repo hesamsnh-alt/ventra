@@ -1,45 +1,47 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 export default function DashboardPreview() {
   return (
-    <section className="dashboard-section">
-      <div className="dashboard-container">
-        <div className="dashboard-text">
-          <span className="dashboard-badge">Smart Dashboard</span>
+    <LocalizedElement as="section" className="dashboard-section">
+      <LocalizedElement as="div" className="dashboard-container">
+        <LocalizedElement as="div" className="dashboard-text">
+          <LocalizedElement as="span" className="dashboard-badge">Smart Dashboard</LocalizedElement>
 
-          <h2>Everything you need in one powerful dashboard.</h2>
+          <LocalizedElement as="h2">Everything you need in one powerful dashboard.</LocalizedElement>
 
-          <p>
+          <LocalizedElement as="p">
             Manage quotations, BOQs, project files, clients, and AI estimations
             from one clean workspace.
-          </p>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <div className="dashboard-preview">
-          <div className="dashboard-sidebar">
-            <div>Dashboard</div>
-            <div>Projects</div>
-            <div>Estimations</div>
-            <div>Clients</div>
-            <div>Reports</div>
-          </div>
+        <LocalizedElement as="div" className="dashboard-preview">
+          <LocalizedElement as="div" className="dashboard-sidebar">
+            <LocalizedElement as="div">Dashboard</LocalizedElement>
+            <LocalizedElement as="div">Projects</LocalizedElement>
+            <LocalizedElement as="div">Estimations</LocalizedElement>
+            <LocalizedElement as="div">Clients</LocalizedElement>
+            <LocalizedElement as="div">Reports</LocalizedElement>
+          </LocalizedElement>
 
-          <div className="dashboard-content">
-            <div className="dashboard-card">
-              <h3>Active Projects</h3>
-              <span>24</span>
-            </div>
+          <LocalizedElement as="div" className="dashboard-content">
+            <LocalizedElement as="div" className="dashboard-card">
+              <LocalizedElement as="h3">Active Projects</LocalizedElement>
+              <LocalizedElement as="span">24</LocalizedElement>
+            </LocalizedElement>
 
-            <div className="dashboard-card">
-              <h3>Pending Quotes</h3>
-              <span>8</span>
-            </div>
+            <LocalizedElement as="div" className="dashboard-card">
+              <LocalizedElement as="h3">Pending Quotes</LocalizedElement>
+              <LocalizedElement as="span">8</LocalizedElement>
+            </LocalizedElement>
 
-            <div className="dashboard-card">
-              <h3>Completed</h3>
-              <span>132</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+            <LocalizedElement as="div" className="dashboard-card">
+              <LocalizedElement as="h3">Completed</LocalizedElement>
+              <LocalizedElement as="span">132</LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

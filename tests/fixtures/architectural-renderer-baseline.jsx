@@ -1,0 +1,9814 @@
+"use client";
+
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getRasterReview, subscribeRasterReview } from "@/lib/rasterReviewSession.mjs";
+import { repairOpenPlanScene } from "@/lib/openPlanPartitions.mjs";
+import "./Project3DViewer.css";
+
+const VIEWER_CSS =
+  "https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css";
+const VIEWER_JS =
+  "https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js";
+
+function loadViewerSdk() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Viewer requires a browser."));
+  }
+
+  if (window.Autodesk?.Viewing) {
+    return Promise.resolve();
+  }
+
+  if (!document.querySelector(`link[href="${VIEWER_CSS}"]`)) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = VIEWER_CSS;
+    document.head.appendChild(link);
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${VIEWER_JS}"]`);
+
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = VIEWER_JS;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () =>
+      reject(new Error("Autodesk Viewer SDK could not be loaded."));
+    document.head.appendChild(script);
+  });
+}
+
+async function requestToken() {
+  let response = await fetch("/api/aps/token", { cache: "no-store" });
+
+  if (!response.ok) {
+    response = await fetch("/api/aps/viewer-token", { cache: "no-store" });
+  }
+
+  const payload = await response.json();
+
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(payload?.error || "APS viewer token could not be loaded.");
+  }
+
+  return payload;
+}
+
+function initializeViewer() {
+  return new Promise((resolve, reject) => {
+    window.Autodesk.Viewing.Initializer(
+      {
+        env: "AutodeskProduction2",
+        api: "streamingV2_EU",
+        getAccessToken: async (callback) => {
+          try {
+            const token = await requestToken();
+            callback(token.access_token, Number(token.expires_in) || 3599);
+          } catch (error) {
+            console.error("[VENTRA 3D TOKEN]", error);
+            callback("", 0);
+          }
+        },
+      },
+      resolve,
+      reject
+    );
+  });
+}
+
+function loadDocument(urn) {
+  return new Promise((resolve, reject) => {
+    window.Autodesk.Viewing.Document.load(
+      `urn:${urn}`,
+      resolve,
+      (code, message) =>
+        reject(
+          new Error(
+            message || `Autodesk document load failed (${code}).`
+          )
+        )
+    );
+  });
+}
+
+function getViewables(documentNode) {
+  const root =
+    documentNode?.getRoot?.();
+
+  if (!root) {
+    return [];
+  }
+
+  let geometries = [];
+
+  // Viewer SDK versions differ here. Prefer the Viewable Tree search API,
+  // then fall back to recursive traversal. Do not depend on the removed
+  // Autodesk.Viewing.Document.getSubItemsWithProperties helper.
+  try {
+    if (
+      typeof root.search ===
+      "function"
+    ) {
+      geometries =
+        root.search({
+          type: "geometry",
+        }) || [];
+    }
+  } catch (error) {
+    console.warn(
+      "[VENTRA MODEL VIEWER v2] root.search failed",
+      error
+    );
+  }
+
+  if (
+    !Array.isArray(geometries) ||
+    geometries.length === 0
+  ) {
+    const collected = [];
+
+    const visit = (node) => {
+      if (!node) return;
+
+      const type =
+        String(
+          node?.data?.type ||
+          node?.type?.() ||
+          ""
+        ).toLowerCase();
+
+      if (type === "geometry") {
+        collected.push(node);
+      }
+
+      const children =
+        node?.children ||
+        node?.data?.children ||
+        [];
+
+      if (
+        Array.isArray(children)
+      ) {
+        children.forEach(visit);
+      }
+    };
+
+    visit(root);
+    geometries = collected;
+  }
+
+  // Final safe fallback: Autodesk's default geometry must at least be
+  // loadable if the document itself was translated successfully.
+  if (
+    (!Array.isArray(geometries) ||
+      geometries.length === 0) &&
+    typeof root.getDefaultGeometry ===
+      "function"
+  ) {
+    const defaultGeometry =
+      root.getDefaultGeometry();
+
+    if (defaultGeometry) {
+      geometries = [
+        defaultGeometry,
+      ];
+    }
+  }
+
+  return (
+    Array.isArray(geometries)
+      ? geometries
+      : []
+  ).map(
+    (node, index) => {
+      const role =
+        node?.data?.role ||
+        node?.role?.() ||
+        "unknown";
+
+      return {
+        node,
+        index,
+        name:
+          node?.name?.() ||
+          node?.data?.name ||
+          `View ${index + 1}`,
+        role,
+        is3D:
+          String(role)
+            .toLowerCase() ===
+          "3d",
+      };
+    }
+  );
+}
+
+
+const VENTRA_RECON_OVERLAY =
+  "ventra-reconstruction-overlay";
+const VENTRA_DESIGN_OVERLAY =
+  "ventra-design-overlay";
+const VENTRA_SCHEMATIC_ROOT_NAME = "ventra-schematic-root";
+const VENTRA_SCHEMATIC_OVERLAY =
+  "ventra-schematic-overlay";
+
+function getThree() {
+  return (
+    window?.THREE ||
+    window?.Autodesk
+      ?.Viewing
+      ?.Private
+      ?.THREE ||
+    null
+  );
+}
+
+function clearDesignOverlay(viewer) {
+  try {
+    viewer?.impl
+      ?.removeOverlayScene?.(
+        VENTRA_DESIGN_OVERLAY
+      );
+  } catch {}
+}
+
+function clearReconstruction(
+  viewer
+) {
+  clearDesignOverlay(viewer);
+
+  try {
+    viewer?.impl
+      ?.removeOverlayScene?.(
+        VENTRA_RECON_OVERLAY
+      );
+  } catch {}
+}
+
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value)));
+}
+
+function pointAlongSegment(start, end, t) {
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  };
+}
+
+function splitWallByOpenings({ start, end, openings, minimumWallPiece = 0.08, preserveRasterTrace = false }) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (!Number.isFinite(length) || length <= minimumWallPiece) return [];
+
+  const intervals = [];
+  for (const opening of openings || []) {
+    const center = opening?.wallPosition;
+    if (!center) continue;
+    const projected = projectPointToSegment2D(center, start, end);
+    if (projected.distance > 0.18) continue;
+    const width = preserveRasterTrace ? Number(opening.width) : Math.max(0.10, Number(opening.width) || 0);
+    const halfT = (width / 2) / length;
+    const a = clamp01(projected.t - halfT);
+    const b = clamp01(projected.t + halfT);
+    if (b - a > 1e-6) intervals.push([a, b]);
+  }
+
+  if (intervals.length === 0) return [{ start, end }];
+  intervals.sort((a,b)=>a[0]-b[0]);
+  const merged=[];
+  for (const interval of intervals) {
+    const last=merged[merged.length-1];
+    if (!last || interval[0] > last[1] + 1e-6) merged.push([interval[0], interval[1]]);
+    else last[1]=Math.max(last[1], interval[1]);
+  }
+
+  const pieces=[];
+  let cursor=0;
+  for (const [a,b] of merged) {
+    if (a-cursor > 1e-6) {
+      const s=pointAlongSegment(start,end,cursor);
+      const e=pointAlongSegment(start,end,a);
+      if (Math.hypot(e.x-s.x,e.y-s.y) >= minimumWallPiece) pieces.push({start:s,end:e});
+    }
+    cursor=Math.max(cursor,b);
+  }
+  if (1-cursor > 1e-6) {
+    const s=pointAlongSegment(start,end,cursor);
+    const e=end;
+    if (Math.hypot(e.x-s.x,e.y-s.y) >= minimumWallPiece) pieces.push({start:s,end:e});
+  }
+  return pieces;
+}
+
+function buildHeaderWallMesh({ THREE, opening, thickness, wallHeight, zBase, material }) {
+  const openingHeight=Number(opening?.height);
+  const sillHeight=Number(opening?.sillHeight)||0;
+  const top=sillHeight+openingHeight;
+  const headerHeight=wallHeight-top;
+  if (!Number.isFinite(headerHeight) || headerHeight <= (opening?.preserveRasterTrace ? 0.001 : 0.05)) return null;
+  return createWallMesh({THREE,start:opening.start,end:opening.end,height:headerHeight,thickness,zBase:zBase+top,material});
+}
+
+function buildWindowSillWallMesh({ THREE, opening, thickness, zBase, material }) {
+  if (opening?.type !== 'window') return null;
+  const sillHeight=Number(opening?.sillHeight)||0;
+  if (sillHeight <= (opening?.preserveRasterTrace ? 0.001 : 0.05)) return null;
+  return createWallMesh({THREE,start:opening.start,end:opening.end,height:sillHeight,thickness,zBase,material});
+}
+
+function createWallMesh({
+  THREE,
+  start,
+  end,
+  height,
+  thickness,
+  zBase = 0,
+  material,
+}) {
+  const x1 = Number(start?.x);
+  const y1 = Number(start?.y);
+  const x2 = Number(end?.x);
+  const y2 = Number(end?.y);
+
+  if (
+    ![
+      x1,
+      y1,
+      x2,
+      y2,
+    ].every(Number.isFinite)
+  ) {
+    return null;
+  }
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length =
+    Math.hypot(dx, dy);
+
+  if (
+    !Number.isFinite(length) ||
+    length <= 0
+  ) {
+    return null;
+  }
+
+  const geometry =
+    new THREE.BoxGeometry(
+      length,
+      thickness,
+      height
+    );
+
+  const mesh =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  mesh.position.set(
+    (x1 + x2) / 2,
+    (y1 + y2) / 2,
+    zBase + height / 2
+  );
+
+  mesh.rotation.z =
+    Math.atan2(dy, dx);
+
+  return mesh;
+}
+
+function ventraDistance2D(
+  a,
+  b
+) {
+  return Math.hypot(
+    Number(a?.x) -
+      Number(b?.x),
+    Number(a?.y) -
+      Number(b?.y)
+  );
+}
+
+function ventraCross2D(
+  a,
+  b,
+  c
+) {
+  return (
+    (Number(b?.x) -
+      Number(a?.x)) *
+      (Number(c?.y) -
+        Number(a?.y)) -
+    (Number(b?.y) -
+      Number(a?.y)) *
+      (Number(c?.x) -
+        Number(a?.x))
+  );
+}
+
+function ventraOrientation(
+  a,
+  b,
+  c,
+  epsilon = 1e-9
+) {
+  const cross =
+    ventraCross2D(
+      a,
+      b,
+      c
+    );
+
+  if (
+    Math.abs(cross) <=
+    epsilon
+  ) {
+    return 0;
+  }
+
+  return cross > 0
+    ? 1
+    : -1;
+}
+
+function ventraOnSegment(
+  a,
+  b,
+  p,
+  epsilon = 1e-9
+) {
+  return (
+    Number(p.x) >=
+      Math.min(
+        Number(a.x),
+        Number(b.x)
+      ) -
+        epsilon &&
+    Number(p.x) <=
+      Math.max(
+        Number(a.x),
+        Number(b.x)
+      ) +
+        epsilon &&
+    Number(p.y) >=
+      Math.min(
+        Number(a.y),
+        Number(b.y)
+      ) -
+        epsilon &&
+    Number(p.y) <=
+      Math.max(
+        Number(a.y),
+        Number(b.y)
+      ) +
+        epsilon
+  );
+}
+
+function ventraSegmentsIntersect(
+  a,
+  b,
+  c,
+  d,
+  epsilon = 1e-9
+) {
+  const o1 =
+    ventraOrientation(
+      a,
+      b,
+      c,
+      epsilon
+    );
+  const o2 =
+    ventraOrientation(
+      a,
+      b,
+      d,
+      epsilon
+    );
+  const o3 =
+    ventraOrientation(
+      c,
+      d,
+      a,
+      epsilon
+    );
+  const o4 =
+    ventraOrientation(
+      c,
+      d,
+      b,
+      epsilon
+    );
+
+  if (
+    o1 !== o2 &&
+    o3 !== o4
+  ) {
+    return true;
+  }
+
+  if (
+    o1 === 0 &&
+    ventraOnSegment(
+      a,
+      b,
+      c,
+      epsilon
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    o2 === 0 &&
+    ventraOnSegment(
+      a,
+      b,
+      d,
+      epsilon
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    o3 === 0 &&
+    ventraOnSegment(
+      c,
+      d,
+      a,
+      epsilon
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    o4 === 0 &&
+    ventraOnSegment(
+      c,
+      d,
+      b,
+      epsilon
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function ventraPolygonIsSimple(
+  points
+) {
+  const count =
+    points.length;
+
+  if (count < 3) {
+    return false;
+  }
+
+  for (
+    let i = 0;
+    i < count;
+    i += 1
+  ) {
+    const a =
+      points[i];
+    const b =
+      points[
+        (i + 1) %
+          count
+      ];
+
+    for (
+      let j = i + 1;
+      j < count;
+      j += 1
+    ) {
+      const c =
+        points[j];
+      const d =
+        points[
+          (j + 1) %
+            count
+        ];
+
+      const adjacent =
+        i === j ||
+        (i + 1) %
+          count === j ||
+        i ===
+          (j + 1) %
+            count;
+
+      if (adjacent) {
+        continue;
+      }
+
+      if (
+        ventraSegmentsIntersect(
+          a,
+          b,
+          c,
+          d
+        )
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function sanitizeFloorPolygon(
+  polygon
+) {
+  const rawPoints =
+    Array.isArray(polygon)
+      ? polygon
+      : Array.isArray(
+          polygon?.points
+        )
+        ? polygon.points
+        : [];
+
+  const numeric =
+    rawPoints
+      .map((point) => ({
+        x:
+          Number(
+            point?.x
+          ),
+        y:
+          Number(
+            point?.y
+          ),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(
+            point.x
+          ) &&
+          Number.isFinite(
+            point.y
+          )
+      );
+
+  if (
+    numeric.length < 3
+  ) {
+    return {
+      valid: false,
+      reason:
+        "too_few_numeric_points",
+      points: [],
+    };
+  }
+
+  const epsilon =
+    1e-6;
+
+  const deduped = [];
+
+  for (
+    const point of
+    numeric
+  ) {
+    const previous =
+      deduped[
+        deduped.length - 1
+      ];
+
+    if (
+      previous &&
+      ventraDistance2D(
+        previous,
+        point
+      ) <= epsilon
+    ) {
+      continue;
+    }
+
+    deduped.push(
+      point
+    );
+  }
+
+  if (
+    deduped.length >= 2 &&
+    ventraDistance2D(
+      deduped[0],
+      deduped[
+        deduped.length - 1
+      ]
+    ) <= epsilon
+  ) {
+    deduped.pop();
+  }
+
+  if (
+    deduped.length < 3
+  ) {
+    return {
+      valid: false,
+      reason:
+        "collapsed_after_duplicate_cleanup",
+      points: [],
+    };
+  }
+
+  let cleaned =
+    [...deduped];
+
+  // Remove near-collinear intermediate vertices. CAD outlines often contain
+  // dozens of tiny points on one straight edge; ShapeGeometry does not enjoy
+  // being fed those any more than a human enjoys reading them.
+  let changed = true;
+  let guard = 0;
+
+  while (
+    changed &&
+    cleaned.length > 3 &&
+    guard < 10
+  ) {
+    changed = false;
+    guard += 1;
+
+    const next = [];
+
+    for (
+      let index = 0;
+      index <
+      cleaned.length;
+      index += 1
+    ) {
+      const previous =
+        cleaned[
+          (index -
+            1 +
+            cleaned.length) %
+            cleaned.length
+        ];
+      const current =
+        cleaned[index];
+      const following =
+        cleaned[
+          (index + 1) %
+            cleaned.length
+        ];
+
+      const cross =
+        Math.abs(
+          ventraCross2D(
+            previous,
+            current,
+            following
+          )
+        );
+
+      const span =
+        Math.max(
+          ventraDistance2D(
+            previous,
+            following
+          ),
+          1
+        );
+
+      if (
+        cross <=
+        epsilon * span
+      ) {
+        changed = true;
+        continue;
+      }
+
+      next.push(
+        current
+      );
+    }
+
+    if (
+      next.length >= 3
+    ) {
+      cleaned = next;
+    } else {
+      break;
+    }
+  }
+
+  if (
+    cleaned.length < 3
+  ) {
+    return {
+      valid: false,
+      reason:
+        "collapsed_after_collinear_cleanup",
+      points: [],
+    };
+  }
+
+  if (
+    !ventraPolygonIsSimple(
+      cleaned
+    )
+  ) {
+    return {
+      valid: false,
+      reason:
+        "self_intersecting_polygon",
+      points:
+        cleaned,
+    };
+  }
+
+  let signedArea = 0;
+
+  for (
+    let index = 0;
+    index <
+    cleaned.length;
+    index += 1
+  ) {
+    const a =
+      cleaned[index];
+    const b =
+      cleaned[
+        (index + 1) %
+          cleaned.length
+      ];
+
+    signedArea +=
+      a.x * b.y -
+      b.x * a.y;
+  }
+
+  signedArea /= 2;
+
+  if (
+    Math.abs(
+      signedArea
+    ) <= 1e-8
+  ) {
+    return {
+      valid: false,
+      reason:
+        "near_zero_area_polygon",
+      points:
+        cleaned,
+    };
+  }
+
+  return {
+    valid: true,
+    reason: "ok",
+    points:
+      cleaned,
+    signedArea,
+  };
+}
+
+function buildFloorMesh({
+  THREE,
+  polygon,
+  z = 0,
+  material,
+}) {
+  const sanitized =
+    sanitizeFloorPolygon(
+      polygon
+    );
+
+  if (
+    !sanitized.valid
+  ) {
+    return {
+      mesh: null,
+      skipped: true,
+      reason:
+        sanitized.reason,
+    };
+  }
+
+  const valid =
+    sanitized.points;
+
+  try {
+    const shape =
+      new THREE.Shape();
+
+    shape.moveTo(
+      valid[0].x,
+      valid[0].y
+    );
+
+    for (
+      let index = 1;
+      index <
+      valid.length;
+      index += 1
+    ) {
+      shape.lineTo(
+        valid[index].x,
+        valid[index].y
+      );
+    }
+
+    shape.closePath();
+
+    const geometry =
+      new THREE.ShapeGeometry(
+        shape
+      );
+
+    const bufferVertexCount =
+      Number(
+        geometry?.attributes
+          ?.position?.count
+      ) || 0;
+
+    const legacyVertexCount =
+      Array.isArray(
+        geometry?.vertices
+      )
+        ? geometry.vertices.length
+        : 0;
+
+    const legacyFaceCount =
+      Array.isArray(
+        geometry?.faces
+      )
+        ? geometry.faces.length
+        : 0;
+
+    // Autodesk Viewer currently exposes THREE r71 in this project.
+    // In that legacy THREE version ShapeGeometry returns Geometry with
+    // .vertices / .faces instead of BufferGeometry .attributes.position.
+    // The previous check rejected every valid room floor, which is why the
+    // console reported roomCount: 0 even though the room polygons existed.
+    const hasValidGeometry =
+      bufferVertexCount >= 3 ||
+      (
+        legacyVertexCount >= 3 &&
+        legacyFaceCount >= 1
+      );
+
+    if (!hasValidGeometry) {
+      geometry?.dispose?.();
+
+      console.warn(
+        "[VENTRA JPG FLOOR GEOMETRY REJECTED v14.1]",
+        {
+          bufferVertexCount,
+          legacyVertexCount,
+          legacyFaceCount,
+          threeRevision:
+            THREE?.REVISION ||
+            null,
+        }
+      );
+
+      return {
+        mesh: null,
+        skipped: true,
+        reason:
+          "triangulation_returned_empty_geometry",
+      };
+    }
+
+    try {
+      geometry.computeFaceNormals?.();
+      geometry.computeVertexNormals?.();
+      geometry.computeBoundingBox?.();
+      geometry.computeBoundingSphere?.();
+    } catch {}
+
+    const mesh =
+      new THREE.Mesh(
+        geometry,
+        material
+      );
+
+    mesh.position.z = z;
+
+    console.log(
+      "[VENTRA JPG ROOM FLOOR BUILT v14.1]",
+      {
+        threeRevision:
+          THREE?.REVISION ||
+          null,
+        bufferVertexCount,
+        legacyVertexCount,
+        legacyFaceCount,
+        z,
+      }
+    );
+
+    return {
+      mesh,
+      skipped: false,
+      reason: "ok",
+    };
+  } catch (error) {
+    console.warn(
+      "[VENTRA FLOOR POLYGON v42.2] skipped",
+      {
+        reason:
+          error?.message ||
+          "shape_geometry_failed",
+        points:
+          valid.length,
+      }
+    );
+
+    return {
+      mesh: null,
+      skipped: true,
+      reason:
+        "shape_geometry_failed",
+    };
+  }
+}
+
+
+function ventraSignedPolygonArea2D(points = []) {
+  let area = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    area += Number(a.x) * Number(b.y) - Number(b.x) * Number(a.y);
+  }
+  return area / 2;
+}
+
+function ventraPointInTriangle2D(point, a, b, c) {
+  const sign = (p1, p2, p3) =>
+    (Number(p1.x) - Number(p3.x)) * (Number(p2.y) - Number(p3.y)) -
+    (Number(p2.x) - Number(p3.x)) * (Number(p1.y) - Number(p3.y));
+
+  const d1 = sign(point, a, b);
+  const d2 = sign(point, b, c);
+  const d3 = sign(point, c, a);
+  const hasNeg = d1 < -1e-9 || d2 < -1e-9 || d3 < -1e-9;
+  const hasPos = d1 > 1e-9 || d2 > 1e-9 || d3 > 1e-9;
+  return !(hasNeg && hasPos);
+}
+
+function ventraTriangulateSimplePolygon2D(polygon = []) {
+  const sanitized = sanitizeFloorPolygon(polygon);
+  if (!sanitized.valid || sanitized.points.length < 3) return [];
+
+  const points = sanitized.points.slice();
+  if (ventraSignedPolygonArea2D(points) < 0) points.reverse();
+
+  const remaining = points.map((_, index) => index);
+  const triangles = [];
+  let guard = 0;
+
+  while (remaining.length > 3 && guard < points.length * points.length * 2) {
+    let earFound = false;
+
+    for (let i = 0; i < remaining.length; i += 1) {
+      const prevIndex = remaining[(i - 1 + remaining.length) % remaining.length];
+      const currIndex = remaining[i];
+      const nextIndex = remaining[(i + 1) % remaining.length];
+      const a = points[prevIndex];
+      const b = points[currIndex];
+      const c = points[nextIndex];
+
+      const cross =
+        (Number(b.x) - Number(a.x)) * (Number(c.y) - Number(a.y)) -
+        (Number(b.y) - Number(a.y)) * (Number(c.x) - Number(a.x));
+
+      if (cross <= 1e-9) continue;
+
+      let containsOtherPoint = false;
+      for (const candidateIndex of remaining) {
+        if (candidateIndex === prevIndex || candidateIndex === currIndex || candidateIndex === nextIndex) continue;
+        if (ventraPointInTriangle2D(points[candidateIndex], a, b, c)) {
+          containsOtherPoint = true;
+          break;
+        }
+      }
+
+      if (containsOtherPoint) continue;
+
+      triangles.push([prevIndex, currIndex, nextIndex]);
+      remaining.splice(i, 1);
+      earFound = true;
+      break;
+    }
+
+    if (!earFound) break;
+    guard += 1;
+  }
+
+  if (remaining.length === 3) {
+    triangles.push([remaining[0], remaining[1], remaining[2]]);
+  }
+
+  return { points, triangles };
+}
+
+function ventraBuildConcaveFloorMesh({ THREE, polygon, z = 0, material }) {
+  const triangulated = ventraTriangulateSimplePolygon2D(polygon);
+  if (!triangulated?.triangles?.length) {
+    return buildFloorMesh({ THREE, polygon, z, material });
+  }
+
+  const { points, triangles } = triangulated;
+
+  try {
+    if (THREE?.Geometry && THREE?.Face3 && THREE?.Vector3) {
+      const geometry = new THREE.Geometry();
+      geometry.vertices = points.map((point) => new THREE.Vector3(Number(point.x), Number(point.y), 0));
+      geometry.faces = triangles.map(([a, b, c]) => new THREE.Face3(a, b, c));
+      geometry.computeFaceNormals?.();
+      geometry.computeVertexNormals?.();
+      geometry.computeBoundingBox?.();
+      geometry.computeBoundingSphere?.();
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.z = z;
+      return { mesh, skipped: false, reason: 'ear_clip_legacy_geometry' };
+    }
+
+    if (THREE?.BufferGeometry && THREE?.Float32BufferAttribute) {
+      const positions = [];
+      for (const [a, b, c] of triangles) {
+        for (const index of [a, b, c]) {
+          const point = points[index];
+          positions.push(Number(point.x), Number(point.y), 0);
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.computeVertexNormals?.();
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.z = z;
+      return { mesh, skipped: false, reason: 'ear_clip_buffer_geometry' };
+    }
+  } catch (error) {
+    console.warn('[VENTRA JPG FOOTPRINT EAR CLIP v33]', error);
+  }
+
+  return buildFloorMesh({ THREE, polygon, z, material });
+}
+
+
+
+function serializeBox3(
+  box
+) {
+  if (!box) {
+    return null;
+  }
+
+  return {
+    min: {
+      x: Number(box.min?.x),
+      y: Number(box.min?.y),
+      z: Number(box.min?.z),
+    },
+    max: {
+      x: Number(box.max?.x),
+      y: Number(box.max?.y),
+      z: Number(box.max?.z),
+    },
+  };
+}
+
+function deserializeBox3(
+  THREE,
+  value
+) {
+  if (
+    !value?.min ||
+    !value?.max
+  ) {
+    return null;
+  }
+
+  const numbers = [
+    value.min.x,
+    value.min.y,
+    value.min.z,
+    value.max.x,
+    value.max.y,
+    value.max.z,
+  ].map(Number);
+
+  if (
+    !numbers.every(
+      Number.isFinite
+    )
+  ) {
+    return null;
+  }
+
+  return new THREE.Box3(
+    new THREE.Vector3(
+      numbers[0],
+      numbers[1],
+      numbers[2]
+    ),
+    new THREE.Vector3(
+      numbers[3],
+      numbers[4],
+      numbers[5]
+    )
+  );
+}
+
+function frameReconstruction(
+  viewer,
+  serializedBounds
+) {
+  const THREE =
+    getThree();
+
+  if (
+    !viewer ||
+    !THREE?.Box3 ||
+    !THREE?.Vector3
+  ) {
+    return false;
+  }
+
+  const bounds =
+    deserializeBox3(
+      THREE,
+      serializedBounds
+    );
+
+  if (
+    !bounds ||
+    bounds.isEmpty?.()
+  ) {
+    return false;
+  }
+
+  const center =
+    bounds.getCenter(
+      new THREE.Vector3()
+    );
+
+  const size =
+    bounds.getSize(
+      new THREE.Vector3()
+    );
+
+  const maxDimension =
+    Math.max(
+      size.x,
+      size.y,
+      size.z,
+      1
+    );
+
+  // Tight isometric framing for Ventra reconstruction.
+  // The previous 1.65 multiplier made the building appear like a tiny model
+  // because the Autodesk 2D sheet remained in the same Viewer session.
+  const distance =
+    maxDimension * 0.62;
+
+  const position =
+    new THREE.Vector3(
+      center.x +
+        distance,
+      center.y -
+        distance,
+      center.z +
+        distance * 0.72
+    );
+
+  try {
+    viewer.navigation
+      ?.toPerspective?.();
+
+    viewer.navigation
+      ?.setView?.(
+        position,
+        center
+      );
+
+    viewer.navigation
+      ?.setPivotPoint?.(
+        center
+      );
+
+    viewer.navigation
+      ?.setCameraUpVector?.(
+        new THREE.Vector3(
+          0,
+          0,
+          1
+        )
+      );
+
+    viewer.setActiveNavigationTool?.(
+      "orbit"
+    );
+
+    viewer.impl
+      ?.invalidate?.(
+        true,
+        true,
+        true
+      );
+
+    return true;
+  } catch (error) {
+    console.warn(
+      "[VENTRA 3D CAMERA v42.6]",
+      error
+    );
+
+    return false;
+  }
+}
+
+
+
+function lineMidpointMeters(
+  line,
+  meterFactor
+) {
+  const x1 = Number(line?.start?.x);
+  const y1 = Number(line?.start?.y);
+  const x2 = Number(line?.end?.x);
+  const y2 = Number(line?.end?.y);
+
+  if (
+    ![
+      x1,
+      y1,
+      x2,
+      y2,
+    ].every(Number.isFinite)
+  ) {
+    return null;
+  }
+
+  return {
+    x:
+      ((x1 + x2) / 2) *
+      meterFactor,
+    y:
+      ((y1 + y2) / 2) *
+      meterFactor,
+  };
+}
+
+function splitWallLinesIntoStoreys(
+  wallLines,
+  meterFactor
+) {
+  const usable =
+    (wallLines || [])
+      .map((line) => ({
+        line,
+        midpoint:
+          lineMidpointMeters(
+            line,
+            meterFactor
+          ),
+      }))
+      .filter(
+        (item) =>
+          item.midpoint
+      );
+
+  if (usable.length < 20) {
+    return [
+      {
+        index: 0,
+        lines:
+          wallLines || [],
+        axis: "none",
+        splitGapMeters: 0,
+      },
+    ];
+  }
+
+  function findLargestGap(
+    axis
+  ) {
+    const sorted =
+      [...usable].sort(
+        (a, b) =>
+          a.midpoint[axis] -
+          b.midpoint[axis]
+      );
+
+    let best = null;
+
+    for (
+      let i = 1;
+      i < sorted.length;
+      i += 1
+    ) {
+      const gap =
+        sorted[i]
+          .midpoint[axis] -
+        sorted[i - 1]
+          .midpoint[axis];
+
+      const leftCount = i;
+      const rightCount =
+        sorted.length - i;
+
+      if (
+        leftCount < 12 ||
+        rightCount < 12
+      ) {
+        continue;
+      }
+
+      if (
+        !best ||
+        gap > best.gap
+      ) {
+        best = {
+          gap,
+          index: i,
+          sorted,
+        };
+      }
+    }
+
+    return best;
+  }
+
+  const xGap =
+    findLargestGap("x");
+  const yGap =
+    findLargestGap("y");
+
+  const candidates =
+    [
+      xGap && {
+        axis: "x",
+        ...xGap,
+      },
+      yGap && {
+        axis: "y",
+        ...yGap,
+      },
+    ].filter(Boolean);
+
+  if (
+    candidates.length === 0
+  ) {
+    return [
+      {
+        index: 0,
+        lines:
+          wallLines || [],
+        axis: "none",
+        splitGapMeters: 0,
+      },
+    ];
+  }
+
+  candidates.sort(
+    (a, b) =>
+      b.gap - a.gap
+  );
+
+  const best =
+    candidates[0];
+
+  // Do not invent multiple storeys unless there is a meaningful physical gap
+  // between two substantial drawing clusters.
+  if (
+    best.gap < 1.25
+  ) {
+    return [
+      {
+        index: 0,
+        lines:
+          wallLines || [],
+        axis: "none",
+        splitGapMeters:
+          best.gap,
+      },
+    ];
+  }
+
+  const left =
+    best.sorted
+      .slice(
+        0,
+        best.index
+      )
+      .map(
+        (item) =>
+          item.line
+      );
+
+  const right =
+    best.sorted
+      .slice(
+        best.index
+      )
+      .map(
+        (item) =>
+          item.line
+      );
+
+  return [
+    {
+      index: 0,
+      lines: left,
+      axis:
+        best.axis,
+      splitGapMeters:
+        best.gap,
+    },
+    {
+      index: 1,
+      lines: right,
+      axis:
+        best.axis,
+      splitGapMeters:
+        best.gap,
+    },
+  ];
+}
+
+function getStoreyFrame(
+  lines,
+  meterFactor
+) {
+  return getWallGeometryFrame(
+    lines,
+    meterFactor
+  );
+}
+
+function toStoreyLocalMeters(
+  point,
+  frame,
+  meterFactor
+) {
+  return toLocalMeters(
+    point,
+    frame,
+    meterFactor
+  );
+}
+
+function getWallGeometryFrame(
+  wallLines,
+  meterFactor
+) {
+  const points = [];
+
+  for (const line of wallLines || []) {
+    for (const point of [
+      line?.start,
+      line?.end,
+    ]) {
+      const x = Number(point?.x);
+      const y = Number(point?.y);
+
+      if (
+        Number.isFinite(x) &&
+        Number.isFinite(y)
+      ) {
+        points.push({ x, y });
+      }
+    }
+  }
+
+  if (points.length === 0) {
+    return null;
+  }
+
+  const minX = Math.min(
+    ...points.map(
+      (point) => point.x
+    )
+  );
+  const maxX = Math.max(
+    ...points.map(
+      (point) => point.x
+    )
+  );
+  const minY = Math.min(
+    ...points.map(
+      (point) => point.y
+    )
+  );
+  const maxY = Math.max(
+    ...points.map(
+      (point) => point.y
+    )
+  );
+
+  const centerX =
+    (minX + maxX) / 2;
+  const centerY =
+    (minY + maxY) / 2;
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    centerX,
+    centerY,
+    widthMeters:
+      (maxX - minX) *
+      meterFactor,
+    depthMeters:
+      (maxY - minY) *
+      meterFactor,
+  };
+}
+
+function toLocalMeters(
+  point,
+  frame,
+  meterFactor
+) {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+
+  if (
+    !frame ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    return null;
+  }
+
+  return {
+    x:
+      (x - frame.centerX) *
+      meterFactor,
+    y:
+      (y - frame.centerY) *
+      meterFactor,
+    z: 0,
+  };
+}
+
+function hideAutodeskSourceModel(
+  viewer,
+  sourceModel
+) {
+  if (!viewer) {
+    return {
+      hidden: false,
+      unloaded: false,
+    };
+  }
+
+  const model =
+    sourceModel ||
+    viewer.model;
+
+  if (!model) {
+    return {
+      hidden: false,
+      unloaded: false,
+    };
+  }
+
+  let hidden = false;
+  const unloaded = false;
+
+  // Keep the Autodesk source model LOADED.
+  // Unloading the only active 2D model can reset Autodesk's render lifecycle
+  // and make Ventra's reconstruction overlay disappear even though all wall,
+  // slab, door and window meshes were created successfully.
+  //
+  // We only hide the source model. The Viewer stays alive and continues
+  // rendering VENTRA_RECON_OVERLAY.
+  try {
+    viewer.impl
+      ?.setModelVisibility?.(
+        model,
+        false
+      );
+    hidden = true;
+  } catch {}
+
+  try {
+    model
+      ?.setAllVisibility?.(
+        false
+      );
+    hidden = true;
+  } catch {}
+
+  try {
+    viewer.impl
+      ?.visibilityManager
+      ?.setAllVisibility?.(
+        false,
+        model
+      );
+    hidden = true;
+  } catch {}
+
+  try {
+    viewer.clearSelection?.();
+  } catch {}
+
+  viewer.impl
+    ?.invalidate?.(
+      true,
+      true,
+      true
+    );
+
+  console.log(
+    "[VENTRA DWG SOURCE MODEL HIDDEN SAFELY]",
+    {
+      hidden,
+      unloaded: false,
+      viewerModelKeptAlive:
+        Boolean(
+          viewer.model ||
+          model
+        ),
+    }
+  );
+
+  return {
+    hidden,
+    unloaded,
+  };
+}
+
+async function showAutodeskSourceModel(
+  viewer,
+  documentNode,
+  viewable,
+  sourceModel,
+  wasUnloaded
+) {
+  if (!viewer) {
+    return null;
+  }
+
+  if (
+    wasUnloaded &&
+    documentNode &&
+    viewable?.node
+  ) {
+    try {
+      const restored =
+        await viewer.loadDocumentNode(
+          documentNode,
+          viewable.node,
+          {
+            keepCurrentModels:
+              false,
+          }
+        );
+
+      viewer.fitToView?.();
+
+      return (
+        restored ||
+        viewer.model ||
+        null
+      );
+    } catch (error) {
+      console.error(
+        "[VENTRA SOURCE RESTORE v42.6]",
+        error
+      );
+    }
+  }
+
+  const model =
+    sourceModel ||
+    viewer.model;
+
+  try {
+    viewer.impl
+      ?.setModelVisibility?.(
+        model,
+        true
+      );
+  } catch {}
+
+  try {
+    model
+      ?.setAllVisibility?.(
+        true
+      );
+  } catch {}
+
+  try {
+    viewer.impl
+      ?.visibilityManager
+      ?.setAllVisibility?.(
+        true,
+        model
+      );
+  } catch {}
+
+  try {
+    viewer.showAll?.();
+  } catch {}
+
+  viewer.impl
+    ?.invalidate?.(
+      true,
+      true,
+      true
+    );
+
+  viewer.fitToView?.();
+
+  return model || null;
+}
+
+
+function getLegacyObjectList(
+  takeoff,
+  key
+) {
+  const direct =
+    takeoff
+      ?.object_details
+      ?.[key];
+
+  if (Array.isArray(direct)) {
+    return direct;
+  }
+
+  const advanced =
+    takeoff
+      ?.advanced_takeoff
+      ?.object_details
+      ?.[key];
+
+  return Array.isArray(advanced)
+    ? advanced
+    : [];
+}
+
+function getVerifiedLinesByType(
+  takeoff,
+  geometry,
+  type
+) {
+  const directKey =
+    type === "door"
+      ? "doorLineSegments"
+      : type === "window"
+        ? "windowLineSegments"
+        : null;
+
+  if (
+    directKey &&
+    Array.isArray(
+      geometry?.[directKey]
+    ) &&
+    geometry[directKey].length > 0
+  ) {
+    return {
+      lines:
+        geometry[directKey],
+      source:
+        `saved_${type}_segments`,
+    };
+  }
+
+  const allLines =
+    Array.isArray(
+      geometry?.lineSegments
+    )
+      ? geometry.lineSegments
+      : [];
+
+  const objectKey =
+    type === "door"
+      ? "doors"
+      : "windows";
+
+  const objects =
+    getLegacyObjectList(
+      takeoff,
+      objectKey
+    );
+
+  const ids =
+    new Set(
+      objects
+        .map(
+          (item) =>
+            item?.dbId
+        )
+        .filter(
+          (value) =>
+            value !== null &&
+            value !== undefined
+        )
+        .map(String)
+    );
+
+  if (
+    allLines.length === 0 ||
+    ids.size === 0
+  ) {
+    return {
+      lines: [],
+      source: "unavailable",
+    };
+  }
+
+  return {
+    lines:
+      allLines.filter(
+        (line) =>
+          ids.has(
+            String(
+              line?.dbId
+            )
+          )
+      ),
+    source:
+      `legacy_lines_plus_verified_${type}_dbids`,
+  };
+}
+
+function convexHull2D(
+  points
+) {
+  const unique =
+    [...new Map(
+      (points || [])
+        .filter(
+          (p) =>
+            Number.isFinite(Number(p?.x)) &&
+            Number.isFinite(Number(p?.y))
+        )
+        .map(
+          (p) => [
+            `${Number(p.x).toFixed(6)}:${Number(p.y).toFixed(6)}`,
+            {
+              x: Number(p.x),
+              y: Number(p.y),
+            },
+          ]
+        )
+    ).values()];
+
+  if (unique.length < 3) {
+    return [];
+  }
+
+  unique.sort(
+    (a, b) =>
+      a.x === b.x
+        ? a.y - b.y
+        : a.x - b.x
+  );
+
+  const cross =
+    (o, a, b) =>
+      (a.x - o.x) *
+        (b.y - o.y) -
+      (a.y - o.y) *
+        (b.x - o.x);
+
+  const lower = [];
+
+  for (const p of unique) {
+    while (
+      lower.length >= 2 &&
+      cross(
+        lower[lower.length - 2],
+        lower[lower.length - 1],
+        p
+      ) <= 0
+    ) {
+      lower.pop();
+    }
+
+    lower.push(p);
+  }
+
+  const upper = [];
+
+  for (
+    let i = unique.length - 1;
+    i >= 0;
+    i -= 1
+  ) {
+    const p = unique[i];
+
+    while (
+      upper.length >= 2 &&
+      cross(
+        upper[upper.length - 2],
+        upper[upper.length - 1],
+        p
+      ) <= 0
+    ) {
+      upper.pop();
+    }
+
+    upper.push(p);
+  }
+
+  lower.pop();
+  upper.pop();
+
+  return [
+    ...lower,
+    ...upper,
+  ];
+}
+
+function createSlabMesh({
+  THREE,
+  points,
+  thickness = 0.18,
+  zBase = 0,
+  material,
+}) {
+  const hull =
+    convexHull2D(
+      points
+    );
+
+  if (hull.length < 3) {
+    return null;
+  }
+
+  try {
+    const shape =
+      new THREE.Shape();
+
+    shape.moveTo(
+      hull[0].x,
+      hull[0].y
+    );
+
+    for (
+      let i = 1;
+      i < hull.length;
+      i += 1
+    ) {
+      shape.lineTo(
+        hull[i].x,
+        hull[i].y
+      );
+    }
+
+    shape.closePath();
+
+    const geometry =
+      new THREE.ExtrudeGeometry(
+        shape,
+        {
+          // Autodesk Viewer can ship an older THREE build where
+          // ExtrudeGeometry uses `amount` instead of `depth`. If only
+          // `depth` is supplied that runtime falls back to its historical
+          // default extrusion (100 units), producing the giant vertical
+          // towers seen in the reconstruction. Supply both keys so the
+          // slab is 0.18 m thick on old and new THREE runtimes.
+          amount:
+            thickness,
+          depth:
+            thickness,
+          bevelEnabled:
+            false,
+          steps: 1,
+        }
+      );
+
+    const mesh =
+      new THREE.Mesh(
+        geometry,
+        material
+      );
+
+    mesh.position.z =
+      zBase -
+      thickness;
+
+    return mesh;
+  } catch (error) {
+    console.warn(
+      "[VENTRA SLAB v43]",
+      error
+    );
+
+    return null;
+  }
+}
+
+
+function groupLinesByDbId(
+  lines
+) {
+  const groups =
+    new Map();
+
+  for (const line of lines || []) {
+    const key =
+      String(
+        line?.dbId ??
+        ""
+      );
+
+    if (!key) {
+      continue;
+    }
+
+    if (
+      !groups.has(key)
+    ) {
+      groups.set(
+        key,
+        []
+      );
+    }
+
+    groups
+      .get(key)
+      .push(line);
+  }
+
+  return [
+    ...groups.entries()
+  ].map(
+    ([dbId, groupedLines]) => ({
+      dbId,
+      lines:
+        groupedLines,
+    })
+  );
+}
+
+function getOpeningDescriptor({
+  group,
+  storeyFrames,
+  meterFactor,
+  type,
+}) {
+  if (
+    !group?.lines?.length
+  ) {
+    return null;
+  }
+
+  const points = [];
+
+  for (
+    const line of
+    group.lines
+  ) {
+    for (const point of [
+      line?.start,
+      line?.end,
+    ]) {
+      const x =
+        Number(point?.x);
+      const y =
+        Number(point?.y);
+
+      if (
+        Number.isFinite(x) &&
+        Number.isFinite(y)
+      ) {
+        points.push({
+          x,
+          y,
+        });
+      }
+    }
+  }
+
+  if (
+    points.length < 2
+  ) {
+    return null;
+  }
+
+  const centroid = {
+    x:
+      points.reduce(
+        (sum, p) =>
+          sum + p.x,
+        0
+      ) /
+      points.length,
+    y:
+      points.reduce(
+        (sum, p) =>
+          sum + p.y,
+        0
+      ) /
+      points.length,
+  };
+
+  let bestStorey =
+    storeyFrames[0];
+  let bestDistance =
+    Infinity;
+
+  for (
+    const storey of
+    storeyFrames
+  ) {
+    const dx =
+      (
+        centroid.x -
+        storey.frame
+          .centerX
+      ) *
+      meterFactor;
+    const dy =
+      (
+        centroid.y -
+        storey.frame
+          .centerY
+      ) *
+      meterFactor;
+
+    const d =
+      Math.hypot(
+        dx,
+        dy
+      );
+
+    if (
+      d < bestDistance
+    ) {
+      bestDistance = d;
+      bestStorey =
+        storey;
+    }
+  }
+
+  if (!bestStorey) {
+    return null;
+  }
+
+  const localPoints =
+    points
+      .map(
+        (point) =>
+          toStoreyLocalMeters(
+            point,
+            bestStorey.frame,
+            meterFactor
+          )
+      )
+      .filter(Boolean);
+
+  if (
+    localPoints.length < 2
+  ) {
+    return null;
+  }
+
+  const minX =
+    Math.min(
+      ...localPoints.map(
+        (p) => p.x
+      )
+    );
+  const maxX =
+    Math.max(
+      ...localPoints.map(
+        (p) => p.x
+      )
+    );
+  const minY =
+    Math.min(
+      ...localPoints.map(
+        (p) => p.y
+      )
+    );
+  const maxY =
+    Math.max(
+      ...localPoints.map(
+        (p) => p.y
+      )
+    );
+
+  const spanX =
+    maxX - minX;
+  const spanY =
+    maxY - minY;
+
+  const major =
+    Math.max(
+      spanX,
+      spanY
+    );
+
+  const minor =
+    Math.min(
+      spanX,
+      spanY
+    );
+
+  // CAD door/window symbols often contain swing arcs and multiple short
+  // segments. Use the overall object envelope, not every primitive line.
+  let width =
+    major;
+
+  if (
+    !Number.isFinite(width)
+  ) {
+    return null;
+  }
+
+  const limits =
+    type === "door"
+      ? {
+          min: 0.55,
+          max: 1.80,
+          fallback:
+            0.90,
+        }
+      : {
+          min: 0.40,
+          max: 3.60,
+          fallback:
+            1.20,
+        };
+
+  // Reject annotation-like or sheet-scale objects. Do not silently clamp huge
+  // garbage into a plausible opening, because that would just hide bad data.
+  if (
+    width <
+      limits.min ||
+    width >
+      limits.max
+  ) {
+    // If the envelope is distorted by a symbol arc, try the longest actual
+    // primitive line as a secondary width estimate.
+    let longest =
+      0;
+
+    for (
+      const line of
+      group.lines
+    ) {
+      const a =
+        toStoreyLocalMeters(
+          line?.start,
+          bestStorey.frame,
+          meterFactor
+        );
+      const b =
+        toStoreyLocalMeters(
+          line?.end,
+          bestStorey.frame,
+          meterFactor
+        );
+
+      if (!a || !b) {
+        continue;
+      }
+
+      longest =
+        Math.max(
+          longest,
+          Math.hypot(
+            b.x - a.x,
+            b.y - a.y
+          )
+        );
+    }
+
+    if (
+      longest >=
+        limits.min &&
+      longest <=
+        limits.max
+    ) {
+      width =
+        longest;
+    } else {
+      return null;
+    }
+  }
+
+  const center = {
+    x:
+      (minX + maxX) /
+      2,
+    y:
+      (minY + maxY) /
+      2,
+  };
+
+  // Orientation follows the longer dimension of the verified object envelope.
+  const horizontal =
+    spanX >= spanY;
+
+  const half =
+    width / 2;
+
+  return {
+    dbId:
+      group.dbId,
+    storey:
+      bestStorey,
+    start:
+      horizontal
+        ? {
+            x:
+              center.x -
+              half,
+            y:
+              center.y,
+          }
+        : {
+            x:
+              center.x,
+            y:
+              center.y -
+              half,
+          },
+    end:
+      horizontal
+        ? {
+            x:
+              center.x +
+              half,
+            y:
+              center.y,
+          }
+        : {
+            x:
+              center.x,
+            y:
+              center.y +
+              half,
+          },
+    width,
+    minorSpan:
+      minor,
+  };
+}
+
+
+function validOpeningCentroid(
+  object
+) {
+  const x =
+    Number(
+      object
+        ?.centroid
+        ?.x
+    );
+  const y =
+    Number(
+      object
+        ?.centroid
+        ?.y
+    );
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    return null;
+  }
+
+  return {
+    x,
+    y,
+  };
+}
+
+function resolveOpeningWidthMeters(
+  object,
+  type
+) {
+  const limits =
+    type === "door"
+      ? {
+          min: 0.55,
+          max: 1.80,
+          fallback:
+            0.90,
+          defaultHeight:
+            2.10,
+        }
+      : {
+          min: 0.40,
+          max: 3.60,
+          fallback:
+            1.20,
+          defaultHeight:
+            1.20,
+        };
+
+  const candidates = [
+    Number(
+      object?.width
+    ),
+    Number(
+      object?.length
+    ),
+  ];
+
+  const area =
+    Number(
+      object?.area
+    );
+  const height =
+    Number(
+      object?.height
+    );
+
+  if (
+    Number.isFinite(area) &&
+    area > 0
+  ) {
+    const usableHeight =
+      Number.isFinite(height) &&
+      height > 0.5 &&
+      height < 4
+        ? height
+        : limits
+            .defaultHeight;
+
+    candidates.push(
+      area /
+        usableHeight
+    );
+  }
+
+  for (
+    const value of
+    candidates
+  ) {
+    if (
+      Number.isFinite(value) &&
+      value >= limits.min &&
+      value <= limits.max
+    ) {
+      return value;
+    }
+  }
+
+  return limits.fallback;
+}
+
+function resolveOpeningHeightMeters(
+  object,
+  type
+) {
+  const value =
+    Number(
+      object?.height
+    );
+
+  const min =
+    type === "door"
+      ? 1.70
+      : 0.50;
+
+  const max =
+    type === "door"
+      ? 2.70
+      : 2.40;
+
+  if (
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+  ) {
+    return value;
+  }
+
+  return type === "door"
+    ? 2.10
+    : 1.20;
+}
+
+function chooseStoreyForPoint(
+  point,
+  storeyFrames,
+  meterFactor
+) {
+  if (
+    !point ||
+    !Array.isArray(
+      storeyFrames
+    ) ||
+    storeyFrames.length === 0
+  ) {
+    return null;
+  }
+
+  let best = null;
+  let bestDistance =
+    Infinity;
+
+  for (
+    const storey of
+    storeyFrames
+  ) {
+    const dx =
+      (
+        Number(point.x) -
+        Number(
+          storey
+            ?.frame
+            ?.centerX
+        )
+      ) *
+      meterFactor;
+
+    const dy =
+      (
+        Number(point.y) -
+        Number(
+          storey
+            ?.frame
+            ?.centerY
+        )
+      ) *
+      meterFactor;
+
+    const distance =
+      Math.hypot(
+        dx,
+        dy
+      );
+
+    if (
+      distance <
+      bestDistance
+    ) {
+      bestDistance =
+        distance;
+      best = storey;
+    }
+  }
+
+  return best;
+}
+
+function projectPointToSegment2D(
+  point,
+  start,
+  end
+) {
+  const dx =
+    end.x -
+    start.x;
+  const dy =
+    end.y -
+    start.y;
+
+  const lengthSquared =
+    dx * dx +
+    dy * dy;
+
+  if (
+    lengthSquared <=
+    1e-10
+  ) {
+    return {
+      point: {
+        x:
+          start.x,
+        y:
+          start.y,
+      },
+      t: 0,
+      distance:
+        Math.hypot(
+          point.x -
+            start.x,
+          point.y -
+            start.y
+        ),
+    };
+  }
+
+  const rawT =
+    (
+      (
+        point.x -
+        start.x
+      ) *
+        dx +
+      (
+        point.y -
+        start.y
+      ) *
+        dy
+    ) /
+    lengthSquared;
+
+  const t =
+    Math.max(
+      0,
+      Math.min(
+        1,
+        rawT
+      )
+    );
+
+  const projected = {
+    x:
+      start.x +
+      dx * t,
+    y:
+      start.y +
+      dy * t,
+  };
+
+  return {
+    point:
+      projected,
+    t,
+    distance:
+      Math.hypot(
+        point.x -
+          projected.x,
+        point.y -
+          projected.y
+      ),
+  };
+}
+
+function normalizedWallKey(line) {
+  const x1=Number(line?.start?.x), y1=Number(line?.start?.y);
+  const x2=Number(line?.end?.x), y2=Number(line?.end?.y);
+  if (![x1,y1,x2,y2].every(Number.isFinite)) return null;
+  const a=`${x1.toFixed(6)},${y1.toFixed(6)}`;
+  const b=`${x2.toFixed(6)},${y2.toFixed(6)}`;
+  const ordered=a<=b?`${a}|${b}`:`${b}|${a}`;
+  const dbId=(line?.dbId!==null&&line?.dbId!==undefined)?String(line.dbId):"no-db";
+  return `${dbId}:${ordered}`;
+}
+
+function snapOpeningObjectToWall({
+  object,
+  type,
+  storeyFrames,
+  meterFactor,
+  fallbackGroup,
+}) {
+  let centroid =
+    validOpeningCentroid(
+      object
+    );
+
+  // Older saved takeoffs may not contain centroids. When available, use the
+  // verified dbId line group only to recover the object's center, never to
+  // create hundreds of primitive-line openings.
+  if (
+    !centroid &&
+    fallbackGroup
+      ?.lines
+      ?.length
+  ) {
+    const points = [];
+
+    for (
+      const line of
+      fallbackGroup.lines
+    ) {
+      for (
+        const point of [
+          line?.start,
+          line?.end,
+        ]
+      ) {
+        const x =
+          Number(point?.x);
+        const y =
+          Number(point?.y);
+
+        if (
+          Number.isFinite(x) &&
+          Number.isFinite(y)
+        ) {
+          points.push({
+            x,
+            y,
+          });
+        }
+      }
+    }
+
+    if (
+      points.length > 0
+    ) {
+      centroid = {
+        x:
+          points.reduce(
+            (sum, p) =>
+              sum + p.x,
+            0
+          ) /
+          points.length,
+        y:
+          points.reduce(
+            (sum, p) =>
+              sum + p.y,
+            0
+          ) /
+          points.length,
+      };
+    }
+  }
+
+  if (!centroid) {
+    return {
+      valid: false,
+      reason:
+        "missing_centroid",
+    };
+  }
+
+  const storey =
+    chooseStoreyForPoint(
+      centroid,
+      storeyFrames,
+      meterFactor
+    );
+
+  if (!storey) {
+    return {
+      valid: false,
+      reason:
+        "storey_not_found",
+    };
+  }
+
+  const localCentroid =
+    toStoreyLocalMeters(
+      centroid,
+      storey.frame,
+      meterFactor
+    );
+
+  if (!localCentroid) {
+    return {
+      valid: false,
+      reason:
+        "centroid_transform_failed",
+    };
+  }
+
+  let nearest = null;
+  let nearestContaining = null;
+  const resolvedOpeningWidth =
+    resolveOpeningWidthMeters(
+      object,
+      type
+    );
+  const openingHalfWidth =
+    Math.max(0.05, resolvedOpeningWidth / 2);
+
+  for (
+    const wallLine of
+    storey.lines || []
+  ) {
+    const start =
+      toStoreyLocalMeters(
+        wallLine?.start,
+        storey.frame,
+        meterFactor
+      );
+    const end =
+      toStoreyLocalMeters(
+        wallLine?.end,
+        storey.frame,
+        meterFactor
+      );
+
+    if (
+      !start ||
+      !end
+    ) {
+      continue;
+    }
+
+    const wallLength =
+      Math.hypot(
+        end.x -
+          start.x,
+        end.y -
+          start.y
+      );
+
+    // Tiny line fragments are usually CAD detail noise, not usable walls.
+    if (
+      wallLength <
+      0.25
+    ) {
+      continue;
+    }
+
+    const projection =
+      projectPointToSegment2D(
+        localCentroid,
+        start,
+        end
+      );
+
+    const candidate = {
+      start,
+      end,
+      rawWallLine: wallLine,
+      parentWallKey: normalizedWallKey(wallLine),
+      distance:
+        projection.distance,
+      position:
+        projection.point,
+      wallLength,
+    };
+
+    if (
+      !nearest ||
+      projection.distance <
+        nearest.distance
+    ) {
+      nearest = candidate;
+    }
+
+    const edgeClearance =
+      Math.min(
+        projection.t * wallLength,
+        (1 - projection.t) * wallLength
+      );
+    const containsFullOpening =
+      edgeClearance + 0.02 >=
+      openingHalfWidth;
+
+    if (
+      containsFullOpening &&
+      (
+        !nearestContaining ||
+        projection.distance <
+          nearestContaining.distance
+      )
+    ) {
+      nearestContaining = candidate;
+    }
+  }
+
+  nearest =
+    nearestContaining ||
+    nearest;
+
+  if (!nearest) {
+    return {
+      valid: false,
+      reason:
+        "nearest_wall_missing",
+    };
+  }
+
+  const maxSnapDistance =
+    type === "door"
+      ? 1.35
+      : 1.60;
+
+  if (
+    nearest.distance >
+    maxSnapDistance
+  ) {
+    return {
+      valid: false,
+      reason:
+        "too_far_from_wall",
+      distance:
+        nearest.distance,
+    };
+  }
+
+  const wallDx =
+    nearest.end.x -
+    nearest.start.x;
+  const wallDy =
+    nearest.end.y -
+    nearest.start.y;
+
+  const wallLength =
+    Math.hypot(
+      wallDx,
+      wallDy
+    );
+
+  if (
+    wallLength <= 0
+  ) {
+    return {
+      valid: false,
+      reason:
+        "invalid_wall_direction",
+    };
+  }
+
+  const width =
+    Math.min(
+      resolvedOpeningWidth,
+      Math.max(
+        0.45,
+        wallLength * 0.92
+      )
+    );
+
+  const ux =
+    wallDx /
+    wallLength;
+  const uy =
+    wallDy /
+    wallLength;
+
+  const half =
+    width / 2;
+
+  return {
+    valid: true,
+    dbId:
+      object?.dbId ??
+      null,
+    storey,
+    start: {
+      x:
+        nearest
+          .position
+          .x -
+        ux * half,
+      y:
+        nearest
+          .position
+          .y -
+        uy * half,
+    },
+    end: {
+      x:
+        nearest
+          .position
+          .x +
+        ux * half,
+      y:
+        nearest
+          .position
+          .y +
+        uy * half,
+    },
+    width,
+    height:
+      resolveOpeningHeightMeters(
+        object,
+        type
+      ),
+    snapDistance:
+      nearest.distance,
+    wallPosition:
+      nearest.position,
+    wallStart:
+      nearest.start,
+    wallEnd:
+      nearest.end,
+    parentWallKey:
+      nearest.parentWallKey,
+    parentWallDbId:
+      nearest.rawWallLine?.dbId ?? null,
+    source:
+      validOpeningCentroid(
+        object
+      )
+        ? "aps_object_centroid_snapped_to_verified_wall"
+        : "verified_dbid_geometry_center_snapped_to_verified_wall",
+  };
+}
+
+function uniqueOpeningObjects(
+  objects,
+  expectedCount
+) {
+  const result = [];
+  const seen =
+    new Set();
+
+  for (
+    let index = 0;
+    index <
+    (objects || []).length;
+    index += 1
+  ) {
+    const object =
+      objects[index];
+
+    const dbId =
+      object?.dbId;
+
+    const key =
+      dbId !== null &&
+      dbId !== undefined
+        ? `db:${String(dbId)}`
+        : `idx:${index}`;
+
+    if (
+      seen.has(key)
+    ) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(object);
+  }
+
+  const expected =
+    Number(
+      expectedCount
+    );
+
+  if (
+    Number.isFinite(expected) &&
+    expected > 0 &&
+    result.length > expected
+  ) {
+    return result.slice(
+      0,
+      expected
+    );
+  }
+
+  return result;
+}
+
+function createOpeningMarker({
+  THREE,
+  start,
+  end,
+  widthFallback,
+  thickness,
+  height,
+  sillHeight = 0,
+  zBase = 0,
+  material,
+}) {
+  if (
+    !start ||
+    !end
+  ) {
+    return null;
+  }
+
+  const dx =
+    Number(end.x) -
+    Number(start.x);
+  const dy =
+    Number(end.y) -
+    Number(start.y);
+
+  let length =
+    Math.hypot(
+      dx,
+      dy
+    );
+
+  if (
+    !Number.isFinite(length) ||
+    length <= 0.05
+  ) {
+    length =
+      widthFallback;
+  }
+
+  const geometry =
+    new THREE.BoxGeometry(
+      Math.max(
+        length,
+        widthFallback
+      ),
+      thickness,
+      height
+    );
+
+  const mesh =
+    new THREE.Mesh(
+      geometry,
+      material
+    );
+
+  mesh.position.set(
+    (
+      Number(start.x) +
+      Number(end.x)
+    ) / 2,
+    (
+      Number(start.y) +
+      Number(end.y)
+    ) / 2,
+    zBase +
+      sillHeight +
+      height / 2
+  );
+
+  mesh.rotation.z =
+    Math.atan2(
+      dy,
+      dx
+    );
+
+  return mesh;
+}
+
+function getStoreyIndexForLine(
+  line,
+  storeyFrames,
+  meterFactor
+) {
+  const midpoint =
+    lineMidpointMeters(
+      line,
+      meterFactor
+    );
+
+  if (!midpoint) {
+    return 0;
+  }
+
+  let bestIndex = 0;
+  let bestDistance =
+    Infinity;
+
+  for (
+    const storey of
+    storeyFrames
+  ) {
+    const cx =
+      storey.frame
+        .centerX *
+      meterFactor;
+    const cy =
+      storey.frame
+        .centerY *
+      meterFactor;
+
+    const d =
+      Math.hypot(
+        midpoint.x - cx,
+        midpoint.y - cy
+      );
+
+    if (
+      d < bestDistance
+    ) {
+      bestDistance = d;
+      bestIndex =
+        storey.index;
+    }
+  }
+
+  return bestIndex;
+}
+
+function addMeshToBounds(
+  THREE,
+  mesh,
+  bounds
+) {
+  if (!mesh || !bounds) {
+    return false;
+  }
+
+  try {
+    mesh.updateMatrixWorld?.(
+      true
+    );
+
+    const meshBounds =
+      new THREE.Box3()
+        .setFromObject(
+          mesh
+        );
+
+    if (
+      meshBounds.isEmpty()
+    ) {
+      return false;
+    }
+
+    const size =
+      meshBounds.getSize(
+        new THREE.Vector3()
+      );
+
+    // Final geometry fuse. A normal Ventra villa reconstruction is measured
+    // in metres. Never allow a malformed primitive (for example an old
+    // ExtrudeGeometry defaulting to 100 units) to poison camera bounds.
+    if (
+      !Number.isFinite(size.x) ||
+      !Number.isFinite(size.y) ||
+      !Number.isFinite(size.z) ||
+      size.x > 80 ||
+      size.y > 80 ||
+      size.z > 20
+    ) {
+      console.warn(
+        "[VENTRA RECONSTRUCTION] rejected implausible mesh bounds",
+        { x: size.x, y: size.y, z: size.z }
+      );
+      return false;
+    }
+
+    bounds.union(
+      meshBounds
+    );
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+function colorToHex(value, fallback) {
+  const normalized = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(normalized)) {
+    return Number.parseInt(normalized.slice(1), 16);
+  }
+  return fallback;
+}
+
+function setMaterialDesign(material, color, fallbackColor, shininess = 22) {
+  if (!material) return;
+  const nextColor = colorToHex(color, fallbackColor);
+  material.color?.setHex?.(nextColor);
+  material.shininess = Number.isFinite(Number(shininess))
+    ? Math.max(0, Math.min(100, Number(shininess)))
+    : 22;
+  material.needsUpdate = true;
+}
+
+function distancePointToSegment(point, start, end) {
+  return projectPointToSegment2D(point, start, end).distance;
+}
+
+function isExteriorWallSegment(start, end, hull, tolerance = 0.24) {
+  if (!start || !end || !Array.isArray(hull) || hull.length < 3) return false;
+  const midpoint = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  };
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (!Number.isFinite(length) || length < 0.05) return false;
+
+  for (let index = 0; index < hull.length; index += 1) {
+    const a = hull[index];
+    const b = hull[(index + 1) % hull.length];
+    const hx = b.x - a.x;
+    const hy = b.y - a.y;
+    const hullLength = Math.hypot(hx, hy);
+    if (!Number.isFinite(hullLength) || hullLength < 0.05) continue;
+    const parallel = Math.abs((dx * hx + dy * hy) / (length * hullLength));
+    if (parallel < 0.94) continue;
+    if (distancePointToSegment(midpoint, a, b) <= tolerance) return true;
+  }
+  return false;
+}
+
+function buildDesignOverlay({ viewer, reconstruction, design }) {
+  const THREE = getThree();
+  const runtime = reconstruction?._runtime;
+  const impl = viewer?.impl;
+  if (!viewer || !THREE || !runtime || !impl) {
+    throw new Error("Reconstruct 3D before applying a design prompt.");
+  }
+
+  clearDesignOverlay(viewer);
+  if (typeof impl.createOverlayScene === 'function') {
+    impl.createOverlayScene(VENTRA_DESIGN_OVERLAY);
+  }
+
+  const palette = design?.palette || {};
+  setMaterialDesign(runtime.interiorWallMaterial, palette.interiorWall, 0xd8d8d8, design?.wallShininess);
+  setMaterialDesign(runtime.exteriorWallMaterial, palette.facade, 0xd8d8d8, design?.facadeShininess);
+  setMaterialDesign(runtime.doorMaterial, palette.door, 0x8b5a2b, 30);
+  setMaterialDesign(runtime.windowMaterial, palette.glass, 0x85c8ff, 80);
+
+  if (runtime.windowMaterial) {
+    runtime.windowMaterial.opacity = Math.max(0.2, Math.min(0.85, Number(design?.glassOpacity) || 0.52));
+    runtime.windowMaterial.transparent = true;
+    runtime.windowMaterial.needsUpdate = true;
+  }
+
+  const floorFinishMaterial = new THREE.MeshPhongMaterial({
+    color: colorToHex(palette.floor, 0xc7b8a2),
+    transparent: false,
+    opacity: 1,
+    side: THREE.FrontSide,
+    shininess: Math.max(0, Math.min(100, Number(design?.floorShininess) || 28)),
+  });
+
+  const ceilingMaterial = new THREE.MeshPhongMaterial({
+    color: colorToHex(palette.ceiling, 0xf4f1e9),
+    transparent: false,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    shininess: 8,
+  });
+
+  const accentMaterial = new THREE.MeshPhongMaterial({
+    color: colorToHex(palette.accent, 0x7b5b3d),
+    transparent: false,
+    opacity: 1,
+    side: THREE.FrontSide,
+    shininess: 25,
+  });
+
+  let floorFinishCount = 0;
+  let ceilingCount = 0;
+  let baseboardCount = 0;
+  let facadeBandCount = 0;
+
+  for (const storey of runtime.storeys || []) {
+    const zBase = storey.index * runtime.storeyHeightMeters;
+
+    if (design?.features?.floorFinish !== false && Array.isArray(storey.hull) && storey.hull.length >= 3) {
+      const finish = createSlabMesh({
+        THREE,
+        points: storey.hull,
+        thickness: 0.025,
+        zBase: zBase + 0.185,
+        material: floorFinishMaterial,
+      });
+      if (finish) {
+        finish.userData = { ventraType: "design_floor_finish", aiGeneratedDesign: true };
+        viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY, finish);
+        floorFinishCount += 1;
+      }
+    }
+
+    if (design?.features?.ceiling === true && Array.isArray(storey.hull) && storey.hull.length >= 3) {
+      const ceiling = createSlabMesh({
+        THREE,
+        points: storey.hull,
+        thickness: 0.035,
+        zBase: zBase + runtime.wallHeightMeters - 0.04,
+        material: ceilingMaterial,
+      });
+      if (ceiling) {
+        ceiling.userData = { ventraType: "design_ceiling", aiGeneratedDesign: true };
+        viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY, ceiling);
+        ceilingCount += 1;
+      }
+    }
+
+    if (design?.features?.baseboards !== false) {
+      for (const piece of storey.wallPieces || []) {
+        if (piece.exterior) continue;
+        const baseboard = createWallMesh({
+          THREE,
+          start: piece.start,
+          end: piece.end,
+          height: 0.11,
+          thickness: runtime.wallThicknessMeters + 0.012,
+          zBase: zBase + 0.19,
+          material: accentMaterial,
+        });
+        if (!baseboard) continue;
+        baseboard.userData = { ventraType: "design_baseboard", aiGeneratedDesign: true };
+        viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY, baseboard);
+        baseboardCount += 1;
+      }
+    }
+
+    if (design?.features?.facadeBand === true) {
+      for (const piece of storey.wallPieces || []) {
+        if (!piece.exterior) continue;
+        const band = createWallMesh({
+          THREE,
+          start: piece.start,
+          end: piece.end,
+          height: 0.10,
+          thickness: runtime.wallThicknessMeters + 0.018,
+          zBase: zBase + Math.min(runtime.wallHeightMeters - 0.35, 2.55),
+          material: accentMaterial,
+        });
+        if (!band) continue;
+        band.userData = { ventraType: "design_facade_band", aiGeneratedDesign: true };
+        viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY, band);
+        facadeBandCount += 1;
+      }
+    }
+  }
+
+  viewer.impl.invalidate(true, true, true);
+
+  return {
+    floorFinishCount,
+    ceilingCount,
+    baseboardCount,
+    facadeBandCount,
+    style: design?.style || "custom",
+  };
+}
+
+
+
+const VENTRA_DESIGN_FETCH_TIMEOUT_MS = 25000;
+
+function ventraLocalDesignFromPrompt(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  const design = {
+    style: "modern neutral",
+    palette: {
+      interiorWall: "#E7E1D8", facade: "#D8D0C3", floor: "#C9B89F",
+      ceiling: "#F5F2EA", door: "#6E4A32", glass: "#7896AA", accent: "#403D39",
+    },
+    floorFinish: "warm stone", facadeFinish: "smooth mineral finish",
+    wallShininess: 18, facadeShininess: 12, floorShininess: 28, glassOpacity: 0.48,
+    features: { floorFinish: true, baseboards: true, ceiling: false, facadeBand: false },
+  };
+
+  if (/(luxury|luxurious|لوکس)/i.test(text)) {
+    design.style = "modern luxury";
+    design.palette.interiorWall = "#EEE6D8";
+    design.palette.floor = "#D6C5AA";
+    design.palette.door = "#5C3C2B";
+    design.palette.accent = "#2E2B28";
+    design.floorFinish = "beige marble";
+    design.facadeFinish = "light stone cladding";
+    design.floorShininess = 52;
+  }
+  if (/(minimal|scandinav|مینیمال|اسکاند)/i.test(text)) {
+    design.style = "warm minimal";
+    design.palette.interiorWall = "#E9E5DC";
+    design.palette.floor = "#C9A97D";
+    design.palette.door = "#9A7654";
+    design.floorFinish = "natural oak";
+    design.floorShininess = 14;
+  }
+  if (/(black|charcoal|مشکی|ذغالی)/i.test(text)) design.palette.accent = "#25282B";
+  if (/(white|سفید)/i.test(text)) design.palette.interiorWall = "#F2F1EC";
+  if (/(wood|walnut|oak|چوب|گردو)/i.test(text)) design.palette.door = "#66452F";
+  if (/(stone|limestone|travertine|سنگ|تراورتن)/i.test(text)) {
+    design.palette.facade = "#D6CABB";
+    design.facadeFinish = "natural stone";
+  }
+  if (/(marble|مرمر|ماربل)/i.test(text)) {
+    design.palette.floor = "#D8D0C5";
+    design.floorFinish = "marble";
+    design.floorShininess = 58;
+  }
+  if (/(ceiling|سقف)/i.test(text)) design.features.ceiling = true;
+  if (/(band|facade accent|فریم نما|خط افقی)/i.test(text)) design.features.facadeBand = true;
+  return design;
+}
+
+function ventraLocalEditSchematicScene(scene, prompt) {
+  const next = JSON.parse(JSON.stringify(scene || {}));
+  next.assets = Array.isArray(next.assets) ? next.assets : [];
+  next.palette = next.palette || {};
+  const text = String(prompt || "").toLowerCase();
+  const hasType = (type) => next.assets.some((item) => item?.type === type);
+  const add = (asset) => { if (!hasType(asset.type)) next.assets.push(asset); };
+
+  if (/(bathtub|bath tub|وان)/i.test(text)) add({ type: "bathtub", x: 0.72, y: 0.72, width: 1.7, depth: 0.75, height: 0.58, rotation: 0 });
+  if (/(sink|vanity|روشویی)/i.test(text)) add({ type: "sink", x: 0.22, y: 0.28, width: 0.8, depth: 0.5, height: 0.85, rotation: 0 });
+  if (/(faucet|شیر آب|شیرآلات)/i.test(text)) add({ type: "faucet", x: 0.22, y: 0.28, width: 0.15, depth: 0.15, height: 0.35, rotation: 0 });
+  if (/(shower|دوش)/i.test(text)) add({ type: "shower", x: 0.82, y: 0.22, width: 0.95, depth: 0.95, height: 2.1, rotation: 0 });
+  if (/(toilet|wc|توالت)/i.test(text)) add({ type: "toilet", x: 0.35, y: 0.72, width: 0.7, depth: 0.8, height: 0.78, rotation: 0 });
+  if (/(sofa|couch|مبل)/i.test(text)) add({ type: "sofa", x: 0.5, y: 0.7, width: 2.2, depth: 0.9, height: 0.85, rotation: 0 });
+  if (/(armchair|صندلی راحتی)/i.test(text)) add({ type: "armchair", x: 0.22, y: 0.62, width: 0.85, depth: 0.85, height: 0.9, rotation: 15 });
+  if (/(coffee table|میز جلو مبلی)/i.test(text)) add({ type: "coffee_table", x: 0.5, y: 0.5, width: 1.1, depth: 0.65, height: 0.42, rotation: 0 });
+  if (/(bed|تخت)/i.test(text)) add({ type: "bed", x: 0.5, y: 0.62, width: 1.8, depth: 2.0, height: 0.55, rotation: 0 });
+  if (/(wardrobe|closet|کمد)/i.test(text)) add({ type: "wardrobe", x: 0.82, y: 0.5, width: 1.6, depth: 0.6, height: 2.2, rotation: 90 });
+  if (/(tv|تلویزیون)/i.test(text)) add({ type: "tv_unit", x: 0.5, y: 0.14, width: 1.8, depth: 0.35, height: 0.65, rotation: 0 });
+  if (/(island|جزیره)/i.test(text)) add({ type: "kitchen_island", x: 0.5, y: 0.5, width: 1.8, depth: 0.9, height: 0.92, rotation: 0 });
+
+  // Schematic style presets must mutate the scene palette itself. The standalone
+  // JPG renderer reads scene.palette directly, so changing only Design Mode state
+  // would make the preset buttons appear to do nothing.
+  if (/(modern luxury|luxury|luxurious|لوکس)/i.test(text)) {
+    next.style = "modern_luxury";
+    next.palette.wall = "#EFE5D6";
+    next.palette.floor = "#D8C8B2";
+    next.palette.accent = "#8B6F58";
+    next.palette.glass = "#A8C5D6";
+    next.palette.door = "#6B4935";
+    next.palette.metal = "#A38E78";
+    next.palette.furniture = "#B79B83";
+  }
+  if (/(warm minimal|minimal|scandinav|مینیمال|اسکاند)/i.test(text)) {
+    next.style = "warm_minimal";
+    next.palette.wall = "#EEEAE2";
+    next.palette.floor = "#C9B18C";
+    next.palette.accent = "#9A8068";
+    next.palette.glass = "#B6CED8";
+    next.palette.door = "#A37B55";
+    next.palette.metal = "#9C9388";
+    next.palette.furniture = "#B79C7D";
+  }
+  if (/(facade concept|contemporary exterior|facade|exterior|نما)/i.test(text)) {
+    next.style = "facade_concept";
+    next.palette.wall = next.palette.wall || "#E9E4DB";
+    next.palette.floor = next.palette.floor || "#CFC1AB";
+    next.palette.accent = "#6C7277";
+    next.palette.glass = "#7897AA";
+    next.palette.door = "#4F4740";
+    next.palette.metal = "#73787C";
+    next.palette.furniture = "#8B8179";
+  }
+
+  if (/(white|سفید)/i.test(text)) next.palette.wall = "#F2F1EC";
+  if (/(black|charcoal|مشکی|ذغالی)/i.test(text)) next.palette.accent = "#565A5E";
+  if (/(warm|گرم)/i.test(text) && !/(minimal|luxury|لوکس)/i.test(text)) next.palette.wall = "#E8DFD0";
+  if (/(marble|مرمر|ماربل)/i.test(text)) next.palette.floor = "#DDD3C5";
+  if (/(oak|natural oak|بلوط)/i.test(text)) next.palette.floor = "#C6A77D";
+  if (/(walnut|گردو)/i.test(text)) next.palette.door = "#684A38";
+
+  next.updatedAt = new Date().toISOString();
+  return next;
+}
+
+
+const VENTRA_SCHEMATIC_ASSET_DEFAULTS = {
+  sofa: { width: 2.35, depth: 0.95, height: 0.88 },
+  armchair: { width: 0.9, depth: 0.9, height: 0.92 },
+  coffee_table: { width: 1.15, depth: 0.65, height: 0.42 },
+  dining_table: { width: 1.8, depth: 0.95, height: 0.76 },
+  desk: { width: 1.35, depth: 0.65, height: 0.76 },
+  chair: { width: 0.48, depth: 0.52, height: 0.9 },
+  bed: { width: 1.8, depth: 2.05, height: 0.62 },
+  wardrobe: { width: 1.8, depth: 0.62, height: 2.25 },
+  cabinet: { width: 1.2, depth: 0.55, height: 0.9 },
+  tv_unit: { width: 1.9, depth: 0.38, height: 0.62 },
+  kitchen_counter: { width: 2.2, depth: 0.65, height: 0.92 },
+  rug: { width: 2.2, depth: 1.6, height: 0.025 },
+  plant: { width: 0.45, depth: 0.45, height: 0.9 },
+  kitchen_island: { width: 1.9, depth: 0.95, height: 0.92 },
+  nightstand: { width: 0.5, depth: 0.45, height: 0.5 },
+  bathtub: { width: 1.75, depth: 0.78, height: 0.58 },
+  sink: { width: 0.82, depth: 0.52, height: 0.86 },
+  faucet: { width: 0.18, depth: 0.18, height: 0.38 },
+  shower: { width: 0.95, depth: 0.95, height: 2.1 },
+  toilet: { width: 0.72, depth: 0.82, height: 0.78 },
+  refrigerator: { width: 0.85, depth: 0.75, height: 1.85 },
+  stove: { width: 0.70, depth: 0.65, height: 0.90 },
+  washing_machine: { width: 0.65, depth: 0.65, height: 0.88 },
+  mirror: { width: 0.75, depth: 0.04, height: 1.10 },
+};
+
+function ventraSchematicPresetFromText(value) {
+  const text = String(value || "").toLowerCase();
+  if (/(modern luxury|luxury|luxurious|لوکس)/i.test(text)) return "luxury";
+  if (/(warm minimal|minimal|scandinav|مینیمال|اسکاند)/i.test(text)) return "minimal";
+  if (/(modern|contemporary|مدرن)/i.test(text)) return "modern";
+  if (/(facade|exterior|نما)/i.test(text)) return "facade";
+  return null;
+}
+
+
+function ventraHasMetricAssetPlacement(asset) {
+  return asset?.xMeters != null && asset?.yMeters != null &&
+    Number.isFinite(Number(asset.xMeters)) && Number.isFinite(Number(asset.yMeters));
+}
+
+function ventraApplySchematicPreset(scene, presetId) {
+  const next = JSON.parse(JSON.stringify(scene || {}));
+  next.assets = Array.isArray(next.assets) ? next.assets : [];
+  next.palette = next.palette || {};
+
+  const definitions = {
+    typical: { scale: 1.00, style: 'typical_modern' },
+    modern: { scale: 1.00, style: 'modern' },
+    minimal: { scale: 0.97, style: 'warm_minimal' },
+    luxury: { scale: 1.04, style: 'modern_luxury' },
+    facade: { scale: 1.00, style: 'facade_concept' },
+  };
+
+  const normalizedId = presetId === 'classic' ? 'typical' : presetId;
+  const definition = ventraGetSchematicPresetDefinition(normalizedId);
+  const meta = definitions[normalizedId] || definitions.modern;
+
+  next.style = definition.style || meta.style;
+  next.backgroundColor = definition.backgroundColor || next.backgroundColor;
+  next.palette = { ...next.palette, ...(definition.palette || {}) };
+
+  const scale = meta.scale || 1;
+
+  next.assets = next.assets.map((asset) => {
+    if (!asset || typeof asset !== 'object') return asset;
+    if (ventraHasMetricAssetPlacement(asset)) return { ...asset, variant: normalizedId };
+    return {
+      ...asset,
+      width: Math.max(0.15, Number(asset.width || 0.8) * scale),
+      depth: Math.max(0.15, Number(asset.depth || 0.8) * scale),
+      height: Math.max(0.10, Number(asset.height || 0.8) * (normalizedId === 'luxury' ? 1.02 : 1)),
+      variant: normalizedId,
+    };
+  });
+
+  next.updatedAt = new Date().toISOString();
+  return next;
+}
+
+function ventraCloneScene(scene) {
+  return scene ? JSON.parse(JSON.stringify(scene)) : null;
+}
+
+
+function ventraGetSchematicPresetDefinition(presetId) {
+  const presets = {
+    typical: {
+      style: 'typical_modern',
+      backgroundColor: '#23262B',
+      palette: {
+        wall: '#E9E6DF',
+        floor: '#DDD7CF',
+        accent: '#6E6257',
+        glass: '#94B4C5',
+        door: '#7A5A42',
+        metal: '#6E7378',
+        furniture: '#B08C6C',
+        upholstery: '#DDD4C8',
+        textileAccent: '#8D9A74',
+        bathroomTile: '#F2F3F1',
+        bedroomWood: '#C89E70',
+        mainStone: '#E5E1DA',
+      },
+    },
+    modern: {
+      style: 'modern',
+      backgroundColor: '#1E2228',
+      palette: {
+        wall: '#ECEAE5',
+        floor: '#E3DED6',
+        accent: '#394149',
+        glass: '#8FAFC0',
+        door: '#6D4E38',
+        metal: '#4E5962',
+        furniture: '#A97C57',
+        upholstery: '#D8D2C8',
+        textileAccent: '#7D8F71',
+        bathroomTile: '#F6F7F5',
+        bedroomWood: '#C89563',
+        mainStone: '#E7E3DD',
+      },
+    },
+    minimal: {
+      style: 'warm_minimal',
+      backgroundColor: '#22201D',
+      palette: {
+        wall: '#F1EDE5',
+        floor: '#E6E0D7',
+        accent: '#A47F5B',
+        glass: '#B7CDD8',
+        door: '#9A744F',
+        metal: '#8A8882',
+        furniture: '#B89069',
+        upholstery: '#E6DDD0',
+        textileAccent: '#9AA486',
+        bathroomTile: '#FAFAF8',
+        bedroomWood: '#CDA57B',
+        mainStone: '#EAE5DD',
+      },
+    },
+    luxury: {
+      style: 'modern_luxury',
+      backgroundColor: '#1F1B18',
+      palette: {
+        wall: '#F1E8DB',
+        floor: '#DDD3C7',
+        accent: '#6E5140',
+        glass: '#A5BDCA',
+        door: '#5A3C2A',
+        metal: '#9E8467',
+        furniture: '#B68963',
+        upholstery: '#DDD2C7',
+        textileAccent: '#88916D',
+        bathroomTile: '#F4F4F1',
+        bedroomWood: '#BB8A58',
+        mainStone: '#E4DED4',
+      },
+    },
+    facade: {
+      style: 'facade_concept',
+      backgroundColor: '#23272E',
+      palette: {
+        wall: '#E7E1D7',
+        floor: '#CEC2B0',
+        accent: '#626970',
+        glass: '#7898AA',
+        door: '#4D4640',
+        metal: '#6D7479',
+        furniture: '#948A82',
+        upholstery: '#D7D1C8',
+        textileAccent: '#8D987B',
+        bathroomTile: '#ECEDEA',
+        bedroomWood: '#C59A72',
+        mainStone: '#D9D1C4',
+      },
+    },
+  };
+
+  if (presetId === 'classic') return presets.typical;
+  return presets[presetId] || presets.modern;
+}
+
+function ventraSuggestAssetPlacement(asset, index = 0, presetId = 'modern') {
+  const type = String(asset?.type || '').toLowerCase();
+  const living = {
+    sofa: { x: 0.34, y: 0.57, rotation: 0 },
+    armchair: [
+      { x: 0.24, y: 0.38, rotation: 28 },
+      { x: 0.47, y: 0.37, rotation: -28 },
+    ],
+    coffee_table: { x: 0.35, y: 0.43, rotation: 0 },
+    tv_unit: { x: 0.35, y: 0.17, rotation: 0 },
+  };
+  const dining = {
+    dining_table: { x: 0.68, y: 0.48, rotation: 0 },
+    chair: [
+      { x: 0.61, y: 0.38, rotation: 0 },
+      { x: 0.75, y: 0.38, rotation: 0 },
+      { x: 0.61, y: 0.58, rotation: 180 },
+      { x: 0.75, y: 0.58, rotation: 180 },
+      { x: 0.56, y: 0.48, rotation: 90 },
+      { x: 0.80, y: 0.48, rotation: -90 },
+    ],
+  };
+  const bedroom = {
+    bed: [
+      { x: 0.30, y: 0.76, rotation: 0 },
+      { x: 0.73, y: 0.77, rotation: 0 },
+    ],
+    nightstand: [
+      { x: 0.18, y: 0.76, rotation: 0 },
+      { x: 0.42, y: 0.76, rotation: 0 },
+      { x: 0.61, y: 0.77, rotation: 0 },
+      { x: 0.85, y: 0.77, rotation: 0 },
+    ],
+    wardrobe: [
+      { x: 0.12, y: 0.56, rotation: 90 },
+      { x: 0.90, y: 0.56, rotation: 90 },
+    ],
+  };
+  const service = {
+    kitchen_counter: [
+      { x: 0.84, y: 0.18, rotation: 0 },
+      { x: 0.84, y: 0.30, rotation: 0 },
+    ],
+    kitchen_island: { x: 0.67, y: 0.22, rotation: 0 },
+    bathtub: { x: 0.16, y: 0.22, rotation: 90 },
+    sink: { x: 0.14, y: 0.40, rotation: 90 },
+    faucet: { x: 0.14, y: 0.42, rotation: 90 },
+    shower: { x: 0.09, y: 0.12, rotation: 0 },
+    toilet: { x: 0.25, y: 0.15, rotation: 90 },
+    desk: { x: 0.84, y: 0.74, rotation: 180 },
+    cabinet: { x: 0.88, y: 0.84, rotation: 90 },
+  };
+
+  const fetchEntry = (entry) => Array.isArray(entry) ? entry[index % entry.length] : entry;
+  const found = fetchEntry(living[type]) || fetchEntry(dining[type]) || fetchEntry(bedroom[type]) || fetchEntry(service[type]);
+  if (!found) return null;
+
+  const styleOffset = presetId === 'luxury'
+    ? { x: 0.01, y: 0.01 }
+    : presetId === 'minimal'
+      ? { x: -0.01, y: 0 }
+      : presetId === 'modern'
+        ? { x: 0, y: -0.01 }
+        : { x: 0, y: 0 };
+
+  return {
+    x: Math.max(0.07, Math.min(0.93, Number(found.x) + styleOffset.x)),
+    y: Math.max(0.07, Math.min(0.93, Number(found.y) + styleOffset.y)),
+    rotation: Number(found.rotation || 0),
+  };
+}
+
+function ventraRestyleSchematicScene(baseScene, presetId = 'modern') {
+  const startingScene = ventraCloneScene(baseScene) || {};
+  let next = presetId === 'classic'
+    ? startingScene
+    : ventraApplySchematicPreset(startingScene, presetId);
+
+  const preset = ventraGetSchematicPresetDefinition(presetId);
+  next.style = preset.style;
+  next.backgroundColor = next.sceneType === 'floorplan_interactive_preview' ? '#D5D7DA' : preset.backgroundColor;
+  next.palette = { ...(next.palette || {}), ...(preset.palette || {}) };
+  next.assets = Array.isArray(next.assets) ? next.assets : [];
+
+  const counts = {};
+  next.assets = next.assets.map((asset) => {
+    if (!asset || typeof asset !== 'object') return asset;
+    const type = String(asset.type || '').toLowerCase();
+    const index = counts[type] || 0;
+    counts[type] = index + 1;
+    const placed = ventraSuggestAssetPlacement(asset, index, presetId);
+    const styled = { ...asset };
+    const metricPlacement = ventraHasMetricAssetPlacement(asset);
+    if (placed && presetId !== 'classic' && !metricPlacement) {
+      styled.x = placed.x;
+      styled.y = placed.y;
+      styled.rotation = placed.rotation;
+    }
+    if (!metricPlacement && presetId === 'minimal') {
+      styled.width = Math.max(0.15, Number(styled.width || 0.8) * 0.94);
+      styled.depth = Math.max(0.15, Number(styled.depth || 0.8) * 0.94);
+    } else if (!metricPlacement && presetId === 'luxury') {
+      styled.width = Math.max(0.15, Number(styled.width || 0.8) * 1.06);
+      styled.depth = Math.max(0.15, Number(styled.depth || 0.8) * 1.04);
+    }
+    styled.variant = presetId;
+    return styled;
+  });
+
+  next.updatedAt = new Date().toISOString();
+  return next;
+}
+
+async function ventraFetchJson(url, options = {}, timeoutMs = VENTRA_DESIGN_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch {
+      throw new Error(`API returned HTTP ${response.status} with a non-JSON response.`);
+    }
+    if (!response.ok) throw new Error(payload?.error || `API request failed (${response.status}).`);
+    return payload;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function resetDesignMaterials(reconstruction) {
+  const runtime = reconstruction?._runtime;
+  if (!runtime) return;
+  setMaterialDesign(runtime.interiorWallMaterial, "#d8d8d8", 0xd8d8d8, 22);
+  setMaterialDesign(runtime.exteriorWallMaterial, "#d8d8d8", 0xd8d8d8, 22);
+  setMaterialDesign(runtime.doorMaterial, "#8b5a2b", 0x8b5a2b, 30);
+  setMaterialDesign(runtime.windowMaterial, "#85c8ff", 0x85c8ff, 80);
+  if (runtime.windowMaterial) {
+    runtime.windowMaterial.opacity = 0.58;
+    runtime.windowMaterial.transparent = true;
+    runtime.windowMaterial.needsUpdate = true;
+  }
+}
+
+function buildReconstructionOverlay({
+  viewer,
+  takeoff,
+  wallHeightMeters = 3,
+  wallThicknessMeters = 0.15,
+}) {
+  const THREE = getThree();
+
+  if (
+    !viewer ||
+    !THREE?.Mesh ||
+    !THREE?.BoxGeometry
+  ) {
+    throw new Error(
+      "Autodesk THREE runtime is unavailable."
+    );
+  }
+
+  const geometry =
+    takeoff?.geometry ||
+    {};
+
+  const unitName = String(
+    geometry?.unit ??
+    takeoff?.model_unit ??
+    takeoff?.advanced_takeoff?.model_unit ??
+    ""
+  ).trim().toLowerCase();
+
+  const unitFactor = (() => {
+    if (!unitName) return null;
+    if (["m", "meter", "meters", "metre", "metres"].includes(unitName)) return 1;
+    if (["mm", "millimeter", "millimeters", "millimetre", "millimetres"].includes(unitName)) return 0.001;
+    if (["cm", "centimeter", "centimeters", "centimetre", "centimetres"].includes(unitName)) return 0.01;
+    if (["ft", "foot", "feet"].includes(unitName)) return 0.3048;
+    if (["in", "inch", "inches"].includes(unitName)) return 0.0254;
+    return null;
+  })();
+
+  const ratioCandidate = (metricValue, modelValue) => {
+    const metric = Number(metricValue);
+    const model = Number(modelValue);
+    if (!Number.isFinite(metric) || metric <= 0) return null;
+    if (!Number.isFinite(model) || model <= 0) return null;
+    const ratio = metric / model;
+    return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+  };
+
+  const calibrationCandidate =
+    Array.isArray(geometry?.unitCalibrationCandidates)
+      ? geometry.unitCalibrationCandidates
+          .map((item) => ({
+            factor: Number(item?.factor),
+            score: Number(item?.score),
+          }))
+          .filter((item) => Number.isFinite(item.factor) && item.factor > 0)
+          .sort((a, b) => (Number.isFinite(b.score) ? b.score : -Infinity) - (Number.isFinite(a.score) ? a.score : -Infinity))[0]?.factor
+      : null;
+
+  const meterFactorEntries = [
+    ["geometry.meterFactor", geometry?.meterFactor],
+    ["geometry.sourceMeterFactor", geometry?.sourceMeterFactor],
+    ["takeoff.meter_factor", takeoff?.meter_factor],
+    ["takeoff.source_meter_factor", takeoff?.source_meter_factor],
+    ["advanced_takeoff.meter_factor", takeoff?.advanced_takeoff?.meter_factor],
+    ["advanced_takeoff.source_meter_factor", takeoff?.advanced_takeoff?.source_meter_factor],
+    ["advanced_takeoff.geometry.meterFactor", takeoff?.advanced_takeoff?.geometry?.meterFactor],
+    ["advanced_takeoff.geometry.sourceMeterFactor", takeoff?.advanced_takeoff?.geometry?.sourceMeterFactor],
+
+    // Engineering-derived recovery paths. These use two measurements of the
+    // same geometry, one already converted to metres and one in model units.
+    ["geometry.totalLengthMeters/geometry.totalCurveLength",
+      ratioCandidate(geometry?.totalLengthMeters, geometry?.totalCurveLength)],
+    ["takeoff.total_curve_length_m/takeoff.total_curve_length",
+      ratioCandidate(takeoff?.total_curve_length_m, takeoff?.total_curve_length)],
+    ["takeoff.wall_length/geometry.wallLengthModelUnits",
+      ratioCandidate(takeoff?.wall_length, geometry?.wallLengthModelUnits)],
+    ["advanced_takeoff.wall_length/geometry.wallLengthModelUnits",
+      ratioCandidate(takeoff?.advanced_takeoff?.wall_length, geometry?.wallLengthModelUnits)],
+
+    ["geometry.unitCalibrationCandidates", calibrationCandidate],
+    ["model unit", unitFactor],
+  ];
+
+  const resolvedMeterFactorEntry = meterFactorEntries
+    .map(([source, value]) => [source, Number(value)])
+    .find(([, value]) => Number.isFinite(value) && value > 0);
+
+  const meterFactor = resolvedMeterFactorEntry?.[1] ?? null;
+
+  if (Number.isFinite(meterFactor) && meterFactor > 0) {
+    console.log("[VENTRA DWG CALIBRATION RESOLVER]", {
+      meterFactor,
+      source: resolvedMeterFactorEntry?.[0] || "unknown",
+      modelUnit: unitName || null,
+    });
+  }
+
+  if (!Number.isFinite(meterFactor) || meterFactor <= 0) {
+    console.error("[VENTRA DWG CALIBRATION MISSING]", {
+      geometryMeterFactor: geometry?.meterFactor ?? null,
+      geometrySourceMeterFactor: geometry?.sourceMeterFactor ?? null,
+      takeoffMeterFactor: takeoff?.meter_factor ?? null,
+      takeoffSourceMeterFactor: takeoff?.source_meter_factor ?? null,
+      totalCurveLength: takeoff?.total_curve_length ?? geometry?.totalCurveLength ?? null,
+      totalCurveLengthMeters: takeoff?.total_curve_length_m ?? geometry?.totalLengthMeters ?? null,
+      wallLengthMeters: takeoff?.wall_length ?? null,
+      wallLengthModelUnits: geometry?.wallLengthModelUnits ?? null,
+      unit: unitName || null,
+      calibrationCandidates: geometry?.unitCalibrationCandidates ?? null,
+    });
+    throw new Error(
+      "The drawing unit calibration is unavailable. Re-run Analyze Drawing before reconstruction."
+    );
+  }
+
+  let wallLines =
+    Array.isArray(
+      geometry
+        ?.wallLineSegments
+    )
+      ? geometry
+          .wallLineSegments
+      : [];
+
+  let wallLineSource =
+    wallLines.length > 0
+      ? "saved_verified_wall_segments"
+      : "unavailable";
+
+  // v42.1 backward compatibility:
+  // Older saved takeoffs already contain all APS line segments plus the
+  // dbIds of objects classified as walls. Reconstruct verified wall segments
+  // from those two existing datasets instead of forcing a full re-analysis.
+  if (wallLines.length === 0) {
+    const allLines =
+      Array.isArray(
+        geometry?.lineSegments
+      )
+        ? geometry.lineSegments
+        : [];
+
+    const wallObjects =
+      Array.isArray(
+        takeoff
+          ?.object_details
+          ?.walls
+      )
+        ? takeoff
+            .object_details
+            .walls
+        : Array.isArray(
+            takeoff
+              ?.advanced_takeoff
+              ?.object_details
+              ?.walls
+          )
+          ? takeoff
+              .advanced_takeoff
+              .object_details
+              .walls
+          : [];
+
+    const wallDbIds =
+      new Set(
+        wallObjects
+          .map(
+            (item) =>
+              item?.dbId
+          )
+          .filter(
+            (value) =>
+              value !== null &&
+              value !== undefined
+          )
+          .map(String)
+      );
+
+    if (
+      allLines.length > 0 &&
+      wallDbIds.size > 0
+    ) {
+      wallLines =
+        allLines.filter(
+          (line) =>
+            wallDbIds.has(
+              String(
+                line?.dbId
+              )
+            )
+        );
+
+      if (wallLines.length > 0) {
+        wallLineSource =
+          "legacy_line_segments_plus_verified_wall_dbids";
+      }
+    }
+  }
+
+  if (wallLines.length === 0) {
+    throw new Error(
+      "Verified wall centerlines are unavailable in the saved takeoff. Open Drawings and run Analyze Drawing once."
+    );
+  }
+
+  const doorData =
+    getVerifiedLinesByType(
+      takeoff,
+      geometry,
+      "door"
+    );
+
+  const windowData =
+    getVerifiedLinesByType(
+      takeoff,
+      geometry,
+      "window"
+    );
+
+  const doorLines =
+    doorData.lines;
+
+  const windowLines =
+    windowData.lines;
+
+  clearReconstruction(viewer);
+
+  viewer.impl.createOverlayScene(
+    VENTRA_RECON_OVERLAY
+  );
+
+  const reconstructionBounds =
+    new THREE.Box3();
+  let hasReconstructionBounds =
+    false;
+
+  const storeys =
+    splitWallLinesIntoStoreys(
+      wallLines,
+      meterFactor
+    );
+
+  const storeyHeightMeters =
+    Math.max(
+      wallHeightMeters +
+        0.25,
+      3.25
+    );
+
+  const storeyFrames =
+    storeys.map(
+      (storey) => ({
+        ...storey,
+        frame:
+          getStoreyFrame(
+            storey.lines,
+            meterFactor
+          ),
+      })
+    );
+
+  if (
+    storeyFrames.some(
+      (storey) =>
+        !storey.frame
+    )
+  ) {
+    throw new Error(
+      "Unable to calculate one or more storey coordinate frames."
+    );
+  }
+
+  const geometryFrame = {
+    widthMeters:
+      Math.max(
+        ...storeyFrames.map(
+          (storey) =>
+            storey.frame
+              .widthMeters
+        )
+      ),
+    depthMeters:
+      Math.max(
+        ...storeyFrames.map(
+          (storey) =>
+            storey.frame
+              .depthMeters
+        )
+      ),
+    storeyCount:
+      storeyFrames.length,
+    splitAxis:
+      storeyFrames[0]
+        ?.axis ||
+      "none",
+    splitGapMeters:
+      storeyFrames[0]
+        ?.splitGapMeters ||
+      0,
+  };
+
+  const wallHeight =
+    wallHeightMeters;
+
+  const wallThickness =
+    wallThicknessMeters;
+
+  const createWallMaterial = () =>
+    new THREE.MeshPhongMaterial({
+      color: 0xd8d8d8,
+      // Solid wall pieces stay opaque/front-side to avoid transparent seam
+      // artifacts at adjacent BoxGeometry boundaries.
+      transparent: false,
+      opacity: 1,
+      side: THREE.FrontSide,
+      depthTest: true,
+      depthWrite: true,
+      shininess: 22,
+    });
+
+  const interiorWallMaterial = createWallMaterial();
+  const exteriorWallMaterial = createWallMaterial();
+
+  const storeyHullByIndex = new Map(
+    storeyFrames.map((storey) => {
+      const points = [];
+      for (const line of storey.lines || []) {
+        const a = toStoreyLocalMeters(line?.start, storey.frame, meterFactor);
+        const b = toStoreyLocalMeters(line?.end, storey.frame, meterFactor);
+        if (a) points.push(a);
+        if (b) points.push(b);
+      }
+      return [storey.index, convexHull2D(points)];
+    })
+  );
+
+  const exteriorWallKeysByStorey = new Map(
+    storeyFrames.map((storey) => {
+      const hull = storeyHullByIndex.get(storey.index) || [];
+      const keys = new Set();
+      for (const line of storey.lines || []) {
+        const a = toStoreyLocalMeters(line?.start, storey.frame, meterFactor);
+        const b = toStoreyLocalMeters(line?.end, storey.frame, meterFactor);
+        if (a && b && isExteriorWallSegment(a, b, hull)) {
+          keys.add(normalizedWallKey(line));
+        }
+      }
+      return [storey.index, keys];
+    })
+  );
+
+  const floorMaterial =
+    new THREE.MeshPhongMaterial({
+      color: 0xb8c2d3,
+      transparent: true,
+      opacity: 0.52,
+      side:
+        THREE.DoubleSide,
+    });
+
+  const doorMaterial =
+    new THREE.MeshPhongMaterial({
+      color: 0x8b5a2b,
+      transparent: true,
+      opacity: 0.95,
+      side:
+        THREE.DoubleSide,
+    });
+
+  const windowMaterial =
+    new THREE.MeshPhongMaterial({
+      color: 0x85c8ff,
+      transparent: true,
+      opacity: 0.58,
+      side:
+        THREE.DoubleSide,
+    });
+
+  let wallCount = 0;
+  let wallPieceCount = 0;
+  let wallOpeningCutCount = 0;
+
+  const doorGroupsForCuts = groupLinesByDbId(doorLines);
+  const windowGroupsForCuts = groupLinesByDbId(windowLines);
+  const doorGroupMapForCuts = new Map(doorGroupsForCuts.map((group)=>[String(group.dbId),group]));
+  const windowGroupMapForCuts = new Map(windowGroupsForCuts.map((group)=>[String(group.dbId),group]));
+
+  const authoritativeDoorObjects = uniqueOpeningObjects(getLegacyObjectList(takeoff,"doors"), takeoff?.doors);
+  const authoritativeWindowObjects = uniqueOpeningObjects(getLegacyObjectList(takeoff,"windows"), takeoff?.windows);
+
+  const snappedDoorOpenings = [];
+  const snappedWindowOpenings = [];
+
+  for (const object of authoritativeDoorObjects) {
+    const snapped = snapOpeningObjectToWall({
+      object,
+      type: "door",
+      storeyFrames,
+      meterFactor,
+      fallbackGroup: doorGroupMapForCuts.get(String(object?.dbId ?? "")),
+    });
+    if (snapped?.valid) snappedDoorOpenings.push({...snapped,type:"door",sillHeight:0});
+  }
+
+  for (const object of authoritativeWindowObjects) {
+    const snapped = snapOpeningObjectToWall({
+      object,
+      type: "window",
+      storeyFrames,
+      meterFactor,
+      fallbackGroup: windowGroupMapForCuts.get(String(object?.dbId ?? "")),
+    });
+    if (snapped?.valid) snappedWindowOpenings.push({...snapped,type:"window",sillHeight:0.90});
+  }
+
+  function dedupeSnappedOpenings(openings) {
+    const seen=new Set();
+    const result=[];
+    for (const opening of openings || []) {
+      const key=(opening?.dbId!==null&&opening?.dbId!==undefined)
+        ? `db:${String(opening.dbId)}`
+        : opening?.wallPosition
+          ? `xy:${Number(opening.wallPosition.x).toFixed(4)}:${Number(opening.wallPosition.y).toFixed(4)}:${opening?.type||""}`
+          : null;
+      if (!key || seen.has(key)) continue;
+
+      const duplicatePhysicalOpening=result.some((existing)=>{
+        if (existing?.type!==opening?.type) return false;
+        if (existing?.storey?.index!==opening?.storey?.index) return false;
+        if (!existing?.parentWallKey || existing.parentWallKey!==opening?.parentWallKey) return false;
+        if (!existing?.wallPosition || !opening?.wallPosition) return false;
+        return Math.hypot(
+          existing.wallPosition.x-opening.wallPosition.x,
+          existing.wallPosition.y-opening.wallPosition.y
+        ) <= 0.06;
+      });
+      if (duplicatePhysicalOpening) continue;
+
+      seen.add(key);
+      result.push(opening);
+    }
+    return result;
+  }
+
+  const uniqueSnappedDoorOpenings=dedupeSnappedOpenings(snappedDoorOpenings);
+  const uniqueSnappedWindowOpenings=dedupeSnappedOpenings(snappedWindowOpenings);
+  const allSnappedOpenings=[...uniqueSnappedDoorOpenings,...uniqueSnappedWindowOpenings];
+  const designStoreys = storeyFrames.map((storey) => ({
+    index: storey.index,
+    hull: storeyHullByIndex.get(storey.index) || [],
+    wallPieces: [],
+  }));
+
+  for (const storey of storeyFrames) {
+    const zBase=storey.index*storeyHeightMeters;
+    const storeyOpenings=allSnappedOpenings.filter((opening)=>opening?.storey?.index===storey.index);
+
+    for (const line of storey.lines) {
+      const localStart=toStoreyLocalMeters(line?.start,storey.frame,meterFactor);
+      const localEnd=toStoreyLocalMeters(line?.end,storey.frame,meterFactor);
+      if (!localStart || !localEnd) continue;
+
+      const currentWallKey=normalizedWallKey(line);
+      const relevantOpenings=storeyOpenings.filter(
+        (opening)=>Boolean(opening?.parentWallKey) && opening.parentWallKey===currentWallKey
+      );
+
+      const pieces=splitWallByOpenings({start:localStart,end:localEnd,openings:relevantOpenings});
+      const exterior = exteriorWallKeysByStorey.get(storey.index)?.has(currentWallKey) || false;
+      const activeWallMaterial = exterior ? exteriorWallMaterial : interiorWallMaterial;
+      const designStorey = designStoreys.find((item) => item.index === storey.index);
+      for (const piece of pieces) {
+        const mesh=createWallMesh({THREE,start:piece.start,end:piece.end,height:wallHeight,thickness:wallThickness,zBase,material:activeWallMaterial});
+        if (!mesh) continue;
+        mesh.userData={ventraType:exterior?"exterior_wall":"interior_wall",parentWallKey:currentWallKey,storeyIndex:storey.index};
+        viewer.impl.addOverlay(VENTRA_RECON_OVERLAY,mesh);
+        if (addMeshToBounds(THREE,mesh,reconstructionBounds)) hasReconstructionBounds=true;
+        designStorey?.wallPieces.push({start:piece.start,end:piece.end,exterior,parentWallKey:currentWallKey});
+        wallPieceCount+=1;
+      }
+      wallCount+=1;
+      wallOpeningCutCount+=relevantOpenings.length;
+    }
+
+    for (const opening of storeyOpenings) {
+      const openingExterior = exteriorWallKeysByStorey.get(storey.index)?.has(opening?.parentWallKey) || false;
+      const openingWallMaterial = openingExterior ? exteriorWallMaterial : interiorWallMaterial;
+      const sillMesh=buildWindowSillWallMesh({THREE,opening,thickness:wallThickness,zBase,material:openingWallMaterial});
+      if (sillMesh) {
+        viewer.impl.addOverlay(VENTRA_RECON_OVERLAY,sillMesh);
+        if (addMeshToBounds(THREE,sillMesh,reconstructionBounds)) hasReconstructionBounds=true;
+      }
+      const headerMesh=buildHeaderWallMesh({THREE,opening,thickness:wallThickness,wallHeight,zBase,material:openingWallMaterial});
+      if (headerMesh) {
+        viewer.impl.addOverlay(VENTRA_RECON_OVERLAY,headerMesh);
+        if (addMeshToBounds(THREE,headerMesh,reconstructionBounds)) hasReconstructionBounds=true;
+      }
+    }
+  }
+
+  // v43: slab surfaces are provisional and derived from each verified wall
+  // cluster's convex hull. This avoids the broken raw floor polygons while
+  // giving the 3D model a real structural floor plate.
+  let floorCount = 0;
+  let slabCount = 0;
+
+  for (
+    const storey of
+    storeyFrames
+  ) {
+    const zBase =
+      storey.index *
+      storeyHeightMeters;
+
+    const localPoints = [];
+
+    for (
+      const line of
+      storey.lines
+    ) {
+      const a =
+        toStoreyLocalMeters(
+          line?.start,
+          storey.frame,
+          meterFactor
+        );
+
+      const b =
+        toStoreyLocalMeters(
+          line?.end,
+          storey.frame,
+          meterFactor
+        );
+
+      if (a) {
+        localPoints.push(
+          a
+        );
+      }
+
+      if (b) {
+        localPoints.push(
+          b
+        );
+      }
+    }
+
+    const slab =
+      createSlabMesh({
+        THREE,
+        points:
+          localPoints,
+        thickness:
+          0.18,
+        zBase,
+        material:
+          floorMaterial,
+      });
+
+    if (slab) {
+      viewer.impl.addOverlay(
+        VENTRA_RECON_OVERLAY,
+        slab
+      );
+
+      if (
+        addMeshToBounds(
+          THREE,
+          slab,
+          reconstructionBounds
+        )
+      ) {
+        hasReconstructionBounds =
+          true;
+      }
+
+      slabCount += 1;
+      floorCount += 1;
+    }
+  }
+
+  let doorCount = 0;
+  let windowCount = 0;
+  const rejectedDoorObjects=Math.max(0,authoritativeDoorObjects.length-uniqueSnappedDoorOpenings.length);
+  const rejectedWindowObjects=Math.max(0,authoritativeWindowObjects.length-uniqueSnappedWindowOpenings.length);
+  const rejectedOpeningReasons={};
+
+  for (const opening of uniqueSnappedDoorOpenings) {
+    const marker=createOpeningMarker({THREE,start:opening.start,end:opening.end,widthFallback:opening.width,thickness:0.05,height:opening.height,sillHeight:0,zBase:opening.storey.index*storeyHeightMeters,material:doorMaterial});
+    if (!marker) continue;
+    marker.userData={ventraType:"door_panel",dbId:opening.dbId,widthMeters:opening.width,heightMeters:opening.height,snapDistanceMeters:opening.snapDistance,source:opening.source,realWallOpening:true};
+    viewer.impl.addOverlay(VENTRA_RECON_OVERLAY,marker);
+    doorCount+=1;
+  }
+
+  for (const opening of uniqueSnappedWindowOpenings) {
+    const marker=createOpeningMarker({THREE,start:opening.start,end:opening.end,widthFallback:opening.width,thickness:0.04,height:opening.height,sillHeight:opening.sillHeight,zBase:opening.storey.index*storeyHeightMeters,material:windowMaterial});
+    if (!marker) continue;
+    marker.userData={ventraType:"window_glazing",dbId:opening.dbId,widthMeters:opening.width,heightMeters:opening.height,sillHeightMeters:opening.sillHeight,snapDistanceMeters:opening.snapDistance,source:opening.source,realWallOpening:true};
+    viewer.impl.addOverlay(VENTRA_RECON_OVERLAY,marker);
+    windowCount+=1;
+  }
+
+  const skippedFloorCount = 0;
+  const skippedFloorReasons = {};
+
+  viewer.impl.invalidate(
+    true,
+    true,
+    true
+  );
+
+  const serializedBounds =
+    hasReconstructionBounds
+      ? serializeBox3(
+          reconstructionBounds
+        )
+      : null;
+
+  // Add a neutral reconstruction backdrop inside the Ventra overlay.
+  // Autodesk 2D sheets can retain a white paper surface even after model
+  // visibility is disabled. This plane visually isolates the 3D building
+  // without unloading the source model or touching engineering geometry.
+  if (
+    hasReconstructionBounds &&
+    THREE?.PlaneGeometry &&
+    THREE?.MeshBasicMaterial
+  ) {
+    try {
+      const reconCenter =
+        reconstructionBounds.getCenter(
+          new THREE.Vector3()
+        );
+
+      const reconSize =
+        reconstructionBounds.getSize(
+          new THREE.Vector3()
+        );
+
+      const backdropSpan =
+        Math.max(
+          reconSize.x,
+          reconSize.y,
+          8
+        ) * 7;
+
+      const backdropMaterial =
+        new THREE.MeshBasicMaterial({
+          color: 0xb7b7b7,
+          side: THREE.DoubleSide,
+          depthWrite: true,
+          depthTest: true,
+        });
+
+      const backdrop =
+        new THREE.Mesh(
+          new THREE.PlaneGeometry(
+            backdropSpan,
+            backdropSpan
+          ),
+          backdropMaterial
+        );
+
+      backdrop.position.set(
+        reconCenter.x,
+        reconCenter.y,
+        Number(
+          reconstructionBounds.min?.z ??
+          0
+        ) - 0.08
+      );
+
+      backdrop.userData = {
+        ventraType:
+          "reconstruction_backdrop",
+        schematic: false,
+        selectable: false,
+      };
+
+      viewer.impl.addOverlay(
+        VENTRA_RECON_OVERLAY,
+        backdrop
+      );
+    } catch (error) {
+      console.warn(
+        "[VENTRA DWG BACKDROP]",
+        error
+      );
+    }
+  }
+
+  const sourceModelState =
+    hideAutodeskSourceModel(
+      viewer,
+      viewer.model
+    );
+
+  const sourceModelHidden =
+    Boolean(
+      sourceModelState?.hidden
+    );
+
+  const sourceModelUnloaded =
+    Boolean(
+      sourceModelState?.unloaded
+    );
+
+  const framed =
+    frameReconstruction(
+      viewer,
+      serializedBounds
+    );
+
+  try {
+    viewer.impl?.invalidate?.(
+      true,
+      true,
+      true
+    );
+  } catch {}
+
+  console.log(
+    "[VENTRA DWG RECONSTRUCTION VISIBILITY]",
+    {
+      framed,
+      hasBounds:
+        Boolean(
+          serializedBounds
+        ),
+      sourceModelHidden,
+      sourceModelUnloaded,
+      bounds: serializedBounds,
+    }
+  );
+
+  return {
+    wallCount,
+    wallPieceCount,
+    wallOpeningCutCount,
+    singleParentWallAssignment:true,
+    floorCount,
+    slabCount,
+    doorCount,
+    windowCount,
+    rejectedDoorObjects,
+    rejectedWindowObjects,
+    rawDoorLineCount:
+      doorLines.length,
+    rawWindowLineCount:
+      windowLines.length,
+    rawDoorObjectCount:
+      authoritativeDoorObjects.length,
+    rawWindowObjectCount:
+      authoritativeWindowObjects.length,
+    expectedDoorCount:
+      Number(takeoff?.doors) || 0,
+    expectedWindowCount:
+      Number(takeoff?.windows) || 0,
+    rejectedOpeningReasons,
+    doorSource:
+      "takeoff_object_details_centroid_wall_snap",
+    windowSource:
+      "takeoff_object_details_centroid_wall_snap",
+    skippedFloorCount,
+    skippedFloorReasons,
+    wallHeightMeters,
+    wallThicknessMeters,
+    meterFactor,
+    wallLineSource,
+    bounds:
+      serializedBounds,
+    geometryFrame,
+    coordinateSpace:
+      "local_meters",
+    sourceModelHidden,
+    sourceModelUnloaded,
+    storeyCount:
+      storeyFrames.length,
+    storeyHeightMeters,
+    splitAxis:
+      geometryFrame.splitAxis,
+    splitGapMeters:
+      geometryFrame.splitGapMeters,
+    _runtime: {
+      interiorWallMaterial,
+      exteriorWallMaterial,
+      floorMaterial,
+      doorMaterial,
+      windowMaterial,
+      storeys: designStoreys,
+      wallHeightMeters,
+      wallThicknessMeters,
+      storeyHeightMeters,
+    },
+  };
+}
+
+
+function hexNumber(value, fallback = 0xcccccc) {
+  const text = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return Number.parseInt(text.slice(1), 16);
+  return fallback;
+}
+
+function ventraReadableSchematicColor(value, fallback = 0xcccccc, maxChannel = 224) {
+  const color = hexNumber(value, fallback);
+  let r = (color >> 16) & 255;
+  let g = (color >> 8) & 255;
+  let b = color & 255;
+
+  // AI palettes often return pure white (#ffffff), which destroys depth
+  // under simple schematic lighting. Preserve the hue but cap near-white
+  // materials to a readable architectural ivory/stone range.
+  const brightest = Math.max(r, g, b);
+  if (brightest > maxChannel) {
+    const scale = maxChannel / brightest;
+    r = Math.max(0, Math.min(255, Math.round(r * scale)));
+    g = Math.max(0, Math.min(255, Math.round(g * scale)));
+    b = Math.max(0, Math.min(255, Math.round(b * scale)));
+  }
+
+  return (r << 16) | (g << 8) | b;
+}
+
+function clearSchematicOverlay(viewer) {
+  try {
+    const sceneAfter = viewer?.impl?.sceneAfter;
+    const previous = sceneAfter?.getObjectByName?.(VENTRA_SCHEMATIC_ROOT_NAME);
+    if (previous) {
+      sceneAfter.remove(previous);
+      previous.traverse?.((object) => {
+        try { object.geometry?.dispose?.(); } catch {}
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          try { material?.map?.dispose?.(); } catch {}
+          try { material?.dispose?.(); } catch {}
+        }
+      });
+    }
+  } catch {}
+  try { viewer?.impl?.removeOverlayScene?.(VENTRA_SCHEMATIC_OVERLAY); } catch {}
+}
+
+
+function ventraNormalizeSchematicAssetType(asset) {
+  const raw = String(
+    asset?.type ||
+    asset?.assetType ||
+    asset?.name ||
+    asset?.label ||
+    asset?.description ||
+    ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+
+  if (!raw) return "generic";
+
+  if (/(sectional|l_shape.*sofa|l_sofa|couch|sofa)/.test(raw)) return "sofa";
+  if (/(armchair|lounge_chair|accent_chair)/.test(raw)) return "armchair";
+  if (/(double_bed|queen_bed|king_bed|single_bed|bed)/.test(raw)) return "bed";
+  if (/(wardrobe|closet|dresser|cupboard)/.test(raw)) return "wardrobe";
+  if (/(nightstand|bedside|side_table)/.test(raw)) return "nightstand";
+  if (/(coffee_table|center_table|centre_table)/.test(raw)) return "coffee_table";
+  if (/(dining_table|dinner_table)/.test(raw)) return "dining_table";
+  if (/(office_desk|study_desk|desk)/.test(raw)) return "desk";
+  if (/(dining_chair|chair|stool)/.test(raw)) return "chair";
+  if (/(tv_unit|tv_console|media_console|television_unit)/.test(raw)) return "tv_unit";
+  if (/(kitchen_island|island_counter|island)/.test(raw)) return "kitchen_island";
+  if (/(kitchen_counter|base_cabinet|wall_cabinet|kitchen_cabinet|countertop|counter)/.test(raw)) return "kitchen_counter";
+  if (/(rug|carpet)/.test(raw)) return "rug";
+  if (/(plant|potted_plant|indoor_plant)/.test(raw)) return "plant";
+  if (/(cabinet|storage_unit|shelving|shelf)/.test(raw)) return "cabinet";
+  if (/(bathtub|bath_tub|bath)/.test(raw)) return "bathtub";
+  if (/(wash_basin|basin|vanity_sink|sink)/.test(raw)) return "sink";
+  if (/(faucet|tap|mixer)/.test(raw)) return "faucet";
+  if (/(shower_enclosure|shower_cubicle|shower)/.test(raw)) return "shower";
+  if (/(toilet|wc|water_closet)/.test(raw)) return "toilet";
+  if (/(fridge|refrigerator)/.test(raw)) return "refrigerator";
+  if (/(oven|stove|cooker|range)/.test(raw)) return "stove";
+  if (/(washing_machine|washer)/.test(raw)) return "washing_machine";
+  if (/(mirror)/.test(raw)) return "mirror";
+
+  return raw;
+}
+
+
+const VENTRA_SCHEMATIC_TEXTURE_CACHE = new Map();
+
+function ventraGetPolygonBounds2D(points) {
+  const valid = (Array.isArray(points) ? points : []).filter(
+    (point) => Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y))
+  );
+  if (!valid.length) {
+    return { minX: 0, minY: 0, maxX: 1, maxY: 1, width: 1, height: 1 };
+  }
+
+  const xs = valid.map((point) => Number(point.x));
+  const ys = valid.map((point) => Number(point.y));
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: Math.max(0.25, maxX - minX),
+    height: Math.max(0.25, maxY - minY),
+  };
+}
+
+function ventraGetSchematicTexture({ THREE, kind, baseColor, detailColor, accentColor, repeatX = 4, repeatY = 4 }) {
+  if (typeof document === 'undefined' || !THREE?.Texture) return null;
+  const cacheKey = [kind, baseColor, detailColor, accentColor, repeatX, repeatY].join('|');
+  if (VENTRA_SCHEMATIC_TEXTURE_CACHE.has(cacheKey)) {
+    return VENTRA_SCHEMATIC_TEXTURE_CACHE.get(cacheKey).clone();
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (kind === 'tile') {
+    const tile = 64;
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 3;
+    for (let x = 0; x <= canvas.width; x += tile) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= canvas.height; y += tile) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= canvas.width; x += tile) {
+      ctx.beginPath();
+      ctx.moveTo(x + tile * 0.5, 0);
+      ctx.lineTo(x + tile * 0.5, canvas.height);
+      ctx.stroke();
+    }
+  } else if (kind === 'parquet') {
+    const plankW = 80;
+    const plankH = 28;
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 2;
+    for (let y = 0; y < canvas.height; y += plankH) {
+      const offset = Math.floor(y / plankH) % 2 === 0 ? 0 : plankW * 0.5;
+      for (let x = -offset; x < canvas.width; x += plankW) {
+        ctx.fillStyle = (Math.floor((x + offset) / plankW) + Math.floor(y / plankH)) % 3 === 0 ? accentColor : baseColor;
+        ctx.fillRect(x, y, plankW, plankH);
+        ctx.strokeRect(x, y, plankW, plankH);
+      }
+    }
+  } else if (kind === 'stone') {
+    ctx.fillStyle = accentColor;
+    for (let i = 0; i < 1800; i += 1) {
+      ctx.globalAlpha = 0.04 + Math.random() * 0.05;
+      ctx.fillRect(
+        Math.random() * canvas.width,
+        Math.random() * canvas.height,
+        1 + Math.random() * 3,
+        1 + Math.random() * 3
+      );
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+  }
+
+  const texture = new THREE.Texture(canvas);
+  texture.needsUpdate = true;
+
+  // Autodesk Viewer may expose an older THREE/WebGL runtime.
+  // Keep filtering explicitly WebGL1-safe so canvas textures do not spam
+  // NPOT warnings or silently lose the floor texture.
+  if (THREE.LinearFilter !== undefined) {
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+  }
+
+  texture.generateMipmaps = false;
+
+  const isPowerOfTwo =
+    (value) =>
+      value > 0 &&
+      (value & (value - 1)) === 0;
+
+  const canRepeat =
+    isPowerOfTwo(canvas.width) &&
+    isPowerOfTwo(canvas.height) &&
+    THREE.RepeatWrapping !== undefined;
+
+  if (canRepeat) {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(repeatX, repeatY);
+  } else {
+    texture.wrapS =
+      THREE.ClampToEdgeWrapping ??
+      texture.wrapS;
+    texture.wrapT =
+      THREE.ClampToEdgeWrapping ??
+      texture.wrapT;
+  }
+
+  console.log("[VENTRA JPG FLOOR TEXTURE v12.1]", {
+    kind,
+    width: canvas.width,
+    height: canvas.height,
+    repeatX,
+    repeatY,
+    minFilter: texture.minFilter,
+    mipmaps: texture.generateMipmaps,
+  });
+
+  VENTRA_SCHEMATIC_TEXTURE_CACHE.set(cacheKey, texture);
+  return texture.clone();
+}
+
+
+function ventraCreateRoomFloorMaterial({ THREE, room, palette = {}, polygon = [] }) {
+  const OpaqueMaterial =
+    THREE.MeshLambertMaterial ||
+    THREE.MeshPhongMaterial ||
+    THREE.MeshBasicMaterial;
+
+  const roomType = String(room?.semanticType || room?.type || room?.name || '').toLowerCase();
+  const explicitFinish = String(room?.floorFinish || '').toLowerCase();
+
+  let color = hexNumber(palette?.mainStone, 0xD8CEC1);
+  let finish = 'large_white_tile';
+  let pattern = 'tile';
+  let lineColor = 0xC9C3BA;
+  let lineOpacity = 0.18;
+  let spacingX = 0.95;
+  let spacingY = 0.95;
+
+  if (explicitFinish === 'wet_tile' || /(bath|wc|toilet|shower|laundry|wash)/.test(roomType)) {
+    color = hexNumber(palette?.bathroomTile, 0xF5F6F4);
+    finish = 'white_ceramic';
+    pattern = 'tile';
+    lineColor = 0xD0D4D6;
+    lineOpacity = 0.28;
+    spacingX = 0.40;
+    spacingY = 0.40;
+  } else if (explicitFinish === 'light_oak' || /(bed|bedroom|master|guest)/.test(roomType)) {
+    color = hexNumber(palette?.bedroomWood, 0xB98252);
+    finish = 'warm_oak';
+    pattern = 'wood';
+    lineColor = 0x986F49;
+    lineOpacity = 0.27;
+    spacingX = 0.22;
+    spacingY = 1.05;
+  } else if (/(store|storage|closet)/.test(roomType)) {
+    color = 0xD8D4CC;
+    finish = 'utility_tile';
+    pattern = 'tile';
+    lineColor = 0xBDB7AD;
+    lineOpacity = 0.20;
+    spacingX = 0.55;
+    spacingY = 0.55;
+  }
+
+  const material = new OpaqueMaterial({
+    color,
+    side: THREE.DoubleSide,
+    shininess: 7,
+  });
+
+  material.userData = {
+    ...(material.userData || {}),
+    ventraFloorFinish: finish,
+    ventraFloorPattern: pattern,
+    ventraFloorLineColor: lineColor,
+    ventraFloorLineOpacity: lineOpacity,
+    ventraFloorSpacingX: spacingX,
+    ventraFloorSpacingY: spacingY,
+  };
+
+  return material;
+}
+
+function ventraCreateLineGeometry(
+  THREE,
+  points = []
+) {
+  const safePoints =
+    (Array.isArray(points)
+      ? points
+      : []
+    ).filter(
+      (point) =>
+        Number.isFinite(
+          Number(point?.x)
+        ) &&
+        Number.isFinite(
+          Number(point?.y)
+        ) &&
+        Number.isFinite(
+          Number(point?.z ?? 0)
+        )
+    );
+
+  if (
+    safePoints.length < 2
+  ) {
+    return null;
+  }
+
+  // Modern THREE path.
+  if (
+    THREE?.BufferGeometry &&
+    THREE?.Float32BufferAttribute
+  ) {
+    try {
+      const positions = [];
+
+      for (
+        const point of
+        safePoints
+      ) {
+        positions.push(
+          Number(point.x),
+          Number(point.y),
+          Number(
+            point.z ?? 0
+          )
+        );
+      }
+
+      const geometry =
+        new THREE.BufferGeometry();
+
+      geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(
+          positions,
+          3
+        )
+      );
+
+      return geometry;
+    } catch {}
+  }
+
+  // Autodesk Viewer currently exposes THREE r71.
+  // Legacy Geometry is the reliable path there.
+  if (
+    THREE?.Geometry &&
+    THREE?.Vector3
+  ) {
+    try {
+      const geometry =
+        new THREE.Geometry();
+
+      geometry.vertices =
+        safePoints.map(
+          (point) =>
+            new THREE.Vector3(
+              Number(point.x),
+              Number(point.y),
+              Number(
+                point.z ?? 0
+              )
+            )
+        );
+
+      geometry.verticesNeedUpdate =
+        true;
+
+      return geometry;
+    } catch {}
+  }
+
+  console.warn(
+    "[VENTRA JPG LINE GEOMETRY UNSUPPORTED v14.2]",
+    {
+      threeRevision:
+        THREE?.REVISION ||
+        null,
+      hasGeometry:
+        Boolean(
+          THREE?.Geometry
+        ),
+      hasBufferGeometry:
+        Boolean(
+          THREE?.BufferGeometry
+        ),
+      hasFloat32BufferAttribute:
+        Boolean(
+          THREE?.Float32BufferAttribute
+        ),
+    }
+  );
+
+  return null;
+}
+
+function ventraCreateLineSegmentsObject(
+  THREE,
+  geometry,
+  material
+) {
+  if (
+    !geometry ||
+    !material
+  ) {
+    return null;
+  }
+
+  // Modern THREE.
+  if (
+    THREE?.LineSegments
+  ) {
+    try {
+      return new THREE.LineSegments(
+        geometry,
+        material
+      );
+    } catch {}
+  }
+
+  // THREE r71 / Autodesk legacy path.
+  if (
+    THREE?.Line
+  ) {
+    try {
+      return new THREE.Line(
+        geometry,
+        material,
+        THREE.LinePieces
+      );
+    } catch {}
+  }
+
+  return null;
+}
+
+
+function ventraPointOnSegment2D(point, a, b, epsilon = 1e-6) {
+  const cross =
+    (Number(point.y) - Number(a.y)) *
+      (Number(b.x) - Number(a.x)) -
+    (Number(point.x) - Number(a.x)) *
+      (Number(b.y) - Number(a.y));
+
+  if (Math.abs(cross) > epsilon) return false;
+
+  const dot =
+    (Number(point.x) - Number(a.x)) *
+      (Number(b.x) - Number(a.x)) +
+    (Number(point.y) - Number(a.y)) *
+      (Number(b.y) - Number(a.y));
+
+  if (dot < -epsilon) return false;
+
+  const lengthSquared =
+    Math.pow(Number(b.x) - Number(a.x), 2) +
+    Math.pow(Number(b.y) - Number(a.y), 2);
+
+  return dot <= lengthSquared + epsilon;
+}
+
+function ventraPointInsidePolygon2D(point, polygon) {
+  if (!point || !Array.isArray(polygon) || polygon.length < 3) return false;
+
+  for (let i = 0; i < polygon.length; i += 1) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    if (ventraPointOnSegment2D(point, a, b)) return true;
+  }
+
+  let inside = false;
+
+  for (
+    let i = 0, j = polygon.length - 1;
+    i < polygon.length;
+    j = i, i += 1
+  ) {
+    const xi = Number(polygon[i].x);
+    const yi = Number(polygon[i].y);
+    const xj = Number(polygon[j].x);
+    const yj = Number(polygon[j].y);
+
+    const intersects =
+      (yi > point.y) !== (yj > point.y) &&
+      point.x <
+        ((xj - xi) * (point.y - yi)) /
+          Math.max(1e-9, yj - yi) +
+          xi;
+
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+}
+
+function ventraLineSegmentIntersection2D(a, b, c, d) {
+  const r = {
+    x: Number(b.x) - Number(a.x),
+    y: Number(b.y) - Number(a.y),
+  };
+  const s = {
+    x: Number(d.x) - Number(c.x),
+    y: Number(d.y) - Number(c.y),
+  };
+
+  const crossRS = r.x * s.y - r.y * s.x;
+  if (Math.abs(crossRS) < 1e-9) return null;
+
+  const qmp = {
+    x: Number(c.x) - Number(a.x),
+    y: Number(c.y) - Number(a.y),
+  };
+
+  const t = (qmp.x * s.y - qmp.y * s.x) / crossRS;
+  const u = (qmp.x * r.y - qmp.y * r.x) / crossRS;
+
+  if (t < -1e-8 || t > 1 + 1e-8 || u < -1e-8 || u > 1 + 1e-8) {
+    return null;
+  }
+
+  return {
+    x: Number(a.x) + r.x * t,
+    y: Number(a.y) + r.y * t,
+    t,
+  };
+}
+
+function ventraClipLineToPolygon2D(start, end, polygon) {
+  const hits = [];
+
+  const addHit = (point, t) => {
+    if (!point || !Number.isFinite(t)) return;
+    if (
+      hits.some(
+        (existing) =>
+          Math.abs(existing.point.x - point.x) < 1e-5 &&
+          Math.abs(existing.point.y - point.y) < 1e-5
+      )
+    ) {
+      return;
+    }
+    hits.push({ point, t });
+  };
+
+  if (ventraPointInsidePolygon2D(start, polygon)) addHit(start, 0);
+  if (ventraPointInsidePolygon2D(end, polygon)) addHit(end, 1);
+
+  for (let i = 0; i < polygon.length; i += 1) {
+    const c = polygon[i];
+    const d = polygon[(i + 1) % polygon.length];
+    const hit = ventraLineSegmentIntersection2D(start, end, c, d);
+    if (hit) addHit(hit, hit.t);
+  }
+
+  hits.sort((a, b) => a.t - b.t);
+  if (hits.length < 2) return [];
+
+  const segments = [];
+  for (let i = 0; i < hits.length - 1; i += 1) {
+    const a = hits[i];
+    const b = hits[i + 1];
+    const mid = {
+      x: (a.point.x + b.point.x) / 2,
+      y: (a.point.y + b.point.y) / 2,
+    };
+
+    if (ventraPointInsidePolygon2D(mid, polygon)) {
+      segments.push([a.point, b.point]);
+    }
+  }
+
+  return segments;
+}
+
+
+function ventraSegmentIntersectionT2D(a, b, c, d) {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const crossRS = r.x * s.y - r.y * s.x;
+
+  if (Math.abs(crossRS) < 1e-9) return null;
+
+  const qmp = { x: c.x - a.x, y: c.y - a.y };
+  const t = (qmp.x * s.y - qmp.y * s.x) / crossRS;
+  const u = (qmp.x * r.y - qmp.y * r.x) / crossRS;
+
+  if (t < -1e-8 || t > 1 + 1e-8 || u < -1e-8 || u > 1 + 1e-8) return null;
+  return Math.max(0, Math.min(1, t));
+}
+
+function ventraClipSegmentToPolygon2D(start, end, polygon) {
+  if (!start || !end || !Array.isArray(polygon) || polygon.length < 3) return [];
+
+  const ts = [0, 1];
+  for (let i = 0; i < polygon.length; i += 1) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    const t = ventraSegmentIntersectionT2D(start, end, a, b);
+    if (Number.isFinite(t)) ts.push(t);
+  }
+
+  ts.sort((a, b) => a - b);
+  const unique = [];
+  for (const t of ts) {
+    if (!unique.length || Math.abs(t - unique[unique.length - 1]) > 1e-6) unique.push(t);
+  }
+
+  const clipped = [];
+  for (let i = 0; i < unique.length - 1; i += 1) {
+    const t0 = unique[i];
+    const t1 = unique[i + 1];
+    if (t1 - t0 < 1e-6) continue;
+
+    const tm = (t0 + t1) / 2;
+    const midpoint = {
+      x: start.x + (end.x - start.x) * tm,
+      y: start.y + (end.y - start.y) * tm,
+    };
+
+    if (!ventraPointInsidePolygon2D(midpoint, polygon)) continue;
+
+    clipped.push([
+      {
+        x: start.x + (end.x - start.x) * t0,
+        y: start.y + (end.y - start.y) * t0,
+      },
+      {
+        x: start.x + (end.x - start.x) * t1,
+        y: start.y + (end.y - start.y) * t1,
+      },
+    ]);
+  }
+
+  return clipped;
+}
+
+function ventraAddVisibleFloorPattern({
+  THREE,
+  root,
+  polygon,
+  material,
+  z = 0.018,
+}) {
+  if (
+    !THREE?.LineBasicMaterial ||
+    !Array.isArray(polygon) ||
+    polygon.length < 3
+  ) {
+    return;
+  }
+
+  const xs = polygon.map((p) => Number(p?.x)).filter(Number.isFinite);
+  const ys = polygon.map((p) => Number(p?.y)).filter(Number.isFinite);
+  if (!xs.length || !ys.length) return;
+
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const spacingX = Math.max(
+    0.16,
+    Number(material?.userData?.ventraFloorSpacingX) || 0.6
+  );
+  const spacingY = Math.max(
+    0.16,
+    Number(material?.userData?.ventraFloorSpacingY) || spacingX
+  );
+
+  const points = [];
+
+  const appendClipped = (start, end) => {
+    const pieces = ventraClipSegmentToPolygon2D(start, end, polygon);
+    for (const [a, b] of pieces) {
+      points.push(
+        { x: a.x, y: a.y, z },
+        { x: b.x, y: b.y, z }
+      );
+    }
+  };
+
+  for (let x = minX + spacingX; x < maxX; x += spacingX) {
+    appendClipped({ x, y: minY }, { x, y: maxY });
+  }
+
+  for (let y = minY + spacingY; y < maxY; y += spacingY) {
+    appendClipped({ x: minX, y }, { x: maxX, y });
+  }
+
+  if (!points.length) return;
+
+  const geometry = ventraCreateLineGeometry(THREE, points);
+  if (!geometry) return;
+
+  const lineMaterial = new THREE.LineBasicMaterial({
+    color: material?.userData?.ventraFloorLineColor ?? 0x66584a,
+    transparent: true,
+    opacity: Math.min(
+      0.32,
+      Number(material?.userData?.ventraFloorLineOpacity) || 0.26
+    ),
+    depthWrite: false,
+  });
+
+  const lines = ventraCreateLineSegmentsObject(THREE, geometry, lineMaterial);
+  if (!lines) {
+    geometry?.dispose?.();
+    lineMaterial?.dispose?.();
+    return;
+  }
+
+  lines.userData = {
+    ventraType: 'schematic_floor_pattern',
+    finish: material?.userData?.ventraFloorFinish || null,
+    schematic: true,
+    nonSelectable: true,
+  };
+
+  root.add(lines);
+}
+
+function ventraResolveSchematicAssetPlacement(
+  asset,
+  roomWidth,
+  roomDepth
+) {
+  const assetType =
+    ventraNormalizeSchematicAssetType(
+      asset
+    );
+
+  const defaults =
+    VENTRA_SCHEMATIC_ASSET_DEFAULTS[
+      assetType
+    ] || {
+      width: 0.8,
+      depth: 0.8,
+      height: 0.8,
+    };
+
+  const finite = (value, fallback) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const positive = (value, fallback) => {
+    const number = finite(value, NaN);
+    return number > 0 ? number : fallback;
+  };
+  const w = positive(asset.width, defaults.width);
+  const d = positive(asset.depth, defaults.depth);
+  const h = positive(asset.height, defaults.height);
+  const rot = finite(asset.rotation, 0) * Math.PI / 180;
+  const cx = finite(asset.xMeters, finite(asset.x, 0.5) * roomWidth) - roomWidth / 2;
+  const cy = finite(asset.yMeters, finite(asset.y, 0.5) * roomDepth) - roomDepth / 2;
+
+  return {
+    assetType,
+    defaults,
+    w,
+    d,
+    h,
+    rot,
+    cx,
+    cy,
+    roomId:
+      asset?.roomId ||
+      null,
+    againstWallId:
+      asset?.againstWallId ||
+      null,
+    placementSource:
+      asset?.placementSource ||
+      null,
+  };
+}
+
+function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
+  const meshes = [];
+  const { assetType, w, d, h, rot, cx, cy } = ventraResolveSchematicAssetPlacement(asset, roomWidth, roomDepth);
+  // Tiny, deterministic surface grain adds material depth without a network asset.
+  // Textures belong to this asset and are released with its mesh materials.
+  const surfaceTexture = (kind) => {
+    if (typeof document === 'undefined' || !THREE.Texture) return null;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      const base = kind === 'wood' ? [221, 205, 184] : kind === 'stone' ? [244, 240, 234] : [244, 242, 238];
+      context.fillStyle = `rgb(${base.join(',')})`;
+      context.fillRect(0, 0, 64, 64);
+      for (let i = 0; i < 160; i++) {
+        const x = (i * 37 + i * i * 13) % 64;
+        const y = (i * 47 + i * i * 7) % 64;
+        const alpha = kind === 'wood' ? 0.045 : 0.025;
+        context.fillStyle = `rgba(65,52,41,${alpha})`;
+        context.fillRect(x, y, kind === 'wood' ? 17 : 1, 1);
+      }
+      const texture = new THREE.Texture(canvas);
+      texture.needsUpdate = true;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    } catch { return null; }
+  };
+  const upholstery = assetType === 'sofa' || assetType === 'armchair';
+  const finish = (kind) => {
+    const map = surfaceTexture(kind);
+    return map ? { map } : {};
+  };
+  const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+  const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+  const accent = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(asset?.color || palette?.furniture || palette?.accent, 0x815a3f, 176),
+    side: THREE.DoubleSide,
+    shininess: upholstery ? 5 : 16,
+    ...finish(upholstery ? 'fabric' : 'wood'),
+  });
+  const light = new OpaqueMaterial({ color: hexNumber(palette?.upholstery, 0xcfc5ba), side: THREE.DoubleSide, shininess: 8, ...finish('fabric') });
+  const white = new OpaqueMaterial({ color: 0xe8e2da, side: THREE.DoubleSide, shininess: 14, ...finish('stone') });
+  const dark = new OpaqueMaterial({ color: 0x4d433b, side: THREE.DoubleSide, shininess: 9 });
+  const sage = new OpaqueMaterial({ color: hexNumber(palette?.textileAccent, 0x8e9b78), side: THREE.DoubleSide, shininess: 5 });
+  const rugMat = new OpaqueMaterial({ color: 0xcfc7bd, side: THREE.DoubleSide, shininess: 1 });
+  const leafMat = new OpaqueMaterial({ color: 0x6f805c, side: THREE.DoubleSide, shininess: 4 });
+  const potMat = new OpaqueMaterial({ color: 0x8f7358, side: THREE.DoubleSide, shininess: 6 });
+  const glass = new GlassMaterial({ color: hexNumber(palette?.glass, 0x8fb6cc), transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, shininess: 80 });
+  const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 90 });
+
+  const rotateOffset = (ox, oy) => ({
+    x: ox * Math.cos(rot) - oy * Math.sin(rot),
+    y: ox * Math.sin(rot) + oy * Math.cos(rot),
+  });
+
+  const addBox = (bw, bd, bh, ox = 0, oy = 0, oz = bh / 2, material = accent) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bd, bh), material);
+    const shifted = rotateOffset(ox, oy);
+    mesh.position.set(cx + shifted.x, cy + shifted.y, oz);
+    mesh.rotation.z = rot;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    meshes.push(mesh);
+    return mesh;
+  };
+
+  // Rounded rectangle extruded along Z: an actual cushion silhouette, including
+  // rounded plan corners and a narrow softened upper/lower edge in legacy r71.
+  const addCushion = (bw, bd, bh, ox, oy, oz, material = light) => {
+    const corner = Math.min(bw, bd) * 0.10;
+    const bevel = Math.min(corner * 0.4, bh * 0.18);
+    const x = bw / 2, y = bd / 2, r = corner;
+    const shape = new THREE.Shape();
+    shape.moveTo(-x + r, -y);
+    shape.lineTo(x - r, -y); shape.quadraticCurveTo(x, -y, x, -y + r);
+    shape.lineTo(x, y - r); shape.quadraticCurveTo(x, y, x - r, y);
+    shape.lineTo(-x + r, y); shape.quadraticCurveTo(-x, y, -x, y - r);
+    shape.lineTo(-x, -y + r); shape.quadraticCurveTo(-x, -y, -x + r, -y);
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      amount: Math.max(0.001, bh - 2 * bevel), depth: Math.max(0.001, bh - 2 * bevel),
+      steps: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.4,
+      bevelSegments: 2, curveSegments: 3,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    const shifted = rotateOffset(ox, oy);
+    mesh.position.set(cx + shifted.x, cy + shifted.y, oz - bh / 2 + bevel);
+    mesh.rotation.z = rot;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    meshes.push(mesh);
+    return mesh;
+  };
+
+  const addCylinder = (radius, length, ox, oy, oz, material = metal, horizontal = false) => {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 18), material);
+    const shifted = rotateOffset(ox, oy);
+    mesh.position.set(cx + shifted.x, cy + shifted.y, oz);
+    if (!horizontal) mesh.rotation.x = Math.PI / 2;
+    mesh.rotation.z = rot;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    meshes.push(mesh);
+    return mesh;
+  };
+
+  switch (assetType) {
+    case 'sofa': {
+      addBox(w * 0.94, d * 0.82, 0.13, 0, 0.03 * d, 0.15, dark);
+      addCushion(w * 0.88, d * 0.64, 0.19, 0, 0.08 * d, 0.30, accent);
+      addCushion(w * 0.88, d * 0.16, 0.55, 0, -d * 0.39, 0.51, accent);
+      for (const sx of [-1, 1]) {
+        addCushion(w * 0.09, d * 0.66, 0.39, sx * w * 0.43, d * 0.05, 0.43, accent);
+        addBox(w * 0.035, d * 0.035, 0.12, sx * w * 0.38, d * 0.32, 0.06, dark);
+      }
+      for (const offset of [-0.27, 0, 0.27]) {
+        addCushion(w * 0.26, d * 0.46, 0.09, w * offset, d * 0.09, 0.43, offset < 0 ? sage : light);
+        addCushion(w * 0.25, d * 0.11, 0.25, w * offset, -d * 0.27, 0.53, light);
+      }
+      break;
+    }
+    case 'rug': {
+      addBox(w, d, Math.max(0.018, Math.min(h, 0.035)), 0, 0, 0.018, rugMat);
+      break;
+    }
+    case 'plant': {
+      addCylinder(Math.min(w, d) * 0.20, 0.28, 0, 0, 0.14, potMat, false);
+      const crown = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, d) * 0.33, 14, 10), leafMat);
+      crown.position.set(cx, cy, Math.max(0.55, h * 0.64));
+      meshes.push(crown);
+      for (const [ox, oy, oz] of [
+        [0.12,0.00,0.66],[-0.10,0.05,0.72],[0.02,0.11,0.78],[0.00,-0.11,0.70]
+      ]) {
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, d) * 0.18, 12, 8), leafMat);
+        const shifted = rotateOffset(ox, oy);
+        leaf.position.set(cx + shifted.x, cy + shifted.y, Math.max(0.45, h * oz));
+        meshes.push(leaf);
+      }
+      break;
+    }
+    case 'armchair': {
+      addBox(w * 0.82, d * 0.74, 0.13, 0, 0.04 * d, 0.14, dark);
+      addCushion(w * 0.76, d * 0.61, 0.17, 0, 0.06 * d, 0.31, light);
+      addCushion(w * 0.76, d * 0.16, 0.55, 0, -d * 0.38, 0.50, accent);
+      addCushion(w * 0.10, d * 0.69, 0.42, -w * 0.40, 0, 0.41, accent);
+      addCushion(w * 0.10, d * 0.69, 0.42, w * 0.40, 0, 0.41, accent);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.045, 0.045, 0.08, sx * w * 0.30, sy * d * 0.26, 0.04, dark);
+      break;
+    }
+    case 'bed': {
+      addBox(w, d, 0.20, 0, 0, 0.10, accent);
+      addCushion(w * 0.91, d * 0.88, 0.24, 0, 0.01 * d, 0.32, white);
+      addBox(w, 0.11, Math.min(h, 1.05), 0, -d * 0.47, Math.min(h, 1.05) / 2, accent);
+      addCushion(w * 0.30, d * 0.17, 0.11, -w * 0.19, -d * 0.29, 0.50, white);
+      addCushion(w * 0.30, d * 0.17, 0.11,  w * 0.19, -d * 0.29, 0.50, white);
+      addBox(w * 0.88, d * 0.23, 0.035, 0, d * 0.18, 0.465, sage);
+      addBox(w * 0.88, d * 0.05, 0.07, 0, d * 0.45, 0.07, dark);
+      break;
+    }
+    case 'dining_table':
+    case 'desk': {
+      addBox(w, d, 0.08, 0, 0, Math.min(h, 0.76), accent);
+      addBox(w * 0.86, d * 0.82, 0.035, 0, 0, Math.min(h, 0.76) + 0.055, light);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.08, 0.08, Math.min(h, 0.72), sx * w * 0.34, sy * d * 0.28, Math.min(h, 0.72) / 2, dark);
+      break;
+    }
+    case 'coffee_table': {
+      addBox(w, d, 0.07, 0, 0, 0.34, accent);
+      addBox(w * 0.94, d * 0.88, 0.03, 0, 0, 0.39, glass);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.05, 0.05, 0.30, sx * w * 0.34, sy * d * 0.26, 0.15, dark);
+      break;
+    }
+    case 'chair': {
+      addBox(w * 0.92, d * 0.92, 0.08, 0, 0, 0.46, accent);
+      addBox(w * 0.88, 0.08, 0.50, 0, -d * 0.40, 0.69, accent);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.04, 0.04, 0.44, sx * w * 0.30, sy * d * 0.30, 0.22, dark);
+      break;
+    }
+    case 'wardrobe': {
+      addBox(w, d, h, 0, 0, h / 2, accent);
+      addBox(w * 0.47, d * 0.03, h * 0.84, -w * 0.24, -d * 0.50, h * 0.52, light);
+      addBox(w * 0.47, d * 0.03, h * 0.84, w * 0.24, -d * 0.50, h * 0.52, light);
+      addCylinder(0.012, Math.min(0.16, h * 0.25), -w * 0.04, -d * 0.53, h * 0.53, metal);
+      addCylinder(0.012, Math.min(0.16, h * 0.25), w * 0.04, -d * 0.53, h * 0.53, metal);
+      break;
+    }
+    case 'cabinet':
+    case 'tv_unit': {
+      addBox(w, d, Math.min(h, assetType === 'tv_unit' ? 0.52 : h), 0, 0, Math.min(h, assetType === 'tv_unit' ? 0.52 : h) / 2, accent);
+      addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), -w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
+      addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
+      if (assetType === 'tv_unit') {
+        addBox(w * 0.72, 0.04, Math.max(0.55, h * 0.84), 0, -d * 0.10, Math.max(0.55, h * 0.84) * 0.70, new OpaqueMaterial({ color: 0x1f2328, side: THREE.DoubleSide, shininess: 70 }));
+      }
+      break;
+    }
+    case 'kitchen_counter': {
+      addBox(w, d, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
+      addBox(w * 1.03, d * 1.04, 0.045, 0, 0, Math.min(h, 0.88) + 0.03, white);
+      addBox(w * 0.44, d * 0.03, Math.min(h, 0.72), -w * 0.25, -d * 0.52, Math.min(h, 0.72) / 2, light);
+      addBox(w * 0.44, d * 0.03, Math.min(h, 0.72), w * 0.25, -d * 0.52, Math.min(h, 0.72) / 2, light);
+      break;
+    }
+    case 'kitchen_island': {
+      addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
+      addBox(w, d, 0.05, 0, 0, Math.min(h, 0.88) + 0.03, white);
+      break;
+    }
+    case 'nightstand': {
+      const nh = Math.min(h, 0.52);
+      addBox(w, d, nh, 0, 0, nh / 2, accent);
+      addBox(w * 0.88, d * 0.03, 0.12, 0, -d * 0.50, nh * 0.68, light);
+      addCylinder(0.025, 0.22, 0, 0, nh + 0.11, metal);
+      const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.16, 0.18, 16), light);
+      shade.position.set(cx, cy, nh + 0.31);
+      shade.rotation.x = Math.PI / 2;
+      shade.castShadow = true;
+      meshes.push(shade);
+      break;
+    }
+    case 'refrigerator': {
+      addBox(w, d, h, 0, 0, h / 2, light);
+      addBox(w * 0.03, d * 0.05, h * 0.34, w * 0.33, -d * 0.52, h * 0.60, metal);
+      addBox(w * 0.84, d * 0.02, 0.02, 0, -d * 0.515, h * 0.36, metal);
+      break;
+    }
+    case 'stove': {
+      const top = asset?.embeddedInCounter ? 0.93 : Math.min(h, 0.88);
+      if (!asset?.embeddedInCounter) addBox(w, d, top, 0, 0, top / 2, accent);
+      addBox(w * 0.95, d * 0.95, 0.035, 0, 0, top + 0.025, dark);
+      for (const sx of [-0.23, 0.23]) for (const sy of [-0.22, 0.22]) {
+        const burner = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w, d) * 0.10, Math.min(w, d) * 0.10, 0.02, 18), dark);
+        const shifted = rotateOffset(sx * w, sy * d);
+        burner.position.set(cx + shifted.x, cy + shifted.y, top + 0.06);
+        burner.rotation.x = Math.PI / 2;
+        burner.rotation.z = rot;
+        meshes.push(burner);
+      }
+      break;
+    }
+    case 'sink': {
+      const vanityH = asset?.embeddedInCounter ? 0.90 : Math.min(h, 0.82);
+
+      if (!asset?.embeddedInCounter) addBox(w, d, vanityH, 0, 0, vanityH / 2, accent);
+
+      addBox(
+        w * 0.96,
+        d * 0.94,
+        asset?.embeddedInCounter ? 0.025 : 0.07,
+        0,
+        0,
+        vanityH + (asset?.embeddedInCounter ? 0.045 : 0.035),
+        white
+      );
+
+      addBox(
+        w * 0.62,
+        d * 0.52,
+        0.055,
+        0,
+        -d * 0.02,
+        vanityH +
+          0.075,
+        dark
+      );
+
+      addCylinder(
+        0.022,
+        0.28,
+        0,
+        -d * 0.20,
+        vanityH +
+          0.20,
+        metal
+      );
+
+      break;
+    }
+    case 'bathtub': {
+      addBox(
+        w,
+        d,
+        0.50,
+        0,
+        0,
+        0.25,
+        white
+      );
+
+      addBox(
+        w * 0.82,
+        d * 0.68,
+        0.16,
+        0,
+        0,
+        0.43,
+        glass
+      );
+
+      addCylinder(
+        0.018,
+        0.30,
+        w * 0.34,
+        -d * 0.30,
+        0.62,
+        metal
+      );
+
+      break;
+    }
+    case 'shower': {
+      addBox(w, d, 0.05, 0, 0, 0.025, white);
+      addBox(0.028, d, Math.min(h, 2.1), -w / 2, 0, Math.min(h, 2.1) / 2, glass);
+      addBox(w, 0.028, Math.min(h, 2.1), 0, -d / 2, Math.min(h, 2.1) / 2, glass);
+      addCylinder(0.018, Math.min(h, 2), w * 0.36, d * 0.36, Math.min(h, 2) / 2, metal);
+      break;
+    }
+    case 'toilet': {
+      addBox(w * 0.68, d * 0.44, 0.26, 0, d * 0.14, 0.13, white);
+      addBox(w * 0.72, d * 0.20, 0.44, 0, -d * 0.22, 0.34, white);
+      addBox(w * 0.36, d * 0.24, 0.08, 0, d * 0.02, 0.28, light);
+      break;
+    }
+    case 'washing_machine': {
+      addBox(w, d, h, 0, 0, h / 2, white);
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w, h) * 0.22, Math.min(w, h) * 0.22, 0.055, 24), glass);
+      const shifted = rotateOffset(0, -d * 0.51);
+      drum.position.set(cx + shifted.x, cy + shifted.y, h * 0.54);
+      drum.rotation.x = Math.PI / 2;
+      drum.rotation.z = rot;
+      meshes.push(drum);
+      break;
+    }
+    case 'mirror': {
+      const mirrorW =
+        Math.max(
+          0.55,
+          w
+        );
+
+      const mirrorH =
+        Math.max(
+          0.75,
+          h
+        );
+
+      // Wall-mounted mirror. Previous code started it at floor level.
+      addBox(
+        mirrorW,
+        0.035,
+        mirrorH,
+        0,
+        0,
+        1.48,
+        glass
+      );
+
+      addBox(
+        mirrorW + 0.08,
+        0.055,
+        0.045,
+        0,
+        0.006,
+        1.48 +
+          mirrorH /
+            2,
+        metal
+      );
+
+      addBox(
+        mirrorW + 0.08,
+        0.055,
+        0.045,
+        0,
+        0.006,
+        1.48 -
+          mirrorH /
+            2,
+        metal
+      );
+
+      addBox(
+        0.045,
+        0.055,
+        mirrorH,
+        -mirrorW /
+          2,
+        0.006,
+        1.48,
+        metal
+      );
+
+      addBox(
+        0.045,
+        0.055,
+        mirrorH,
+        mirrorW /
+          2,
+        0.006,
+        1.48,
+        metal
+      );
+
+      break;
+    }
+    default: {
+      addBox(w, d, Math.min(h, 0.42), 0, 0, Math.min(h, 0.42) / 2, light);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        addBox(0.045, 0.045, Math.min(0.38, h), sx * w * 0.38, sy * d * 0.34, Math.min(0.38, h) / 2, accent);
+      }
+    }
+  }
+
+  for (const mesh of meshes) {
+    mesh.userData = {
+      ventraType:
+        `schematic_${assetType}`,
+
+      originalVentraType:
+        asset?.type ||
+        null,
+
+      roomId:
+        asset?.roomId ||
+        null,
+
+      againstWallId:
+        asset?.againstWallId ||
+        null,
+
+      placementSource:
+        asset?.placementSource ||
+        null,
+
+      schematic: true,
+    };
+  }
+
+  const usedMaterials = new Set(meshes.map((mesh) => mesh.material));
+  for (const material of [accent, light, white, dark, sage, rugMat, leafMat, potMat, glass, metal]) {
+    if (!usedMaterials.has(material)) {
+      material.map?.dispose?.();
+      material.dispose?.();
+    }
+  }
+
+  return meshes;
+}
+
+function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8 }) {
+  if (!THREE || !opening?.start || !opening?.end) return null;
+  const preserveTrace = opening.preserveRasterTrace === true;
+  if (preserveTrace && (!["start", "end"].includes(opening.hinge) || !["clockwise", "counterclockwise"].includes(opening.swing))) return null;
+
+  const sx = Number(opening.start.x);
+  const sy = Number(opening.start.y);
+  const ex = Number(opening.end.x);
+  const ey = Number(opening.end.y);
+  if (![sx, sy, ex, ey].every(Number.isFinite)) return null;
+
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const openingWidth = Math.hypot(dx, dy);
+  if (!Number.isFinite(openingWidth) || openingWidth < (preserveTrace ? 0.005 : 0.2)) return null;
+
+  const safeWallHeight = Math.max(2.2, Number(wallHeight) || 2.8);
+  const requestedHeight = Number(opening?.height);
+  const leafHeight = preserveTrace ? requestedHeight : Math.max(
+    1.9,
+    Math.min(
+      Number.isFinite(requestedHeight) ? requestedHeight : 2.1,
+      2.15,
+      safeWallHeight - 0.16
+    )
+  );
+
+  const group = new THREE.Group();
+  const hingeAtEnd = String(opening?.hinge || opening?.hingeSide || '').toLowerCase() === 'end';
+  const hinge = hingeAtEnd ? { x: ex, y: ey } : { x: sx, y: sy };
+  const closedEnd = hingeAtEnd ? { x: sx, y: sy } : { x: ex, y: ey };
+  const closedAngle = Math.atan2(closedEnd.y - hinge.y, closedEnd.x - hinge.x);
+  const swingValue = String(opening?.swing || opening?.swingDirection || '').toLowerCase();
+  const sign = preserveTrace
+    ? (swingValue === "clockwise" ? -1 : 1)
+    : ["right", "clockwise", "cw", "out"].includes(swingValue) ? -1 : 1;
+  const openAngle = closedAngle + sign * (Math.PI / 3.0);
+
+  const leafWidth = preserveTrace ? openingWidth * 0.94 : Math.max(0.52, openingWidth * 0.94);
+  const leafThickness = 0.042;
+  const frameDepth = 0.095;
+  const frameWidth = 0.055;
+
+  const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+  const frameMaterial = new OpaqueMaterial({
+    color: 0x624a39,
+    side: THREE.DoubleSide,
+    shininess: 24,
+  });
+  const handleMaterial = new OpaqueMaterial({
+    color: 0x4f4d49,
+    side: THREE.DoubleSide,
+    shininess: 70,
+  });
+
+  // Two full-height jambs around the opening.
+  for (const p of [{ x: sx, y: sy }, { x: ex, y: ey }]) {
+    const jamb = new THREE.Mesh(
+      new THREE.BoxGeometry(frameWidth, frameDepth, leafHeight + 0.08),
+      frameMaterial
+    );
+    jamb.position.set(p.x, p.y, (leafHeight + 0.08) / 2);
+    jamb.rotation.z = closedAngle + Math.PI / 2;
+    jamb.userData = { ventraType: 'schematic_door_jamb', schematic: true };
+    group.add(jamb);
+  }
+
+  const frameHeader = new THREE.Mesh(
+    new THREE.BoxGeometry(openingWidth + frameWidth * 1.5, frameDepth, frameWidth),
+    frameMaterial
+  );
+  frameHeader.position.set(
+    (sx + ex) / 2,
+    (sy + ey) / 2,
+    leafHeight + frameWidth / 2
+  );
+  frameHeader.rotation.z = closedAngle;
+  frameHeader.userData = { ventraType: 'schematic_door_frame_header', schematic: true };
+  group.add(frameHeader);
+
+  // Real vertical leaf, clamped below the wall height.
+  const leaf = new THREE.Mesh(
+    new THREE.BoxGeometry(leafWidth, leafThickness, leafHeight),
+    material
+  );
+  leaf.position.set(
+    hinge.x + Math.cos(openAngle) * (leafWidth / 2),
+    hinge.y + Math.sin(openAngle) * (leafWidth / 2),
+    leafHeight / 2
+  );
+  leaf.rotation.z = openAngle;
+  leaf.userData = { ventraType: 'schematic_door_panel', schematic: true };
+  group.add(leaf);
+
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.015, 0.015, 0.11, 12),
+    handleMaterial
+  );
+  handle.rotation.x = Math.PI / 2;
+  handle.rotation.z = openAngle;
+  handle.position.set(
+    hinge.x + Math.cos(openAngle) * (leafWidth * 0.80),
+    hinge.y + Math.sin(openAngle) * (leafWidth * 0.80),
+    Math.min(1.02, leafHeight * 0.52)
+  );
+  handle.userData = { ventraType: 'schematic_door_handle', schematic: true };
+  group.add(handle);
+
+  // Plan swing arc stays near floor so opening direction remains readable.
+  const arcPoints = [];
+  const steps = 22;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const angle = closedAngle + (openAngle - closedAngle) * t;
+    arcPoints.push({
+      x: hinge.x + Math.cos(angle) * leafWidth,
+      y: hinge.y + Math.sin(angle) * leafWidth,
+      z: 0.025,
+    });
+  }
+
+  const arcGeometry = ventraCreateLineGeometry(THREE, arcPoints);
+  if (arcGeometry && THREE.LineBasicMaterial) {
+    const arcMaterial = new THREE.LineBasicMaterial({
+      color: 0x7a6553,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+    });
+    const arc = ventraCreateLineSegmentsObject(THREE, arcGeometry, arcMaterial);
+    if (arc) {
+      arc.userData = { ventraType: 'schematic_door_arc', schematic: true, nonSelectable: true };
+      group.add(arc);
+    }
+  }
+
+  group.userData = {
+    ventraType: 'schematic_door_leaf',
+    schematic: true,
+  };
+
+  return group;
+}
+
+function ventraCreateWindowVisual({ THREE, opening, glassMaterial, frameMaterial, wallThickness = 0.18 }) {
+  if (!THREE || !opening?.start || !opening?.end) return null;
+
+  const sx = Number(opening.start.x);
+  const sy = Number(opening.start.y);
+  const ex = Number(opening.end.x);
+  const ey = Number(opening.end.y);
+  const sillHeight = opening.preserveRasterTrace ? Number(opening.sillHeight) : Math.max(0.55, Number(opening?.sillHeight) || 0.9);
+  const windowHeight = opening.preserveRasterTrace ? Number(opening.height) : Math.max(0.45, Number(opening?.height) || 1.2);
+
+  if (![sx, sy, ex, ey, sillHeight, windowHeight].every(Number.isFinite)) return null;
+
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const width = Math.hypot(dx, dy);
+  if (width < (opening.preserveRasterTrace ? 0.005 : 0.2)) return null;
+
+  const group = new THREE.Group();
+  const angle = Math.atan2(dy, dx);
+  const thickness = Math.max(0.03, Math.min(0.08, Number(wallThickness) * 0.40));
+  const frameWidth = Math.min(0.075, Math.max(0.045, width * 0.035));
+
+  // Glass is embedded in the opening, not floating in front of the wall.
+  const pane = createWallMesh({
+    THREE,
+    start: { x: sx, y: sy },
+    end: { x: ex, y: ey },
+    height: windowHeight,
+    thickness,
+    zBase: sillHeight,
+    material: glassMaterial,
+  });
+  if (pane) {
+    pane.userData = { ventraType: 'schematic_window_glass', schematic: true };
+    group.add(pane);
+  }
+
+  // Bottom and top frame rails.
+  for (const z of [sillHeight, sillHeight + windowHeight - frameWidth]) {
+    const rail = createWallMesh({
+      THREE,
+      start: { x: sx, y: sy },
+      end: { x: ex, y: ey },
+      height: frameWidth,
+      thickness: Math.max(thickness * 1.4, 0.055),
+      zBase: z,
+      material: frameMaterial,
+    });
+    if (rail) {
+      rail.userData = { ventraType: 'schematic_window_frame_rail', schematic: true };
+      group.add(rail);
+    }
+  }
+
+  // Side jambs and a centre mullion.
+  const jambHeight = Math.max(0.25, windowHeight - frameWidth * 2);
+  const jambZ = sillHeight + frameWidth + jambHeight / 2;
+  const jambDepth = Math.max(thickness * 1.4, 0.055);
+
+  const addJamb = (x, y) => {
+    const jamb = new THREE.Mesh(
+      new THREE.BoxGeometry(frameWidth, jambDepth, jambHeight),
+      frameMaterial
+    );
+    jamb.position.set(x, y, jambZ);
+    jamb.rotation.z = angle + Math.PI / 2;
+    jamb.userData = { ventraType: 'schematic_window_frame_jamb', schematic: true };
+    group.add(jamb);
+  };
+
+  addJamb(sx, sy);
+  addJamb(ex, ey);
+
+  if (width >= 1.05) {
+    addJamb((sx + ex) / 2, (sy + ey) / 2);
+  }
+
+  group.userData = {
+    ventraType: 'schematic_window_assembly',
+    schematic: true,
+  };
+
+  return group;
+}
+
+function ventraStructuredSceneIsValid(scene) {
+  return Boolean(
+    scene &&
+    Array.isArray(scene.rooms) &&
+    scene.rooms.length > 0 &&
+    Array.isArray(scene.walls) &&
+    scene.walls.length > 0
+  );
+}
+
+function ventraScenePointToLocal(point, sceneWidth, sceneDepth) {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    x: x - sceneWidth / 2,
+    y: y - sceneDepth / 2,
+  };
+}
+
+
+function ventraStructuredRoomMaterial(THREE, room, palette = {}) {
+  const OpaqueMaterial =
+    THREE.MeshPhongMaterial ||
+    THREE.MeshLambertMaterial ||
+    THREE.MeshBasicMaterial;
+
+  const roomType =
+    String(
+      room?.type ||
+      room?.name ||
+      ""
+    ).toLowerCase();
+
+  let color = 0xcbbda2;
+
+  if (/(bed|bedroom|master)/.test(roomType)) {
+    color = 0xc9b99f;
+  } else if (/(living|lounge|family)/.test(roomType)) {
+    color = 0xd2c4a8;
+  } else if (/(kitchen|dining)/.test(roomType)) {
+    color = 0xc8b28e;
+  } else if (/(bath|wc|toilet|shower)/.test(roomType)) {
+    color = 0xb9c6ca;
+  } else if (/(store|storage|closet)/.test(roomType)) {
+    color = 0xb7b3aa;
+  }
+
+  return new OpaqueMaterial({
+    color,
+    side: THREE.DoubleSide,
+    shininess: 8,
+  });
+}
+
+function ventraRoomPolygonCentroid(points) {
+  const valid =
+    (Array.isArray(points) ? points : [])
+      .map((point) => ({
+        x: Number(point?.x),
+        y: Number(point?.y),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.x) &&
+          Number.isFinite(point.y)
+      );
+
+  if (!valid.length) {
+    return null;
+  }
+
+  return {
+    x:
+      valid.reduce(
+        (sum, point) =>
+          sum + point.x,
+        0
+      ) / valid.length,
+    y:
+      valid.reduce(
+        (sum, point) =>
+          sum + point.y,
+        0
+      ) / valid.length,
+  };
+}
+
+function ventraBuildRoomLabelSprite({
+  THREE,
+  text,
+  x,
+  y,
+  z = 0.12,
+  scale = 1,
+}) {
+  if (
+    typeof document === "undefined" ||
+    !THREE?.Sprite ||
+    !THREE?.SpriteMaterial ||
+    !THREE?.Texture
+  ) {
+    return null;
+  }
+
+  try {
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    canvas.width = 512;
+    canvas.height = 128;
+
+    const ctx =
+      canvas.getContext("2d");
+
+    if (!ctx) {
+      return null;
+    }
+
+    ctx.clearRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    ctx.fillStyle =
+      "rgba(28,32,36,0.66)";
+
+    const radius = 18;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.beginPath();
+    ctx.roundRect?.(
+      8,
+      8,
+      w - 16,
+      h - 16,
+      radius
+    );
+
+    if (
+      typeof ctx.roundRect !==
+      "function"
+    ) {
+      ctx.rect(
+        8,
+        8,
+        w - 16,
+        h - 16
+      );
+    }
+
+    ctx.fill();
+
+    ctx.font =
+      "600 38px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText(
+      String(text || "Room"),
+      w / 2,
+      h / 2
+    );
+
+    const texture =
+      new THREE.Texture(
+        canvas
+      );
+
+    texture.needsUpdate = true;
+
+    if (
+      THREE.LinearFilter !==
+      undefined
+    ) {
+      texture.minFilter =
+        THREE.LinearFilter;
+      texture.magFilter =
+        THREE.LinearFilter;
+    }
+
+    texture.generateMipmaps =
+      false;
+
+    if (
+      THREE.ClampToEdgeWrapping !==
+      undefined
+    ) {
+      texture.wrapS =
+        THREE.ClampToEdgeWrapping;
+      texture.wrapT =
+        THREE.ClampToEdgeWrapping;
+    }
+
+    const material =
+      new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      });
+
+    const sprite =
+      new THREE.Sprite(
+        material
+      );
+
+    sprite.position.set(
+      x,
+      y,
+      z
+    );
+
+    sprite.scale.set(
+      1.45 * scale,
+      0.36 * scale,
+      1
+    );
+
+    sprite.userData = {
+      ventraType:
+        "schematic_room_label",
+      schematic: true,
+      nonSelectable: true,
+    };
+
+    return sprite;
+  } catch {
+    return null;
+  }
+}
+
+
+function ventraAttachSchematicLights({ THREE, root }) {
+  if (!THREE || !root) return;
+
+  try {
+    const lightGroup = new THREE.Group();
+    lightGroup.name = 'ventra_schematic_lights';
+
+    if (THREE.AmbientLight) {
+      lightGroup.add(new THREE.AmbientLight(0xFFFFFF, 0.42));
+    }
+
+    if (THREE.DirectionalLight) {
+      const key = new THREE.DirectionalLight(0xFFF7EE, 0.62);
+      key.position.set(11, -13, 20);
+      lightGroup.add(key);
+
+      const fill = new THREE.DirectionalLight(0xDBE7EF, 0.24);
+      fill.position.set(-10, 8, 14);
+      lightGroup.add(fill);
+
+      const rim = new THREE.DirectionalLight(0xF7F1E6, 0.14);
+      rim.position.set(0, 14, 9);
+      lightGroup.add(rim);
+    }
+
+    root.add(lightGroup);
+  } catch {}
+}
+
+function ventraBuildTracedRasterFloor({ THREE, polygon, holes = [], material, z = 0 }) {
+  const trace = (path, points) => {
+    path.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) path.lineTo(point.x, point.y);
+    path.closePath();
+    return path;
+  };
+  const shape = trace(new THREE.Shape(), polygon);
+  for (const points of holes) shape.holes.push(trace(new THREE.Path(), points));
+  const geometry = new THREE.ShapeGeometry(shape);
+  if (!(geometry.faces?.length || geometry.attributes?.position?.count)) {
+    geometry.dispose?.();
+    throw new Error("The traced raster floor could not be triangulated.");
+  }
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.z = z;
+  return { mesh, reason: "traced_raster_floor_with_real_voids" };
+}
+
+function renderStructuredSchematicScene(viewer, scene) {
+  scene = repairOpenPlanScene(scene);
+  const THREE = getThree();
+  if (!viewer || !scene || !THREE) {
+    throw new Error("Structured schematic 3D renderer is not ready.");
+  }
+
+  clearSchematicOverlay(viewer);
+
+  const schematicRoot = new THREE.Group();
+  schematicRoot.name = VENTRA_SCHEMATIC_ROOT_NAME;
+  const targetScene = viewer?.impl?.sceneAfter || viewer?.impl?.scene;
+  if (!targetScene?.add) {
+    throw new Error("Standalone structured schematic render scene is unavailable.");
+  }
+  targetScene.add(schematicRoot);
+
+  const preserveRasterTrace = scene.rasterGeometryVersion === "raster-metric-trace-v1";
+  const width = preserveRasterTrace ? Number(scene.width) : Math.max(2, Number(scene.width) || 12.5);
+  const depth = preserveRasterTrace ? Number(scene.depth) : Math.max(2, Number(scene.depth) || 9.5);
+  const fullHeight = preserveRasterTrace ? Number(scene.height) : Math.max(2.4, Math.min(3.4, Number(scene.height) || 2.8));
+  const cutawayHeight = fullHeight;
+  const externalThickness = Math.max(0.12, Number(scene.externalWallThickness) || 0.18);
+  const internalThickness = Math.max(0.08, Number(scene.wallThickness) || 0.12);
+  const palette = scene.palette || {};
+
+  const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+  const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+
+  const wallMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.wall, 0xe8e2d9, 220),
+    side: THREE.DoubleSide,
+    shininess: 3,
+  });
+  const externalWallMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.externalWall, 0x474a4d, 112),
+    side: THREE.DoubleSide,
+    shininess: 8,
+  });
+  const floorMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.floor, 0x9f8b70, 170),
+    side: THREE.DoubleSide,
+    shininess: 10,
+  });
+  const glassMat = new GlassMaterial({
+    color: ventraReadableSchematicColor(palette.glass, 0x6f96aa, 205),
+    transparent: true,
+    opacity: 0.34,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    shininess: 55,
+  });
+  const windowFrameMat = new OpaqueMaterial({
+    color: 0x747a7d,
+    side: THREE.DoubleSide,
+    shininess: 32,
+  });
+  const doorMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.door || palette.accent, 0x7b573e, 190),
+    side: THREE.DoubleSide,
+    shininess: 9,
+  });
+
+  const bounds = new THREE.Box3();
+  let roomCount = 0;
+  let wallPieceCount = 0;
+  let openingCount = 0;
+  let assetMeshCount = 0;
+
+  const addReadableEdges = (mesh) => {
+    if (!mesh?.geometry || !THREE?.EdgesGeometry || !THREE?.LineSegments || !THREE?.LineBasicMaterial) return;
+    if (mesh.material?.transparent && Number(mesh.material.opacity) < 0.75) return;
+    try {
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(mesh.geometry, 24),
+        new THREE.LineBasicMaterial({ color: 0x5b5650, transparent: true, opacity: 0.28 })
+      );
+      edges.userData = { ventraType: 'schematic_edges', schematic: true, nonSelectable: true };
+      mesh.add(edges);
+    } catch {}
+  };
+
+  const add = (mesh) => {
+    if (!mesh) return;
+    addReadableEdges(mesh);
+    try {
+      if (mesh.geometry && mesh.material && !mesh.material?.transparent) {
+        // Tall cutaway walls must not black out the plan. Keep furniture contact shadows.
+        mesh.castShadow = !!mesh.userData?.originalVentraType;
+        mesh.receiveShadow = true;
+      }
+    } catch {}
+    schematicRoot.add(mesh);
+    try {
+      mesh.updateMatrixWorld(true);
+      bounds.expandByObject(mesh);
+    } catch {}
+  };
+
+  // V35: draw the validated outer footprint first, then layer room finishes above it.
+  // This prevents black interior gaps when room polygons miss circulation slivers,
+  // while the ear-clipping mesh avoids THREE r71 concave-polygon artifacts.
+  const BaseFloorMaterial =
+    THREE.MeshPhongMaterial ||
+    THREE.MeshLambertMaterial ||
+    THREE.MeshBasicMaterial;
+
+  const baseFloorMaterial = new BaseFloorMaterial({
+    // V41: uncovered circulation/slivers are valid floor plate, never a black void.
+    color: ventraReadableSchematicColor(palette.floor, 0xb7a68f, 188),
+    side: THREE.DoubleSide,
+    shininess: 5,
+  });
+
+  const footprintPoints =
+    (Array.isArray(scene?.footprint) ? scene.footprint : [])
+      .map((point) => ventraScenePointToLocal(point, width, depth))
+      .filter(Boolean);
+
+  if (footprintPoints.length >= 3) {
+    const footprintBuilder = preserveRasterTrace ? ventraBuildTracedRasterFloor : ventraBuildConcaveFloorMesh;
+    const footprintResult = footprintBuilder({
+      THREE,
+      polygon: footprintPoints,
+      holes: preserveRasterTrace ? (scene.holes || []).map((hole) => hole.polygon.map((point) => ventraScenePointToLocal(point, width, depth))) : [],
+      z: -0.055,
+      material: baseFloorMaterial,
+    });
+
+    if (footprintResult?.mesh) {
+      footprintResult.mesh.userData = {
+        ventraType: 'schematic_footprint_floor_v36',
+        schematic: true,
+      };
+      add(footprintResult.mesh);
+    }
+
+    console.log('[VENTRA JPG FOOTPRINT FIRST v41]', {
+      pointCount: footprintPoints.length,
+      strategy: footprintResult?.reason || 'unknown',
+      roomCount: Array.isArray(scene?.rooms) ? scene.rooms.length : 0,
+      width,
+      depth,
+    });
+  } else {
+    console.warn('[VENTRA JPG FOOTPRINT FIRST v41] missing footprint; room floors only');
+  }
+
+  // V36: render ONLY explicitly detected real holes/shafts as dark cut-out caps.
+  // Uncovered room gaps are NOT treated as voids anymore because the footprint
+  // base floor exists underneath them.
+  const sceneHoles =
+    (Array.isArray(scene?.holes) ? scene.holes : [])
+      .filter((hole) => ["shaft", "courtyard"].includes(String(hole?.type || "").toLowerCase()));
+
+  if (sceneHoles.length && !preserveRasterTrace) {
+    const HoleMaterial =
+      THREE.MeshBasicMaterial ||
+      THREE.MeshLambertMaterial ||
+      THREE.MeshPhongMaterial;
+
+    const holeMaterial =
+      new HoleMaterial({
+        color:
+          hexNumber(
+            scene.backgroundColor ||
+              "#262A30",
+            0x262a30
+          ),
+        side:
+          THREE.DoubleSide,
+      });
+
+    let renderedHoleCount = 0;
+
+    for (const hole of sceneHoles) {
+      const polygon =
+        (Array.isArray(hole?.polygon) ? hole.polygon : [])
+          .map((point) => ventraScenePointToLocal(point, width, depth))
+          .filter(Boolean);
+
+      if (polygon.length < 3) continue;
+
+      const holeResult =
+        ventraBuildConcaveFloorMesh({
+          THREE,
+          polygon,
+          z: 0.026,
+          material:
+            holeMaterial,
+        });
+
+      if (holeResult?.mesh) {
+        holeResult.mesh.userData = {
+          ventraType:
+            "schematic_real_hole_v36",
+          holeId:
+            hole?.id || null,
+          holeType:
+            hole?.type || "void",
+          schematic: true,
+        };
+
+        add(holeResult.mesh);
+        renderedHoleCount += 1;
+      }
+    }
+
+    console.log(
+      "[VENTRA JPG REAL HOLES v41]",
+      {
+        detected:
+          sceneHoles.length,
+        rendered:
+          renderedHoleCount,
+      }
+    );
+  }
+
+  // Room polygons are absolute plan coordinates in metres, origin at lower-left.
+  // Convert them into the Viewer-centred coordinate system and create one floor
+  // slab per room. This is the core difference from the old single-box renderer.
+  for (const room of scene.rooms || []) {
+    const rawPolygon = Array.isArray(room?.polygon)
+      ? room.polygon
+      : Array.isArray(room?.points)
+        ? room.points
+        : [];
+    const polygon = rawPolygon
+      .map((point) => ventraScenePointToLocal(point, width, depth))
+      .filter(Boolean);
+    if (polygon.length < 3) continue;
+
+    const material =
+      ventraCreateRoomFloorMaterial({
+        THREE,
+        room,
+        palette,
+        polygon,
+      });
+
+    const roomFloorBuilder = preserveRasterTrace ? ventraBuildTracedRasterFloor : buildFloorMesh;
+    const result =
+      roomFloorBuilder({
+        THREE,
+        polygon,
+        z: 0.003,
+        material,
+      });
+
+    if (result?.mesh) {
+      result.mesh.userData = {
+        ventraType:
+          "schematic_room_floor",
+        roomId:
+          room?.id || null,
+        roomName:
+          room?.name || null,
+        schematic: true,
+      };
+
+      add(result.mesh);
+
+      ventraAddVisibleFloorPattern({
+        THREE,
+        root:
+          schematicRoot,
+        polygon,
+        material,
+        z: 0.022,
+      });
+
+      roomCount += 1;
+
+      const centroid =
+        ventraRoomPolygonCentroid(
+          polygon
+        );
+
+      if (
+        centroid &&
+        scene?.showRoomLabels ===
+          true
+      ) {
+        const roomLabel =
+          ventraBuildRoomLabelSprite({
+            THREE,
+            text:
+              room?.name ||
+              room?.type ||
+              "Room",
+            x: centroid.x,
+            y: centroid.y,
+            z: 0.12,
+            scale:
+              /bath|store/i.test(
+                String(
+                  room?.type ||
+                  room?.name ||
+                  ""
+                )
+              )
+                ? 0.55
+                : 0.68,
+          });
+
+        if (roomLabel) {
+          schematicRoot.add(
+            roomLabel
+          );
+        }
+      }
+    }
+  }
+
+  const wallMap = new Map();
+  for (const wall of scene.walls || []) {
+    if (wall?.id) wallMap.set(String(wall.id), wall);
+  }
+
+  for (const wall of scene.walls || []) {
+    const start = ventraScenePointToLocal(wall?.start, width, depth);
+    const end = ventraScenePointToLocal(wall?.end, width, depth);
+    if (!start || !end) continue;
+    const wallLength = Math.hypot(end.x - start.x, end.y - start.y);
+    if (!Number.isFinite(wallLength) || wallLength < (preserveRasterTrace ? 0.001 : 0.05)) continue;
+
+    const wallType = String(wall?.type || 'internal').toLowerCase();
+    const thickness = wallType === 'external' ? externalThickness : internalThickness;
+    const requestedWallHeight = Number(wall?.height);
+
+    // Architectural wall geometry must use real wall height. Previous versions
+    // reused the dollhouse cutaway height for internal partitions, which made
+    // doors look taller than the walls and destroyed scale perception.
+    const displayHeight = Number.isFinite(requestedWallHeight) && requestedWallHeight >= 2.2
+      ? Math.min(fullHeight, requestedWallHeight)
+      : fullHeight;
+
+    const wallOpenings = (scene.openings || [])
+      .filter((opening) => String(opening?.wallId || '') === String(wall?.id || ''))
+      .map((opening) => {
+        // The raster compiler already checked the jamb span and owning wall.
+        // Preserve it exactly, including narrow/low/edge-adjacent openings.
+        if (preserveRasterTrace) {
+          return {
+            ...opening,
+            preserveRasterTrace: true,
+            wallPosition: pointAlongSegment(start, end, Number(opening.offset)),
+          };
+        }
+        const type = opening?.type === 'window' ? 'window' : 'door';
+        const offset = Math.max(0.025, Math.min(0.975, Number(opening?.offset) || 0.5));
+        const maxOpeningWidth = Math.max(0.45, wallLength - 0.16);
+        const rawWidth = Number(opening?.width);
+        const openingWidth = Math.min(
+          maxOpeningWidth,
+          Math.max(0.45, Number.isFinite(rawWidth) ? rawWidth : (type === 'window' ? 1.4 : 0.9))
+        );
+
+        if (type === 'door') {
+          const rawDoorHeight = Number(opening?.height);
+          return {
+            ...opening,
+            type,
+            wallPosition: pointAlongSegment(start, end, offset),
+            width: openingWidth,
+            height: Math.max(
+              1.9,
+              Math.min(
+                Number.isFinite(rawDoorHeight) ? rawDoorHeight : 2.1,
+                2.15,
+                displayHeight - 0.16
+              )
+            ),
+            sillHeight: 0,
+          };
+        }
+
+        const rawSill = Number(opening?.sillHeight);
+        const sillHeight = Math.max(
+          0.55,
+          Math.min(
+            Number.isFinite(rawSill) ? rawSill : 0.9,
+            displayHeight - 0.85
+          )
+        );
+        const rawWindowHeight = Number(opening?.height);
+        const windowHeight = Math.max(
+          0.45,
+          Math.min(
+            Number.isFinite(rawWindowHeight) ? rawWindowHeight : 1.2,
+            displayHeight - sillHeight - 0.18
+          )
+        );
+
+        return {
+          ...opening,
+          type,
+          wallPosition: pointAlongSegment(start, end, offset),
+          width: openingWidth,
+          height: windowHeight,
+          sillHeight,
+        };
+      });
+
+    const pieces = splitWallByOpenings({
+      start,
+      end,
+      openings: wallOpenings,
+      minimumWallPiece: preserveRasterTrace ? 0.001 : 0.06,
+      preserveRasterTrace,
+    });
+
+    for (const piece of pieces) {
+      const mesh = createWallMesh({
+        THREE,
+        start: piece.start,
+        end: piece.end,
+        height: displayHeight,
+        thickness,
+        zBase: 0,
+        material: wallType === 'external' ? externalWallMat : wallMat,
+      });
+      if (!mesh) continue;
+      mesh.userData = {
+        ventraType: 'schematic_plan_wall',
+        wallId: wall?.id || null,
+        wallKind: wallType,
+        schematic: true,
+      };
+      add(mesh);
+      wallPieceCount += 1;
+    }
+
+    for (const opening of wallOpenings) {
+      const half = (opening.width / 2) / wallLength;
+      const centerT = projectPointToSegment2D(opening.wallPosition, start, end).t;
+      opening.start = pointAlongSegment(start, end, Math.max(0, centerT - half));
+      opening.end = pointAlongSegment(start, end, Math.min(1, centerT + half));
+
+      if (opening.type === 'window') {
+        // The horizontal wall split removes the entire wall column. Rebuild
+        // the solid wall below and above the window so glass is physically
+        // embedded in the wall instead of floating in space.
+        const sillWall = buildWindowSillWallMesh({
+          THREE,
+          opening,
+          thickness,
+          zBase: 0,
+          material: wallType === 'external' ? externalWallMat : wallMat,
+        });
+        add(sillWall);
+
+        const headerWall = buildHeaderWallMesh({
+          THREE,
+          opening,
+          thickness,
+          wallHeight: displayHeight,
+          zBase: 0,
+          material: wallType === 'external' ? externalWallMat : wallMat,
+        });
+        add(headerWall);
+
+        const windowAssembly = ventraCreateWindowVisual({
+          THREE,
+          opening,
+          glassMaterial: glassMat,
+          frameMaterial: windowFrameMat,
+          wallThickness: thickness,
+        });
+        add(windowAssembly);
+      } else {
+        // Fill wall above the door opening; otherwise the renderer leaves an
+        // unrealistic floor-to-ceiling slot above every door.
+        const doorHeaderWall = buildHeaderWallMesh({
+          THREE,
+          opening,
+          thickness,
+          wallHeight: displayHeight,
+          zBase: 0,
+          material: wallType === 'external' ? externalWallMat : wallMat,
+        });
+        add(doorHeaderWall);
+
+        const doorLeaf = ventraCreateDoorLeafVisual({
+          THREE,
+          opening,
+          material: doorMat,
+          wallHeight: displayHeight,
+        });
+        add(doorLeaf);
+      }
+      openingCount += 1;
+    }
+  }
+
+  for (const asset of scene.assets || []) {
+    const meshes = buildSchematicAssetMeshes({
+      THREE,
+      asset,
+      palette,
+      roomWidth: width,
+      roomDepth: depth,
+    });
+    meshes.forEach(add);
+    assetMeshCount += meshes.length;
+  }
+
+  try {
+    const bg = hexNumber(scene.backgroundColor || '#262A30', 0x262a30);
+    const r = (bg >> 16) & 255;
+    const g = (bg >> 8) & 255;
+    const b = bg & 255;
+    viewer.setBackgroundColor?.(r, g, b, r, g, b);
+  } catch {}
+
+  schematicRoot.updateMatrixWorld(true);
+  try { viewer.impl?.sceneUpdated?.(true); } catch {}
+  viewer.impl?.invalidate?.(true, true, true);
+
+  const serializedBounds = serializeBox3(bounds);
+  try {
+    const center = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z, 3);
+    const position =
+      new THREE.Vector3(
+        center.x +
+          maxDimension * 0.78,
+        center.y -
+          maxDimension * 1.04,
+        center.z +
+          maxDimension * 1.20
+      );
+
+    if (viewer.navigation?.toOrthographic) {
+      viewer.navigation.toOrthographic();
+    } else {
+      viewer.navigation?.toPerspective?.();
+    }
+    viewer.navigation?.setView?.(position, center);
+    viewer.navigation?.setPivotPoint?.(center);
+    viewer.navigation?.setCameraUpVector?.(new THREE.Vector3(0, 0, 1));
+    viewer.setActiveNavigationTool?.('orbit');
+    viewer.impl?.invalidate?.(
+      true,
+      true,
+      true
+    );
+
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+      window.requestAnimationFrame(
+        () => {
+          try {
+            viewer.navigation
+              ?.setView?.(
+                position,
+                center
+              );
+            viewer.navigation
+              ?.setPivotPoint?.(
+                center
+              );
+            viewer.impl
+              ?.invalidate?.(
+                true,
+                true,
+                true
+              );
+          } catch {}
+        }
+      );
+    }
+  } catch {}
+
+  console.log('[VENTRA JPG READABLE DOLLHOUSE v8]', { roomCount, wallPieceCount, openingCount, assetMeshCount });
+
+  console.log('[VENTRA JPG RENDER INTEGRITY v41]', {
+    roomsReceived: Array.isArray(scene.rooms) ? scene.rooms.length : 0,
+    wallsReceived: Array.isArray(scene.walls) ? scene.walls.length : 0,
+    openingsReceived: Array.isArray(scene.openings) ? scene.openings.length : 0,
+    assetsReceived: Array.isArray(scene.assets) ? scene.assets.length : 0,
+    holesRendered: sceneHoles.length,
+    footprintPoints: Array.isArray(scene.footprint) ? scene.footprint.length : 0,
+  });
+
+  console.log('[VENTRA JPG GENERIC STRUCTURED FLOOR PLAN 3D v41]', {
+    sceneType: scene.sceneType,
+    roomCount,
+    wallCount: Array.isArray(scene.walls) ? scene.walls.length : 0,
+    wallPieceCount,
+    openingCount,
+    assetCount: Array.isArray(scene.assets) ? scene.assets.length : 0,
+    assetMeshCount,
+    width,
+    depth,
+  });
+
+  return {
+    bounds: serializedBounds,
+    schematic: true,
+    structured: true,
+    sceneType: scene.sceneType || 'apartment_floorplan',
+    title: scene.title || 'Floor Plan 3D',
+    roomCount,
+    wallPieceCount,
+    openingCount,
+    assetCount: Array.isArray(scene.assets) ? scene.assets.length : 0,
+    assetMeshCount,
+    width,
+    depth,
+    height: fullHeight,
+  };
+}
+
+function renderSchematicScene(viewer, scene) {
+  if (ventraStructuredSceneIsValid(scene)) {
+    return renderStructuredSchematicScene(viewer, scene);
+  }
+
+  const THREE = getThree();
+  if (!viewer || !scene || !THREE) throw new Error("Schematic 3D renderer is not ready.");
+  clearSchematicOverlay(viewer);
+
+  // Standalone JPG scenes cannot rely on Autodesk overlay rendering because
+  // there may be no Autodesk model loaded. Render into sceneAfter instead.
+  const schematicRoot = new THREE.Group();
+  schematicRoot.name = VENTRA_SCHEMATIC_ROOT_NAME;
+  const targetScene = viewer?.impl?.sceneAfter || viewer?.impl?.scene;
+  if (!targetScene?.add) {
+    throw new Error("Autodesk standalone schematic render scene is unavailable.");
+  }
+  targetScene.add(schematicRoot);
+
+  const width = Math.max(1.8, Number(scene.width) || 4.8);
+  const depth = Math.max(1.8, Number(scene.depth) || 4.2);
+  const height = Math.max(2.2, Number(scene.height) || 2.8);
+  const thickness = 0.12;
+  const palette = scene.palette || {};
+  const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+  const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
+
+  const wallMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.wall, 0xd5cec2, 218),
+    side: THREE.DoubleSide,
+    shininess: 4
+  });
+
+  const floorMat = new OpaqueMaterial({
+    color: ventraReadableSchematicColor(palette.floor, 0xb39f82, 205),
+    side: THREE.DoubleSide,
+    shininess: 8
+  });
+
+  const glassMat = new GlassMaterial({
+    color: ventraReadableSchematicColor(palette.glass, 0x6f96aa, 205),
+    transparent: true,
+    opacity: 0.34,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    shininess: 55
+  });
+
+  const bounds = new THREE.Box3();
+  let assetMeshCount = 0, openingCount = 0, wallPieceCount = 0;
+
+  const addReadableEdges = (mesh) => {
+    if (
+      !mesh?.geometry ||
+      !THREE?.EdgesGeometry ||
+      !THREE?.LineSegments ||
+      !THREE?.LineBasicMaterial
+    ) {
+      return;
+    }
+
+    const material = mesh.material;
+    if (material?.transparent && Number(material?.opacity) < 0.75) {
+      return;
+    }
+
+    try {
+      const edgeGeometry = new THREE.EdgesGeometry(mesh.geometry, 24);
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color: 0x625d57,
+        transparent: true,
+        opacity: 0.32,
+      });
+
+      const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+      edges.userData = {
+        ventraType: "schematic_edges",
+        schematic: true,
+        nonSelectable: true,
+      };
+      mesh.add(edges);
+    } catch {}
+  };
+
+  const add = (mesh) => {
+    if (!mesh) return;
+    addReadableEdges(mesh);
+    if (mesh.geometry && mesh.material && !mesh.material.transparent) {
+      mesh.castShadow = mesh.userData?.ventraType !== 'schematic_floor';
+      mesh.receiveShadow = true;
+    }
+    schematicRoot.add(mesh);
+    try {
+      mesh.updateMatrixWorld(true);
+      bounds.expandByObject(mesh);
+    } catch {}
+  };
+
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(width, depth, 0.08), floorMat);
+  floor.position.set(0, 0, -0.04); floor.userData={ventraType:"schematic_floor",schematic:true}; add(floor);
+
+  const walls = [
+    {name:"south",start:{x:-width/2,y:-depth/2},end:{x:width/2,y:-depth/2}},
+    {name:"north",start:{x:width/2,y:depth/2},end:{x:-width/2,y:depth/2}},
+    {name:"east",start:{x:width/2,y:-depth/2},end:{x:width/2,y:depth/2}},
+    {name:"west",start:{x:-width/2,y:depth/2},end:{x:-width/2,y:-depth/2}},
+  ];
+
+  const interiorScene =
+    !/(exterior|facade|elevation)/i.test(
+      String(scene.sceneType || scene.title || "")
+    );
+
+  for (const wall of walls) {
+    // The default schematic camera looks from +X / -Y.
+    // East + South are therefore the two front walls. Keeping both at full
+    // height turns every interior scene into an opaque box. In interior mode
+    // they become low cutaway walls so furniture and room layout remain visible.
+    const isFrontCutaway =
+      interiorScene &&
+      (wall.name === "south" || wall.name === "east");
+
+    if (isFrontCutaway) {
+      const cutawayHeight =
+        Math.min(
+          1.0,
+          Math.max(0.72, height * 0.34)
+        );
+
+      const cutawayWall =
+        createWallMesh({
+          THREE,
+          start: wall.start,
+          end: wall.end,
+          height: cutawayHeight,
+          thickness,
+          zBase: 0,
+          material: wallMat,
+        });
+
+      if (cutawayWall) {
+        cutawayWall.userData = {
+          ventraType: "schematic_cutaway_wall",
+          wall: wall.name,
+          schematic: true,
+          cutaway: true,
+        };
+        add(cutawayWall);
+        wallPieceCount += 1;
+      }
+
+      // Count original openings for inspector accuracy, but do not rebuild
+      // full-height headers/windows on the two cutaway walls.
+      openingCount +=
+        (scene.openings || []).filter(
+          (o) => o.wall === wall.name
+        ).length;
+
+      continue;
+    }
+
+    const wallOpenings = (scene.openings || []).filter(o=>o.wall===wall.name).map(o=>{
+      const t=Math.max(0.02,Math.min(0.98,Number(o.offset)||0.5));
+      const center=pointAlongSegment(wall.start,wall.end,t);
+      return { type:o.type, wallPosition:center, width:Number(o.width)||0.9, height:Number(o.height)||2.1, sillHeight:Number(o.sillHeight)||0 };
+    });
+
+    const pieces=splitWallByOpenings({start:wall.start,end:wall.end,openings:wallOpenings,minimumWallPiece:0.06});
+
+    for(const piece of pieces){
+      const mesh=createWallMesh({THREE,start:piece.start,end:piece.end,height,thickness,zBase:0,material:wallMat});
+      if(mesh){
+        mesh.userData={ventraType:"schematic_wall",wall:wall.name,schematic:true};
+        add(mesh);
+        wallPieceCount++;
+      }
+    }
+
+    for(const o of wallOpenings){
+      const len = Math.hypot(wall.end.x-wall.start.x, wall.end.y-wall.start.y);
+      const half=(o.width/2)/len;
+      const centerT=projectPointToSegment2D(o.wallPosition,wall.start,wall.end).t;
+      o.start=pointAlongSegment(wall.start,wall.end,Math.max(0,centerT-half));
+      o.end=pointAlongSegment(wall.start,wall.end,Math.min(1,centerT+half));
+
+      const header=buildHeaderWallMesh({THREE,opening:o,thickness,wallHeight:height,zBase:0,material:wallMat});
+      add(header);
+
+      const sill=buildWindowSillWallMesh({THREE,opening:o,thickness,zBase:0,material:wallMat});
+      add(sill);
+
+      if(o.type==="window"){
+        const pane=createWallMesh({THREE,start:o.start,end:o.end,height:o.height,thickness:0.025,zBase:o.sillHeight,material:glassMat});
+        if(pane){
+          pane.userData={ventraType:"schematic_window",schematic:true};
+          add(pane);
+        }
+      }
+
+      openingCount++;
+    }
+  }
+
+  for(const asset of scene.assets || []){
+    const meshes=buildSchematicAssetMeshes({THREE,asset,palette,roomWidth:width,roomDepth:depth});
+    meshes.forEach(add); assetMeshCount += meshes.length;
+  }
+
+  try {
+    const bg = hexNumber(scene.backgroundColor || "#262A30", 0x262a30);
+    const r = (bg >> 16) & 255; const g = (bg >> 8) & 255; const b = bg & 255;
+    viewer.setBackgroundColor?.(r, g, b, r, g, b);
+  } catch {}
+  schematicRoot.updateMatrixWorld(true);
+  try { viewer.impl?.sceneUpdated?.(true); } catch {}
+  viewer.impl.invalidate(true,true,true);
+  const serializedBounds=serializeBox3(bounds);
+
+  const frameSchematic = () => {
+    try {
+      const center = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const maxDimension = Math.max(size.x, size.y, size.z, 3);
+
+      const position = new THREE.Vector3(
+        center.x + maxDimension * 1.18,
+        center.y - maxDimension * 1.28,
+        center.z + maxDimension * 0.95
+      );
+
+      viewer.navigation?.toPerspective?.();
+      viewer.navigation?.setView?.(position, center);
+      viewer.navigation?.setPivotPoint?.(center);
+      viewer.navigation?.setCameraUpVector?.(
+        new THREE.Vector3(0, 0, 1)
+      );
+      viewer.setActiveNavigationTool?.("orbit");
+      viewer.impl?.invalidate?.(true, true, true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  frameSchematic();
+
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame(() => {
+      frameSchematic();
+      try { viewer.impl?.sceneUpdated?.(true); } catch {}
+      viewer.impl?.invalidate?.(true, true, true);
+    });
+  }
+  return { bounds:serializedBounds, schematic:true, sceneType:scene.sceneType||"room", title:scene.title||"AI Schematic", wallPieceCount, openingCount, assetCount:(scene.assets||[]).length, assetMeshCount, width, depth, height };
+}
+
+function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
+  const THREE = getThree();
+  if (!container || !sceneData || !canvasElement || !THREE?.WebGLRenderer || !THREE?.PerspectiveCamera) {
+    throw new Error("Standalone schematic renderer is not available.");
+  }
+
+  const width = Math.max(320, container.clientWidth || 960);
+  const height = Math.max(320, container.clientHeight || 640);
+  const background = hexNumber(sceneData?.backgroundColor || "#D9DADC", 0x262a30);
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvasElement,
+    antialias: true,
+    alpha: false,
+    preserveDrawingBuffer: true,
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(width, height, false);
+  renderer.setClearColor(background, 1);
+  try {
+    if (renderer.shadowMap) {
+      renderer.shadowMap.enabled = true;
+      if (THREE.PCFSoftShadowMap !== undefined) {
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
+    } else if ("shadowMapEnabled" in renderer) {
+      renderer.shadowMapEnabled = true;
+      if (THREE.PCFSoftShadowMap !== undefined) {
+        renderer.shadowMapType = THREE.PCFSoftShadowMap;
+      }
+    }
+  } catch {}
+  renderer.domElement.style.width = "100%";
+  renderer.domElement.style.height = "100%";
+  renderer.domElement.style.display = "block";
+  renderer.domElement.style.touchAction = "none";
+  renderer.domElement.style.position = "absolute";
+  renderer.domElement.style.inset = "0";
+  renderer.domElement.style.zIndex = "2";
+
+  const threeScene = new THREE.Scene();
+  threeScene.background = new THREE.Color(background);
+
+  if (THREE.AmbientLight) {
+    // r71 ignores AmbientLight's intensity argument. Encode intensity in the
+    // color, which is supported by both the legacy and modern Three.js APIs.
+    const ambient = new THREE.AmbientLight(0xffffff);
+    ambient.color.multiplyScalar(0.48);
+    threeScene.add(ambient);
+  }
+
+  if (THREE.DirectionalLight) {
+    const keyLight =
+      new THREE.DirectionalLight(
+        0xfffaf4,
+        0.48
+      );
+    keyLight.position.set(
+      10,
+      -12,
+      16
+    );
+    try {
+      keyLight.castShadow = true;
+      const shadowExtent = Math.max(6, Math.hypot(Number(sceneData.width) || 5, Number(sceneData.depth) || 5) * 0.7 + 2);
+      if (keyLight.shadow?.mapSize) {
+        keyLight.shadow.mapSize.width = 2048;
+        keyLight.shadow.mapSize.height = 2048;
+        if (keyLight.shadow.camera) {
+          Object.assign(keyLight.shadow.camera, {
+            left: -shadowExtent, right: shadowExtent,
+            top: shadowExtent, bottom: -shadowExtent, near: 0.5, far: 80,
+          });
+          keyLight.shadow.camera.updateProjectionMatrix?.();
+        }
+      }
+      // Autodesk's THREE r71 predates Light.shadow; its renderer reads these
+      // properties directly from DirectionalLight instead.
+      keyLight.shadowMapWidth = 2048;
+      keyLight.shadowMapHeight = 2048;
+      keyLight.shadowCameraLeft = -shadowExtent;
+      keyLight.shadowCameraRight = shadowExtent;
+      keyLight.shadowCameraTop = shadowExtent;
+      keyLight.shadowCameraBottom = -shadowExtent;
+      keyLight.shadowCameraNear = 0.5;
+      keyLight.shadowCameraFar = 80;
+      keyLight.shadowBias = -0.0003;
+      keyLight.shadowDarkness = 0.20;
+    } catch {}
+    threeScene.add(keyLight);
+
+    const fillLight =
+      new THREE.DirectionalLight(
+        0xdfe7ec,
+        0.18
+      );
+    fillLight.position.set(
+      -8,
+      9,
+      10
+    );
+    threeScene.add(fillLight);
+  }
+
+  const camera = new THREE.PerspectiveCamera(30, width / height, 0.02, 5000);
+  camera.up.set(0, 0, 1);
+  const target = new THREE.Vector3(0, 0, 1);
+  let controlMode = "orbit";
+
+  const render = () => {
+    camera.lookAt(target);
+    renderer.render(threeScene, camera);
+  };
+
+  const adapter = {
+    impl: {
+      sceneAfter: threeScene,
+      scene: threeScene,
+      invalidate: render,
+      sceneUpdated: render,
+      removeOverlayScene: () => {},
+    },
+    navigation: {
+      toPerspective: () => {},
+      setView: (position, center) => {
+        if (position?.isVector3) camera.position.copy(position);
+        if (center?.isVector3) target.copy(center);
+        camera.up.set(0, 0, 1);
+        camera.lookAt(target);
+        camera.updateProjectionMatrix();
+        render();
+      },
+      setCameraUpVector: (up) => {
+        if (up?.isVector3) camera.up.copy(up);
+        camera.lookAt(target);
+        render();
+      },
+    },
+    setActiveNavigationTool: () => {},
+    setBackgroundColor: (r, g, b) => {
+      const color = new THREE.Color(r / 255, g / 255, b / 255);
+      threeScene.background = color;
+      renderer.setClearColor(color, 1);
+      render();
+    },
+  };
+
+  const model = renderSchematicScene(adapter, sceneData);
+
+  const getBoundsInfo = () => {
+    const b = model?.bounds || {};
+    const min = b.min || { x: -2, y: -2, z: 0 };
+    const max = b.max || { x: 2, y: 2, z: 3 };
+    const center = new THREE.Vector3(
+      (Number(min.x) + Number(max.x)) / 2,
+      (Number(min.y) + Number(max.y)) / 2,
+      (Number(min.z) + Number(max.z)) / 2
+    );
+    const sx = Math.max(1, Number(max.x) - Number(min.x));
+    const sy = Math.max(1, Number(max.y) - Number(min.y));
+    const sz = Math.max(1, Number(max.z) - Number(min.z));
+    return { center, distance: Math.max(sx, sy, sz) * 1.65, sx, sy, sz };
+  };
+
+  const setNamedView = (view = "iso") => {
+    const { center, distance, sz } = getBoundsInfo();
+    target.copy(center);
+
+    if (view === "top") {
+      camera.up.set(0, 1, 0);
+      camera.position.set(center.x, center.y, center.z + distance * 1.35);
+    } else if (view === "front") {
+      camera.up.set(0, 0, 1);
+      camera.position.set(center.x, center.y - distance * 1.25, center.z + sz * 0.35);
+    } else if (view === "left") {
+      camera.up.set(0, 0, 1);
+      camera.position.set(center.x - distance * 1.25, center.y, center.z + sz * 0.35);
+    } else {
+      camera.up.set(0, 0, 1);
+      camera.position.set(
+        center.x + distance,
+        center.y - distance,
+        center.z + distance * 0.90
+      );
+    }
+
+    camera.lookAt(target);
+    camera.updateProjectionMatrix();
+    render();
+  };
+
+  const orbit = (dx, dy) => {
+    camera.up.set(0, 0, 1);
+    const offset = camera.position.clone().sub(target);
+    const radius = Math.max(0.001, offset.length());
+    let theta = Math.atan2(offset.x, offset.y);
+    let phi = Math.acos(Math.max(-1, Math.min(1, offset.z / radius)));
+
+    theta -= dx * 0.006;
+    phi = Math.max(0.18, Math.min(Math.PI - 0.18, phi + dy * 0.006));
+
+    const sinPhi = Math.sin(phi);
+    offset.set(
+      radius * sinPhi * Math.sin(theta),
+      radius * sinPhi * Math.cos(theta),
+      radius * Math.cos(phi)
+    );
+
+    camera.position.copy(target).add(offset);
+    camera.lookAt(target);
+    render();
+  };
+
+  const pan = (dx, dy) => {
+    const distance = Math.max(0.01, camera.position.distanceTo(target) * 0.0018);
+    const forward = target.clone().sub(camera.position).normalize();
+    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+    const up = camera.up.clone().normalize();
+    const delta = right.multiplyScalar(-dx * distance).add(up.multiplyScalar(dy * distance));
+    target.add(delta);
+    camera.position.add(delta);
+    render();
+  };
+
+  const zoomBy = (direction) => {
+    const offset = camera.position.clone().sub(target);
+    const factor = direction > 0 ? 0.88 : 1.14;
+    const nextLength = Math.max(1.2, Math.min(250, offset.length() * factor));
+    offset.setLength(nextLength);
+    camera.position.copy(target).add(offset);
+    render();
+  };
+
+  setNamedView("iso");
+
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const onPointerDown = (event) => {
+    dragging = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    try { renderer.domElement.setPointerCapture(event.pointerId); } catch {}
+  };
+  const onPointerMove = (event) => {
+    if (!dragging) return;
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    const shouldPan = controlMode === "pan" || event.shiftKey || event.buttons === 2;
+    if (shouldPan) pan(dx, dy); else orbit(dx, dy);
+  };
+  const onPointerUp = (event) => {
+    dragging = false;
+    try { renderer.domElement.releasePointerCapture(event.pointerId); } catch {}
+  };
+  const onWheel = (event) => {
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? 1 : -1);
+  };
+  const onContextMenu = (event) => event.preventDefault();
+
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+  renderer.domElement.addEventListener("pointermove", onPointerMove);
+  renderer.domElement.addEventListener("pointerup", onPointerUp);
+  renderer.domElement.addEventListener("pointercancel", onPointerUp);
+  renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
+  renderer.domElement.addEventListener("contextmenu", onContextMenu);
+
+  const resize = () => {
+    if (!container.isConnected) return;
+    const nextWidth = Math.max(1, container.clientWidth || width);
+    const nextHeight = Math.max(1, container.clientHeight || height);
+    camera.aspect = nextWidth / nextHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(nextWidth, nextHeight, false);
+    render();
+  };
+  const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+  resizeObserver?.observe(container);
+  window.requestAnimationFrame(resize);
+
+  return {
+    model,
+    render,
+    fitView: () => setNamedView("iso"),
+    homeView: () => setNamedView("iso"),
+    setNamedView,
+    setControlMode: (mode) => { controlMode = mode === "pan" ? "pan" : "orbit"; },
+    zoomIn: () => zoomBy(1),
+    zoomOut: () => zoomBy(-1),
+    dispose: () => {
+      resizeObserver?.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("pointercancel", onPointerUp);
+      renderer.domElement.removeEventListener("wheel", onWheel);
+      renderer.domElement.removeEventListener("contextmenu", onContextMenu);
+      threeScene.traverse?.((object) => {
+        try { object.geometry?.dispose?.(); } catch {}
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          try { material?.map?.dispose?.(); } catch {}
+          try { material?.dispose?.(); } catch {}
+        }
+      });
+      try { renderer.dispose(); } catch {}
+      // React owns canvasElement. Never remove renderer.domElement here.
+    },
+  };
+}
+
+
+function ventraSafeFileBase(value) {
+  return String(value || "ventra-project")
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function ventraDownloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1200);
+}
+
+function ventraWait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+
+function ventraCropCanvasToContent(sourceCanvas, paddingRatio = 0.035) {
+  if (
+    !sourceCanvas ||
+    !sourceCanvas.width ||
+    !sourceCanvas.height
+  ) {
+    return sourceCanvas;
+  }
+
+  try {
+    const width =
+      sourceCanvas.width;
+    const height =
+      sourceCanvas.height;
+
+    // WebGL canvases cannot be inspected with getContext("2d") after the
+    // WebGL context already exists. Copy the rendered frame into a temporary
+    // 2D canvas first, then inspect/crop that copy.
+    const readableCanvas =
+      document.createElement(
+        "canvas"
+      );
+
+    readableCanvas.width =
+      width;
+    readableCanvas.height =
+      height;
+
+    const readableContext =
+      readableCanvas.getContext(
+        "2d",
+        {
+          willReadFrequently: true,
+        }
+      );
+
+    if (!readableContext) {
+      return sourceCanvas;
+    }
+
+    readableContext.drawImage(
+      sourceCanvas,
+      0,
+      0,
+      width,
+      height
+    );
+
+    const image =
+      readableContext.getImageData(
+        0,
+        0,
+        width,
+        height
+      );
+
+    const data =
+      image.data;
+
+    const samplePixel =
+      (x, y) => {
+        const index =
+          (y * width + x) * 4;
+
+        return [
+          data[index],
+          data[index + 1],
+          data[index + 2],
+        ];
+      };
+
+    const corners = [
+      samplePixel(0, 0),
+      samplePixel(
+        width - 1,
+        0
+      ),
+      samplePixel(
+        0,
+        height - 1
+      ),
+      samplePixel(
+        width - 1,
+        height - 1
+      ),
+    ];
+
+    const background = [
+      Math.round(
+        corners.reduce(
+          (sum, color) =>
+            sum + color[0],
+          0
+        ) /
+          corners.length
+      ),
+      Math.round(
+        corners.reduce(
+          (sum, color) =>
+            sum + color[1],
+          0
+        ) /
+          corners.length
+      ),
+      Math.round(
+        corners.reduce(
+          (sum, color) =>
+            sum + color[2],
+          0
+        ) /
+          corners.length
+      ),
+    ];
+
+    let minX =
+      width;
+    let minY =
+      height;
+    let maxX =
+      -1;
+    let maxY =
+      -1;
+
+    const step = 2;
+    const threshold = 28;
+
+    for (
+      let y = 0;
+      y < height;
+      y += step
+    ) {
+      for (
+        let x = 0;
+        x < width;
+        x += step
+      ) {
+        const index =
+          (y * width + x) *
+          4;
+
+        const r =
+          data[index];
+        const g =
+          data[index + 1];
+        const b =
+          data[index + 2];
+        const a =
+          data[index + 3];
+
+        if (a < 10) {
+          continue;
+        }
+
+        const distance =
+          Math.abs(
+            r -
+              background[0]
+          ) +
+          Math.abs(
+            g -
+              background[1]
+          ) +
+          Math.abs(
+            b -
+              background[2]
+          );
+
+        if (
+          distance <=
+          threshold
+        ) {
+          continue;
+        }
+
+        minX =
+          Math.min(
+            minX,
+            x
+          );
+        maxX =
+          Math.max(
+            maxX,
+            x
+          );
+        minY =
+          Math.min(
+            minY,
+            y
+          );
+        maxY =
+          Math.max(
+            maxY,
+            y
+          );
+      }
+    }
+
+    if (
+      maxX < minX ||
+      maxY < minY
+    ) {
+      console.warn(
+        "[VENTRA EXPORT CROP v24.2] visible content bounds not detected; using readable full canvas"
+      );
+
+      return readableCanvas;
+    }
+
+    const contentWidth =
+      maxX -
+      minX +
+      1;
+
+    const contentHeight =
+      maxY -
+      minY +
+      1;
+
+    const padding =
+      Math.max(
+        18,
+        Math.round(
+          Math.max(
+            contentWidth,
+            contentHeight
+          ) *
+            paddingRatio
+        )
+      );
+
+    const sx =
+      Math.max(
+        0,
+        minX -
+          padding
+      );
+
+    const sy =
+      Math.max(
+        0,
+        minY -
+          padding
+      );
+
+    const ex =
+      Math.min(
+        width,
+        maxX +
+          padding
+      );
+
+    const ey =
+      Math.min(
+        height,
+        maxY +
+          padding
+      );
+
+    const cropWidth =
+      Math.max(
+        1,
+        ex -
+          sx
+      );
+
+    const cropHeight =
+      Math.max(
+        1,
+        ey -
+          sy
+      );
+
+    const cropped =
+      document.createElement(
+        "canvas"
+      );
+
+    cropped.width =
+      cropWidth;
+    cropped.height =
+      cropHeight;
+
+    const croppedContext =
+      cropped.getContext(
+        "2d"
+      );
+
+    if (!croppedContext) {
+      return readableCanvas;
+    }
+
+    croppedContext.drawImage(
+      readableCanvas,
+      sx,
+      sy,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      cropWidth,
+      cropHeight
+    );
+
+    console.log(
+      "[VENTRA EXPORT CAPTURE v24.2]",
+      {
+        original:
+          `${width}x${height}`,
+        exported:
+          `${cropWidth}x${cropHeight}`,
+        preserveDrawingBuffer:
+          true,
+      }
+    );
+
+    return cropped;
+  } catch (error) {
+    console.warn(
+      "[VENTRA EXPORT CAPTURE v24.2]",
+      error
+    );
+
+    return sourceCanvas;
+  }
+}
+
+
+function ventraCanvasToJpegBlob(canvas, quality = 0.96) {
+  return new Promise((resolve, reject) => {
+    if (!canvas) {
+      reject(new Error("3D canvas is unavailable."));
+      return;
+    }
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("JPEG capture failed."));
+          return;
+        }
+        resolve(blob);
+      },
+      "image/jpeg",
+      quality
+    );
+  });
+}
+
+function ventraDataUrlToBlob(dataUrl) {
+  const parts = String(dataUrl || "").split(",");
+  if (parts.length < 2) throw new Error("Invalid screenshot data.");
+  const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const binary = atob(parts[1]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+function ventraBuildSingleImagePdf(jpegBytes, imageWidth, imageHeight, title = "Ventra 3D Export") {
+  const enc = new TextEncoder();
+  const pageW = 842;
+  const pageH = 595;
+  const margin = 28;
+  const maxW = pageW - margin * 2;
+  const maxH = pageH - margin * 2 - 24;
+  const scale = Math.min(maxW / imageWidth, maxH / imageHeight);
+  const drawW = imageWidth * scale;
+  const drawH = imageHeight * scale;
+  const x = (pageW - drawW) / 2;
+  const y = (pageH - drawH) / 2 - 6;
+
+  const safeTitle = String(title || "Ventra 3D Export")
+    .replace(/[()\\]/g, (m) => `\\${m}`);
+
+  const content = [
+    "q",
+    `${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm`,
+    "/Im0 Do",
+    "Q",
+    "BT",
+    "/F1 12 Tf",
+    `${margin} ${pageH - 20} Td`,
+    `(${safeTitle}) Tj`,
+    "ET",
+  ].join("\n");
+
+  const objects = [];
+  objects[1] = enc.encode("<< /Type /Catalog /Pages 2 0 R >>");
+  objects[2] = enc.encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  objects[3] = enc.encode(
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> /Font << /F1 6 0 R >> >> /Contents 5 0 R >>`
+  );
+
+  const imageHead = enc.encode(
+    `<< /Type /XObject /Subtype /Image /Width ${Math.max(1, Math.round(imageWidth))} /Height ${Math.max(1, Math.round(imageHeight))} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
+  );
+  const imageTail = enc.encode("\nendstream");
+  objects[4] = { binaryParts: [imageHead, jpegBytes, imageTail] };
+
+  const contentBytes = enc.encode(content);
+  objects[5] = enc.encode(`<< /Length ${contentBytes.length} >>\nstream\n${content}\nendstream`);
+  objects[6] = enc.encode("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+
+  const chunks = [];
+  const offsets = [0];
+  let length = 0;
+
+  const push = (bytes) => {
+    chunks.push(bytes);
+    length += bytes.length;
+  };
+
+  push(enc.encode("%PDF-1.4\n%Ventra\n"));
+
+  for (let i = 1; i <= 6; i += 1) {
+    offsets[i] = length;
+    push(enc.encode(`${i} 0 obj\n`));
+    const obj = objects[i];
+    if (obj?.binaryParts) {
+      for (const part of obj.binaryParts) push(part);
+    } else {
+      push(obj);
+    }
+    push(enc.encode("\nendobj\n"));
+  }
+
+  const xrefOffset = length;
+  let xref = `xref\n0 7\n0000000000 65535 f \n`;
+  for (let i = 1; i <= 6; i += 1) {
+    xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  }
+  xref += `trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  push(enc.encode(xref));
+
+  return new Blob(chunks, { type: "application/pdf" });
+}
+
+function ventraDxfLine(x1, y1, x2, y2, layer = "0") {
+  return [
+    "0","LINE","8",layer,
+    "10",String(x1),"20",String(y1),"30","0",
+    "11",String(x2),"21",String(y2),"31","0",
+  ].join("\n");
+}
+
+function ventraDxfPolyline(points = [], layer = "0", closed = true) {
+  if (!Array.isArray(points) || points.length < 2) return "";
+  const lines = ["0","LWPOLYLINE","8",layer,"90",String(points.length),"70",closed ? "1" : "0"];
+  for (const point of points) {
+    lines.push("10", String(Number(point?.x) || 0));
+    lines.push("20", String(Number(point?.y) || 0));
+  }
+  return lines.join("\n");
+}
+
+function ventraSceneToMetricDxf(scene) {
+  const entities = [];
+  const safeScene = scene || {};
+
+  for (const room of Array.isArray(safeScene.rooms) ? safeScene.rooms : []) {
+    const polygon = Array.isArray(room?.polygon) ? room.polygon : [];
+    if (polygon.length >= 3) {
+      entities.push(ventraDxfPolyline(polygon, "ROOM_BOUNDARY", true));
+    }
+  }
+
+  for (const wall of Array.isArray(safeScene.walls) ? safeScene.walls : []) {
+    entities.push(
+      ventraDxfLine(
+        Number(wall?.start?.x) || 0,
+        Number(wall?.start?.y) || 0,
+        Number(wall?.end?.x) || 0,
+        Number(wall?.end?.y) || 0,
+        wall?.type === "external" ? "WALL_EXTERNAL" : "WALL_INTERNAL"
+      )
+    );
+  }
+
+  for (const opening of Array.isArray(safeScene.openings) ? safeScene.openings : []) {
+    const wall = (safeScene.walls || []).find((item) => String(item?.id || "") === String(opening?.wallId || ""));
+    if (!wall) continue;
+
+    const x1 = Number(wall?.start?.x) || 0;
+    const y1 = Number(wall?.start?.y) || 0;
+    const x2 = Number(wall?.end?.x) || 0;
+    const y2 = Number(wall?.end?.y) || 0;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    if (length < 0.05) continue;
+
+    const offset = Math.max(0.02, Math.min(0.98, Number(opening?.offset) || 0.5));
+    const width = Math.max(0.45, Number(opening?.width) || (opening?.type === "window" ? 1.4 : 0.9));
+    const ux = dx / length;
+    const uy = dy / length;
+    const center = offset * length;
+    const a = Math.max(0, center - width / 2);
+    const b = Math.min(length, center + width / 2);
+
+    entities.push(
+      ventraDxfLine(
+        x1 + ux * a,
+        y1 + uy * a,
+        x1 + ux * b,
+        y1 + uy * b,
+        opening?.type === "window" ? "WINDOW" : "DOOR_OPENING"
+      )
+    );
+  }
+
+  return [
+    "0","SECTION","2","HEADER",
+    "9","$INSUNITS","70","6",
+    "0","ENDSEC",
+    "0","SECTION","2","ENTITIES",
+    entities.filter(Boolean).join("\n"),
+    "0","ENDSEC","0","EOF"
+  ].join("\n");
+}
+
+
+export default function Project3DViewer({ projectId }) {
+  const rasterReview = useSyncExternalStore(subscribeRasterReview, () => getRasterReview(projectId), () => null);
+  const containerRef = useRef(null);
+  const schematicCanvasRef = useRef(null);
+  const viewerRef = useRef(null);
+  const schematicRendererRef = useRef(null);
+  const documentRef = useRef(null);
+  const sourceModelRef = useRef(null);
+  const schematicBaseSceneRef = useRef(null);
+
+  const [urn, setUrn] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [message, setMessage] = useState("");
+  const [viewables, setViewables] = useState([]);
+  const [activeViewIndex, setActiveViewIndex] = useState(-1);
+  const [selectedObject, setSelectedObject] = useState(null);
+  const [takeoff, setTakeoff] = useState(null);
+  const [reconstruction, setReconstruction] = useState(null);
+  const [reconstructing, setReconstructing] = useState(false);
+  const [designPrompt, setDesignPrompt] = useState("");
+  const [designBusy, setDesignBusy] = useState(false);
+  const [designResult, setDesignResult] = useState(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [schematicScene, setSchematicScene] = useState(null);
+  const [schematicModel, setSchematicModel] = useState(null);
+  const [active3DSource, setActive3DSource] = useState("aps");
+
+  function refreshProject3DSourceFromStorage(
+    preferredSource = null,
+    preferredScene = undefined,
+    preferredTakeoff = undefined
+  ) {
+    if (
+      !projectId ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    try {
+      const takeoff =
+        preferredTakeoff !== undefined
+          ? preferredTakeoff
+          : (() => {
+              const raw =
+                window.localStorage.getItem(
+                  `ventra:project-takeoff:${projectId}`
+                );
+              return raw
+                ? JSON.parse(raw)
+                : null;
+            })();
+
+      const storedScene =
+        preferredScene !== undefined
+          ? preferredScene
+          : (() => {
+              const raw =
+                window.localStorage.getItem(
+                  `ventra:project-schematic3d:${projectId}`
+                );
+              return raw
+                ? JSON.parse(raw)
+                : null;
+            })();
+
+      const requestedSource =
+        preferredSource ||
+        window.localStorage.getItem(
+          `ventra:project-active-3d-source:${projectId}`
+        ) ||
+        "aps";
+
+      const resolvedUrn =
+        takeoff?.aps_urn ||
+        takeoff?.apsUrn ||
+        takeoff?.urn ||
+        "";
+
+      const hasSchematic =
+        Boolean(
+          storedScene &&
+          typeof storedScene ===
+            "object" &&
+          Number.isFinite(
+            Number(
+              storedScene.width
+            )
+          ) &&
+          Number.isFinite(
+            Number(
+              storedScene.depth
+            )
+          )
+        );
+
+      const resolvedSource =
+        requestedSource ===
+          "schematic" &&
+        hasSchematic
+          ? "schematic"
+          : requestedSource ===
+              "aps" &&
+            resolvedUrn
+          ? "aps"
+          : hasSchematic
+          ? "schematic"
+          : resolvedUrn
+          ? "aps"
+          : requestedSource;
+
+      setTakeoff(takeoff);
+      setSchematicScene(
+        repairOpenPlanScene(storedScene || null)
+      );
+      setUrn(
+        String(
+          resolvedUrn || ""
+        )
+      );
+      setActive3DSource(
+        resolvedSource
+      );
+
+      if (storedScene) {
+        const baseRaw =
+          window.localStorage.getItem(
+            `ventra:project-schematic3d-base:${projectId}`
+          );
+        const baseScene =
+          baseRaw
+            ? JSON.parse(baseRaw)
+            : storedScene;
+        schematicBaseSceneRef.current =
+          baseScene;
+
+        setSchematicPreset(
+          storedScene?.variant ||
+            (storedScene?.style ===
+            "modern_luxury"
+              ? "luxury"
+              : storedScene?.style ===
+                  "warm_minimal"
+              ? "minimal"
+              : storedScene?.style ===
+                  "modern"
+              ? "modern"
+              : "classic")
+        );
+      }
+
+      console.log(
+        "[VENTRA 3D SOURCE LIVE REFRESH]",
+        {
+          requestedSource,
+          resolvedSource,
+          hasSchematic,
+          hasAps:
+            Boolean(
+              resolvedUrn
+            ),
+          assets:
+            Array.isArray(
+              storedScene?.assets
+            )
+              ? storedScene
+                  .assets.length
+              : 0,
+        }
+      );
+    } catch (error) {
+      console.error(
+        "[VENTRA 3D SOURCE LIVE REFRESH]",
+        error
+      );
+    }
+  }
+  const [schematicPreset, setSchematicPreset] = useState("classic");
+  const [schematicNavMode, setSchematicNavMode] = useState("orbit");
+
+  useEffect(() => {
+    if (
+      !projectId ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    function handle3DSourceUpdated(
+      event
+    ) {
+      const detail =
+        event?.detail || {};
+
+      if (
+        detail.projectId &&
+        detail.projectId !==
+          projectId
+      ) {
+        return;
+      }
+
+      refreshProject3DSourceFromStorage(
+        detail.source || null,
+        detail.scene,
+        detail.takeoff
+      );
+    }
+
+    function handleStorage(
+      event
+    ) {
+      if (
+        !event?.key ||
+        !event.key.includes(
+          projectId
+        )
+      ) {
+        return;
+      }
+
+      if (
+        event.key.includes(
+          "project-active-3d-source"
+        ) ||
+        event.key.includes(
+          "project-schematic3d"
+        ) ||
+        event.key.includes(
+          "project-takeoff"
+        )
+      ) {
+        refreshProject3DSourceFromStorage();
+      }
+    }
+
+    window.addEventListener(
+      "ventra:3d-source-updated",
+      handle3DSourceUpdated
+    );
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+    return () => {
+      window.removeEventListener(
+        "ventra:3d-source-updated",
+        handle3DSourceUpdated
+      );
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem(
+        `ventra:project-takeoff:${projectId}`
+      );
+
+      const takeoff = raw ? JSON.parse(raw) : null;
+      setTakeoff(takeoff);
+
+      const schematicRaw = window.localStorage.getItem(
+        `ventra:project-schematic3d:${projectId}`
+      );
+      const storedSchematic = schematicRaw ? JSON.parse(schematicRaw) : null;
+      setSchematicScene(repairOpenPlanScene(storedSchematic));
+
+      const storedBaseRaw = window.localStorage.getItem(
+        `ventra:project-schematic3d-base:${projectId}`
+      );
+      const storedBaseSchematic = storedBaseRaw ? JSON.parse(storedBaseRaw) : storedSchematic;
+      schematicBaseSceneRef.current = storedBaseSchematic || null;
+      if (!storedBaseRaw && storedSchematic) {
+        window.localStorage.setItem(
+          `ventra:project-schematic3d-base:${projectId}`,
+          JSON.stringify(storedSchematic)
+        );
+      }
+      setSchematicPreset(storedSchematic?.variant || (storedSchematic?.style === 'modern_luxury' ? 'luxury' : storedSchematic?.style === 'warm_minimal' ? 'minimal' : storedSchematic?.style === 'modern' ? 'modern' : 'classic'));
+
+      const storedActive3DSource = window.localStorage.getItem(
+        `ventra:project-active-3d-source:${projectId}`
+      );
+      const hasStoredSchematic = Boolean(
+        storedSchematic &&
+        typeof storedSchematic === "object" &&
+        Number.isFinite(Number(storedSchematic.width)) &&
+        Number.isFinite(Number(storedSchematic.depth))
+      );
+
+      const resolvedUrn =
+        takeoff?.aps_urn ||
+        takeoff?.apsUrn ||
+        takeoff?.urn ||
+        "";
+      const hasApsSource = Boolean(String(resolvedUrn || "").trim());
+
+      // Drawing Center explicitly writes the active source when the user selects
+      // a DWG/DXF/IFC/RVT or a JPG/PNG/WebP. Respect that choice. A stale saved
+      // JPG schematic must never hijack an active Autodesk/DWG session.
+      let resolvedActive3DSource = "aps";
+      if (storedActive3DSource === "schematic" && hasStoredSchematic) {
+        resolvedActive3DSource = "schematic";
+      } else if (storedActive3DSource === "aps" && hasApsSource) {
+        resolvedActive3DSource = "aps";
+      } else if (hasApsSource) {
+        resolvedActive3DSource = "aps";
+      } else if (hasStoredSchematic) {
+        resolvedActive3DSource = "schematic";
+      }
+
+      setActive3DSource(resolvedActive3DSource);
+      window.localStorage.setItem(
+        `ventra:project-active-3d-source:${projectId}`,
+        resolvedActive3DSource
+      );
+      setUrn(resolvedUrn);
+
+      if (!resolvedUrn) {
+        if (storedSchematic) {
+          setStatus("idle");
+          setMessage("AI image schematic is ready. Loading the 3D room…");
+        } else {
+          setStatus("missing");
+          setMessage(
+            "No Autodesk model or image schematic is linked yet. Open Drawings and upload/analyze a supported drawing or JPG/PNG/WebP image."
+          );
+        }
+      }
+    } catch (error) {
+      setStatus("error");
+      setMessage(error?.message || "Could not read the project model.");
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    const useSchematic = Boolean(schematicScene) && active3DSource === "schematic";
+    if ((!urn && !useSchematic) || !containerRef.current) return;
+
+    let cancelled = false;
+    let selectionHandler = null;
+
+    async function boot() {
+      try {
+        setStatus("loading");
+        setMessage(useSchematic ? "Loading AI schematic 3D…" : "Loading Autodesk model…");
+        setSelectedObject(null);
+
+        await loadViewerSdk();
+
+        if (cancelled || !containerRef.current) return;
+
+        if (viewerRef.current) {
+          viewerRef.current.finish();
+          viewerRef.current = null;
+        }
+        if (schematicRendererRef.current) {
+          schematicRendererRef.current.dispose?.();
+          schematicRendererRef.current = null;
+        }
+        if (useSchematic) {
+          console.log("[VENTRA SCHEMATIC SOURCE]", {
+            projectId,
+            active3DSource,
+            source: schematicScene?.source || null,
+            sceneType: schematicScene?.sceneType || null,
+            width: schematicScene?.width || null,
+            depth: schematicScene?.depth || null,
+            assets: Array.isArray(schematicScene?.assets) ? schematicScene.assets.length : 0,
+            renderer: "standalone-three",
+          });
+          const standalone = mountStandaloneSchematicRenderer(
+            containerRef.current,
+            schematicScene,
+            schematicCanvasRef.current
+          );
+          if (cancelled) {
+            standalone.dispose?.();
+            return;
+          }
+          schematicRendererRef.current = standalone;
+          standalone.setControlMode?.(schematicNavMode);
+          const model = standalone.model;
+          setSchematicModel(model);
+          setReconstruction(null);
+          setViewables([]);
+          setActiveViewIndex(-1);
+          setStatus("ready");
+          setMessage(
+            `AI schematic 3D ready: ${schematicScene.title || schematicScene.sceneType || "room"}. ${model.assetCount} furniture/fixture object(s). Drag to orbit and use the mouse wheel to zoom.`
+          );
+          console.log("[VENTRA JPG SCHEMATIC 3D STANDALONE]", model);
+          return;
+        }
+
+        containerRef.current.innerHTML = "";
+        await initializeViewer();
+        if (cancelled || !containerRef.current) return;
+
+        const viewer = new window.Autodesk.Viewing.GuiViewer3D(
+          containerRef.current,
+          {
+            extensions: ["Autodesk.DocumentBrowser"],
+          }
+        );
+
+        const code = viewer.start();
+
+        if (code > 0) {
+          throw new Error(`Autodesk Viewer start failed (${code}).`);
+        }
+
+        viewer.setTheme("dark-theme");
+        viewerRef.current = viewer;
+
+        const doc = await loadDocument(urn);
+
+        // React/Next dev mode can unmount and remount this Viewer while the
+        // Autodesk document request is still in flight. Never continue loading
+        // a document node into a Viewer instance that has already been finished
+        // by the effect cleanup; Autodesk then reaches an uninitialized render
+        // scene internally (the intermittent `hasModels` null error).
+        if (
+          cancelled ||
+          viewerRef.current !== viewer ||
+          !containerRef.current ||
+          !viewer?.impl
+        ) {
+          return;
+        }
+
+        documentRef.current = doc;
+
+        const available = getViewables(doc);
+        setViewables(available);
+
+        const preferredIndex = Math.max(
+          0,
+          available.findIndex((item) => item.is3D)
+        );
+
+        const preferred = available[preferredIndex];
+
+        if (!preferred) {
+          throw new Error("No viewable geometry was found in this Autodesk model.");
+        }
+
+        if (
+          cancelled ||
+          viewerRef.current !== viewer ||
+          !viewer?.impl ||
+          !preferred?.node
+        ) {
+          return;
+        }
+
+        await viewer.loadDocumentNode(doc, preferred.node, {
+          keepCurrentModels: false,
+        });
+
+        if (cancelled || viewerRef.current !== viewer || !viewer?.impl) {
+          return;
+        }
+
+        sourceModelRef.current = viewer.model;
+        viewer.fitToView();
+        setActiveViewIndex(preferredIndex);
+
+        const has3D = available.some((item) => item.is3D);
+
+        setStatus("ready");
+        setMessage(
+          has3D
+            ? "3D model ready. Select an object to inspect its properties."
+            : "This source contains 2D viewable geometry only. The Viewer is ready, but a true 3D model requires an IFC/RVT/3D source or Ventra reconstruction."
+        );
+
+        selectionHandler = async (event) => {
+          const dbId = event?.dbIdArray?.[0];
+
+          if (dbId === null || dbId === undefined) {
+            setSelectedObject(null);
+            return;
+          }
+
+          const model = viewer.model;
+
+          model.getProperties(
+            dbId,
+            (result) => {
+              const properties = Array.isArray(result?.properties)
+                ? result.properties
+                    .filter(
+                      (item) =>
+                        item?.displayValue !== null &&
+                        item?.displayValue !== undefined &&
+                        String(item.displayValue).trim() !== ""
+                    )
+                    .slice(0, 24)
+                : [];
+
+              setSelectedObject({
+                dbId,
+                name: result?.name || `Object ${dbId}`,
+                properties,
+              });
+            },
+            () =>
+              setSelectedObject({
+                dbId,
+                name: `Object ${dbId}`,
+                properties: [],
+              })
+          );
+        };
+
+        viewer.addEventListener(
+          window.Autodesk.Viewing.SELECTION_CHANGED_EVENT,
+          selectionHandler
+        );
+
+        console.log("[VENTRA MODEL VIEWER v2]", {
+          urn: Boolean(urn),
+          views: available.length,
+          has3D,
+          loadedView: preferred.name,
+          role: preferred.role,
+        });
+      } catch (error) {
+        console.error("[VENTRA MODEL VIEWER v2]", error);
+        setStatus("error");
+        setMessage(error?.message || "The project model could not be loaded.");
+      }
+    }
+
+    boot();
+
+    return () => {
+      cancelled = true;
+
+      const viewer = viewerRef.current;
+
+      if (viewer && selectionHandler && window.Autodesk?.Viewing) {
+        viewer.removeEventListener(
+          window.Autodesk.Viewing.SELECTION_CHANGED_EVENT,
+          selectionHandler
+        );
+      }
+
+      if (schematicRendererRef.current) {
+        schematicRendererRef.current.dispose?.();
+        schematicRendererRef.current = null;
+      }
+
+      if (viewer && viewerRef.current === viewer) {
+        viewer.finish();
+        viewerRef.current = null;
+      }
+
+      if (containerRef.current && !useSchematic) {
+        containerRef.current.innerHTML = "";
+      }
+    };
+  }, [urn, schematicScene, active3DSource]);
+
+  useEffect(() => {
+    if (schematicRendererRef.current) {
+      schematicRendererRef.current.setControlMode?.(schematicNavMode);
+    }
+  }, [schematicNavMode]);
+
+  function persistSchematicScene(nextScene, { preserveBase = true } = {}) {
+    if (!projectId || typeof window === "undefined" || !nextScene) return;
+    window.localStorage.setItem(
+      `ventra:project-schematic3d:${projectId}`,
+      JSON.stringify(nextScene)
+    );
+    window.localStorage.setItem(
+      `ventra:project-active-3d-source:${projectId}`,
+      'schematic'
+    );
+    if (!preserveBase) {
+      schematicBaseSceneRef.current = ventraCloneScene(nextScene);
+      window.localStorage.setItem(
+        `ventra:project-schematic3d-base:${projectId}`,
+        JSON.stringify(nextScene)
+      );
+    }
+  }
+
+  function rebuildStandaloneScene(nextScene, nextMessage = null) {
+    if (!containerRef.current) throw new Error('Schematic 3D canvas is not ready.');
+    schematicRendererRef.current?.dispose?.();
+    const standalone = mountStandaloneSchematicRenderer(
+      containerRef.current,
+      nextScene,
+      schematicCanvasRef.current
+    );
+    standalone.setControlMode?.(schematicNavMode);
+    schematicRendererRef.current = standalone;
+    setSchematicModel(standalone.model);
+    setSchematicScene(repairOpenPlanScene(nextScene));
+    setActive3DSource('schematic');
+    if (nextMessage) setMessage(nextMessage);
+    return standalone;
+  }
+
+  function runSchematicCameraAction(action) {
+    const renderer = schematicRendererRef.current;
+    if (!renderer) return;
+    if (action === 'fit') renderer.fitView?.();
+    else if (action === 'home' || action === 'iso') renderer.homeView?.();
+    else if (action === 'top') renderer.setNamedView?.('top');
+    else if (action === 'front') renderer.setNamedView?.('front');
+    else if (action === 'left') renderer.setNamedView?.('left');
+    else if (action === 'zoomIn') renderer.zoomIn?.();
+    else if (action === 'zoomOut') renderer.zoomOut?.();
+  }
+
+  function applySchematicPreset(presetId) {
+    if (
+      !schematicScene ||
+      active3DSource !== "schematic"
+    ) {
+      setMessage("Schematic presets are available when a JPG/PNG/WebP 3D scene is active.");
+      return;
+    }
+
+    try {
+      const baseScene = schematicBaseSceneRef.current || schematicScene;
+      const nextScene = {
+        ...ventraRestyleSchematicScene(baseScene, presetId),
+        projectId,
+        source: "image-ai-schematic",
+        variant: presetId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      persistSchematicScene(nextScene, { preserveBase: true });
+      const standalone = rebuildStandaloneScene(
+        nextScene,
+        `${presetId.replaceAll("_", " ")} preset applied instantly.`
+      );
+
+      setSchematicModel(standalone.model);
+      setSchematicPreset(presetId);
+      setDesignResult({
+        source: "ventra-local-preset",
+        prompt: presetId,
+        schematic: true,
+        design: { style: nextScene.style || presetId },
+      });
+    } catch (error) {
+      console.error("[VENTRA SCHEMATIC PRESET]", error);
+      setMessage(error?.message || "Could not apply the schematic preset.");
+    }
+  }
+
+  function restoreClassicSchematic() {
+    if (!schematicBaseSceneRef.current) {
+      setMessage('No base JPG schematic is saved for this project yet.');
+      return;
+    }
+    try {
+      const baseScene = ventraRestyleSchematicScene(schematicBaseSceneRef.current, 'classic');
+      const nextScene = { ...baseScene, projectId, source: 'image-ai-schematic', variant: 'classic', updatedAt: new Date().toISOString() };
+      persistSchematicScene(nextScene, { preserveBase: true });
+      rebuildStandaloneScene(nextScene, 'Classic JPG schematic restored.');
+      setDesignResult({ source: 'ventra-local-preset', prompt: 'classic', schematic: true, design: { style: 'classic' } });
+      setSchematicPreset('classic');
+    } catch (error) {
+      setMessage(error?.message || 'Could not restore the classic schematic.');
+    }
+  }
+
+  async function switchView(index) {
+    const viewer = viewerRef.current;
+    const doc = documentRef.current;
+    const target = viewables[index];
+
+    if (!viewer || !doc || !target) return;
+
+    try {
+      setStatus("loading");
+      setMessage(`Opening ${target.name}…`);
+      setSelectedObject(null);
+
+      const models = viewer.getVisibleModels?.() || [];
+      for (const model of models) {
+        try {
+          viewer.unloadModel(model);
+        } catch {}
+      }
+
+      await viewer.loadDocumentNode(doc, target.node, {
+        keepCurrentModels: false,
+      });
+
+      sourceModelRef.current = viewer.model;
+      viewer.fitToView();
+      setActiveViewIndex(index);
+      setStatus("ready");
+      setMessage(
+        target.is3D
+          ? "3D model ready. Orbit, pan, zoom and select objects."
+          : "2D Autodesk view loaded."
+      );
+    } catch (error) {
+      setStatus("error");
+      setMessage(error?.message || "Could not switch Autodesk view.");
+    }
+  }
+
+  function getFreshProjectTakeoff() {
+    if (typeof window === "undefined" || !projectId) return takeoff;
+    try {
+      const raw = window.localStorage.getItem(`ventra:project-takeoff:${projectId}`);
+      const fresh = raw ? JSON.parse(raw) : null;
+      if (fresh && typeof fresh === "object") {
+        return fresh;
+      }
+    } catch (error) {
+      console.warn("[VENTRA 3D] Could not refresh takeoff from localStorage", error);
+    }
+    return takeoff;
+  }
+
+  function reconstruct3D() {
+    const viewer = viewerRef.current;
+
+    if (schematicScene && active3DSource === "schematic") {
+      try {
+        setReconstructing(true);
+        const standalone = rebuildStandaloneScene(
+          schematicScene,
+          `Schematic 3D rebuilt with ${(schematicScene?.assets || []).length} furniture/fixture object(s).`
+        );
+        setSchematicModel(standalone.model);
+      } catch (error) {
+        setMessage(error?.message || "Schematic 3D reconstruction failed.");
+      } finally {
+        setReconstructing(false);
+      }
+      return;
+    }
+
+    const latestTakeoff = getFreshProjectTakeoff();
+
+    if (!viewer || !latestTakeoff) {
+      setMessage("The Autodesk model/takeoff is not ready.");
+      return;
+    }
+
+    try {
+      setReconstructing(true);
+
+      if (!sourceModelRef.current) {
+        sourceModelRef.current = viewer.model;
+      }
+
+      // Drawing Center can finish geometry extraction after this Viewer mounted.
+      // Always reconstruct from the newest persisted takeoff instead of stale React state.
+      setTakeoff(latestTakeoff);
+
+      const result = buildReconstructionOverlay({
+        viewer,
+        takeoff: latestTakeoff,
+        wallHeightMeters: Number(latestTakeoff?.wall_height) || 3,
+        wallThicknessMeters: 0.15,
+      });
+
+      setReconstruction({
+        ...result,
+        sourceViewIndex: activeViewIndex,
+      });
+      setDesignResult(null);
+
+      setMessage(
+        `Ventra architectural 3D ready: ${result.wallCount} verified wall segment(s) rebuilt into ${result.wallPieceCount} wall piece(s), ${result.wallOpeningCutCount} single-parent opening cut(s), doors ${result.doorCount}/${result.expectedDoorCount}, windows ${result.windowCount}/${result.expectedWindowCount}, ${result.slabCount} slab(s), ${result.storeyCount} storey(s).`
+      );
+
+      console.log("[VENTRA ARCHITECTURAL 3D v43.4 SINGLE PARENT WALL]", result);
+    } catch (error) {
+      setReconstruction(null);
+      setMessage(error?.message || "3D reconstruction failed.");
+
+      console.error("[VENTRA ARCHITECTURAL 3D v43.4 SINGLE PARENT WALL]", error);
+    } finally {
+      setReconstructing(false);
+    }
+  }
+
+  async function clear3D() {
+    const viewer = viewerRef.current;
+
+    clearReconstruction(viewer);
+
+    const viewIndex = Number.isInteger(reconstruction?.sourceViewIndex)
+      ? reconstruction.sourceViewIndex
+      : activeViewIndex;
+
+    const sourceView = viewables[viewIndex] || viewables[0] || null;
+
+    const restored = await showAutodeskSourceModel(
+      viewer,
+      documentRef.current,
+      sourceView,
+      sourceModelRef.current,
+      Boolean(reconstruction?.sourceModelUnloaded)
+    );
+
+    if (restored) {
+      sourceModelRef.current = restored;
+    }
+
+    setReconstruction(null);
+    setDesignResult(null);
+
+    setMessage("Ventra reconstruction hidden. Autodesk source sheet restored.");
+  }
+
+  async function applyDesignPrompt(promptOverride = null) {
+    const viewer = viewerRef.current;
+    const prompt = String(promptOverride ?? designPrompt).trim();
+
+    if (!prompt) {
+      setMessage("Write a design prompt first.");
+      return;
+    }
+
+    if (schematicScene && active3DSource === "schematic") {
+      try {
+        setDesignBusy(true);
+        setMessage("Ventra is applying the JPG schematic prompt locally…");
+        const requestedPreset = ventraSchematicPresetFromText(prompt);
+        const baseForEdit = ventraCloneScene(schematicBaseSceneRef.current || schematicScene) || ventraCloneScene(schematicScene);
+        const locallyEdited = ventraLocalEditSchematicScene(baseForEdit, prompt);
+        const presetToUse = requestedPreset || (locallyEdited?.style === 'modern_luxury'
+          ? 'luxury'
+          : locallyEdited?.style === 'warm_minimal'
+            ? 'minimal'
+            : locallyEdited?.style === 'facade_concept'
+              ? 'facade'
+              : 'modern');
+        const polishedScene = ventraRestyleSchematicScene(locallyEdited, presetToUse);
+        const nextScene = {
+          ...polishedScene,
+          projectId,
+          source: 'image-ai-schematic',
+          variant: presetToUse,
+          updatedAt: new Date().toISOString(),
+        };
+        persistSchematicScene(nextScene, { preserveBase: true });
+        const standalone = rebuildStandaloneScene(nextScene);
+        const model = standalone.model;
+        setDesignPrompt(prompt);
+        setDesignResult({
+          source: 'ventra-local-prompt',
+          prompt,
+          schematic: true,
+          design: {
+            style: nextScene.style || presetToUse,
+            floorFinish: nextScene.palette?.floor || 'schematic finish',
+            facadeFinish: nextScene.palette?.wall || 'schematic finish',
+          },
+        });
+        setSchematicPreset(presetToUse);
+        setMessage(`Prompt applied locally. ${model.assetCount} furniture/fixture object(s) are now in the scene.`);
+      } catch (error) {
+        setMessage(error?.message || "Could not apply the schematic 3D prompt.");
+        console.error("[VENTRA JPG SCHEMATIC PROMPT]", error);
+      } finally {
+        setDesignBusy(false);
+      }
+      return;
+    }
+
+    if (!viewer) {
+      setMessage("3D Viewer is not ready.");
+      return;
+    }
+
+    if (!reconstruction) {
+      setMessage("Reconstruct 3D before using Design Prompt.");
+      return;
+    }
+
+    try {
+      setDesignBusy(true);
+      setMessage("Ventra AI is translating the design prompt into safe 3D design actions…");
+
+      let payload = null;
+      try {
+        payload = await ventraFetchJson("/api/ai/design-3d", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt,
+            projectId,
+            context: {
+              storeyCount: reconstruction.storeyCount,
+              wallHeightMeters: reconstruction.wallHeightMeters,
+              wallThicknessMeters: reconstruction.wallThicknessMeters,
+              doorCount: reconstruction.doorCount,
+              windowCount: reconstruction.windowCount,
+            },
+          }),
+        });
+      } catch (networkError) {
+        console.warn("[VENTRA AI DESIGN MODE] API unavailable, using local safe design fallback", networkError);
+        payload = { design: ventraLocalDesignFromPrompt(prompt), source: "local-fallback" };
+      }
+      if (!payload?.design) throw new Error("The design prompt could not be interpreted.");
+
+      const visual = buildDesignOverlay({
+        viewer,
+        reconstruction,
+        design: payload.design,
+      });
+
+      const nextResult = {
+        ...visual,
+        design: payload.design,
+        source: payload.source || "design-controller",
+        prompt,
+      };
+      setDesignResult(nextResult);
+      setDesignPrompt(prompt);
+      setMessage(
+        `Design applied: ${payload.design.style || "custom"}. ${visual.floorFinishCount} floor finish layer(s), ${visual.baseboardCount} interior baseboard piece(s), ${visual.ceilingCount} ceiling layer(s), ${visual.facadeBandCount} facade accent band(s). AI design remains separate from BOQ/Estimate.`
+      );
+    } catch (error) {
+      setMessage(error?.message || "Could not apply the 3D design prompt.");
+      console.error("[VENTRA AI DESIGN MODE]", error);
+    } finally {
+      setDesignBusy(false);
+    }
+  }
+
+
+  function resetDesign() {
+    const viewer = viewerRef.current;
+    if (schematicScene && active3DSource === "schematic") {
+      setDesignResult(null);
+      setDesignPrompt("");
+      restoreClassicSchematic();
+      return;
+    }
+    clearDesignOverlay(viewer);
+    resetDesignMaterials(reconstruction);
+    viewer?.impl?.invalidate?.(true, true, true);
+    setDesignResult(null);
+    setMessage("AI design layer reset. Structural reconstruction is unchanged.");
+  }
+
+
+  async function captureCurrent3DJpeg() {
+    if (active3DSource === "schematic") {
+      const standalone = schematicRendererRef.current;
+      const canvas = schematicCanvasRef.current;
+
+      if (!standalone || !canvas) {
+        throw new Error("Schematic 3D is not ready.");
+      }
+
+      standalone.render?.();
+
+      // Capture immediately after render. preserveDrawingBuffer keeps the
+      // visible WebGL frame available for the 2D export copy.
+      const exportCanvas =
+        ventraCropCanvasToContent(
+          canvas
+        );
+
+      return {
+        blob:
+          await ventraCanvasToJpegBlob(
+            exportCanvas,
+            0.97
+          ),
+        width:
+          Math.max(
+            1,
+            exportCanvas.width
+          ),
+        height:
+          Math.max(
+            1,
+            exportCanvas.height
+          ),
+      };
+    }
+
+    const viewer = viewerRef.current;
+
+    if (viewer?.getScreenShot) {
+      const width = Math.max(1600, containerRef.current?.clientWidth || 1600);
+      const height = Math.max(900, containerRef.current?.clientHeight || 900);
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        try {
+          viewer.getScreenShot(width, height, (value) => {
+            if (!value) reject(new Error("Autodesk screenshot failed."));
+            else resolve(value);
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+
+      return {
+        blob: ventraDataUrlToBlob(dataUrl),
+        width,
+        height,
+      };
+    }
+
+    const canvas = containerRef.current?.querySelector("canvas");
+    if (!canvas) throw new Error("3D canvas is unavailable.");
+
+    const exportCanvas =
+      ventraCropCanvasToContent(
+        canvas
+      );
+
+    return {
+      blob:
+        await ventraCanvasToJpegBlob(
+          exportCanvas,
+          0.97
+        ),
+      width:
+        Math.max(
+          1,
+          exportCanvas.width
+        ),
+      height:
+        Math.max(
+          1,
+          exportCanvas.height
+        ),
+    };
+  }
+
+  async function saveCurrentViewAsJpg() {
+    try {
+      setExportBusy(true);
+      const capture = await captureCurrent3DJpeg();
+      ventraDownloadBlob(
+        capture.blob,
+        `${ventraSafeFileBase(projectId)}-3d-view.jpg`
+      );
+      setMessage("Current 3D view saved as JPG.");
+    } catch (error) {
+      console.error("[VENTRA SAVE JPG]", error);
+      setMessage(error?.message || "Could not save JPG.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  async function saveCurrentViewAsPdf() {
+    try {
+      setExportBusy(true);
+      const capture = await captureCurrent3DJpeg();
+      const jpegBytes = new Uint8Array(await capture.blob.arrayBuffer());
+      const title =
+        schematicScene?.title ||
+        takeoff?.project_name ||
+        "Ventra 3D Model";
+
+      const pdfBlob = ventraBuildSingleImagePdf(
+        jpegBytes,
+        capture.width,
+        capture.height,
+        title
+      );
+
+      ventraDownloadBlob(
+        pdfBlob,
+        `${ventraSafeFileBase(projectId)}-3d-view.pdf`
+      );
+
+      setMessage("Current 3D view saved as PDF.");
+    } catch (error) {
+      console.error("[VENTRA SAVE PDF]", error);
+      setMessage(error?.message || "Could not save PDF.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
+
+  function saveSchematicAsCad() {
+    try {
+      if (!schematicScene || active3DSource !== "schematic") {
+        setMessage(
+          "CAD export for the JPG schematic is available as metric DXF. Original DWG files remain available from Drawings."
+        );
+        return;
+      }
+
+      const dxf = ventraSceneToMetricDxf(schematicScene);
+      const blob = new Blob([dxf], {
+        type: "application/dxf;charset=utf-8",
+      });
+
+      ventraDownloadBlob(
+        blob,
+        `${ventraSafeFileBase(projectId)}-autocad-plan.dxf`
+      );
+
+      setMessage(
+        "AutoCAD-compatible metric DXF saved. Open it in AutoCAD and Save As DWG if a native DWG is required."
+      );
+    } catch (error) {
+      console.error("[VENTRA SAVE CAD]", error);
+      setMessage(error?.message || "Could not save CAD file.");
+    }
+  }
+
+  function fitModel() {
+    const viewer = viewerRef.current;
+
+    if (schematicRendererRef.current && active3DSource === 'schematic') {
+      runSchematicCameraAction('fit');
+      setMessage('Camera fitted to the JPG schematic scene.');
+      return;
+    }
+
+    if ((reconstruction?.bounds || schematicModel?.bounds)) {
+      const framed = frameReconstruction(
+        viewer,
+        reconstruction?.bounds || schematicModel?.bounds
+      );
+
+      if (framed) {
+        setMessage('Camera fitted to Ventra 3D reconstruction.');
+        return;
+      }
+    }
+
+    viewer?.fitToView?.();
+  }
+
+  function homeView() {
+    const viewer = viewerRef.current;
+
+    if (schematicRendererRef.current && active3DSource === 'schematic') {
+      runSchematicCameraAction('home');
+      return;
+    }
+
+    if ((reconstruction?.bounds || schematicModel?.bounds)) {
+      frameReconstruction(
+        viewer,
+        reconstruction?.bounds || schematicModel?.bounds
+      );
+      return;
+    }
+
+    viewer?.navigation?.setRequestHomeView?.(true);
+    viewer?.fitToView?.();
+  }
+
+  return (
+    <section className="ventra-model-panel">
+      <header className="ventra-model-header">
+        <div>
+          <span>PROJECT MODEL</span>
+          <h2>3D Model Viewer</h2>
+          <p>
+            Autodesk engineering models plus AI schematic 3D for JPG/PNG/WebP drawings.
+          </p>
+        </div>
+
+        <div className={`ventra-model-status ventra-model-status-${status}`}>
+          {status === "loading" ? "Loading" : status === "ready" ? "Ready" : status}
+        </div>
+      </header>
+
+      {schematicScene && active3DSource === "schematic" && (
+        <p role="status" style={{ padding: "12px 16px", border: "1px solid #a58a36", borderRadius: 8 }}>
+          {rasterReview?.report?.status === "analyzing"
+            ? "Image analysis is still running. The model shown here is from an earlier analysis."
+            : rasterReview?.report?.accepted === false
+              ? "The latest image analysis was rejected. This is the previously saved model. Open Drawings for the error and analysis report."
+              : schematicScene.geometryValidation?.pixelSupport !== "passed"
+                ? "This saved model predates source-image alignment checks. Analyze the image in Drawings to validate it."
+                : "Wall alignment and structural checks passed. Compare room labels, openings and completeness with the source drawing before using this schematic model."}
+        </p>
+      )}
+
+      <div className="ventra-model-toolbar">
+        <button type="button" onClick={fitModel} disabled={status !== "ready"}>
+          Fit to View
+        </button>
+        <button type="button" onClick={homeView} disabled={status !== "ready"}>
+          Home
+        </button>
+
+        <button
+          type="button"
+          onClick={reconstruct3D}
+          disabled={
+            status !== "ready" ||
+            reconstructing
+          }
+        >
+          {reconstructing
+            ? "Building 3D..."
+            : reconstruction
+              ? "Rebuild 3D"
+              : schematicScene && active3DSource === "schematic"
+                ? "Rebuild Schematic"
+                : "Reconstruct 3D"}
+        </button>
+
+        {schematicScene && active3DSource === "schematic" && (
+          <>
+            <span className="ventra-toolbar-label">JPG Presets</span>
+            <button type="button" className={schematicPreset === 'classic' ? 'is-active' : ''} onClick={restoreClassicSchematic}>Classic</button>
+            <button type="button" className={schematicPreset === 'modern' ? 'is-active' : ''} onClick={() => applySchematicPreset('modern')}>Modern</button>
+            <button type="button" className={schematicPreset === 'minimal' ? 'is-active' : ''} onClick={() => applySchematicPreset('minimal')}>Minimal</button>
+            <button type="button" className={schematicPreset === 'luxury' ? 'is-active' : ''} onClick={() => applySchematicPreset('luxury')}>Luxury</button>
+            <button type="button" className={schematicPreset === 'facade' ? 'is-active' : ''} onClick={() => applySchematicPreset('facade')}>Facade</button>
+            <span className="ventra-toolbar-label">Camera</span>
+            <button type="button" className={schematicNavMode === 'orbit' ? 'is-active' : ''} onClick={() => setSchematicNavMode('orbit')}>Orbit</button>
+            <button type="button" className={schematicNavMode === 'pan' ? 'is-active' : ''} onClick={() => setSchematicNavMode('pan')}>Pan</button>
+            <button type="button" onClick={() => runSchematicCameraAction('zoomIn')}>Zoom +</button>
+            <button type="button" onClick={() => runSchematicCameraAction('zoomOut')}>Zoom -</button>
+            <button type="button" onClick={() => runSchematicCameraAction('iso')}>ISO</button>
+            <button type="button" onClick={() => runSchematicCameraAction('front')}>Front</button>
+            <button type="button" onClick={() => runSchematicCameraAction('left')}>Left</button>
+            <button type="button" onClick={() => runSchematicCameraAction('top')}>Top</button>
+          </>
+        )}
+
+
+        <span className="ventra-toolbar-label">Export</span>
+
+        <button
+          type="button"
+          onClick={saveCurrentViewAsJpg}
+          disabled={exportBusy || status !== "ready"}
+        >
+          {exportBusy ? "Saving..." : "Save JPG"}
+        </button>
+
+        <button
+          type="button"
+          onClick={saveCurrentViewAsPdf}
+          disabled={exportBusy || status !== "ready"}
+        >
+          Save PDF
+        </button>
+
+        <button
+          type="button"
+          onClick={saveSchematicAsCad}
+          disabled={exportBusy || !schematicScene}
+          title="Exports a metric AutoCAD DXF. Native DWG requires AutoCAD/ODA conversion."
+        >
+          Save DWG / CAD
+        </button>
+
+        {reconstruction && (
+          <button
+            type="button"
+            onClick={clear3D}
+          >
+            Hide Reconstruction
+          </button>
+        )}
+
+        {viewables.length > 1 && (
+          <select
+            value={activeViewIndex}
+            onChange={(event) => switchView(Number(event.target.value))}
+          >
+            {viewables.map((item, index) => (
+              <option key={`${item.name}-${index}`} value={index}>
+                {item.is3D ? "3D" : "2D"} · {item.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {message && (
+        <div className="ventra-model-message">
+          {message}
+        </div>
+      )}
+
+      {schematicModel && schematicScene && active3DSource === "schematic" && (
+        <div className="ventra-model-reconstruction-summary">
+          <strong>AI IMAGE SCHEMATIC 3D</strong>
+          <span>{schematicScene.title || schematicScene.sceneType || "Room"}</span>
+          <span>Approx. {Number(schematicModel.width || 0).toFixed(2)} × {Number(schematicModel.depth || 0).toFixed(2)} m</span>
+          <span>Height {Number(schematicModel.height || 0).toFixed(2)} m</span>
+          <span>{schematicModel.assetCount || 0} furniture/fixture object(s)</span>
+          <span>{schematicModel.openingCount || 0} opening(s)</span>
+          <span>Mode: schematic, not engineering BOQ</span>
+        </div>
+      )}
+
+      {reconstruction && (
+        <div className="ventra-model-reconstruction-summary">
+          <strong>VENTRA RECONSTRUCTION</strong>
+          <span>
+            {reconstruction.wallCount} wall segments
+          </span>
+          <span>
+            {reconstruction.wallPieceCount || 0} wall pieces
+          </span>
+          <span>
+            {reconstruction.wallOpeningCutCount || 0} single-parent opening cuts
+          </span>
+          <span>
+            Doors {reconstruction.doorCount || 0}/{reconstruction.expectedDoorCount || 0}
+          </span>
+          <span>
+            Windows {reconstruction.windowCount || 0}/{reconstruction.expectedWindowCount || 0}
+          </span>
+          <span>
+            {reconstruction.slabCount || 0} slab(s)
+          </span>
+          <span>
+            Rejected opening objects {(reconstruction.rejectedDoorObjects || 0) + (reconstruction.rejectedWindowObjects || 0)}
+          </span>
+          {reconstruction.skippedFloorCount > 0 && (
+            <span>
+              {reconstruction.skippedFloorCount} invalid floor polygon(s) skipped
+            </span>
+          )}
+          <span>
+            Height {reconstruction.wallHeightMeters.toFixed(2)} m
+          </span>
+          <span>
+            Thickness {reconstruction.wallThicknessMeters.toFixed(2)} m
+          </span>
+          <span>
+            {reconstruction.storeyCount} storey(s)
+          </span>
+          <span>
+            Source sheet {reconstruction.sourceModelUnloaded ? "removed" : reconstruction.sourceModelHidden ? "hidden" : "visible"}
+          </span>
+          <span>
+            Storey height {Number(reconstruction.storeyHeightMeters || 0).toFixed(2)} m
+          </span>
+          <span>
+            Space {reconstruction.coordinateSpace}
+          </span>
+          <span>
+            Size {Number(reconstruction.geometryFrame?.widthMeters || 0).toFixed(2)} × {Number(reconstruction.geometryFrame?.depthMeters || 0).toFixed(2)} m
+          </span>
+          <span>
+            Wall source {reconstruction.wallLineSource}
+          </span>
+          <span>
+            Door source {reconstruction.doorSource}
+          </span>
+          <span>
+            Window source {reconstruction.windowSource}
+          </span>
+          <span>
+            Slab source provisional_convex_hull
+          </span>
+        </div>
+      )}
+
+
+      {(reconstruction || (schematicScene && active3DSource === "schematic")) && (
+        <section className="ventra-design-studio">
+          <div className="ventra-design-studio-heading">
+            <div>
+              <span>AI DESIGN STUDIO</span>
+              <h3>Interior + Facade Prompt</h3>
+              <p>
+                Prompt-edit materials and scene objects. Image schematic mode stays separate from BOQ/Estimate engineering quantities.
+              </p>
+            </div>
+            {designResult && (
+              <div className="ventra-design-source">
+                {designResult.source === "openai" ? "OpenAI" : "Safe fallback"}
+              </div>
+            )}
+          </div>
+
+          <textarea
+            value={designPrompt}
+            onChange={(event) => setDesignPrompt(event.target.value)}
+            placeholder="Example: Modern luxury interior with warm off-white walls, beige marble floors, dark walnut doors and a contemporary beige stone facade with black accents."
+            rows={4}
+          />
+
+          <div className="ventra-design-actions">
+            <button
+              type="button"
+              onClick={() => applyDesignPrompt()}
+              disabled={designBusy}
+            >
+              {designBusy ? "Designing…" : "Apply Prompt"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("modern") : applyDesignPrompt("Modern interior with clean neutral walls, stone-look floor, contemporary furniture and dark metal accents.")}
+              disabled={designBusy}
+            >
+              Modern
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("minimal") : applyDesignPrompt("Warm minimal interior, light greige walls, natural oak floor, warm wood doors and simple neutral finishes.")}
+              disabled={designBusy}
+            >
+              Minimal
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("luxury") : applyDesignPrompt("Modern luxury interior, warm ivory walls, beige marble floor, walnut doors and refined bronze accents.")}
+              disabled={designBusy}
+            >
+              Luxury
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("facade") : applyDesignPrompt("Contemporary exterior facade with light limestone, charcoal accents, dark doors and blue-grey glass.")}
+              disabled={designBusy}
+            >
+              Facade
+            </button>
+            {designResult && (
+              <button type="button" className="danger" onClick={resetDesign}>
+                Reset Design
+              </button>
+            )}
+          </div>
+
+          {designResult?.design && (
+            <div className="ventra-design-summary">
+              <strong>{designResult.design.style || "Custom design"}</strong>
+              <span>Floor: {designResult.design.floorFinish || "design finish"}</span>
+              <span>Facade: {designResult.design.facadeFinish || "design finish"}</span>
+              <span>BOQ impact: none</span>
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="ventra-model-layout">
+        <div className="ventra-model-canvas-shell">
+          {!urn && !schematicScene && status === "missing" ? (
+            <div className="ventra-model-empty">
+              <strong>No APS model available</strong>
+              <p>
+                Open Drawings and analyze a DWG/DXF/IFC/RVT engineering file, or upload a JPG/PNG/WebP image for AI schematic 3D.
+              </p>
+            </div>
+          ) : (
+            <div ref={containerRef} className="ventra-model-canvas">
+              {schematicScene && active3DSource === "schematic" && (
+                <>
+                  <canvas
+                    ref={schematicCanvasRef}
+                    aria-label="Ventra schematic 3D canvas"
+                    style={{ width: "100%", height: "100%", display: "block" }}
+                  />
+                  <div className="ventra-schematic-overlay-controls">
+                    <button type="button" className={schematicNavMode === 'orbit' ? 'is-active' : ''} onClick={() => setSchematicNavMode('orbit')}>Orbit</button>
+                    <button type="button" className={schematicNavMode === 'pan' ? 'is-active' : ''} onClick={() => setSchematicNavMode('pan')}>Pan</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('zoomIn')}>+</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('zoomOut')}>-</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('iso')}>Iso</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('top')}>Top</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('front')}>Front</button>
+                    <button type="button" onClick={() => runSchematicCameraAction('left')}>Left</button>
+                    <button type="button" onClick={fitModel}>Fit</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <aside className="ventra-model-inspector">
+          {schematicScene && active3DSource === "schematic" ? (
+            <>
+              <span>SCHEMATIC INSPECTOR</span>
+              <h3>{schematicScene.title || "JPG Schematic 3D"}</h3>
+              <p>Standalone Three.js visualization. This mode is separate from Autodesk engineering quantities.</p>
+              <div className="ventra-model-properties">
+                <div><small>Style</small><strong>{schematicPreset || schematicScene.style || "classic"}</strong></div>
+                <div><small>Room size</small><strong>{Number(schematicModel?.width || 0).toFixed(2)} × {Number(schematicModel?.depth || 0).toFixed(2)} m</strong></div>
+                <div><small>Height</small><strong>{Number(schematicModel?.height || 0).toFixed(2)} m</strong></div>
+                <div><small>Furniture / fixtures</small><strong>{schematicModel?.assetCount || 0}</strong></div>
+                <div><small>Openings</small><strong>{schematicModel?.openingCount || 0}</strong></div>
+                <div><small>Camera</small><strong>{schematicNavMode === "pan" ? "Pan" : "Orbit"}</strong></div>
+              </div>
+            </>
+          ) : selectedObject ? (
+            <>
+              <span>OBJECT INSPECTOR</span>
+              <h3>{selectedObject.name}</h3>
+              <p>dbId: {selectedObject.dbId}</p>
+
+              <div className="ventra-model-properties">
+                {selectedObject.properties.length > 0 ? (
+                  selectedObject.properties.map((property, index) => (
+                    <div key={`${property.displayName}-${index}`}>
+                      <small>{property.displayName || property.attributeName}</small>
+                      <strong>{String(property.displayValue)}</strong>
+                    </div>
+                  ))
+                ) : (
+                  <p>No displayable properties were returned for this object.</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span>OBJECT INSPECTOR</span>
+              <p>Select an object in the Viewer to inspect its Autodesk properties.</p>
+            </>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}

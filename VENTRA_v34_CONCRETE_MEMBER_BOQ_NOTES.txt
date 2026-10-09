@@ -1,0 +1,29 @@
+Ventra v34 - Concrete Member BOQ Restructure
+
+Current verified structural data:
+- Columns: 16/16 complete
+- Column concrete volume: 4.21 m3
+- Column formwork: 17.02 m2
+- Beam/Foundation/Slab concrete volume: not measured in this drawing
+
+Problem:
+Legacy Concrete Works rows such as C25 and C30 are grade-based but do not say
+which structural member they belong to. Assigning 4.21 m3 to C25 or C30 would
+be a guess.
+
+v34:
+- Adds member-specific measured concrete rows when APS verifies member volume.
+- Current project will add:
+  Reinforced concrete to columns - concrete grade/rate to be confirmed
+  Quantity: 4.21 m3
+  Status: measured_rate_pending
+  Commercial total: excluded until grade/rate is confirmed.
+- Does not invent a concrete grade or rate.
+- Existing C25/C30 rows remain provisional legacy scope.
+- Beam/slab/foundation member rows appear only when APS measures their volumes.
+- Existing measured column formwork 17.02 m2 remains unchanged.
+- Diagnostic:
+  [VENTRA CONCRETE MEMBER BOQ v34]
+
+This is intentionally fail-closed: measured geometry is authoritative; material
+grade and commercial pricing require actual evidence or a deliberate selection.

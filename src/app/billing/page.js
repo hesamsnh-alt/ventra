@@ -1,0 +1,1 @@
+import WorkspacePage from "../components/WorkspacePage";import BillingClient from "./BillingClient";export default function Page(){return <WorkspacePage title="Billing & subscription"><BillingClient/></WorkspacePage>}

@@ -1,10 +1,8 @@
-import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
+import LanguageProvider from "./components/i18n/LanguageProvider";
+import VentraHelper from "./components/help/VentraHelper";
+import {cookies} from "next/headers";
+import {normalizeLanguage,languageDirection} from "@/lib/i18n/translate.mjs";
 
 export const metadata = {
   title: "Ventra | AI Construction Estimation Platform",
@@ -12,10 +10,11 @@ export const metadata = {
     "AI-powered construction estimation, BOQ and quotation platform.",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const language=normalizeLanguage((await cookies()).get('ventra-language')?.value);
   return (
-    <html lang="en">
-      <body className={jakarta.className}>{children}</body>
+    <html lang={language} dir={languageDirection(language)} data-scroll-behavior="smooth">
+      <body><LanguageProvider initialLanguage={language}>{children}<VentraHelper /></LanguageProvider></body>
     </html>
   );
 }

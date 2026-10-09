@@ -1,97 +1,13 @@
-import {
-  CalendarClock,
-  CircleUserRound,
-  FileEdit,
-  Image,
-  CheckCircle2,
-} from "lucide-react";
+"use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
+import { useEffect, useState } from "react";
+import {planProgress} from "@/lib/boqSchedule.mjs";
+import { listWorkspaceRecords } from "@/services/workspaceRecordsService";
 import "./ProjectActivity.css";
-
-const activities = [
-  {
-    id: 1,
-    user: "Ahmed Al Mansoori",
-    action: "Approved today's daily report",
-    time: "10 minutes ago",
-    icon: CheckCircle2,
-  },
-  {
-    id: 2,
-    user: "Reza Karimi",
-    action: "Uploaded 6 site photos",
-    time: "45 minutes ago",
-    icon: Image,
-  },
-  {
-    id: 3,
-    user: "Ahmed Al Mansoori",
-    action: "Updated project schedule",
-    time: "1 hour ago",
-    icon: CalendarClock,
-  },
-  {
-    id: 4,
-    user: "Reza Karimi",
-    action: "Edited concrete quantity",
-    time: "Yesterday",
-    icon: FileEdit,
-  },
-];
-
-export default function ProjectActivity() {
-  return (
-    <section className="activity-panel">
-
-      <div className="activity-header">
-
-        <div>
-
-          <span>ACTIVITY LOG</span>
-
-          <h2>Recent Activity</h2>
-
-        </div>
-
-      </div>
-
-      <div className="activity-list">
-
-        {activities.map((activity) => {
-
-          const Icon = activity.icon;
-
-          return (
-
-            <div
-              className="activity-item"
-              key={activity.id}
-            >
-
-              <div className="activity-icon">
-
-                <Icon size={18} />
-
-              </div>
-
-              <div className="activity-content">
-
-                <strong>{activity.user}</strong>
-
-                <p>{activity.action}</p>
-
-                <span>{activity.time}</span>
-
-              </div>
-
-            </div>
-
-          );
-
-        })}
-
-      </div>
-
-    </section>
-  );
+export default function ProjectActivity({ projectId }) {
+ const [data,setData]=useState({tasks:[],schedule:[],reports:[],activity:[],progress:{}}),[error,setError]=useState(""),[loading,setLoading]=useState(true);
+ useEffect(()=>{listWorkspaceRecords(projectId).then(r=>{setData(r);setError(r.error?.message||"");setLoading(false);});},[projectId]);
+ const schedule=data.plan?planProgress(data.plan):null;
+ return <LocalizedElement as="section" className="activity-panel"><LocalizedElement as="h2">Workspace activity</LocalizedElement>{loading&&<LocalizedElement as="p">Loading shared activity…</LocalizedElement>}{error&&<LocalizedElement as="p" role="alert">{error}</LocalizedElement>}<LocalizedElement as="p">Shared records: {data.tasks.length} tasks · {data.plan?.activities?.length||0} scheduled activities · {data.reports.length} daily reports.</LocalizedElement><LocalizedElement as="p">Calculated progress: tasks {data.progress.task_progress ?? "—"}% · BOQ schedule {schedule?.percent ?? "—"}% (planned crew effort).</LocalizedElement><LocalizedElement as="div">{data.activity.map(item=><LocalizedElement as="p" key={item.id}><LocalizedElement as="strong">{item.action}</LocalizedElement> · {item.entity} · {new Date(item.created_at).toLocaleString("en-AE")}</LocalizedElement>)}</LocalizedElement></LocalizedElement>;
 }

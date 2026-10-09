@@ -1,0 +1,28 @@
+VENTRA V24 - JPG / PDF / CAD EXPORT TOOLBAR
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Added toolbar buttons:
+- Save JPG
+- Save PDF
+- Save DWG / CAD
+
+Behavior:
+- JPG saves the current camera view at high quality.
+- PDF creates a real one-page PDF containing the current 3D view.
+- JPG schematic CAD export generates a metric AutoCAD DXF with room boundaries,
+  walls and door/window openings.
+- Native binary DWG is NOT faked in the browser. DXF opens directly in AutoCAD
+  and can be saved as DWG. Original uploaded DWG remains available from Drawings.
+
+No changes to:
+- Analyze
+- BOQ / Estimate / Quotation
+- JPG persistence
+- source switching
+- APS reconstruction
+- route.js
+
+Install:
+Replace only Project3DViewer.jsx, clear .next, restart dev server.

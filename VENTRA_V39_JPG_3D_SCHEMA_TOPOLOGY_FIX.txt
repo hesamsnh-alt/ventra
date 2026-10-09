@@ -1,0 +1,29 @@
+VENTRA V39 - JPG/PNG/WebP 3D schema + topology safety patch
+Date: 2026-09-13
+Authoritative base: ventra(20260913-102936).zip
+
+Changed file:
+- src/app/api/ai/design-3d/route.js
+
+Fixes:
+1. OpenAI strict structured-output schema now declares and requires footprint + holes.
+   This fixes the 400 Invalid schema error where required did not contain footprint.
+2. schematic_edit schema also carries footprint + holes, preventing edit responses from
+   silently dropping the floor plate / real void topology.
+3. Vision footprint is now actually consumed, converted to metres, and passed through
+   Ventra's existing footprint sanitizer. Invalid footprints still fall back to the
+   external-wall loop / room hull / plan bounds.
+4. Holes are conservative: only explicit holes fully inside the validated footprint and
+   outside detected rooms survive. This prevents fabricated black voids through rooms.
+5. Removed invented fallback furniture/fixtures from the image reconstruction path.
+   Only assets detected from the actual plan are retained, and existing room-locking keeps
+   them inside valid rooms.
+6. DWG/DXF/IFC/RVT engineering path was not modified. Viewer, Drawing Center, BOQ,
+   Estimate, Quotation, Supabase/Auth, APS, Takeoff, Geometry Extractor, Dashboard,
+   persistence/export/source switching were not modified.
+
+Validation performed:
+- node --check src/app/api/ai/design-3d/route.js : PASS
+- targeted static assertions for schema/footprint/asset changes : PASS
+- full npm dependency install/lint could not be completed in the sandbox because npm ci
+  exceeded the execution transport window; no dependency or lockfile changes were kept.

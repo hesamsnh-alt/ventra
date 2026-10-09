@@ -1,0 +1,25 @@
+VENTRA V16.1 CUMULATIVE ROUTE-SAFE PATCH
+
+Fixes:
+GET /projects/<id> 404 after V16 replacement.
+
+Why it happened:
+The V16 patch only contained two files. If the [id] folder was replaced instead
+of copying the files into the existing folder, page.js disappeared and Next.js
+lost the /projects/[id] route.
+
+This cumulative patch includes:
+- src/app/projects/[id]/page.js
+- src/app/projects/[id]/Project3DViewer.jsx
+- src/app/api/ai/design-3d/route.js
+
+It keeps the V16 room-locked generic JPG floorplan engine.
+
+Install:
+1. Copy the files into the exact existing paths. Do NOT delete the whole [id] folder.
+2. Ctrl + C
+3. Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+4. npm run dev
+
+Expected:
+GET /projects/<project-id> 200

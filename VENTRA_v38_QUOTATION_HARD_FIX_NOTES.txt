@@ -1,0 +1,26 @@
+Ventra v38 - Quotation Hard Fix
+
+Problems fixed:
+1. Refresh button appeared to do nothing.
+2. Save Draft had no verifiable visible feedback.
+3. Generate PDF opened an about:blank white tab.
+
+v38:
+- Refresh re-reads the exact Estimate localStorage record and shows:
+  build quality, AED/m2 benchmark, final estimate, estimate timestamp.
+- Every action shows a visible status + last-action time.
+- Save Draft writes the quotation and immediately reads it back to verify.
+- Generate PDF no longer uses window.open or a popup.
+- Generate PDF saves the exact quotation snapshot, then calls window.print()
+  on the current quotation page.
+- Print CSS hides the rest of the app and prints only the quotation panel.
+- In Chrome/Edge choose "Save as PDF" in the normal print dialog.
+- No OpenAI/API call.
+- Console markers:
+  [VENTRA QUOTATION REFRESH v38]
+  [VENTRA QUOTATION SAVE v38]
+  [VENTRA QUOTATION PDF v38]
+
+Expected Luxury+ test:
+Quotation should load the latest saved Estimate around AED 1.188M when the
+Estimate page is saved at 7,500 AED/m2.

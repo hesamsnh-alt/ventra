@@ -654,7 +654,7 @@ section {
   }
 
   .header-buttons {
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   .dashboard-preview {
@@ -776,3 +776,10 @@ section {
     box-shadow:0 0 30px rgba(255,212,0,.15);
 
 }
+.ventra-language-switch{position:fixed;bottom:18px;inset-inline-start:18px;z-index:10000;display:flex;align-items:center;gap:8px;background:#111827;color:#fff;border:1px solid #475569;border-radius:10px;padding:8px 12px;box-shadow:0 4px 16px #0005;font-size:13px}
+.ventra-language-switch select{background:#111827;color:white;border:0;padding:4px;cursor:pointer}
+html[dir="rtl"] body{font-family:Tahoma,Arial,sans-serif}
+html[dir="rtl"] input,html[dir="rtl"] textarea{text-align:start}
+html[dir="rtl"] .boq-table,html[dir="rtl"] .estimate-table,html[dir="rtl"] .schedule-table-wrap table{text-align:start}
+html[dir="rtl"] canvas,html[dir="rtl"] .aps-viewer,html[dir="rtl"] .raster-review-svg{direction:ltr}
+@media print{.ventra-language-switch{display:none!important}}

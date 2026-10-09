@@ -1,0 +1,14 @@
+Ventra 3D Model v1.1
+
+Fix:
+The installed Autodesk Viewer runtime does not expose
+Autodesk.Viewing.Document.getSubItemsWithProperties.
+
+View enumeration now uses:
+1. root.search({ type: "geometry" })
+2. recursive Viewable Tree traversal fallback
+3. root.getDefaultGeometry() final fallback
+
+No other 3D Viewer behavior changed.
+Expected marker:
+[VENTRA MODEL VIEWER v1.1]

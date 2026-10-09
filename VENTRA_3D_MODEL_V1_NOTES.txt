@@ -1,0 +1,25 @@
+Ventra 3D Model v1
+
+Added a new project workspace tab: 3D Model.
+
+What it does:
+- Reads the project's APS URN from the latest saved takeoff.
+- Loads Autodesk Viewer without rerunning takeoff/AI analysis.
+- Enumerates all Autodesk geometry views.
+- Automatically prefers a real 3D view when the source contains one.
+- Supports Autodesk orbit/pan/zoom/navigation.
+- Fit to View and Home controls.
+- View selector when multiple 2D/3D views exist.
+- Object selection and property inspector (dbId + Autodesk properties).
+- Proper viewer cleanup when leaving the tab, reducing leaked viewer instances.
+- No OpenAI call.
+
+Important:
+A 2D DWG does not magically contain a true 3D building. For the current 2D
+source, the tab will show the Autodesk 2D view and explicitly say that true 3D
+requires either:
+1) IFC/RVT/another source containing 3D geometry, or
+2) Ventra's next reconstruction stage, which will build 3D walls/slabs/openings
+   from verified 2D geometry.
+
+This is intentionally the foundation before automatic 2D -> 3D reconstruction.

@@ -1,0 +1,25 @@
+VENTRA V24.3 BLACK JPG/PDF EXPORT FIX
+
+Exact issue fixed:
+- JPG/PDF export contained a fully black image even though the live 3D viewer was visible.
+
+Root causes:
+1. Standalone WebGLRenderer did not preserve the drawing buffer.
+2. Crop code tried to read a 2D context directly from an existing WebGL canvas.
+
+Fix:
+- WebGLRenderer now uses preserveDrawingBuffer: true.
+- Export renders the current view and immediately copies the WebGL canvas into a temporary 2D canvas.
+- Crop and JPEG/PDF creation use that readable 2D copy.
+- CAD/DXF export is unchanged.
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+After replacing:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Expected browser log after Save JPG/PDF:
+[VENTRA EXPORT CAPTURE v24.2]

@@ -1,0 +1,37 @@
+Ventra v37 - Quotation Final Wiring
+
+Fixes all three previously non-functional quotation actions:
+
+1. Refresh Estimate
+- Re-reads ventra:project-estimate:<projectId> from localStorage.
+- Forces fresh React state.
+- Shows the loaded final tender amount.
+- Displays build quality, AED/m2 benchmark and estimate timestamp.
+- Logs [VENTRA QUOTATION REFRESH v37].
+
+2. Save Draft Quotation
+- Persists the complete commercial snapshot.
+- Includes estimate quality, benchmark, measured/provisional/missing scope,
+  VAT, expected range and estimate timestamp.
+- Loads saved client/terms/exclusions on return.
+- Shows success/error message.
+- Logs [VENTRA QUOTATION SAVE v37].
+
+3. Generate PDF
+- Button is no longer disabled.
+- Saves the exact quotation snapshot first.
+- Opens a clean A4 quotation document in a new browser tab and automatically
+  opens the browser print dialog.
+- Choose "Save as PDF" in Chrome/Edge to create the PDF.
+- Includes client, validity, build quality, benchmark, estimate breakdown,
+  final quotation, range, payment terms and exclusions.
+- Shows popup-blocker errors on screen.
+- Logs [VENTRA QUOTATION PDF v37].
+
+No OpenAI/API call is used.
+
+Important:
+Quotation reads the latest SAVED Estimate. After changing build quality or
+benchmark on Estimate, wait for the Estimate screen to update, then use
+Refresh Estimate on Quotation. The loaded quality/benchmark/timestamp are now
+visible, making stale-data problems obvious.

@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Workflow.css";
 import {
   Upload,
@@ -21,23 +23,23 @@ const steps = [
   },
   {
     icon: DollarSign,
-    title: "Live UAE Cost Database",
-    text: "Materials, Labour & Equipment",
+    title: "Review Cost Rates",
+    text: "Confirm rates, scope and allowances",
   },
   {
     icon: FileText,
-    title: "AI Quotation Builder",
-    text: "Generate branded quotations instantly",
+    title: "Branded Quotation Builder",
+    text: "Edit items, review totals and export PDF",
   },
   {
     icon: CalendarRange,
-    title: "AI Project Planning",
+    title: "BOQ-Based Project Planning",
     text: "Timeline, Activities & Dependencies",
   },
   {
     icon: Calculator,
-    title: "Construction Monitoring",
-    text: "Progress, Payments & Delay Risk",
+    title: "Reported Project Progress",
+    text: "Checklists, milestones and delays",
   },
   {
     icon: LayoutDashboard,
@@ -47,30 +49,30 @@ const steps = [
 ];
 export default function Workflow() {
   return (
-    <section className="workflow" id="workflow">
-      <div className="workflow-bg"></div>
+    <LocalizedElement as="section" className="workflow" id="workflow">
+      <LocalizedElement as="div" className="workflow-bg"></LocalizedElement>
 
-      <div className="workflow-header">
+      <LocalizedElement as="div" className="workflow-header">
 
-        <span className="workflow-tag">
+        <LocalizedElement as="span" className="workflow-tag">
           AI WORKFLOW
-        </span>
+        </LocalizedElement>
 
-        <h2>
-Everything Your Project Needs.
-<span> Powered by AI.</span>
-</h2>
+        <LocalizedElement as="h2">
+From Scope to Proposal.
+<LocalizedElement as="span"> Supported by Your Review.</LocalizedElement>
+</LocalizedElement>
 
-<p>
+<LocalizedElement as="p">
 Upload drawings, generate BOQs, estimate UAE costs,
 create quotations, plan activities,
 track progress and monitor payments
 inside one intelligent platform.
-</p>
+</LocalizedElement>
 
-      </div>
+      </LocalizedElement>
 
-      <div className="workflow-grid">
+      <LocalizedElement as="div" className="workflow-grid">
 
         {steps.map((step, index) => {
 
@@ -78,42 +80,42 @@ inside one intelligent platform.
 
           return (
 
-            <div
+            <LocalizedElement as="div"
               className="workflow-card"
               key={step.title}
             >
 
-              <div className="workflow-number">
+              <LocalizedElement as="div" className="workflow-number">
 
                 {String(index + 1).padStart(2, "0")}
 
-              </div>
+              </LocalizedElement>
 
-              <div className="workflow-icon">
+              <LocalizedElement as="div" className="workflow-icon">
 
                 <Icon size={28} />
 
-              </div>
+              </LocalizedElement>
 
-              <h3>
+              <LocalizedElement as="h3">
 
                 {step.title}
 
-              </h3>
+              </LocalizedElement>
 
-              <p>
+              <LocalizedElement as="p">
 
                 {step.text}
 
-              </p>
+              </LocalizedElement>
 
-            </div>
+            </LocalizedElement>
 
           );
 
         })}
 
-      </div>
-    </section>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

@@ -1,0 +1,14 @@
+VENTRA JPG PLAN MATCH V14
+
+What changed:
+- Replaced the old loose apartment fallback with a hard-coded exact match for the uploaded 2-bedroom plan.
+- Added a real corridor/circulation zone.
+- Corrected living room size from 4.2 x 4.7 zone.
+- Repositioned kitchen, dining, bath fixtures, wardrobes, TV wall, and doors to better match the 2D source plan.
+- This is still a schematic model, not automatic true BIM extraction.
+
+Replace file:
+- src/app/api/ai/design-3d/route.js
+
+Optional keep from V13:
+- src/app/projects/[id]/Project3DViewer.jsx (for visible floors/material contrast)

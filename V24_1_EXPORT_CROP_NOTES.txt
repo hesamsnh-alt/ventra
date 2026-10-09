@@ -1,0 +1,26 @@
+VENTRA V24.1 EXPORT CROP FIX
+
+Fix:
+- JPG/PDF exports no longer save a huge dark/black empty canvas around the 3D model.
+- Export automatically detects the visible model bounds inside the 3D canvas.
+- Adds a small clean margin around the model.
+- PDF remains one landscape page and now receives the cropped image.
+- CAD/DXF export is unchanged.
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+No changes to:
+- Analyze
+- route.js
+- schematic save/persistence
+- BOQ / Estimate / Quotation
+- APS / DWG source handling
+
+After replacement:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Expected browser log when saving:
+[VENTRA EXPORT CROP v24.1]

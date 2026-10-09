@@ -1,0 +1,20 @@
+Ventra v42.1 - Legacy Takeoff Reconstruction Compatibility
+
+Problem:
+The existing project takeoff was generated before v42 started persisting
+geometry.wallLineSegments, so Reconstruct 3D requested a new Analyze Drawing run.
+
+Fix:
+- If wallLineSegments exists, use it.
+- Otherwise reuse the already saved geometry.lineSegments.
+- Filter those segments using the already verified wall dbIds from
+  object_details.walls / advanced_takeoff.object_details.walls.
+- This preserves the rule that only verified wall objects are extruded.
+- A new full analysis is only required if neither the wall dbIds nor line
+  geometry exist in the old saved takeoff.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.1]
+
+Expected source for the current older takeoff:
+legacy_line_segments_plus_verified_wall_dbids

@@ -1,0 +1,26 @@
+VENTRA 3D QUALITY PATCH (best-effort stable patch)
+Date: 2026-09-05
+
+Files changed:
+- src/app/api/ai/design-3d/route.js
+- src/app/projects/[id]/Project3DViewer.jsx
+
+What was fixed/improved:
+1) JPG schematic room furniture completion is now stronger and more room-aware.
+   - Better fallback placement by room label (roomHint) if symbol centers are slightly off.
+   - Conservative residential completeness for bedrooms, living rooms, dining rooms,
+     kitchens, laundry/service rooms, and entrance/corridor areas.
+   - Bathroom completeness remains active.
+
+2) 3D readability and quality improved.
+   - Added dedicated schematic lighting for clearer materials and depth.
+   - Improved door visualization: jambs, threshold, leaf, handle, swing arc, closed-door line.
+   - Slightly higher standalone renderer pixel ratio.
+
+3) Stability.
+   - Added safer overlay creation guard in Design Overlay to reduce viewer-side runtime crashes.
+
+Important note:
+- This patch improves the procedural 3D furniture/layout system that exists in the zip.
+- There were NO GLB furniture assets inside the provided zip, so furniture is still rendered procedurally,
+  not from an external high-poly model library.

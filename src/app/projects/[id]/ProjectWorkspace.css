@@ -332,7 +332,7 @@
 
 .daily-update-list {
   margin: 0;
-  padding-left: 19px;
+  padding-inline-start: 19px;
 
   color: #a0a0a0;
 
@@ -507,4 +507,52 @@
   .project-delete-button {
     width: 100%;
   }
+}.project-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  margin: 24px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  scrollbar-width: thin;
+}
+
+.project-tab {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #9ca3af;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.project-tab:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.project-tab-active {
+  color: #0b0f19;
+  background: #facc15;
+  border-color: #facc15;
+}
+
+.project-tab-active:hover {
+  color: #0b0f19;
+  background: #fde047;
+}
+
+.project-content-stack {
+  min-height: 300px;
 }

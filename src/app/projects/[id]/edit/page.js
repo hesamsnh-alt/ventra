@@ -1,4 +1,8 @@
 "use client";
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -12,28 +16,33 @@ import {
 } from "lucide-react";
 
 import {
-  fetchProjectById,
+  getProjectById,
   updateProject,
 } from "@/services/projectService";
 
 import "./EditProject.css";
 
+const initialForm = {
+  name: "",
+  client_name: "",
+  location: "",
+  budget: "",
+  start_date: "",
+  end_date: "",
+  status: "planning",
+  progress: 0,
+};
+
 export default function EditProjectPage() {
   const params = useParams();
   const router = useRouter();
 
-  const projectId = params?.id;
+  const projectId = Array.isArray(params?.id)
+    ? params.id[0]
+    : params?.id;
 
-  const [form, setForm] = useState({
-    name: "",
-    client: "",
-    location: "",
-    budget: "",
-    start_date: "",
-    deadline: "",
-    status: "Planning",
-    progress: 0,
-  });
+  const [form, setForm] =
+    useState(initialForm);
 
   const [loading, setLoading] =
     useState(true);
@@ -41,14 +50,23 @@ export default function EditProjectPage() {
   const [saving, setSaving] =
     useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadProject() {
       if (!projectId) {
+        if (isMounted) {
+          setLoading(false);
+          setErrorMessage(
+            "Project ID is missing."
+          );
+        }
+
         return;
       }
 
@@ -59,7 +77,7 @@ export default function EditProjectPage() {
         const {
           project,
           error,
-        } = await fetchProjectById(
+        } = await getProjectById(
           projectId
         );
 
@@ -69,8 +87,10 @@ export default function EditProjectPage() {
 
         if (error || !project) {
           setErrorMessage(
-            error?.message ||
-              "Project could not be found."
+            error?.code === "PGRST116"
+              ? "Project could not be found."
+              : error?.message ||
+                  "Project could not be found."
           );
 
           return;
@@ -78,17 +98,25 @@ export default function EditProjectPage() {
 
         setForm({
           name: project.name || "",
-          client: project.client || "",
+
+          client_name:
+            project.client_name || "",
+
           location:
             project.location || "",
+
           budget:
             project.budget ?? "",
+
           start_date:
             project.start_date || "",
-          deadline:
-            project.deadline || "",
+
+          end_date:
+            project.end_date || "",
+
           status:
-            project.status || "Planning",
+            project.status || "planning",
+
           progress:
             project.progress ?? 0,
         });
@@ -122,10 +150,24 @@ export default function EditProjectPage() {
       ...currentForm,
       [field]: value,
     }));
+
+    if (errorMessage) {
+      setErrorMessage("");
+    }
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    setErrorMessage("");
+
+    if (!projectId) {
+      setErrorMessage(
+        "Project ID is missing."
+      );
+
+      return;
+    }
 
     if (!form.name.trim()) {
       setErrorMessage(
@@ -135,37 +177,73 @@ export default function EditProjectPage() {
       return;
     }
 
+    const budgetNumber =
+      form.budget === ""
+        ? 0
+        : Number(form.budget);
+
+    const progressNumber =
+      Number(form.progress);
+
+    if (
+      Number.isNaN(budgetNumber) ||
+      budgetNumber < 0
+    ) {
+      setErrorMessage(
+        "Budget must be a valid positive number."
+      );
+
+      return;
+    }
+
+    if (
+      Number.isNaN(progressNumber) ||
+      progressNumber < 0 ||
+      progressNumber > 100
+    ) {
+      setErrorMessage(
+        "Progress must be between 0 and 100."
+      );
+
+      return;
+    }
+
+    if (
+      form.start_date &&
+      form.end_date &&
+      form.end_date < form.start_date
+    ) {
+      setErrorMessage(
+        "End date cannot be earlier than start date."
+      );
+
+      return;
+    }
+
     try {
       setSaving(true);
-      setErrorMessage("");
 
       const updates = {
         name: form.name.trim(),
 
-        client:
-          form.client.trim() || null,
+        client_name:
+          form.client_name.trim() ||
+          null,
 
         location:
           form.location.trim() || null,
 
-        budget:
-          Number(form.budget) || 0,
+        budget: budgetNumber,
 
         start_date:
           form.start_date || null,
 
-        deadline:
-          form.deadline || null,
+        end_date:
+          form.end_date || null,
 
         status: form.status,
 
-        progress: Math.min(
-          100,
-          Math.max(
-            0,
-            Number(form.progress) || 0
-          )
-        ),
+        progress: progressNumber,
       };
 
       const {
@@ -206,49 +284,49 @@ export default function EditProjectPage() {
 
   if (loading) {
     return (
-      <main className="vt-edit-page">
-        <div className="vt-edit-loading">
-          <div className="vt-edit-spinner" />
+      <LocalizedElement as="main" className="vt-edit-page">
+        <LocalizedElement as="div" className="vt-edit-loading">
+          <LocalizedElement as="div" className="vt-edit-spinner" />
 
-          <p>Loading project...</p>
-        </div>
-      </main>
+          <LocalizedElement as="p">Loading project...</LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
     );
   }
 
   return (
-    <main className="vt-edit-page">
-      <section className="vt-edit-card">
-        <Link
+    <LocalizedElement as="main" className="vt-edit-page">
+      <LocalizedElement as="section" className="vt-edit-card">
+        <LocalizedLink 
           href={`/projects/${projectId}`}
           className="vt-edit-back"
         >
           <ArrowLeft size={18} />
           Back to Project
-        </Link>
+        </LocalizedLink>
 
-        <header className="vt-edit-header">
-          <span className="vt-edit-badge">
+        <LocalizedElement as="header" className="vt-edit-header">
+          <LocalizedElement as="span" className="vt-edit-badge">
             Project settings
-          </span>
+          </LocalizedElement>
 
-          <h1>Edit Project</h1>
+          <LocalizedElement as="h1">Edit Project</LocalizedElement>
 
-          <p>
+          <LocalizedElement as="p">
             Update the project information
             stored in your Ventra workspace.
-          </p>
-        </header>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <form
+        <LocalizedElement as="form"
           className="vt-edit-form"
           onSubmit={handleSubmit}
         >
-          <div className="vt-edit-grid">
-            <label className="vt-edit-field">
-              <span>Project Name</span>
+          <LocalizedElement as="div" className="vt-edit-grid">
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Project Name</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="text"
                 value={form.name}
                 onChange={(event) =>
@@ -259,12 +337,12 @@ export default function EditProjectPage() {
                 }
                 required
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Client</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Client</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="text"
                 value={form.client}
                 onChange={(event) =>
@@ -274,12 +352,12 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Location</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Location</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="text"
                 value={form.location}
                 onChange={(event) =>
@@ -289,12 +367,12 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Budget (AED)</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Budget (AED)</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="number"
                 min="0"
                 step="0.01"
@@ -306,12 +384,12 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Start Date</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Start Date</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="date"
                 value={form.start_date}
                 onChange={(event) =>
@@ -321,27 +399,27 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Deadline</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">End Date</LocalizedElement>
 
-              <input
+              <LocalizedElement as="input"
                 type="date"
-                value={form.deadline}
+                value={form.end_date}
                 onChange={(event) =>
                   updateField(
-                    "deadline",
+                    "end_date",
                     event.target.value
                   )
                 }
               />
-            </label>
+            </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Status</span>
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Status</LocalizedElement>
 
-              <select
+              <LocalizedElement as="select"
                 value={form.status}
                 onChange={(event) =>
                   updateField(
@@ -350,35 +428,36 @@ export default function EditProjectPage() {
                   )
                 }
               >
-                <option value="Planning">
+                <LocalizedElement as="option" value="planning">
                   Planning
-                </option>
+                </LocalizedElement>
 
-                <option value="On Track">
-                  On Track
-                </option>
+                <LocalizedElement as="option" value="in_progress">
+                  In Progress
+                </LocalizedElement>
 
-                <option value="At Risk">
-                  At Risk
-                </option>
+                <LocalizedElement as="option" value="on_hold">
+                  On Hold
+                </LocalizedElement>
 
-                <option value="Delayed">
-                  Delayed
-                </option>
-
-                <option value="Completed">
+                <LocalizedElement as="option" value="completed">
                   Completed
-                </option>
-              </select>
-            </label>
+                </LocalizedElement>
 
-            <label className="vt-edit-field">
-              <span>Progress (%)</span>
+                <LocalizedElement as="option" value="cancelled">
+                  Cancelled
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
 
-              <input
+            <LocalizedElement as="label" className="vt-edit-field">
+              <LocalizedElement as="span">Progress (%)</LocalizedElement>
+
+              <LocalizedElement as="input"
                 type="number"
                 min="0"
                 max="100"
+                step="1"
                 value={form.progress}
                 onChange={(event) =>
                   updateField(
@@ -387,17 +466,17 @@ export default function EditProjectPage() {
                   )
                 }
               />
-            </label>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
           {errorMessage && (
-            <p className="vt-edit-error">
+            <LocalizedElement as="p" className="vt-edit-error">
               {errorMessage}
-            </p>
+            </LocalizedElement>
           )}
 
-          <div className="vt-edit-actions">
-            <button
+          <LocalizedElement as="div" className="vt-edit-actions">
+            <LocalizedElement as="button"
               type="button"
               className="vt-edit-cancel"
               onClick={() =>
@@ -408,9 +487,9 @@ export default function EditProjectPage() {
               disabled={saving}
             >
               Cancel
-            </button>
+            </LocalizedElement>
 
-            <button
+            <LocalizedElement as="button"
               type="submit"
               className="vt-edit-save"
               disabled={saving}
@@ -420,10 +499,10 @@ export default function EditProjectPage() {
               {saving
                 ? "Saving Changes..."
                 : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </section>
-    </main>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

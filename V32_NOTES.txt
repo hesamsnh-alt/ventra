@@ -1,0 +1,31 @@
+VENTRA V32 - EXACT FOOTPRINT DECOMPOSITION
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Root cause:
+- V29 used the correct concave footprint, but THREE r71 triangulated it incorrectly.
+- V30 used an inaccurate 4-rectangle workaround.
+- V31 removed the base floor completely, exposing gaps between room polygons.
+
+V32:
+- Starts from the stable V29 Viewer.
+- Uses an exact non-overlapping rectangular decomposition of the verified V29 footprint.
+- Covers the full real footprint with no gaps and no extra exterior area.
+- Avoids concave triangulation entirely.
+- Other JPG plans keep the existing generic footprint renderer.
+- No route.js changes.
+- No fresh Analyze required.
+
+Install:
+Replace only Project3DViewer.jsx.
+
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Refresh the project page.
+
+Expected browser log:
+[VENTRA JPG EXACT FOOTPRINT FLOOR v32]

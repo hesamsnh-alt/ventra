@@ -33,7 +33,7 @@
   flex-direction: column;
 
   background: rgba(12, 12, 12, 0.98);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.08);
 
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -306,7 +306,7 @@
 .vt-db-main {
   width: calc(100% - 270px);
   min-width: 0;
-  margin-left: 270px;
+  margin-inline-start: 270px;
 }
 
 .vt-db-header {
@@ -1452,7 +1452,7 @@
 
   .vt-db-main {
     width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .vt-db-menu-button {

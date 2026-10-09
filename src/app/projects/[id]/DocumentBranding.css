@@ -1,0 +1,26 @@
+.document-branding-editor { margin: 16px 0; padding: 14px; border: 1px solid #555; border-radius: 6px; }
+.document-branding-editor summary { cursor: pointer; }
+.document-branding-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+.document-branding-editor label { display: grid; gap: 6px; margin-bottom: 12px; }
+.document-branding-editor input { min-width: 0; padding: 8px; background: #181818; border: 1px solid #555; color: #eee; }
+.commercial-document-header { margin: 20px 0; break-inside: avoid; }
+.commercial-letterhead { display: block; max-width: 100%; max-height: 160px; object-fit: contain; margin-bottom: 14px; }
+.commercial-company { display: flex; align-items: center; gap: 20px; overflow-wrap: anywhere; }
+.commercial-logo { max-width: 120px; max-height: 90px; object-fit: contain; }
+.commercial-company p { margin: 4px 0; white-space: pre-wrap; }
+.quotation-lines { overflow-x: auto; margin: 20px 0; }
+.quotation-lines table { border-collapse: collapse; width: 100%; }
+.quotation-lines th, .quotation-lines td { padding: 8px; text-align: left; border-bottom: 1px solid #777; }
+.quotation-lines input { width: 100%; min-width: 75px; box-sizing: border-box; }
+.quotation-lines td:first-child input { min-width: 180px; }
+.commercial-print-only { display: none; }
+@media print {
+  .commercial-no-print { display: none !important; }
+  .commercial-print-only { display: inline; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .commercial-document-header { color: black; }
+  .quotation-lines { overflow: visible; }
+  .quotation-lines input { min-width: 0 !important; width: 100%; }
+  .quotation-lines table { table-layout: fixed; font-size: 10pt; }
+  .quotation-lines tr { break-inside: avoid; }
+  .quotation-lines th:first-child, .quotation-lines td:first-child { width: 35%; }
+}

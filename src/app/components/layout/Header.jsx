@@ -1,7 +1,12 @@
 "use client";
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import SignOutButton from "../SignOutButton";
 import { useRouter } from "next/navigation";
 import {
   Menu,
@@ -17,6 +22,10 @@ import {
 import "./Header.css";
 
 const mainMenu = [
+  {label:"Demo",href:"/demo"},
+  {label:"Billing",href:"/billing"},
+  {label:"Help",href:"/support"},
+  { label: "Tools", href: "/tools" },
   {
     label: "Products",
     href: "/products",
@@ -33,19 +42,23 @@ const publicSideMenu = [
   },
   {
     label: "AI Estimator",
-    href: "#estimator",
+    href: "/tools/estimate",
   },
   {
     label: "BOQ Generator",
-    href: "#boq",
+    href: "/tools/boq",
   },
   {
     label: "Resources",
-    href: "#resources",
+    href: "/resources",
   },
   {
-    label: "Contact",
-    href: "#contact",
+    label: "Help & Support",
+    href: "/support",
+  },
+  {
+    label: "Product Demo",
+    href: "/demo",
   },
 ];
 
@@ -109,7 +122,6 @@ export default function Header() {
         const currentUser =
           result?.user ||
           result?.data?.user ||
-          result ||
           null;
 
         if (active) {
@@ -208,79 +220,80 @@ export default function Header() {
 
   return (
     <>
-      <header
+      <LocalizedElement as="header"
         className={`vt-header ${
           scrolled
             ? "vt-header--scrolled"
             : ""
         }`}
       >
-        <div className="vt-header__bar">
-          <Link
+        <LocalizedElement as="div" className="vt-header__bar">
+          <LocalizedLink 
             href="/"
             className="vt-header__brand"
             aria-label="Ventra home"
           >
-            <span className="vt-header__mark">
+            <LocalizedElement as="span" className="vt-header__mark">
               V
-            </span>
+            </LocalizedElement>
 
-            <span className="vt-header__brand-text">
-              <span className="vt-header__name">
+            <LocalizedElement as="span" className="vt-header__brand-text">
+              <LocalizedElement as="span" className="vt-header__name">
                 Ventra
-              </span>
+              </LocalizedElement>
 
-              <span className="vt-header__tagline">
+              <LocalizedElement as="span" className="vt-header__tagline">
                 AI Construction Intelligence
-              </span>
-            </span>
-          </Link>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedLink>
 
-          <nav
+          <LocalizedElement as="nav"
             className="vt-header__nav"
             aria-label="Primary navigation"
           >
             {mainMenu.map((item) => (
-              <Link
+              <LocalizedLink 
                 key={item.label}
                 href={item.href}
               >
                 {item.label}
-              </Link>
+              </LocalizedLink>
             ))}
-          </nav>
+          </LocalizedElement>
 
-          <div className="vt-header__actions">
-            {!loadingUser && user && (
-              <Link
+          <LocalizedElement as="div" className="vt-header__actions">
+            {!loadingUser && user && <SignOutButton />}
+            <OriginalText>{!loadingUser && user && (
+              <LocalizedLink 
                 href="/dashboard"
                 className="vt-header__login"
               >
                 Hello, {userName}
-              </Link>
-            )}
+              </LocalizedLink>
+            )}</OriginalText>
 
             {!loadingUser && !user && (
               <>
-                <Link
+                <LocalizedLink 
                   href="/login"
                   className="vt-header__login"
                 >
                   Login
-                </Link>
+                </LocalizedLink>
 
-                <Link
+                <LocalizedLink 
                   href="/register"
                   className="vt-header__start"
                 >
                   Get Started
 
                   <ArrowUpRight size={17} />
-                </Link>
+                </LocalizedLink>
               </>
             )}
 
-            <button
+            <LocalizedElement as="button"
               type="button"
               className="vt-header__menu-button"
               onClick={() =>
@@ -291,12 +304,12 @@ export default function Header() {
               aria-controls="ventra-side-menu"
             >
               <Menu size={22} />
-            </button>
-          </div>
-        </div>
-      </header>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <button
+      <LocalizedElement as="button"
         type="button"
         className={`vt-menu-overlay ${
           menuOpen
@@ -308,7 +321,7 @@ export default function Header() {
         tabIndex={menuOpen ? 0 : -1}
       />
 
-      <aside
+      <LocalizedElement as="aside"
         id="ventra-side-menu"
         className={`vt-side-menu ${
           menuOpen
@@ -317,82 +330,85 @@ export default function Header() {
         }`}
         aria-hidden={!menuOpen}
       >
-        <div className="vt-side-menu__top">
-          <span>Menu</span>
+        <LocalizedElement as="div" className="vt-side-menu__top">
+          <LocalizedElement as="span">Menu</LocalizedElement>
 
-          <button
+          <LocalizedElement as="button"
             type="button"
             className="vt-side-menu__close"
             onClick={closeMenu}
             aria-label="Close navigation menu"
           >
             <X size={22} />
-          </button>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <nav
+        <LocalizedElement as="nav"
           className="vt-side-menu__links"
           aria-label="Mobile navigation"
         >
           {publicSideMenu.map((item) => (
-            <Link
+            <LocalizedLink 
               key={item.label}
               href={item.href}
               onClick={closeMenu}
             >
               {item.label}
-            </Link>
+            </LocalizedLink>
           ))}
 
           {!loadingUser && !user && (
             <>
-              <Link
+              <LocalizedLink 
                 href="/login"
                 onClick={closeMenu}
               >
                 Login
-              </Link>
+              </LocalizedLink>
 
-              <Link
+              <LocalizedLink 
                 href="/register"
                 onClick={closeMenu}
               >
                 Register
-              </Link>
+              </LocalizedLink>
             </>
           )}
 
           {!loadingUser && user && (
             <>
-              <Link
+              <LocalizedLink 
                 href="/dashboard"
                 onClick={closeMenu}
               >
                 Dashboard
-              </Link>
+              </LocalizedLink>
 
-              <Link
+              <LocalizedLink 
                 href="/profile"
                 onClick={closeMenu}
               >
                 My Profile
-              </Link>
+              </LocalizedLink>
+              <LocalizedLink  href="/join" onClick={closeMenu}>Join / Shared projects</LocalizedLink>
+              <LocalizedLink  href="/billing" onClick={closeMenu}>Billing</LocalizedLink>
+              <LocalizedLink  href="/tools" onClick={closeMenu}>Engineering Tools</LocalizedLink>
 
-              <a
-                href="/"
+              <LocalizedElement as="button"
+                type="button"
                 onClick={handleLogout}
-                aria-disabled={loggingOut}
+                disabled={loggingOut}
               >
                 {loggingOut
                   ? "Logging out..."
                   : "Logout"}
-              </a>
+              </LocalizedElement>
             </>
           )}
-        </nav>
+        </LocalizedElement>
 
         {!loadingUser && !user && (
-          <Link
+          <LocalizedLink 
             href="/register"
             className="vt-side-menu__cta"
             onClick={closeMenu}
@@ -400,9 +416,9 @@ export default function Header() {
             Start with Ventra
 
             <ArrowUpRight size={18} />
-          </Link>
+          </LocalizedLink>
         )}
-      </aside>
+      </LocalizedElement>
     </>
   );
 }

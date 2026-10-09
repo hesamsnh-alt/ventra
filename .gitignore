@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Safe setup template
+!.env.example
+# Local delivery archives
+/*.zip

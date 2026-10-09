@@ -1,0 +1,32 @@
+VENTRA JPG PLAN MATCH V14.2 - THREE r71 LINE COMPATIBILITY FIX
+
+Observed runtime error:
+ReferenceError: ventraCreateLineGeometry is not defined
+
+Confirmed:
+[VENTRA JPG ROOM FLOOR BUILT v14.1]
+threeRevision: "71"
+legacyVertexCount: 4
+legacyFaceCount: 2
+
+Meaning:
+The room floor geometry is now valid, but rendering the parquet/ceramic
+pattern crashed immediately afterward.
+
+This patch:
+- adds ventraCreateLineGeometry()
+- supports modern BufferGeometry
+- supports legacy THREE.Geometry used by Autodesk THREE r71
+- supports modern THREE.LineSegments
+- falls back to THREE.Line(..., THREE.LinePieces) for legacy runtimes
+
+Expected logs:
+[VENTRA JPG ROOM FLOOR BUILT v14.1]
+[VENTRA JPG FLOOR PATTERN BUILT v14.2]
+
+Then final structured scene should report roomCount > 0.
+
+Only file to replace:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Keep V14 route.js already installed.

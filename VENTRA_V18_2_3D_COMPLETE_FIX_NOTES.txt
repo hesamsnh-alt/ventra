@@ -1,0 +1,35 @@
+VENTRA V18.2 - COMPLETE JPG 3D VISIBILITY / LAYOUT / DOOR PATCH
+Based directly on user zip: ventra(20260905-140829).zip
+
+Changed only:
+- src/app/api/ai/design-3d/route.js
+- src/app/projects/[id]/Project3DViewer.jsx
+
+Main changes:
+- stronger room-aware furniture placement and roomHint recovery
+- conservative residential completeness for bedroom/living/dining/kitchen/laundry/entrance
+- bathroom completeness preserved
+- floor grid/pattern lines clipped to each actual room polygon
+- reduced schematic lighting to prevent white/overexposed 3D
+- lower cutaway walls for readable dollhouse view
+- true visible 3D door leaf + jambs + top frame + threshold + handle
+- door swing/closed reference lines retained
+- safer design overlay creation guard
+- slightly improved standalone renderer resolution
+
+Not changed:
+- BOQ
+- Estimate
+- Quotation
+- Supabase/Auth
+- APS token/routes
+- DWG takeoff/reconstruction logic
+- JPG persistence/source storage keys
+
+Installation:
+Copy the two files over the matching project paths.
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+Re-run JPG Analyze to regenerate placement with V18.2 rules.

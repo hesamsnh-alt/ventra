@@ -1,7 +1,12 @@
 "use client";
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import SignOutButton from "../components/SignOutButton";
 import { useRouter } from "next/navigation";
 
 import {
@@ -209,75 +214,77 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <main className="vt-profile-page">
-        <div className="vt-profile-loading">
+      <LocalizedElement as="main" className="vt-profile-page">
+        <LocalizedElement as="div" className="vt-profile-loading">
           <LoaderCircle
             size={34}
             className="vt-profile-spinner"
           />
 
-          <p>Loading your profile...</p>
-        </div>
-      </main>
+          <LocalizedElement as="p">Loading your profile...</LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
     );
   }
 
   return (
-    <main className="vt-profile-page">
-      <div className="vt-profile-container">
-        <Link
+    <LocalizedElement as="main" className="vt-profile-page">
+      <LocalizedElement as="div" className="vt-profile-container">
+        <LocalizedLink 
           href="/dashboard"
           className="vt-profile-back"
         >
           <ArrowLeft size={18} />
           Back to Dashboard
-        </Link>
+        </LocalizedLink>
 
-        <section className="vt-profile-card">
-          <header className="vt-profile-header">
-            <div className="vt-profile-avatar">
+        <LocalizedElement as="section" className="vt-profile-card">
+          <LocalizedElement as="header" className="vt-profile-header">
+          <SignOutButton />
+            <LocalizedElement as="div" className="vt-profile-avatar">
               {userInitial}
-            </div>
+            </LocalizedElement>
 
-            <div>
-              <span className="vt-profile-label">
+            <LocalizedElement as="div">
+              <LocalizedElement as="span" className="vt-profile-label">
                 Ventra Account
-              </span>
+              </LocalizedElement>
 
-              <h1>My Profile</h1>
+              <LocalizedLink  href="/billing">Manage billing & subscription</LocalizedLink>
+          <LocalizedElement as="h1">My Profile</LocalizedElement>
 
-              <p>
+              <LocalizedElement as="p">
                 Manage your personal and company information.
-              </p>
-            </div>
-          </header>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <form
+          <LocalizedElement as="form"
             className="vt-profile-form"
             onSubmit={handleSubmit}
           >
-            <section className="vt-profile-section">
-              <div className="vt-profile-section-heading">
+            <LocalizedElement as="section" className="vt-profile-section">
+              <LocalizedElement as="div" className="vt-profile-section-heading">
                 <UserRound size={20} />
 
-                <div>
-                  <h2>Personal Information</h2>
+                <LocalizedElement as="div">
+                  <LocalizedElement as="h2">Personal Information</LocalizedElement>
 
-                  <p>
+                  <LocalizedElement as="p">
                     Information connected to your Ventra
                     account.
-                  </p>
-                </div>
-              </div>
+                  </LocalizedElement>
+                </LocalizedElement>
+              </LocalizedElement>
 
-              <div className="vt-profile-grid">
-                <label className="vt-profile-field">
-                  <span>
+              <LocalizedElement as="div" className="vt-profile-grid">
+                <LocalizedElement as="label" className="vt-profile-field">
+                  <LocalizedElement as="span">
                     <UserRound size={16} />
                     Full Name
-                  </span>
+                  </LocalizedElement>
 
-                  <input
+                  <LocalizedElement as="input"
                     type="text"
                     name="full_name"
                     value={form.full_name}
@@ -285,135 +292,135 @@ export default function ProfilePage() {
                     placeholder="Enter your full name"
                     required
                   />
-                </label>
+                </LocalizedElement>
 
-                <label className="vt-profile-field">
-                  <span>
+                <LocalizedElement as="label" className="vt-profile-field">
+                  <LocalizedElement as="span">
                     <Mail size={16} />
                     Email Address
-                  </span>
+                  </LocalizedElement>
 
-                  <input
+                  <LocalizedElement as="input"
                     type="email"
                     value={user?.email || ""}
                     disabled
                     readOnly
                   />
 
-                  <small>
+                  <LocalizedElement as="small">
                     Your login email cannot be changed here.
-                  </small>
-                </label>
+                  </LocalizedElement>
+                </LocalizedElement>
 
-                <label className="vt-profile-field">
-                  <span>
+                <LocalizedElement as="label" className="vt-profile-field">
+                  <LocalizedElement as="span">
                     <Phone size={16} />
                     Phone Number
-                  </span>
+                  </LocalizedElement>
 
-                  <input
+                  <LocalizedElement as="input"
                     type="tel"
                     name="phone"
                     value={form.phone}
                     onChange={handleChange}
                     placeholder="+971 50 000 0000"
                   />
-                </label>
+                </LocalizedElement>
 
-                <label className="vt-profile-field">
-                  <span>
+                <LocalizedElement as="label" className="vt-profile-field">
+                  <LocalizedElement as="span">
                     <MapPin size={16} />
                     Country
-                  </span>
+                  </LocalizedElement>
 
-                  <select
+                  <LocalizedElement as="select"
                     name="country"
                     value={form.country}
                     onChange={handleChange}
                   >
-                    <option value="United Arab Emirates">
+                    <LocalizedElement as="option" value="United Arab Emirates">
                       United Arab Emirates
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Iran">
+                    <LocalizedElement as="option" value="Iran">
                       Iran
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Saudi Arabia">
+                    <LocalizedElement as="option" value="Saudi Arabia">
                       Saudi Arabia
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Qatar">
+                    <LocalizedElement as="option" value="Qatar">
                       Qatar
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Oman">
+                    <LocalizedElement as="option" value="Oman">
                       Oman
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Kuwait">
+                    <LocalizedElement as="option" value="Kuwait">
                       Kuwait
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Bahrain">
+                    <LocalizedElement as="option" value="Bahrain">
                       Bahrain
-                    </option>
+                    </LocalizedElement>
 
-                    <option value="Other">
+                    <LocalizedElement as="option" value="Other">
                       Other
-                    </option>
-                  </select>
-                </label>
-              </div>
-            </section>
+                    </LocalizedElement>
+                  </LocalizedElement>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
 
-            <section className="vt-profile-section">
-              <div className="vt-profile-section-heading">
+            <LocalizedElement as="section" className="vt-profile-section">
+              <LocalizedElement as="div" className="vt-profile-section-heading">
                 <Building2 size={20} />
 
-                <div>
-                  <h2>Company Information</h2>
+                <LocalizedElement as="div">
+                  <LocalizedElement as="h2">Company Information</LocalizedElement>
 
-                  <p>
+                  <LocalizedElement as="p">
                     Information about your company or
                     organization.
-                  </p>
-                </div>
-              </div>
+                  </LocalizedElement>
+                </LocalizedElement>
+              </LocalizedElement>
 
-              <div className="vt-profile-grid">
-                <label className="vt-profile-field vt-profile-field--full">
-                  <span>
+              <LocalizedElement as="div" className="vt-profile-grid">
+                <LocalizedElement as="label" className="vt-profile-field vt-profile-field--full">
+                  <LocalizedElement as="span">
                     <Building2 size={16} />
                     Company Name
-                  </span>
+                  </LocalizedElement>
 
-                  <input
+                  <LocalizedElement as="input"
                     type="text"
                     name="company_name"
                     value={form.company_name}
                     onChange={handleChange}
                     placeholder="Enter your company name"
                   />
-                </label>
-              </div>
-            </section>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
 
             {errorMessage && (
-              <div className="vt-profile-message vt-profile-message--error">
+              <LocalizedElement as="div" className="vt-profile-message vt-profile-message--error">
                 {errorMessage}
-              </div>
+              </LocalizedElement>
             )}
 
             {successMessage && (
-              <div className="vt-profile-message vt-profile-message--success">
+              <LocalizedElement as="div" className="vt-profile-message vt-profile-message--success">
                 <CheckCircle2 size={18} />
                 {successMessage}
-              </div>
+              </LocalizedElement>
             )}
 
-            <div className="vt-profile-actions">
-              <button
+            <LocalizedElement as="div" className="vt-profile-actions">
+              <LocalizedElement as="button"
                 type="submit"
                 className="vt-profile-save"
                 disabled={saving}
@@ -430,11 +437,11 @@ export default function ProfilePage() {
                 {saving
                   ? "Saving Changes..."
                   : "Save Changes"}
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
-    </main>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

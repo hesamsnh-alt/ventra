@@ -1,0 +1,22 @@
+VENTRA V17.2 SCENE RETRY RECOVERY
+
+Fixes:
+- "The JPG/PNG/WebP drawing was analyzed, but the schematic 3D scene could not be created."
+
+What changed:
+1. If the primary floor-plan Vision pass fails/times out, the API retries once with:
+   - smaller 1280px image
+   - low detail
+   - geometry-only prompt
+   - gpt-5-mini retry model by default
+2. Furniture/fixtures are then completed from room rules.
+3. DrawingCenter now logs the real API error under:
+   [VENTRA SCHEMATIC API FAILURE v17.2]
+4. Keeps the V17.1 geometric viewer / door fix.
+
+Replace:
+- src/app/api/ai/design-3d/route.js
+- src/app/projects/[id]/ProjectDrawingCenter.jsx
+- src/app/projects/[id]/Project3DViewer.jsx
+
+Then clear .next and restart.

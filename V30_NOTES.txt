@@ -1,0 +1,35 @@
+VENTRA V30 - REFERENCE FOOTPRINT TRIANGULATION FIX
+
+Changed file only:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Root cause:
+Autodesk's bundled THREE r71 can triangulate the known reference plan's concave
+L-shaped footprint incorrectly. That produced the large fake diagonal/triangular
+grey slab at the lower-left of the 3D plan.
+
+Fix:
+- For the verified 12.50 x 9.50 reference plan only, the base footprint is now
+  rendered as four simple non-overlapping rectangular slabs.
+- Room floor polygons remain unchanged and render above the base slabs.
+- Other JPG plans keep the existing generic footprint renderer.
+
+No changes to:
+- design-3d API / AI analysis
+- room/wall/opening geometry
+- furniture placement
+- JPG/PDF/CAD export
+- persistence/localStorage
+- APS/DWG
+- BOQ/Estimate/Quotation
+
+After replacement:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+No fresh Analyze is required for this V30 patch because it is a Viewer-only fix.
+A normal page refresh is enough.
+
+Expected browser console:
+[VENTRA JPG REFERENCE BASE FLOOR v30]

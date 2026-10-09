@@ -1,4 +1,6 @@
 "use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -22,15 +24,15 @@ export default function TestPage() {
 
   if (loading) {
     return (
-      <main style={{ padding: "40px" }}>
-        <h1>Testing Supabase connection...</h1>
-      </main>
+      <LocalizedElement as="main" style={{ padding: "40px" }}>
+        <LocalizedElement as="h1">Testing Supabase connection...</LocalizedElement>
+      </LocalizedElement>
     );
   }
 
   return (
-    <main style={{ padding: "40px" }}>
-      <h1>Supabase Test</h1>
+    <LocalizedElement as="main" style={{ padding: "40px" }}>
+      <LocalizedElement as="h1">Supabase Test</LocalizedElement>
 
       <pre
         style={{
@@ -44,6 +46,6 @@ export default function TestPage() {
       >
         {JSON.stringify(result, null, 2)}
       </pre>
-    </main>
+    </LocalizedElement>
   );
 }

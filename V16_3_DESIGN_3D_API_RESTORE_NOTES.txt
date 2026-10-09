@@ -1,0 +1,29 @@
+VENTRA V16.3 - DESIGN 3D API ROUTE RESTORE
+
+Observed runtime issue:
+POST /api/ai/design-3d 404
+
+This means Next.js cannot see the API route at all.
+
+This patch restores exactly:
+src/app/api/ai/design-3d/route.js
+
+INSTALL
+-------
+Extract this ZIP at the ROOT of the Ventra project and allow merge/overwrite.
+Do NOT copy the design-3d folder somewhere under projects/[id].
+
+After extraction verify with PowerShell:
+Get-ChildItem -LiteralPath "src\app\api\ai\design-3d"
+
+You must see:
+route.js
+
+Then restart:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Expected after clicking Analyze:
+POST /api/ai/design-3d 200
+(or a JSON 4xx/5xx from the route, but NOT 404)

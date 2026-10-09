@@ -1,0 +1,23 @@
+Ventra v35 - BOQ Measured / Rate Pending UI
+
+Purpose:
+Make verified APS quantities commercially safe and understandable in the BOQ UI.
+
+Fixes:
+- Preserves rateMissing and measuredFromApsStructure through normalizeItems().
+- A measured_rate_pending row now shows:
+  MEASURED / RATE PENDING
+  and Amount displays RATE PENDING instead of AED 0.00.
+- Adds a page warning explaining that verified geometry is excluded from the
+  commercial subtotal until a rate/grade is selected.
+- Commercial subtotal now obeys includeInCommercialTotal instead of including
+  every verification='verified' row.
+- Applying a UAE Price Library rate to a measured_rate_pending row promotes it
+  to measured, clears rateMissing, and includes it in the commercial subtotal.
+- Manually entering a positive rate does the same, with source Manual confirmed rate.
+
+Current expected project row:
+Reinforced concrete to columns - grade/rate to be confirmed
+4.21 m3
+MEASURED / RATE PENDING
+Amount: RATE PENDING

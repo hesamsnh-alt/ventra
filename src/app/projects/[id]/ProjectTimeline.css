@@ -83,7 +83,7 @@
 
   color: #888888;
 
-  border-right: 1px solid #292929;
+  border-inline-end: 1px solid #292929;
 
   font-size: 12px;
   font-weight: 700;
@@ -101,7 +101,7 @@
 
   color: #8d8d8d;
 
-  border-right: 1px solid #252525;
+  border-inline-end: 1px solid #252525;
 
   font-size: 11px;
   font-weight: 700;
@@ -126,7 +126,7 @@
   gap: 6px;
 
   background: #131313;
-  border-right: 1px solid #292929;
+  border-inline-end: 1px solid #292929;
 }
 
 .timeline-activity strong {

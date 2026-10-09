@@ -169,3 +169,32 @@ font-weight:700;
 cursor:pointer;
 
 }
+.quotation-panel textarea { width:100%; min-height:100px; padding:12px; box-sizing:border-box; color:white; background:#0f0f0f; border:1px solid #333; border-radius:10px; }
+.quotation-panel .quotation-lines table { width:100%; border-collapse:collapse; margin-top:18px; }
+.quotation-panel .quotation-lines th, .quotation-panel .quotation-lines td { padding:10px; text-align:left; border-bottom:1px solid #64748b; overflow-wrap:anywhere; }
+@media print {
+  @page { size:A4; margin:12mm; }
+  body * { visibility:hidden !important; }
+  .quotation-panel, .quotation-panel * { visibility:visible !important; }
+  .quotation-panel { position:absolute !important; top:0 !important; left:0 !important; width:100% !important; margin:0 !important; padding:0 !important; border:0 !important; border-radius:0 !important; box-sizing:border-box !important; background:white !important; color:#111 !important; font:10pt/1.45 Arial,sans-serif !important; }
+  .quotation-panel * { color:#111 !important; background:transparent !important; box-shadow:none !important; text-shadow:none !important; }
+  .quotation-panel .commercial-no-print, .quotation-panel .quotation-status-bar, .quotation-panel .quotation-actions { display:none !important; }
+  .quotation-panel .quotation-print-value { display:block !important; white-space:pre-wrap !important; overflow-wrap:anywhere; margin:0; }
+  .quotation-panel .quotation-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:10px !important; margin:12px 0 !important; }
+  .quotation-panel .quotation-card { padding:10px !important; margin:8px 0 !important; border:1px solid #aaa !important; border-radius:4px !important; }
+  .quotation-panel .quotation-card p { margin:4px 0; }
+  .quotation-panel .quotation-header h2 { font-size:20pt; margin:6px 0; }
+  .quotation-panel .quotation-header p { margin:6px 0 12px; }
+  .quotation-panel .quotation-header span { letter-spacing:.12em; }
+  .quotation-panel .quotation-summary { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; gap:8px !important; margin-top:14px !important; break-inside:avoid !important; page-break-inside:avoid !important; }
+  .quotation-panel .quotation-summary div { padding:10px !important; border:1px solid #777 !important; border-radius:4px !important; }
+  .quotation-panel .quotation-summary strong { font-size:13pt !important; }
+  .quotation-panel .quotation-total { border:2px solid #111 !important; }
+  .quotation-panel .quotation-lines { overflow:visible !important; }
+  .quotation-panel table { width:100% !important; table-layout:fixed; font-size:9pt; }
+  .quotation-panel th, .quotation-panel td { padding:7px !important; }
+  .quotation-panel th:first-child, .quotation-panel td:first-child { width:38%; }
+  .quotation-panel thead { display:table-header-group; }
+  .quotation-panel tr, .quotation-panel .commercial-document-header { break-inside:avoid; page-break-inside:avoid; }
+  .quotation-panel .commercial-logo { max-height:60px; object-fit:contain; }
+}

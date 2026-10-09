@@ -1,3 +1,6 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+import Footer from "./components/layout/Footer";
 import Header from "./components/layout/Header";
 import Hero from "./components/sections/Hero";
 import ProjectOverview from "./components/ProjectOverview";
@@ -11,14 +14,15 @@ export default function Home() {
     <>
       <Header />
 
-      <main>
+      <LocalizedElement as="main">
+        
         <Hero />
         <ProjectOverview />
         <Workflow />
         <Toolbox />
         <Features />
         <Quotation />
-      </main>
+      </LocalizedElement><Footer />
     </>
   );
 }

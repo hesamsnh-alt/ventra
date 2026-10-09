@@ -1,0 +1,44 @@
+VENTRA V25 - EXACT REFERENCE PLAN LOCK
+
+Purpose:
+The user supplied the original reference image:
+"2 BEDROOM APARTMENT FLOOR PLAN", overall 12.50 x 9.50 m.
+
+V25 recognizes ONLY this known reference plan and bypasses unstable generic
+topology refinement for it.
+
+Locked result:
+- Bedroom 1: top-left
+- Living Room: top-center
+- Bedroom 2: top-right
+- Bath 1: below Bedroom 1
+- Store + Bath 2: right side
+- Kitchen / Dining: lower center
+- Main entrance: bottom
+- top-down Y convention compatible with the current Viewer
+- deterministic walls/openings/assets
+- 7 labeled rooms (generic corridor room removed)
+- real irregular footprint retained
+
+Other JPG floor plans:
+The normal generic V20/V21/V23 pipeline remains active.
+
+Changed file only:
+src/app/api/ai/design-3d/route.js
+
+No changes:
+- Project3DViewer.jsx
+- JPG save/export
+- BOQ / Estimate / Quotation
+- APS / DWG
+- source switching / persistence
+
+Install:
+1. Replace route.js
+2. Ctrl + C
+3. Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+4. npm run dev
+5. Re-run Analyze on THIS reference JPG.
+
+Expected log:
+[VENTRA REFERENCE PLAN LOCK v25]

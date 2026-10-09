@@ -1,0 +1,38 @@
+VENTRA V23.1 Y-AXIS CORRECTION
+
+Root cause:
+The generic JPG floor-plan engine was vertically mirroring the entire scene.
+
+Old mapping:
+y = ((bounds.maxY - py) / spanY) * depthMeters
+
+Correct mapping:
+y = ((py - bounds.minY) / spanY) * depthMeters
+
+Why:
+The Vision prompts define image coordinates as:
+- x: left -> right
+- y: top -> bottom
+
+Rooms, walls, openings, assets and footprint all pass through this single
+conversion function, so fixing it corrects the entire scene consistently.
+
+Changed file only:
+src/app/api/ai/design-3d/route.js
+
+No changes to:
+- Project3DViewer.jsx
+- Save / JPG persistence
+- source switching
+- APS / DWG
+- BOQ / Estimate / Quotation
+
+Install:
+1) Replace route.js
+2) Ctrl + C
+3) Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+4) npm run dev
+5) Re-run JPG Analyze (required because saved scene coordinates must be regenerated)
+
+Expected route version:
+generic-floorplan-engine-v23.1-y-axis-correction

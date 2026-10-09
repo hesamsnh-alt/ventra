@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Button.css";
 
 export default function Button({
@@ -9,7 +11,7 @@ export default function Button({
   type = "button",
 }) {
   return (
-    <button
+    <LocalizedElement as="button"
       type={type}
       onClick={onClick}
       className={`vt-btn vt-btn-${variant} vt-btn-${size}`}
@@ -17,10 +19,10 @@ export default function Button({
       {children}
 
       {icon && (
-        <span className="vt-btn-icon">
+        <LocalizedElement as="span" className="vt-btn-icon">
           {icon}
-        </span>
+        </LocalizedElement>
       )}
-    </button>
+    </LocalizedElement>
   );
 }

@@ -1,0 +1,34 @@
+VENTRA V19 - WALL / DOOR / WINDOW GEOMETRY PATCH
+
+Based directly on V18.3.1 Project3DViewer.jsx.
+Only Project3DViewer.jsx is replaced.
+
+FIXES
+- Internal walls render at real scene height (default 2.8m), not dollhouse cutaway height.
+- External walls also use the architectural wall height.
+- Door height is clamped below wall height and max 2.15m.
+- Door opening gets solid wall/header above it.
+- Door assembly has jambs, frame header, vertical leaf, handle, and floor swing arc.
+- Window height and sill are clamped to the parent wall.
+- Window opening gets wall material below sill and above window.
+- Window assembly has embedded glass, side jambs, top/bottom rails, and centre mullion for wide windows.
+- Opening width is clamped to fit inside its wall segment.
+
+NOT TOUCHED
+- design-3d API
+- Analyze
+- JPG Save / localStorage persistence
+- active source switching
+- BOQ / Estimate / Quotation
+- APS / DWG
+
+INSTALL
+Replace:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Then run:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+No re-Analyze is required for this renderer geometry fix.

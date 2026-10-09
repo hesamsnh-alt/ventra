@@ -1,0 +1,16 @@
+Ventra v39 - Refresh + Save Final Fix
+
+PDF behavior from v38 is preserved.
+
+Refresh:
+- Estimate dispatches a same-tab ventra:estimate-updated event whenever its snapshot changes.
+- Quotation listens to storage, same-tab estimate updates, focus, and visibility changes.
+- Manual Refresh visibly increments Refresh count.
+- Success message shows REFRESHED with total, quality and benchmark.
+
+Save:
+- Save Draft writes localStorage and reads it back immediately for verification.
+- Saved draft is retained in state.
+- Sync Status shows last draft save timestamp.
+- Button changes to Save Draft Again after successful save.
+- Success message shows SAVED with amount and exact time.

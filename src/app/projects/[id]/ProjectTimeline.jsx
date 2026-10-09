@@ -1,100 +1,75 @@
-import "./ProjectTimeline.css";
+"use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-const activities = [
-  {
-    id: 1,
-    name: "Site Preparation",
-    start: "12 Jul",
-    end: "18 Jul",
-    left: 0,
-    width: 14,
-    progress: 100,
-  },
-  {
-    id: 2,
-    name: "Structural Works",
-    start: "19 Jul",
-    end: "28 Aug",
-    left: 12,
-    width: 32,
-    progress: 78,
-  },
-  {
-    id: 3,
-    name: "MEP First Fix",
-    start: "29 Aug",
-    end: "20 Sep",
-    left: 40,
-    width: 25,
-    progress: 42,
-  },
-  {
-    id: 4,
-    name: "Finishing Works",
-    start: "21 Sep",
-    end: "18 Nov",
-    left: 62,
-    width: 34,
-    progress: 10,
-  },
-];
+import {useEffect,useState} from 'react';
+import {TRADES,SOURCES,prepareBoq,methodsFor,methodDays,generateSchedule,activityStatus,planProgress,todayDubai} from '@/lib/boqSchedule.mjs';
+import {loadSchedule,saveSchedule,recordScheduleProgress,scheduleError} from '@/services/boqScheduleService';
+import './BoqSchedule.css';
 
-const months = ["July", "August", "September", "October", "November"];
-
-export default function ProjectTimeline() {
-  return (
-    <section className="timeline-panel">
-      <div className="timeline-heading">
-        <div>
-          <span>PROJECT SCHEDULE</span>
-          <h2>Project Timeline</h2>
-        </div>
-
-        <button type="button">Edit Timeline</button>
-      </div>
-
-      <div className="timeline-table">
-        <div className="timeline-month-row">
-          <div className="timeline-name-header">Activity</div>
-
-          <div className="timeline-months">
-            {months.map((month) => (
-              <span key={month}>{month}</span>
-            ))}
-          </div>
-        </div>
-
-        {activities.map((activity) => (
-          <div className="timeline-row" key={activity.id}>
-            <div className="timeline-activity">
-              <strong>{activity.name}</strong>
-
-              <span>
-                {activity.start} - {activity.end}
-              </span>
-            </div>
-
-            <div className="timeline-track">
-              <div
-                className="timeline-bar"
-                style={{
-                  left: `${activity.left}%`,
-                  width: `${activity.width}%`,
-                }}
-              >
-                <div
-                  className="timeline-bar-progress"
-                  style={{
-                    width: `${activity.progress}%`,
-                  }}
-                />
-
-                <span>{activity.progress}%</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+function downloadJson(value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ventra-schedule-proposal.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+export default function ProjectTimeline({projectId,projectStart}){
+ const [saved,setSaved]=useState(null),[canEdit,setCanEdit]=useState(false),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const [items,setItems]=useState([]),[proposal,setProposal]=useState(null),[reviewed,setReviewed]=useState(false),[source,setSource]=useState(null),[filter,setFilter]=useState('all'),[progress,setProgress]=useState({});
+ const [today,setToday]=useState(todayDubai());
+ const [holidayText,setHolidayText]=useState('');
+ const [calendar,setCalendar]=useState({start:projectStart?.slice(0,10)||todayDubai(),shiftHours:8,breakHours:1,efficiency:0.85,weekdays:[1,2,3,4,5,6],holidays:[]});
+ useEffect(()=>{let live=true;loadSchedule(projectId).then(r=>{if(live){setSaved(r.plan);setCanEdit(r.canEdit);setError('');}}).catch(e=>{if(live)setError(scheduleError(e));}).finally(()=>{if(live)setLoading(false);});return()=>{live=false;};},[projectId]);
+ useEffect(()=>{const tick=()=>setToday(todayDubai());const timer=setInterval(tick,60000);window.addEventListener('focus',tick);return()=>{clearInterval(timer);window.removeEventListener('focus',tick);};},[]);
+ async function refresh(){setLoading(true);try{const r=await loadSchedule(projectId);setSaved(r.plan);setCanEdit(r.canEdit);setError('');}catch(e){setError(scheduleError(e));}finally{setLoading(false);}}
+ function invalidate(){setProposal(null);setReviewed(false);setMessage('');}
+ function setting(key,value){invalidate();setCalendar(c=>({...c,[key]:value}));}
+ function edit(id,patch){invalidate();setItems(rows=>rows.map(r=>r.id===id?{...r,...patch}:r));}
+ function importBoq(){try{const raw=localStorage.getItem(`ventra:project-boq:${projectId}`);if(!raw)throw new Error('Open BOQ and save its items in this browser first.');const boq=JSON.parse(raw);setItems(prepareBoq(boq.items));setSource({updatedAt:boq.updatedAt||null,projectName:boq.projectName||'',items:boq.items});invalidate();setError('');}catch(e){setError(e.message);}}
+ function preview(){try{if(!reviewed)throw new Error('Confirm the methods, sequence, units, crew and waiting times first.');setProposal({...generateSchedule(items,calendar),source,reviewedAt:new Date().toISOString()});setError('');}catch(e){setError(e.message);}}
+ async function commit(){setBusy(true);try{await saveSchedule(projectId,proposal,saved?.id);await refresh();setProposal(null);setMessage('New baseline saved. Earlier baselines are retained. Dates stay fixed when progress changes.');}catch(e){setError(scheduleError(e));}finally{setBusy(false);}}
+ async function update(row,value){setBusy(true);try{if(value===''||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>100)throw new Error('Progress must be between 0 and 100.');await recordScheduleProgress(saved,row.id,value);await refresh();setProgress({});setMessage('Progress saved.');window.dispatchEvent(new Event('ventra:schedule-progress'));}catch(e){setError(scheduleError(e));}finally{setBusy(false);}}
+ const visible=items.filter(r=>filter==='all'||r.trade===filter);
+ const plan=proposal||saved?.payload;
+ const totals=planProgress(plan);
+ const overdue=plan?.activities.filter(r=>['overdue','behind'].includes(activityStatus(r,today).state)).length||0;
+ return <LocalizedElement as="section" className="boq-schedule">
+  <LocalizedElement as="header"><LocalizedElement as="div"><LocalizedElement as="h2">BOQ → execution schedule</LocalizedElement><LocalizedElement as="p">Plan quantities → choose methods → review dates → track completion.</LocalizedElement></LocalizedElement><LocalizedElement as="button" onClick={refresh} disabled={busy||loading}>Refresh shared plan</LocalizedElement></LocalizedElement>
+  {error&&<LocalizedElement as="p" role="alert" className="schedule-error">{error}</LocalizedElement>}{message&&<LocalizedElement as="p" role="status">{message}</LocalizedElement>}{loading&&<LocalizedElement as="p">Loading shared schedule…</LocalizedElement>}
+  <LocalizedElement as="details" open={!saved}><LocalizedElement as="summary">1. Build a proposed schedule from the BOQ</LocalizedElement>
+   <LocalizedElement as="p">Reads this project’s saved BOQ from this browser. Unknown work needs a trade and a verified rate. All estimates require site review; no automatic structural release.</LocalizedElement>
+   <LocalizedElement as="button" onClick={importBoq} disabled={busy}>Load / reload project BOQ</LocalizedElement>
+   <LocalizedElement as="div" className="schedule-settings">
+    <LocalizedElement as="label">Project / contract start<LocalizedElement as="input" type="date" value={calendar.start} onChange={e=>setting('start',e.target.value)}/></LocalizedElement>
+    <LocalizedElement as="label">Shift hours<LocalizedElement as="input" type="number" min="1" max="16" step="0.5" value={calendar.shiftHours} onChange={e=>setting('shiftHours',e.target.value)}/></LocalizedElement>
+    <LocalizedElement as="label">Break hours<LocalizedElement as="input" type="number" min="0" step="0.25" value={calendar.breakHours} onChange={e=>setting('breakHours',e.target.value)}/></LocalizedElement>
+    <LocalizedElement as="label">Productive fraction (0.1–1)<LocalizedElement as="input" type="number" min="0.1" max="1" step="0.05" value={calendar.efficiency} onChange={e=>setting('efficiency',e.target.value)}/></LocalizedElement>
+    <LocalizedElement as="label">Holidays (YYYY-MM-DD, comma separated)<LocalizedElement as="input" placeholder="2026-12-02, 2026-12-03" value={holidayText} onChange={e=>{setHolidayText(e.target.value);setting('holidays',e.target.value.split(',').map(s=>s.trim()).filter(Boolean));}}/></LocalizedElement>
+   </LocalizedElement>
+   <LocalizedElement as="fieldset"><LocalizedElement as="legend">Working weekdays</LocalizedElement>{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=><LocalizedElement as="label" key={d}><LocalizedElement as="input" type="checkbox" checked={calendar.weekdays.includes(i)} onChange={e=>setting('weekdays',e.target.checked?[...calendar.weekdays,i]:calendar.weekdays.filter(v=>v!==i))}/>{d} </LocalizedElement>)}</LocalizedElement>
+   <LocalizedElement as="p">Effective hours = (shift − breaks) × productive fraction. Duration = quantity ÷ (hourly output × crews × effective hours), rounded up to working days. Source-study rates are starting assumptions; calibrate to this definition.</LocalizedElement>
+   <OriginalText>{!!items.length&&<><LocalizedElement as="label">Trade section <LocalizedElement as="select" value={filter} onChange={e=>setFilter(e.target.value)}><LocalizedElement as="option" value="all">All BOQ sections ({items.length})</LocalizedElement>{TRADES.map(t=><LocalizedElement as="option" value={t.id} key={t.id}>{t.label}</LocalizedElement>)}<LocalizedElement as="option" value="">Needs classification</LocalizedElement></LocalizedElement></LocalizedElement>
+   {visible.map(r=><LocalizedElement as="article" key={r.id} className="schedule-item">
+    <LocalizedElement as="h3"><OriginalText>{r.name}</OriginalText></LocalizedElement><LocalizedElement as="label"><LocalizedElement as="input" type="checkbox" checked={r.included} onChange={e=>edit(r.id,{included:e.target.checked})}/>Include in this plan</LocalizedElement>
+    <OriginalText>{!r.included?<LocalizedElement as="label">Reason for exclusion<LocalizedElement as="input" value={r.exclusionReason} onChange={e=>edit(r.id,{exclusionReason:e.target.value})}/></LocalizedElement>:<>
+    <LocalizedElement as="div" className="schedule-settings"><LocalizedElement as="label">Trade<LocalizedElement as="select" value={r.trade} onChange={e=>{const t=TRADES.find(t=>t.id===e.target.value);const m=methodsFor(t?.id)[0];edit(r.id,{trade:e.target.value,method:m.id,order:t?.order||99,rate:t?.unit===r.unit?m.rate??'':'',waitDays:['concrete','plaster','waterproof','screed','tiling'].includes(t?.id)?'':0});}}><LocalizedElement as="option" value="">Select trade</LocalizedElement>{TRADES.map(t=><LocalizedElement as="option" key={t.id} value={t.id}>{t.label}</LocalizedElement>)}</LocalizedElement></LocalizedElement>
+    <LocalizedElement as="label">BOQ quantity ({r.unit})<LocalizedElement as="input" type="number" min="0" step="any" value={r.quantity} onChange={e=>edit(r.id,{quantity:e.target.value})}/></LocalizedElement>
+    <LocalizedElement as="label">Sequence priority<LocalizedElement as="input" type="number" min="1" max="999" value={r.order} onChange={e=>edit(r.id,{order:e.target.value})}/></LocalizedElement>
+    <LocalizedElement as="label">Complete crews<LocalizedElement as="input" type="number" min="1" max="100" value={r.crews} onChange={e=>edit(r.id,{crews:e.target.value})}/></LocalizedElement>
+    <LocalizedElement as="label">Wait after work (calendar days)<LocalizedElement as="input" type="number" min="0" max="365" placeholder="Engineer / product requirement" value={r.waitDays} onChange={e=>edit(r.id,{waitDays:e.target.value})}/></LocalizedElement></LocalizedElement>
+    <LocalizedElement as="div" className="method-options" role="group" aria-label={`Methods for ${r.name}`}>{methodsFor(r.trade).map(m=>{let days='Enter rate';const baseRate=TRADES.find(t=>t.id===r.trade)?.unit===r.unit?m.rate:null;const rate=m.id===r.method?r.rate:(r.methodRates?.[m.id]??baseRate);try{if(rate!==null&&rate!=='')days=`${methodDays(r.quantity,rate,r.crews,calendar)} working days`;}catch{}return <LocalizedElement as="button" key={m.id} type="button" aria-pressed={r.method===m.id} onClick={()=>edit(r.id,{methodRates:{...r.methodRates,[r.method]:r.rate},method:m.id,rate:rate??''})}><LocalizedElement as="strong">{m.label}</LocalizedElement><LocalizedElement as="span">{days}</LocalizedElement></LocalizedElement>;})}</LocalizedElement>
+    <LocalizedElement as="p">{methodsFor(r.trade).find(m=>m.id===r.method)?.note}</LocalizedElement>
+    <LocalizedElement as="div" className="schedule-settings"><LocalizedElement as="label">Confirmed output ({r.unit} / crew / productive hour)<LocalizedElement as="input" type="number" min="0.000001" step="any" value={r.rate} placeholder="Required: measured or contractor rate" onChange={e=>edit(r.id,{rate:e.target.value})}/></LocalizedElement><LocalizedElement as="label">Crew / scope assumptions<LocalizedElement as="input" value={r.crewNote} onChange={e=>edit(r.id,{crewNote:e.target.value})}/></LocalizedElement></LocalizedElement>
+    </>}</OriginalText>
+   </LocalizedElement>)}
+   <LocalizedElement as="p">Default sequence is a conservative single-workfront proposal. Change priorities for the approved method; include inspections, drying, curing, procurement and missing scope. A zero waiting period must be deliberate.</LocalizedElement>
+   <LocalizedElement as="label"><LocalizedElement as="input" type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I reviewed all included items, methods, units, crew rates, sequence and waiting times.</LocalizedElement><LocalizedElement as="br"/>
+   <LocalizedElement as="button" onClick={preview} disabled={!reviewed||busy}>2. Calculate dates and preview</LocalizedElement></>}</OriginalText>
+  </LocalizedElement>
+  <LocalizedElement as="details"><LocalizedElement as="summary">Rate sources and limits</LocalizedElement>{SOURCES.map(s=><LocalizedElement as="p" key={s.trade}><LocalizedElement as="a" href={s.url} target="_blank" rel="noopener noreferrer">{s.label}</LocalizedElement></LocalizedElement>)}<LocalizedElement as="p">These are case studies outside the UAE. Blank methods require contractor/site rates. Proposed sequence and effective-hours adjustments are Ventra planning assumptions, not claims made by these sources.</LocalizedElement></LocalizedElement>
+  <OriginalText>{plan&&<><LocalizedElement as="h3">{proposal?'Proposed baseline — not saved':'Shared execution checklist'}</LocalizedElement>
+   <LocalizedElement as="div" className="schedule-summary"><LocalizedElement as="strong">{totals.percent}% planned crew-effort complete</LocalizedElement><LocalizedElement as="span">{totals.completed}/{totals.total} activities done</LocalizedElement><LocalizedElement as="span">{totals.excluded} excluded BOQ items</LocalizedElement><LocalizedElement as="span">{overdue} need attention</LocalizedElement><LocalizedElement as="span">{plan.start_date} → {plan.end_date}</LocalizedElement></LocalizedElement>
+   <LocalizedElement as="p">Weighted by quantity ÷ hourly crew output. This is progress of the included schedule, not certified physical progress or a payment entitlement. Expected progress uses completed working days, as of {today} (Dubai).</LocalizedElement>
+   <LocalizedElement as="progress" max="100" value={totals.percent}/>
+   <LocalizedElement as="div" className="schedule-table-wrap"><LocalizedElement as="table"><LocalizedElement as="thead"><LocalizedElement as="tr"><LocalizedElement as="th">Done</LocalizedElement><LocalizedElement as="th">Activity / method</LocalizedElement><LocalizedElement as="th">Quantity</LocalizedElement><LocalizedElement as="th">Daily capacity</LocalizedElement><LocalizedElement as="th">Work + wait</LocalizedElement><LocalizedElement as="th">Dates / prerequisite</LocalizedElement><LocalizedElement as="th">Progress</LocalizedElement><LocalizedElement as="th">Status</LocalizedElement></LocalizedElement></LocalizedElement><LocalizedElement as="tbody"><OriginalText>{plan.activities.map((r,i)=>{const s=activityStatus(r,today);return <LocalizedElement as="tr" key={r.id} className={`schedule-${s.state}`}><LocalizedElement as="td"><LocalizedElement as="input" aria-label={`Mark ${r.name} done`} type="checkbox" checked={Number(r.progress)>=100} disabled={!!proposal||!canEdit||busy} onChange={e=>update(r,e.target.checked?100:0)}/></LocalizedElement><LocalizedElement as="td"><OriginalText>{r.name}</OriginalText><LocalizedElement as="small">{methodsFor(r.trade).find(m=>m.id===r.method)?.label||r.method}</LocalizedElement></LocalizedElement><LocalizedElement as="td">{r.quantity} {r.unit}</LocalizedElement><LocalizedElement as="td">{r.dailyCapacity.toFixed(2)} {r.unit}/day</LocalizedElement><LocalizedElement as="td">{r.workingDays} working days<LocalizedElement as="small">+ {r.waitDays} calendar days release wait</LocalizedElement></LocalizedElement><LocalizedElement as="td">{r.start_date}<LocalizedElement as="br"/>{r.end_date}<LocalizedElement as="small">{i?`After ${plan.activities[i-1].name}`:'Project start'}</LocalizedElement></LocalizedElement><LocalizedElement as="td"><OriginalText>{proposal?'0%':<><LocalizedElement as="input" aria-label={`Progress for ${r.name}`} type="number" min="0" max="100" step="0.1" disabled={!canEdit||busy} value={progress[r.id]??r.progress} onChange={e=>setProgress(v=>({...v,[r.id]:e.target.value}))}/><LocalizedElement as="button" disabled={!canEdit||busy} onClick={()=>update(r,progress[r.id]??r.progress)}>Save %</LocalizedElement></>}</OriginalText></LocalizedElement><LocalizedElement as="td"><LocalizedElement as="strong">{s.state}</LocalizedElement><LocalizedElement as="small">Expected {s.expected}%</LocalizedElement>{s.lateDays>0&&<LocalizedElement as="small">{s.lateDays} calendar days overdue</LocalizedElement>}{s.unreported&&<LocalizedElement as="small">No progress report yet</LocalizedElement>}</LocalizedElement></LocalizedElement>;})}</OriginalText></LocalizedElement></LocalizedElement></LocalizedElement>
+   {!!plan.excluded?.length&&<LocalizedElement as="details"><LocalizedElement as="summary">Excluded scope ({plan.excluded.length})</LocalizedElement><OriginalText>{plan.excluded.map(r=><LocalizedElement as="p" key={r.id}><OriginalText>{r.name}</OriginalText>: {r.exclusionReason}</LocalizedElement>)}</OriginalText></LocalizedElement>}
+   {proposal&&<><LocalizedElement as="p">Saving creates a new baseline with zero reported progress; the previous plan remains in history. A baseline is not automatically approved by an engineer.</LocalizedElement><LocalizedElement as="button" disabled={!canEdit||busy} onClick={commit}>{busy?'Saving…':'3. Save new shared baseline'}</LocalizedElement></>}
+   <LocalizedElement as="button" onClick={()=>downloadJson(plan)}>Export schedule JSON</LocalizedElement>
+   {!canEdit&&<LocalizedElement as="p">Shared updates require an installed database migration and an owner, manager or supervisor account.</LocalizedElement>}
+  </>}</OriginalText>
+ </LocalizedElement>;
 }

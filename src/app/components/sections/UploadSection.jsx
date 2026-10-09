@@ -1,3 +1,8 @@
+
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+import Link from "next/link";
 import {
   UploadCloud,
   FileText,
@@ -9,111 +14,111 @@ import {
 
 export default function UploadSection() {
   return (
-    <section className="upload-section" id="upload">
-      <div className="upload-container">
+    <LocalizedElement as="section" className="upload-section" id="upload">
+      <LocalizedElement as="div" className="upload-container">
 
-        <div className="upload-left">
+        <LocalizedElement as="div" className="upload-left">
 
-          <span className="upload-badge">
+          <LocalizedElement as="span" className="upload-badge">
             AI Project Upload
-          </span>
+          </LocalizedElement>
 
-          <h2>
+          <LocalizedElement as="h2">
             Upload your project.
-            <br />
+            <LocalizedElement as="br" />
             Let AI do the hard work.
-          </h2>
+          </LocalizedElement>
 
-          <p>
+          <LocalizedElement as="p">
             Upload drawings, BOQ files, specifications or images.
             Ventra automatically prepares your project for estimation,
             quotations and project management.
-          </p>
+          </LocalizedElement>
 
-          <div className="upload-files">
+          <LocalizedElement as="div" className="upload-files">
 
-            <span>
+            <LocalizedElement as="span">
               <FileText size={16}/>
               PDF
-            </span>
+            </LocalizedElement>
 
-            <span>
+            <LocalizedElement as="span">
               <FolderOpen size={16}/>
               DWG
-            </span>
+            </LocalizedElement>
 
-            <span>
+            <LocalizedElement as="span">
               <FileSpreadsheet size={16}/>
               XLSX
-            </span>
+            </LocalizedElement>
 
-            <span>
-              <Image size={16}/>
+            <LocalizedElement as="span">
+              <Image size={16} aria-label="Image file" />
               JPG
-            </span>
+            </LocalizedElement>
 
-            <span>
+            <LocalizedElement as="span">
               IFC
-            </span>
+            </LocalizedElement>
 
-            <span>
+            <LocalizedElement as="span">
               DXF
-            </span>
+            </LocalizedElement>
 
-          </div>
+          </LocalizedElement>
 
-        </div>
+        </LocalizedElement>
 
-        <div className="upload-right">
+        <LocalizedElement as="div" className="upload-right">
 
-          <div className="dropzone">
+          <LocalizedElement as="div" className="dropzone">
 
             <UploadCloud
               size={70}
               strokeWidth={1.5}
             />
 
-            <h3>
-              Drag & Drop Files
-            </h3>
+            <LocalizedElement as="h3">
+              Open your project upload
+            </LocalizedElement>
 
-            <p>
+            <LocalizedElement as="p">
               PDF • DWG • IFC • DXF • XLSX • Images
-            </p>
+            </LocalizedElement>
 
-            <button>
+            <LocalizedLink  href="/tools/drawings">
 
-              Choose Files
+              Open Project Upload
 
               <ArrowRight size={18}/>
 
-            </button>
+            </LocalizedLink>
 
-          </div>
+          </LocalizedElement>
 
-          <div className="upload-status">
+          <LocalizedElement as="div" className="upload-status">
 
-            <div className="status-item">
+            <LocalizedElement as="div" className="status-item">
               ✓ AI Ready
-            </div>
+            </LocalizedElement>
 
-            <div className="status-item">
+            <LocalizedElement as="div" className="status-item">
               ✓ BOQ Generation
-            </div>
+            </LocalizedElement>
 
-            <div className="status-item">
+            <LocalizedElement as="div" className="status-item">
               ✓ Cost Estimation
-            </div>
+            </LocalizedElement>
 
-            <div className="status-item">
+            <LocalizedElement as="div" className="status-item">
               ✓ Project Dashboard
-            </div>
+            </LocalizedElement>
 
-          </div>
+          </LocalizedElement>
 
-        </div>
+        </LocalizedElement>
 
-      </div>
-    </section>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

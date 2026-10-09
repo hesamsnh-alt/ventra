@@ -1,4 +1,9 @@
+
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Toolbox.css";
+import Link from "next/link";
 import {
   Calculator,
   Ruler,
@@ -32,7 +37,7 @@ const tools = [
   },
   {
     icon: CalendarDays,
-    title: "AI Scheduler",
+    title: "Project Schedule",
     desc: "Construction timeline",
   },
   {
@@ -67,8 +72,8 @@ const tools = [
   },
   {
     icon: Bot,
-    title: "AI Assistant",
-    desc: "Construction AI",
+    title: "Cost Estimate",
+    desc: "Project cost planning",
   },
   {
     icon: Building2,
@@ -76,55 +81,58 @@ const tools = [
     desc: "Project analytics",
   },
 ];
+const destinations = ["boq", "quotation", "catalog", "schedule", "concrete", "steel", "area", "volume", "units", "mep", "estimate", "dashboard"];
 
 export default function Toolbox() {
   return (
-    <section className="toolbox">
+    <LocalizedElement as="section" className="toolbox">
 
-      <div className="toolbox-header">
+      <LocalizedElement as="div" className="toolbox-header">
 
-        <span>ENGINEERING TOOLBOX</span>
+        <LocalizedElement as="span">ENGINEERING TOOLBOX</LocalizedElement>
 
-        <h2>
+        <LocalizedElement as="h2">
           Everything Engineers Need.
-          <strong> One Platform.</strong>
-        </h2>
+          <LocalizedElement as="strong"> One Platform.</LocalizedElement>
+        </LocalizedElement>
 
-        <p>
+        <LocalizedElement as="p">
           More than just BOQ.
           Ventra provides intelligent engineering tools
           for every stage of construction.
-        </p>
+        </LocalizedElement>
 
-      </div>
+      </LocalizedElement>
 
-      <div className="toolbox-grid">
+      <LocalizedElement as="div" className="toolbox-grid">
 
-        {tools.map((tool) => {
+        {tools.map((tool, index) => {
 
           const Icon = tool.icon;
 
           return (
-            <div
+            <LocalizedLink 
+              href={destinations[index] === "dashboard" ? "/dashboard" : `/tools/${destinations[index]}`}
+              style={{ color: "inherit", textDecoration: "none" }}
               className="tool-card"
               key={tool.title}
             >
 
-              <div className="tool-icon">
+              <LocalizedElement as="div" className="tool-icon">
                 <Icon size={28}/>
-              </div>
+              </LocalizedElement>
 
-              <h3>{tool.title}</h3>
+              <LocalizedElement as="h3">{tool.title}</LocalizedElement>
 
-              <p>{tool.desc}</p>
+              <LocalizedElement as="p">{tool.desc}</LocalizedElement>
 
-            </div>
+            </LocalizedLink>
           );
 
         })}
 
-      </div>
+      </LocalizedElement>
 
-    </section>
+    </LocalizedElement>
   );
 }

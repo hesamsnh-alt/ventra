@@ -1,4 +1,6 @@
 "use client";
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -42,7 +44,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main
+    <LocalizedElement as="main"
       style={{
         minHeight: "100vh",
         display: "grid",
@@ -51,7 +53,7 @@ export default function LoginPage() {
         padding: "24px",
       }}
     >
-      <form
+      <LocalizedElement as="form"
         onSubmit={handleSubmit}
         style={{
           width: "100%",
@@ -62,25 +64,25 @@ export default function LoginPage() {
           border: "1px solid #2b2b2b",
         }}
       >
-        <h1
+        <LocalizedElement as="h1"
           style={{
             color: "#ffffff",
             marginBottom: "8px",
           }}
         >
           Ventra Login
-        </h1>
+        </LocalizedElement>
 
-        <p
+        <LocalizedElement as="p"
           style={{
             color: "#999999",
             marginBottom: "24px",
           }}
         >
           Sign in to your account
-        </p>
+        </LocalizedElement>
 
-        <label
+        <LocalizedElement as="label"
           htmlFor="email"
           style={{
             display: "block",
@@ -89,9 +91,9 @@ export default function LoginPage() {
           }}
         >
           Email
-        </label>
+        </LocalizedElement>
 
-        <input
+        <LocalizedElement as="input"
           id="email"
           type="email"
           autoComplete="email"
@@ -111,7 +113,7 @@ export default function LoginPage() {
           }}
         />
 
-        <label
+        <LocalizedElement as="label"
           htmlFor="password"
           style={{
             display: "block",
@@ -120,9 +122,9 @@ export default function LoginPage() {
           }}
         >
           Password
-        </label>
+        </LocalizedElement>
 
-        <input
+        <LocalizedElement as="input"
           id="password"
           type="password"
           autoComplete="current-password"
@@ -143,17 +145,17 @@ export default function LoginPage() {
         />
 
         {errorMessage && (
-          <p
+          <LocalizedElement as="p"
             style={{
               color: "#ff6b6b",
               marginBottom: "16px",
             }}
           >
             {errorMessage}
-          </p>
+          </LocalizedElement>
         )}
 
-        <button
+        <LocalizedElement as="button"
           type="submit"
           disabled={loading}
           style={{
@@ -168,8 +170,8 @@ export default function LoginPage() {
           }}
         >
           {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
-    </main>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

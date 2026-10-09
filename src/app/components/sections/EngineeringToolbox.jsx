@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 export default function EngineeringToolbox() {
   const tools = [
     {
@@ -27,39 +29,39 @@ export default function EngineeringToolbox() {
   ];
 
   return (
-    <section className="toolbox-section">
-      <div className="toolbox-container">
+    <LocalizedElement as="section" className="toolbox-section">
+      <LocalizedElement as="div" className="toolbox-container">
 
-        <div className="toolbox-title">
-          <span>Engineering Toolbox</span>
+        <LocalizedElement as="div" className="toolbox-title">
+          <LocalizedElement as="span">Engineering Toolbox</LocalizedElement>
 
-          <h2>
+          <LocalizedElement as="h2">
             Every tool an estimator needs.
-          </h2>
+          </LocalizedElement>
 
-          <p>
+          <LocalizedElement as="p">
             Everything is designed to help engineers prepare faster,
             smarter and more accurate quotations.
-          </p>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <div className="toolbox-grid">
+        <LocalizedElement as="div" className="toolbox-grid">
 
           {tools.map((tool, index) => (
-            <div className="tool-card" key={index}>
+            <LocalizedElement as="div" className="tool-card" key={index}>
 
-              <div className="tool-icon">⚡</div>
+              <LocalizedElement as="div" className="tool-icon">⚡</LocalizedElement>
 
-              <h3>{tool.title}</h3>
+              <LocalizedElement as="h3">{tool.title}</LocalizedElement>
 
-              <p>{tool.description}</p>
+              <LocalizedElement as="p">{tool.description}</LocalizedElement>
 
-            </div>
+            </LocalizedElement>
           ))}
 
-        </div>
+        </LocalizedElement>
 
-      </div>
-    </section>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }

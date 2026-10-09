@@ -1,0 +1,27 @@
+Ventra v42.4 - Local Metre Coordinate Reconstruction
+
+Problem:
+The wall reconstruction was being built in APS/DWG model coordinates while the
+visible Autodesk source was a 2D layout/sheet viewport. The resulting overlay
+appeared as tiny 3D blocks in the wrong part of the A1 sheet.
+
+Fix:
+- Wall geometry is normalized into a dedicated local 3D coordinate system.
+- The verified wall line bounding box is centered at local X=0, Y=0.
+- X/Y coordinates are converted from drawing units to metres using meterFactor.
+- Wall height is now a true 3.00 model metres.
+- Wall thickness is now a true 0.15 model metres.
+- Autodesk 2D source sheet is hidden when reconstruction is active.
+- Camera frames only the reconstructed local-metre geometry.
+- Hide Reconstruction removes the overlay and restores the Autodesk source sheet.
+- Reconstruction summary reports local model width/depth and coordinate space.
+- Floor triangulation remains intentionally disabled until floor topology is
+  repaired separately.
+
+No Analyze Drawing required.
+No OpenAI call.
+
+Expected marker:
+[VENTRA 2D→3D RECONSTRUCTION v42.4]
+Expected coordinate space:
+local_meters

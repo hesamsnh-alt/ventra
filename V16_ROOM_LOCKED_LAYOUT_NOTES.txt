@@ -1,0 +1,49 @@
+VENTRA JPG ROOM-LOCKED LAYOUT ENGINE V16
+
+This is a generic floor-plan patch, not a hard-coded plan fix.
+
+CORE CHANGE
+-----------
+Furniture no longer depends only on global normalized x/y coordinates.
+
+The server now:
+- resolves which room contains every detected asset
+- stores roomId
+- stores absolute xMeters/yMeters
+- snaps wall-backed furniture toward the nearest boundary wall
+- stores againstWallId when a wall match is available
+- adjusts rotation for wall-backed assets
+- keeps door/window clearance
+- applies simple furniture collision avoidance inside the same room
+- rejects an asset when it cannot be placed inside a valid room
+
+The viewer now:
+- prefers xMeters/yMeters when present
+- keeps old normalized x/y as backward compatibility
+- preserves roomId / againstWallId / placementSource on meshes
+
+EXPECTED LOGS
+-------------
+[VENTRA ROOM LOCKED ASSETS v16]
+[VENTRA GENERIC FLOORPLAN SUCCESS v16]
+[VENTRA ROOM LOCKED RENDER v16]
+
+IMPORTANT
+---------
+After installing this patch you MUST Analyze the JPG again.
+Old localStorage scenes do not contain xMeters/yMeters/roomId.
+
+FILES TO REPLACE
+----------------
+src/app/api/ai/design-3d/route.js
+src/app/projects/[id]/Project3DViewer.jsx
+
+NOT TOUCHED
+-----------
+Project route page
+ProjectDrawingCenter
+DWG/APS
+BOQ
+Estimate
+Quotation
+Supabase/Auth

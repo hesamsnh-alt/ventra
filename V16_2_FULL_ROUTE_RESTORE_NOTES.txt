@@ -1,0 +1,33 @@
+VENTRA V16.2 FULL PROJECT ROUTE RESTORE
+
+This patch restores the COMPLETE dynamic project route folder:
+
+src/app/projects/[id]/
+
+It includes page.js and every sibling component/CSS file required by that page,
+so Next.js cannot lose the route because of a partial folder replacement.
+
+It also includes:
+src/app/api/ai/design-3d/route.js
+
+The V16 generic room-locked JPG 3D engine is preserved.
+
+INSTALL
+-------
+1. Extract this ZIP at the ROOT of your Ventra project.
+2. Allow overwrite/merge.
+3. Do NOT manually create or rename [id].
+4. Confirm this exact file exists afterward:
+   src/app/projects/[id]/page.js
+5. Then:
+   Ctrl + C
+   Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+   npm run dev
+
+Expected:
+GET /projects/<project-id> 200
+
+If it still returns 404 after this full-folder restore, run:
+Get-ChildItem -LiteralPath "src\app\projects\[id]"
+
+and verify page.js appears.

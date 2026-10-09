@@ -1,0 +1,32 @@
+VENTRA V21 PLAN FIDELITY / TOPOLOGY LOCK
+
+Changed only:
+src/app/api/ai/design-3d/route.js
+
+What V21 changes:
+- Adds a final high-detail topology-lock pass over the original JPG plus first/second geometry attempts.
+- Printed overall + room dimensions become hard geometry constraints in the final audit.
+- Room count, position, adjacency, internal walls, entrance recess, doors/windows are rechecked.
+- Small rooms (bath/store/WC/etc.) are explicitly protected from being stretched into corridor-like shapes.
+- Furniture roomHint remains authoritative.
+- Generic residential furniture completion is disabled whenever the image pass detected at least 2 real furniture symbols.
+- Bathroom completeness remains enabled.
+
+Untouched:
+- Project3DViewer.jsx
+- JPG save/persistence
+- active 3D source switching
+- APS / DWG
+- BOQ / Estimate / Quotation
+
+After install:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+Then Analyze the JPG again.
+
+Expected logs:
+[VENTRA PLAN FIDELITY AUDIT v20]
+[VENTRA TOPOLOGY LOCK v21]
+[VENTRA FURNITURE AUTHORITY v21]
+[VENTRA GENERIC FLOORPLAN SUCCESS v21]

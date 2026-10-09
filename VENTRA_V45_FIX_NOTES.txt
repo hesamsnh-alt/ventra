@@ -1,0 +1,20 @@
+VENTRA V45 - CONTAINMENT / RECOVERY FIX
+Built from authoritative full ZIP: ventra(20260913-102936).zip
+
+Fixes:
+1) External-wall-derived footprint is no longer accepted if it cuts through room polygons.
+2) When the external loop is incomplete, the existing room/external-wall hull fallback is used instead of producing detached/floating room floors.
+3) Scene health now includes room centroid + room vertex containment against footprint.
+4) Visual audit cannot replace the first pass if repaired room geometry falls outside its footprint.
+5) A renderable scene is no longer discarded with HTTP 422 just because a coarse fidelity score is low. It is returned with needsManualReview + health diagnostics. HTTP 422 is reserved for truly non-renderable geometry (no room/wall/footprint set).
+6) ProjectDrawingCenter accepts a scene payload even when an API response is non-2xx, preventing a usable scene from being lost. Quality warnings are logged separately.
+
+Important:
+- DWG/DXF/IFC/RVT engineering path was not modified.
+- BOQ/Estimate/Quotation/Supabase/Auth/APS/Takeoff/Geometry Extractor/Dashboard/Persistence/Export were not modified.
+- No hard-coded apartment template is introduced.
+
+Validation performed:
+- node --check passed for src/app/api/ai/design-3d/route.js
+- static invariants checked for V45 route version, containment gate, recoverable geometry path, and frontend recovered-response handling.
+- full Next.js build was not run because node_modules are not bundled in the authoritative ZIP and this sandbox does not have the project dependencies installed.

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test tests/*.test.mjs",
+    "check:locales": "node scripts/check-locales.mjs"
   },
   "dependencies": {
     "@stripe/stripe-js": "^9.10.0",
@@ -14,15 +16,24 @@
     "@supabase/supabase-js": "^2.110.6",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
-    "next": "16.2.10",
+    "next": "16.3.8",
+    "openai": "^6.48.0",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "stripe": "^22.3.2"
+    "server-only": "^0.0.1",
+    "stripe": "^22.3.2",
+    "zustand": "^5.0.14",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "tailwindcss": "^4"
+    "eslint-config-next": "16.3.8",
+    "tailwindcss": "^4",
+    "@electric-sql/pglite": "0.5.8",
+    "@babel/parser": "^7.28.0",
+    "three-test": "npm:three@0.71.0",
+    "fake-indexeddb": "^6.2.0"
   }
 }

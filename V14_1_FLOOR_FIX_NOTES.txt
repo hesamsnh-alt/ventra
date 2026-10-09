@@ -1,0 +1,39 @@
+VENTRA JPG PLAN MATCH V14.1 - FLOOR GEOMETRY FIX
+
+ROOT CAUSE
+----------
+Browser console shows:
+THREE.WebGLRenderer 71
+roomCount: 0
+
+Autodesk's THREE r71 ShapeGeometry uses legacy:
+geometry.vertices
+geometry.faces
+
+The previous Ventra floor check only accepted:
+geometry.attributes.position
+
+Therefore all valid room floor geometries were incorrectly rejected.
+
+FIX
+---
+buildFloorMesh now supports BOTH:
+- modern BufferGeometry attributes.position
+- legacy THREE.Geometry vertices/faces
+
+Expected after install:
+[VENTRA JPG ROOM FLOOR BUILT v14.1]
+should print once for every valid room.
+
+Most importantly:
+[VENTRA JPG STRUCTURED FLOOR PLAN 3D]
+roomCount should change from 0 to approximately 8 for the V14 exact plan.
+
+FILES
+-----
+Replace:
+src/app/projects/[id]/Project3DViewer.jsx
+
+Keep the V14 design-3d route.js already installed.
+
+No BOQ / DWG / APS / calibration code was changed.

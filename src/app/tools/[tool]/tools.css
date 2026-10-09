@@ -1,0 +1,12 @@
+.engineering-tool { max-width: 900px; margin: 0 auto; padding: 32px 24px; color: #eee; }
+.engineering-tool nav { display: flex; justify-content: space-between; gap: 16px; }
+.engineering-tool a { color: #ffe000; }
+.engineering-tool h1 { font-size: 28px; margin: 32px 0; }
+.engineering-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+.engineering-fields label { display: grid; gap: 8px; }
+.engineering-fields input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #555; border-radius: 4px; background: #161616; color: white; font: inherit; }
+.engineering-tool output { display: block; margin: 32px 0; font-size: 30px; overflow-wrap: anywhere; }
+.engineering-note { color: #bbb; line-height: 1.6; }
+.engineering-tool li { margin: 18px 0; }
+.engineering-tool table { border-collapse: collapse; width: 100%; text-align: left; }
+.engineering-tool th, .engineering-tool td { padding: 12px; border-bottom: 1px solid #444; }

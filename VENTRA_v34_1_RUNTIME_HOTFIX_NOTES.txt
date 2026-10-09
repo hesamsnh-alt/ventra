@@ -1,0 +1,18 @@
+Ventra v34.1 Runtime Hotfix
+
+Root cause of v34 POST /api/ai/generate-boq 500:
+The new concrete-member duplicate check called normalizeUnit(), but that helper
+does not exist in generate-boq/route.js. JavaScript syntax validation passes,
+then runtime throws ReferenceError when the measured column row is evaluated.
+
+Fix:
+- Removed the nonexistent normalizeUnit() call.
+- Normalizes unit inline.
+- v34 concrete-member logic otherwise unchanged.
+- Expected diagnostic:
+  [VENTRA CONCRETE MEMBER BOQ v34.1]
+
+Expected current project:
+- POST /api/ai/generate-boq 200
+- Column member concrete row: 4.21 m3, measured, rate pending.
+- Existing column formwork: 17.02 m2 measured.

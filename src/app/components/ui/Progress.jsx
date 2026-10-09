@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Progress.css";
 
 export default function Progress({
@@ -6,29 +8,29 @@ export default function Progress({
   color = "yellow",
 }) {
   return (
-    <div className="vt-progress">
+    <LocalizedElement as="div" className="vt-progress">
 
       {label && (
-        <div className="vt-progress-top">
+        <LocalizedElement as="div" className="vt-progress-top">
 
-          <span>{label}</span>
+          <LocalizedElement as="span">{label}</LocalizedElement>
 
-          <span>{value}%</span>
+          <LocalizedElement as="span">{value}%</LocalizedElement>
 
-        </div>
+        </LocalizedElement>
       )}
 
-      <div className="vt-progress-track">
+      <LocalizedElement as="div" className="vt-progress-track">
 
-        <div
+        <LocalizedElement as="div"
           className={`vt-progress-fill ${color}`}
           style={{
             width: `${value}%`,
           }}
         />
 
-      </div>
+      </LocalizedElement>
 
-    </div>
+    </LocalizedElement>
   );
 }

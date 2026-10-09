@@ -1,0 +1,23 @@
+Ventra v22 Current-View Room Bridge
+
+Critical fix:
+- The loaded Autodesk 2D view GUID is now preserved.
+- /api/aps/room-metadata is called with that exact view GUID.
+- Metadata dbIds are no longer mixed across two different 2D views.
+- Actual Viewer scans CURRENT model tree names + bulk text properties + bounded per-dbId fallback.
+- Server candidates and client current-view candidates are joined to current geometry by dbId.
+- Parent/block objects that classify as multiple different room types are rejected as noisy metadata.
+
+Expected Browser Console:
+[VENTRA CURRENT APS VIEW v22] { viewGuid: ... }
+[VENTRA CURRENT VIEW ROOM TEXT v22] { candidates: > 0 }
+[VENTRA ROOM META BRIDGE v21] server candidates
+[VENTRA ACTUAL VIEWER ROOM EXTRACTION v19] {
+  currentViewCandidates: > 0,
+  spatialLabels: > 0
+}
+[VENTRA TEST MODE v18] APS spatial room fallback used; OpenAI skipped
+
+Expected BOQ:
+semanticRoomCount > 0
+roomsWithCentroid > 0

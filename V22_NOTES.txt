@@ -1,0 +1,21 @@
+VENTRA V22 - SYMBOL / FURNITURE FIDELITY
+
+Changes only:
+src/app/api/ai/design-3d/route.js
+
+Purpose:
+- Preserve furniture positions detected from the JPG instead of moving them up to ~2.4m to arbitrary nearby walls.
+- roomHint remains authoritative.
+- Vision-detected asset collision does not trigger centroid relocation.
+- Wall snap thresholds are now small and asset-specific for vision symbols.
+- Furniture dimensions are clamped against the detected room size.
+- Inferred/completeness assets still use stronger wall locking where needed.
+
+Untouched:
+- Project3DViewer.jsx
+- JPG save/persistence
+- active source switching
+- APS/DWG
+- BOQ/Estimate/Quotation
+
+After replacing route.js, clear .next, restart, and Analyze the JPG again.

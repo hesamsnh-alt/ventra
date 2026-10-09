@@ -1,0 +1,36 @@
+VENTRA V24.2 PROJECT ROUTE RESTORE
+
+Fixes:
+GET /projects/<project-id> 404
+
+Root cause:
+The dynamic Next.js route folder src/app/projects/[id] was incomplete/replaced.
+A Viewer code error would normally produce a compile/500 error. A clean 404 means
+the page route itself is missing.
+
+This patch restores:
+- page.js
+- ProjectWorkspace.css
+- ProjectDrawingCenter + CSS
+- BOQ / Estimate / Quotation components
+- Activity / Tasks / Timeline / Documents / Daily Reports
+- ApsViewer support
+
+IMPORTANT:
+This patch intentionally DOES NOT contain:
+- Project3DViewer.jsx
+- Project3DViewer.css
+
+So your currently installed V24/V24.1 3D viewer/export work is not overwritten.
+
+INSTALL:
+Extract this zip into the Ventra PROJECT ROOT and MERGE folders.
+Do NOT delete or replace the entire [id] folder first.
+
+Then:
+Ctrl + C
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+npm run dev
+
+Expected:
+GET /projects/<project-id> 200

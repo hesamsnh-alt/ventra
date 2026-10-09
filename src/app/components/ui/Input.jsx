@@ -1,3 +1,5 @@
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 import "./Input.css";
 
 export default function Input({
@@ -9,23 +11,23 @@ export default function Input({
   icon,
 }) {
   return (
-    <div className="vt-input-group">
+    <LocalizedElement as="div" className="vt-input-group">
 
       {label && (
-        <label className="vt-label">
+        <LocalizedElement as="label" className="vt-label">
           {label}
-        </label>
+        </LocalizedElement>
       )}
 
-      <div className="vt-input-wrapper">
+      <LocalizedElement as="div" className="vt-input-wrapper">
 
         {icon && (
-          <span className="vt-input-icon">
+          <LocalizedElement as="span" className="vt-input-icon">
             {icon}
-          </span>
+          </LocalizedElement>
         )}
 
-        <input
+        <LocalizedElement as="input"
           type={type}
           placeholder={placeholder}
           value={value}
@@ -33,8 +35,8 @@ export default function Input({
           className="vt-input"
         />
 
-      </div>
+      </LocalizedElement>
 
-    </div>
+    </LocalizedElement>
   );
 }

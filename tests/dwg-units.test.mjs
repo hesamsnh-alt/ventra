@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {confirmedDwgUnit} from '../src/lib/dwgUnits.mjs';
+test('Manual calibration requires explicit supported units and a drawing reference',()=>{for(const [unit,factor]of [['m',1],['mm',.001],['cm',.01],['ft',.3048],['in',.0254]])assert.equal(confirmedDwgUnit(unit,'Drawing settings').meterFactor,factor);assert.throws(()=>confirmedDwgUnit('unknown','Drawing'));assert.throws(()=>confirmedDwgUnit('mm',''));});

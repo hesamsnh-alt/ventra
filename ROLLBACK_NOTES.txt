@@ -1,0 +1,29 @@
+VENTRA V17.3 ROLLBACK -> V17.2 STABLE
+
+Purpose:
+Undo ONLY the V17.3 viewer lifecycle/source-isolation changes that broke
+JPG schematic display / source flow.
+
+Restores the exact V17.2 set:
+- design-3d route
+- ProjectDrawingCenter
+- Project3DViewer
+
+This returns the system to the state where:
+- project page loads
+- /api/ai/design-3d returns 200
+- JPG Analyze creates a schematic scene
+- JPG schematic save flow works
+- plan/3D rendering works
+
+Known remaining issue after rollback:
+- Prompt/Edit may still hit createOverlayScene lifecycle error.
+That issue must be fixed separately with a minimal local guard only,
+without touching source selection or JPG persistence.
+
+INSTALL:
+1. Extract at Ventra project root.
+2. Overwrite ONLY these three files.
+3. Ctrl + C
+4. Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+5. npm run dev

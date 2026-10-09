@@ -1,4 +1,9 @@
 "use client";
+import LocalizedLink from "@/app/components/i18n/LocalizedLink";
+
+import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
+
+import {meanProjectProgress} from "@/lib/projectProgress.mjs";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -57,10 +62,10 @@ export default function DashboardPage() {
         } = await getCurrentUser();
 
         if (userError) {
-          console.error(
-            "User loading error:",
-            userError.message
-          );
+         console.warn(
+  "User loading warning:",
+  userError
+);
         }
 
         if (!currentUser) {
@@ -177,7 +182,7 @@ export default function DashboardPage() {
 
       return (
         status === "active" ||
-        status === "in progress"
+        status === "in progress" || status === "in_progress"
       );
     }).length;
   }, [projects]);
@@ -216,21 +221,21 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main className="vt-db-loading">
-        <div className="vt-db-loading__logo">
+      <LocalizedElement as="main" className="vt-db-loading">
+        <LocalizedElement as="div" className="vt-db-loading__logo">
           <Building2 size={24} />
-        </div>
+        </LocalizedElement>
 
-        <div className="vt-db-loading__spinner" />
+        <LocalizedElement as="div" className="vt-db-loading__spinner" />
 
-        <p>Loading your workspace...</p>
-      </main>
+        <LocalizedElement as="p">Loading your workspace...</LocalizedElement>
+      </LocalizedElement>
     );
   }
 
   return (
-    <main className="vt-db-page">
-      <button
+    <LocalizedElement as="main" className="vt-db-page">
+      <LocalizedElement as="button"
         type="button"
         className={`vt-db-overlay ${
           sidebarOpen ? "is-visible" : ""
@@ -239,158 +244,158 @@ export default function DashboardPage() {
         aria-label="Close sidebar overlay"
       />
 
-      <aside
+      <LocalizedElement as="aside"
         className={`vt-db-sidebar ${
           sidebarOpen ? "is-open" : ""
         }`}
       >
-        <div className="vt-db-sidebar__top">
-          <Link
+        <LocalizedElement as="div" className="vt-db-sidebar__top">
+          <LocalizedLink 
             href="/"
             className="vt-db-brand"
             onClick={closeSidebar}
           >
-            <span className="vt-db-brand__icon">
+            <LocalizedElement as="span" className="vt-db-brand__icon">
               <Building2 size={23} />
-            </span>
+            </LocalizedElement>
 
-            <span className="vt-db-brand__text">
+            <LocalizedElement as="span" className="vt-db-brand__text">
               Ventra
-            </span>
-          </Link>
+            </LocalizedElement>
+          </LocalizedLink>
 
-          <button
+          <LocalizedElement as="button"
             type="button"
             className="vt-db-sidebar__close"
             onClick={closeSidebar}
             aria-label="Close sidebar"
           >
             <X size={20} />
-          </button>
-        </div>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <nav className="vt-db-nav">
-          <p className="vt-db-nav__label">
+        <LocalizedElement as="nav" className="vt-db-nav">
+          <LocalizedElement as="p" className="vt-db-nav__label">
             Workspace
-          </p>
+          </LocalizedElement>
 
-          <Link
+          <LocalizedLink 
             href="/dashboard"
             className="vt-db-nav__item is-active"
             onClick={closeSidebar}
           >
             <LayoutDashboard size={19} />
-            <span>Overview</span>
-          </Link>
+            <LocalizedElement as="span">Overview</LocalizedElement>
+          </LocalizedLink>
 
-          <Link
+          <LocalizedLink 
             href="/dashboard#projects"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <FolderKanban size={19} />
-            <span>Projects</span>
+            <LocalizedElement as="span">Projects</LocalizedElement>
 
-            <span className="vt-db-nav__count">
+            <LocalizedElement as="span" className="vt-db-nav__count">
               {projects.length}
-            </span>
-          </Link>
+            </LocalizedElement>
+          </LocalizedLink>
 
-          <Link
-            href="/dashboard"
+          <LocalizedLink 
+            href="/tools/estimate"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <Sparkles size={19} />
-            <span>AI Estimation</span>
-          </Link>
+            <LocalizedElement as="span">AI Estimation</LocalizedElement>
+          </LocalizedLink>
 
-          <Link
-            href="/dashboard"
+          <LocalizedLink 
+            href="/tools/boq"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <FileBarChart size={19} />
-            <span>BOQ</span>
-          </Link>
+            <LocalizedElement as="span">BOQ</LocalizedElement>
+          </LocalizedLink>
 
-          <Link
-            href="/dashboard"
+          <LocalizedLink 
+            href="/tools/documents"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <FileText size={19} />
-            <span>Documents</span>
-          </Link>
+            <LocalizedElement as="span">Documents</LocalizedElement>
+          </LocalizedLink>
 
-          <p className="vt-db-nav__label vt-db-nav__label--second">
+          <LocalizedElement as="p" className="vt-db-nav__label vt-db-nav__label--second">
             Management
-          </p>
+          </LocalizedElement>
 
-          <Link
-            href="/dashboard"
+          <LocalizedLink 
+            href="/profile"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <Users size={19} />
-            <span>Team</span>
-          </Link>
+            <LocalizedElement as="span">My account</LocalizedElement>
+          </LocalizedLink>
 
-          <Link
-            href="/dashboard"
+          <LocalizedLink 
+            href="/profile"
             className="vt-db-nav__item"
             onClick={closeSidebar}
           >
             <Settings size={19} />
-            <span>Settings</span>
-          </Link>
-        </nav>
+            <LocalizedElement as="span">Settings</LocalizedElement>
+          </LocalizedLink>
+        </LocalizedElement>
 
-        <div className="vt-db-sidebar__bottom">
-          <div className="vt-db-plan">
-            <div className="vt-db-plan__icon">
+        <LocalizedElement as="div" className="vt-db-sidebar__bottom">
+          <LocalizedElement as="div" className="vt-db-plan">
+            <LocalizedElement as="div" className="vt-db-plan__icon">
               <Sparkles size={18} />
-            </div>
+            </LocalizedElement>
 
-            <div>
-              <strong>Starter plan</strong>
-              <span>Upgrade your workspace</span>
-            </div>
+            <LocalizedElement as="div">
+              <LocalizedElement as="strong">Billing & subscription</LocalizedElement>
+              <LocalizedElement as="span">Upgrade your workspace</LocalizedElement>
+            </LocalizedElement>
 
-            <button type="button">
+            <LocalizedElement as="button" type="button" onClick={() => router.push("/billing")}>
               Upgrade
-            </button>
-          </div>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="vt-db-profile">
-            <div className="vt-db-profile__avatar">
+          <LocalizedElement as="div" className="vt-db-profile">
+            <LocalizedElement as="div" className="vt-db-profile__avatar">
               {avatarLetter}
-            </div>
+            </LocalizedElement>
 
-            <div className="vt-db-profile__details">
-              <strong>
+            <LocalizedElement as="div" className="vt-db-profile__details">
+              <LocalizedElement as="strong">
                 {fullName || firstName}
-              </strong>
+              </LocalizedElement>
 
-              <span>{user?.email}</span>
-            </div>
+              <LocalizedElement as="span">{user?.email}</LocalizedElement>
+            </LocalizedElement>
 
-            <button
+            <LocalizedElement as="button"
               type="button"
               className="vt-db-profile__logout"
               onClick={handleLogout}
               aria-label="Log out"
             >
               <LogOut size={18} />
-            </button>
-          </div>
-        </div>
-      </aside>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <section className="vt-db-main">
-        <header className="vt-db-header">
-          <div className="vt-db-header__left">
-            <button
+      <LocalizedElement as="section" className="vt-db-main">
+        <LocalizedElement as="header" className="vt-db-header">
+          <LocalizedElement as="div" className="vt-db-header__left">
+            <LocalizedElement as="button"
               type="button"
               className="vt-db-menu-button"
               onClick={() =>
@@ -399,22 +404,22 @@ export default function DashboardPage() {
               aria-label="Open sidebar"
             >
               <Menu size={21} />
-            </button>
+            </LocalizedElement>
 
-            <div>
-              <h1>Dashboard</h1>
-              <p>
+            <LocalizedElement as="div">
+              <LocalizedElement as="h1">Dashboard</LocalizedElement>
+              <LocalizedElement as="p">
                 Manage your construction
                 workspace.
-              </p>
-            </div>
-          </div>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <div className="vt-db-header__actions">
-            <label className="vt-db-search">
+          <LocalizedElement as="div" className="vt-db-header__actions">
+            <LocalizedElement as="label" className="vt-db-search">
               <Search size={18} />
 
-              <input
+              <LocalizedElement as="input"
                 type="search"
                 value={searchValue}
                 onChange={(event) =>
@@ -425,98 +430,99 @@ export default function DashboardPage() {
                 placeholder="Search projects..."
                 aria-label="Search projects"
               />
-            </label>
+            </LocalizedElement>
 
-            <button
+            <LocalizedElement as="button"
               type="button"
               className="vt-db-icon-button"
               aria-label="Notifications"
+              onClick={() => router.push("/notifications")}
             >
               <Bell size={20} />
 
-              <span className="vt-db-notification-dot" />
-            </button>
+              
+            </LocalizedElement>
 
-            <Link
+            <LocalizedLink 
               href="/projects/new"
               className="vt-db-primary-button"
             >
               <Plus size={18} />
-              <span>New project</span>
-            </Link>
-          </div>
-        </header>
+              <LocalizedElement as="span">New project</LocalizedElement>
+            </LocalizedLink>
+          </LocalizedElement>
+        </LocalizedElement>
 
-        <div className="vt-db-body">
-          <section className="vt-db-hero">
-            <div className="vt-db-hero__content">
-              <span className="vt-db-hero__badge">
+        <LocalizedElement as="div" className="vt-db-body">
+          <LocalizedElement as="section" className="vt-db-hero">
+            <LocalizedElement as="div" className="vt-db-hero__content">
+              <LocalizedElement as="span" className="vt-db-hero__badge">
                 <Sparkles size={15} />
                 AI construction workspace
-              </span>
+              </LocalizedElement>
 
-              <h2>
+              <LocalizedElement as="h2">
                 Welcome back, {firstName}.
-              </h2>
+              </LocalizedElement>
 
-              <p>
+              <LocalizedElement as="p">
                 Track projects, prepare estimates
                 and manage construction data from
                 one connected workspace.
-              </p>
+              </LocalizedElement>
 
-              <div className="vt-db-hero__buttons">
-                <Link
+              <LocalizedElement as="div" className="vt-db-hero__buttons">
+                <LocalizedLink 
                   href="/projects/new"
                   className="vt-db-primary-button"
                 >
                   <Plus size={18} />
                   Create project
-                </Link>
+                </LocalizedLink>
 
-                <Link
-                  href="/dashboard"
+                <LocalizedLink 
+                  href="/tools/drawings"
                   className="vt-db-secondary-button"
                 >
                   <Upload size={18} />
                   Upload drawings
-                </Link>
-              </div>
-            </div>
+                </LocalizedLink>
+              </LocalizedElement>
+            </LocalizedElement>
 
-            <div className="vt-db-hero__visual">
-              <div className="vt-db-hero__glow" />
+            <LocalizedElement as="div" className="vt-db-hero__visual">
+              <LocalizedElement as="div" className="vt-db-hero__glow" />
 
-              <div className="vt-db-ai-card">
-                <span className="vt-db-ai-card__icon">
+              <LocalizedElement as="div" className="vt-db-ai-card">
+                <LocalizedElement as="span" className="vt-db-ai-card__icon">
                   <Sparkles size={20} />
-                </span>
+                </LocalizedElement>
 
-                <div>
-                  <strong>AI Estimator</strong>
+                <LocalizedElement as="div">
+                  <LocalizedElement as="strong">AI Estimator</LocalizedElement>
 
-                  <p>
+                  <LocalizedElement as="p">
                     Ready to analyze drawings
-                  </p>
-                </div>
-              </div>
+                  </LocalizedElement>
+                </LocalizedElement>
+              </LocalizedElement>
 
-              <div className="vt-db-hero__metric">
-                <span>Workspace health</span>
-                <strong>92%</strong>
+              <LocalizedElement as="div" className="vt-db-hero__metric">
+                <LocalizedElement as="span">Average project progress</LocalizedElement>
+                <LocalizedElement as="strong">{meanProjectProgress(projects)===null?"Not recorded":`${meanProjectProgress(projects)}%`}</LocalizedElement>
 
-                <div className="vt-db-progress">
-                  <span
+                <LocalizedElement as="div" className="vt-db-progress">
+                  <LocalizedElement as="span"
                     style={{
-                      width: "92%",
+                      width: `${meanProjectProgress(projects)??0}%`,
                     }}
                   />
-                </div>
-              </div>
-            </div>
-          </section>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
 
-          <section className="vt-db-stats-grid">
+          <LocalizedElement as="section" className="vt-db-stats-grid">
             <StatCard
               icon={
                 <FolderKanban size={21} />
@@ -552,34 +558,34 @@ export default function DashboardPage() {
               value={completedProjects}
               note="Successfully delivered"
             />
-          </section>
+          </LocalizedElement>
 
-          <div className="vt-db-layout">
-            <div className="vt-db-layout__main">
-              <section
+          <LocalizedElement as="div" className="vt-db-layout">
+            <LocalizedElement as="div" className="vt-db-layout__main">
+              <LocalizedElement as="section"
                 id="projects"
                 className="vt-db-panel"
               >
-                <div className="vt-db-panel__header">
-                  <div>
-                    <span className="vt-db-panel__eyebrow">
+                <LocalizedElement as="div" className="vt-db-panel__header">
+                  <LocalizedElement as="div">
+                    <LocalizedElement as="span" className="vt-db-panel__eyebrow">
                       Project workspace
-                    </span>
+                    </LocalizedElement>
 
-                    <h2>Recent projects</h2>
-                  </div>
+                    <LocalizedElement as="h2">Recent projects</LocalizedElement>
+                  </LocalizedElement>
 
-                  <Link
+                  <LocalizedLink 
                     href="/dashboard#projects"
                     className="vt-db-text-link"
                   >
                     View all
                     <ChevronRight size={17} />
-                  </Link>
-                </div>
+                  </LocalizedLink>
+                </LocalizedElement>
 
                 {filteredProjects.length > 0 ? (
-                  <div className="vt-db-project-grid">
+                  <LocalizedElement as="div" className="vt-db-project-grid">
                     {filteredProjects
                       .slice(0, 6)
                       .map((project) => (
@@ -588,50 +594,50 @@ export default function DashboardPage() {
                           project={project}
                         />
                       ))}
-                  </div>
+                  </LocalizedElement>
                 ) : (
-                  <div className="vt-db-empty">
-                    <div className="vt-db-empty__icon">
+                  <LocalizedElement as="div" className="vt-db-empty">
+                    <LocalizedElement as="div" className="vt-db-empty__icon">
                       <FolderKanban size={28} />
-                    </div>
+                    </LocalizedElement>
 
-                    <h3>
+                    <LocalizedElement as="h3">
                       {searchValue
                         ? "No matching projects found"
                         : "No projects yet"}
-                    </h3>
+                    </LocalizedElement>
 
-                    <p>
+                    <LocalizedElement as="p">
                       {searchValue
                         ? "Try another project name, location or status."
                         : "Create your first project to start estimating and managing construction work."}
-                    </p>
+                    </LocalizedElement>
 
                     {!searchValue && (
-                      <Link
+                      <LocalizedLink 
                         href="/projects/new"
                         className="vt-db-primary-button"
                       >
                         <Plus size={18} />
                         Create first project
-                      </Link>
+                      </LocalizedLink>
                     )}
-                  </div>
+                  </LocalizedElement>
                 )}
-              </section>
+              </LocalizedElement>
 
-              <section className="vt-db-panel">
-                <div className="vt-db-panel__header">
-                  <div>
-                    <span className="vt-db-panel__eyebrow">
+              <LocalizedElement as="section" className="vt-db-panel">
+                <LocalizedElement as="div" className="vt-db-panel__header">
+                  <LocalizedElement as="div">
+                    <LocalizedElement as="span" className="vt-db-panel__eyebrow">
                       Latest updates
-                    </span>
+                    </LocalizedElement>
 
-                    <h2>Recent activity</h2>
-                  </div>
-                </div>
+                    <LocalizedElement as="h2">Recent activity</LocalizedElement>
+                  </LocalizedElement>
+                </LocalizedElement>
 
-                <div className="vt-db-activity-list">
+                <LocalizedElement as="div" className="vt-db-activity-list">
                   <ActivityItem
                     icon={<Upload size={18} />}
                     title="Drawing upload available"
@@ -650,27 +656,27 @@ export default function DashboardPage() {
 
                   <ActivityItem
                     icon={<Users size={18} />}
-                    title="Team collaboration enabled"
-                    description="Invite project managers and site supervisors."
-                    time="Team module"
+                    title="Account settings"
+                    description="Update your profile and review account details."
+                    time="Account"
                   />
-                </div>
-              </section>
-            </div>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
 
-            <aside className="vt-db-layout__aside">
-              <section className="vt-db-panel vt-db-quick-panel">
-                <div className="vt-db-panel__header">
-                  <div>
-                    <span className="vt-db-panel__eyebrow">
+            <LocalizedElement as="aside" className="vt-db-layout__aside">
+              <LocalizedElement as="section" className="vt-db-panel vt-db-quick-panel">
+                <LocalizedElement as="div" className="vt-db-panel__header">
+                  <LocalizedElement as="div">
+                    <LocalizedElement as="span" className="vt-db-panel__eyebrow">
                       Shortcuts
-                    </span>
+                    </LocalizedElement>
 
-                    <h2>Quick actions</h2>
-                  </div>
-                </div>
+                    <LocalizedElement as="h2">Quick actions</LocalizedElement>
+                  </LocalizedElement>
+                </LocalizedElement>
 
-                <div className="vt-db-actions-list">
+                <LocalizedElement as="div" className="vt-db-actions-list">
                   <QuickAction
                     href="/projects/new"
                     icon={<Plus size={20} />}
@@ -702,24 +708,24 @@ export default function DashboardPage() {
                     title="Create BOQ"
                     description="Prepare editable quantities"
                   />
-                </div>
-              </section>
+                </LocalizedElement>
+              </LocalizedElement>
 
-              <section className="vt-db-panel">
-                <div className="vt-db-panel__header">
-                  <div>
-                    <span className="vt-db-panel__eyebrow">
+              <LocalizedElement as="section" className="vt-db-panel">
+                <LocalizedElement as="div" className="vt-db-panel__header">
+                  <LocalizedElement as="div">
+                    <LocalizedElement as="span" className="vt-db-panel__eyebrow">
                       This week
-                    </span>
+                    </LocalizedElement>
 
-                    <h2>Workspace summary</h2>
-                  </div>
-                </div>
+                    <LocalizedElement as="h2">Workspace summary</LocalizedElement>
+                  </LocalizedElement>
+                </LocalizedElement>
 
-                <div className="vt-db-summary">
+                <LocalizedElement as="div" className="vt-db-summary">
                   <SummaryRow
-                    label="Project capacity"
-                    value={`${projects.length}/10`}
+                    label="Projects"
+                    value={`${projects.length}`}
                     progress={Math.min(
                       projects.length * 10,
                       100
@@ -728,51 +734,51 @@ export default function DashboardPage() {
 
                   <SummaryRow
                     label="Storage usage"
-                    value="1.4 GB"
-                    progress={28}
+                    value="Not measured"
+                    progress={0}
                   />
 
                   <SummaryRow
-                    label="Team members"
-                    value="1/2"
-                    progress={50}
+                    label="Account"
+                    value="Your account"
+                    progress={0}
                   />
-                </div>
+                </LocalizedElement>
 
-                <Link
-                  href="/dashboard"
+                <LocalizedLink 
+                  href="/profile"
                   className="vt-db-summary__button"
                 >
                   Manage workspace
                   <ChevronRight size={17} />
-                </Link>
-              </section>
+                </LocalizedLink>
+              </LocalizedElement>
 
-              <section className="vt-db-upgrade-card">
-                <span className="vt-db-upgrade-card__icon">
+              <LocalizedElement as="section" className="vt-db-upgrade-card">
+                <LocalizedElement as="span" className="vt-db-upgrade-card__icon">
                   <Sparkles size={21} />
-                </span>
+                </LocalizedElement>
 
-                <h3>
+                <LocalizedElement as="h3">
                   Unlock full AI analysis
-                </h3>
+                </LocalizedElement>
 
-                <p>
+                <LocalizedElement as="p">
                   Generate detailed quantities,
                   UAE pricing and professional
                   quotations.
-                </p>
+                </LocalizedElement>
 
-                <button type="button">
+                <LocalizedElement as="button" type="button" onClick={() => router.push("/pricing")}>
                   Explore plans
                   <ChevronRight size={17} />
-                </button>
-              </section>
-            </aside>
-          </div>
-        </div>
-      </section>
-    </main>
+                </LocalizedElement>
+              </LocalizedElement>
+            </LocalizedElement>
+          </LocalizedElement>
+        </LocalizedElement>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }
 
@@ -783,30 +789,30 @@ function StatCard({
   note,
 }) {
   return (
-    <article className="vt-db-stat-card">
-      <div className="vt-db-stat-card__top">
-        <span className="vt-db-stat-card__icon">
+    <LocalizedElement as="article" className="vt-db-stat-card">
+      <LocalizedElement as="div" className="vt-db-stat-card__top">
+        <LocalizedElement as="span" className="vt-db-stat-card__icon">
           {icon}
-        </span>
+        </LocalizedElement>
 
-        <button
+        <LocalizedElement as="button"
           type="button"
           aria-label={`More options for ${label}`}
         >
           <MoreHorizontal size={19} />
-        </button>
-      </div>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <strong className="vt-db-stat-card__value">
+      <LocalizedElement as="strong" className="vt-db-stat-card__value">
         {value}
-      </strong>
+      </LocalizedElement>
 
-      <span className="vt-db-stat-card__label">
+      <LocalizedElement as="span" className="vt-db-stat-card__label">
         {label}
-      </span>
+      </LocalizedElement>
 
-      <p>{note}</p>
-    </article>
+      <LocalizedElement as="p">{note}</LocalizedElement>
+    </LocalizedElement>
   );
 }
 
@@ -827,49 +833,49 @@ function ProjectCard({ project }) {
     "Location not added";
 
   return (
-    <Link
+    <LocalizedLink 
       href={`/projects/${project.id}`}
       className="vt-db-project-card"
     >
-      <div className="vt-db-project-card__top">
-        <span className="vt-db-project-card__folder">
+      <LocalizedElement as="div" className="vt-db-project-card__top">
+        <LocalizedElement as="span" className="vt-db-project-card__folder">
           <FolderKanban size={21} />
-        </span>
+        </LocalizedElement>
 
-        <span
+        <LocalizedElement as="span"
           className={`vt-db-status ${getStatusClass(
             projectStatus
           )}`}
         >
           {projectStatus}
-        </span>
-      </div>
+        </LocalizedElement>
+      </LocalizedElement>
 
-      <h3>{projectName}</h3>
-      <p>{projectLocation}</p>
+      <LocalizedElement as="h3"><OriginalText>{projectName}</OriginalText></LocalizedElement>
+      <LocalizedElement as="p">{projectLocation}</LocalizedElement>
 
-      <div className="vt-db-project-card__meta">
-        <span>
+      <LocalizedElement as="div" className="vt-db-project-card__meta">
+        <LocalizedElement as="span">
           <CalendarDays size={15} />
           {formatDate(project.created_at)}
-        </span>
+        </LocalizedElement>
 
-        <span>{progress}%</span>
-      </div>
+        <LocalizedElement as="span">{progress}%</LocalizedElement>
+      </LocalizedElement>
 
-      <div className="vt-db-progress">
-        <span
+      <LocalizedElement as="div" className="vt-db-progress">
+        <LocalizedElement as="span"
           style={{
             width: `${progress}%`,
           }}
         />
-      </div>
+      </LocalizedElement>
 
-      <div className="vt-db-project-card__footer">
-        <span>Open workspace</span>
+      <LocalizedElement as="div" className="vt-db-project-card__footer">
+        <LocalizedElement as="span">Open workspace</LocalizedElement>
         <ChevronRight size={17} />
-      </div>
-    </Link>
+      </LocalizedElement>
+    </LocalizedLink>
   );
 }
 
@@ -880,21 +886,21 @@ function QuickAction({
   description,
 }) {
   return (
-    <Link
+    <LocalizedLink 
       href={href}
       className="vt-db-quick-action"
     >
-      <span className="vt-db-quick-action__icon">
+      <LocalizedElement as="span" className="vt-db-quick-action__icon">
         {icon}
-      </span>
+      </LocalizedElement>
 
-      <span className="vt-db-quick-action__content">
-        <strong>{title}</strong>
-        <small>{description}</small>
-      </span>
+      <LocalizedElement as="span" className="vt-db-quick-action__content">
+        <LocalizedElement as="strong">{title}</LocalizedElement>
+        <LocalizedElement as="small">{description}</LocalizedElement>
+      </LocalizedElement>
 
       <ChevronRight size={18} />
-    </Link>
+    </LocalizedLink>
   );
 }
 
@@ -905,20 +911,20 @@ function ActivityItem({
   time,
 }) {
   return (
-    <article className="vt-db-activity">
-      <span className="vt-db-activity__icon">
+    <LocalizedElement as="article" className="vt-db-activity">
+      <LocalizedElement as="span" className="vt-db-activity__icon">
         {icon}
-      </span>
+      </LocalizedElement>
 
-      <div className="vt-db-activity__content">
-        <strong>{title}</strong>
-        <p>{description}</p>
-      </div>
+      <LocalizedElement as="div" className="vt-db-activity__content">
+        <LocalizedElement as="strong">{title}</LocalizedElement>
+        <LocalizedElement as="p">{description}</LocalizedElement>
+      </LocalizedElement>
 
-      <span className="vt-db-activity__time">
+      <LocalizedElement as="span" className="vt-db-activity__time">
         {time}
-      </span>
-    </article>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }
 
@@ -933,20 +939,20 @@ function SummaryRow({
   );
 
   return (
-    <div className="vt-db-summary__row">
-      <div className="vt-db-summary__details">
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
+    <LocalizedElement as="div" className="vt-db-summary__row">
+      <LocalizedElement as="div" className="vt-db-summary__details">
+        <LocalizedElement as="span">{label}</LocalizedElement>
+        <LocalizedElement as="strong">{value}</LocalizedElement>
+      </LocalizedElement>
 
-      <div className="vt-db-progress">
-        <span
+      <LocalizedElement as="div" className="vt-db-progress">
+        <LocalizedElement as="span"
           style={{
             width: `${safeProgress}%`,
           }}
         />
-      </div>
-    </div>
+      </LocalizedElement>
+    </LocalizedElement>
   );
 }
 

@@ -1,0 +1,44 @@
+VENTRA V41 - JPG/PNG/WebP Spatial Regression Fix
+Base authoritative source: ventra(20260913-102936).zip
+
+Changed source files ONLY:
+1) src/app/api/ai/design-3d/route.js
+2) src/app/projects/[id]/Project3DViewer.jsx
+
+Purpose:
+- Fix false black voids in raster-plan 3D.
+- Stop synthetic furniture/fixture invention for exact-plan reconstruction.
+- Preserve visible AI-detected assets even when room-lock collision logic cannot place them.
+- Restrict floor-cutting holes to explicit shaft/courtyard geometry only.
+- Add a regression lock for the supplied 12.50m x 9.50m 2-bedroom reference plan already represented by Ventra's deterministic reference scene.
+- Keep the DWG/DXF/IFC/RVT engineering pipeline untouched.
+
+Reference-plan behavior:
+When the analyzed drawing is approximately 12.50 x 9.50m and contains the expected 2 bedrooms, 2 baths, living, kitchen/dining and store labels, V41 uses Ventra's existing exact reference reconstruction instead of accepting a plausible-but-wrong AI topology. This prevents the 8-room phantom layout, vertical rearrangement, fake void, and missing furniture shown in the supplied regression screenshots.
+
+Generic raster behavior:
+- No inferred/synthetic furniture is added by enrichFloorPlanAssets.
+- No inferred bathroom completeness fixtures are added.
+- Assets detected by vision are preserved if the stricter room-lock placement rejects them.
+- Only explicit shaft/courtyard holes can cut the floor; generic void/opening guesses cannot create black holes.
+- Viewer also independently refuses to render non-shaft/non-courtyard holes.
+- Uncovered circulation remains a visible floor plate.
+
+Validation performed in patch environment:
+- node --check src/app/api/ai/design-3d/route.js: PASS
+- strict JSON schema harness: PASS
+- targeted V41 static invariants: PASS
+- source diff audit: only the two files listed above differ from the authoritative ZIP.
+
+Full npm build was NOT claimed because dependencies are not installed in the isolated patch environment.
+
+Apply:
+Extract this ZIP into the Ventra project root and overwrite existing files.
+Then stop the dev server completely and run:
+  npm run dev
+Regenerate the 3D scene for the image; do not rely on an already-persisted old scene.
+
+Expected console markers:
+- generic-floorplan-engine-v41-spatial-regression
+- [VENTRA JPG REFERENCE REGRESSION v41] for the supplied reference plan
+- [VENTRA JPG RENDER INTEGRITY v41]
