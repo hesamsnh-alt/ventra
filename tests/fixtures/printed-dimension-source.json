@@ -1,0 +1,1012 @@
+{
+  "width": 12,
+  "depth": 8,
+  "footprint": [
+    {
+      "x": 0,
+      "y": 8
+    },
+    {
+      "x": 12,
+      "y": 8
+    },
+    {
+      "x": 12,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "rooms": [
+    {
+      "id": "bedroom_1",
+      "name": "اتاق خواب ۱",
+      "type": "bedroom",
+      "labelVisible": true,
+      "printedWidthMeters": 4,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 0,
+          "y": 8
+        },
+        {
+          "x": 3.986739130434782,
+          "y": 8
+        },
+        {
+          "x": 3.986739130434782,
+          "y": 4.488548586054485
+        },
+        {
+          "x": 0,
+          "y": 4.488548586054485
+        }
+      ],
+      "semanticType": "bedroom",
+      "floorFinish": "light_oak"
+    },
+    {
+      "id": "bedroom_2",
+      "name": "اتاق خواب ۲",
+      "type": "bedroom",
+      "labelVisible": true,
+      "printedWidthMeters": 4,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 3.986739130434782,
+          "y": 8
+        },
+        {
+          "x": 8.013260869565217,
+          "y": 8
+        },
+        {
+          "x": 8.013260869565217,
+          "y": 4.488548586054485
+        },
+        {
+          "x": 3.986739130434782,
+          "y": 4.488548586054485
+        }
+      ],
+      "semanticType": "bedroom",
+      "floorFinish": "light_oak"
+    },
+    {
+      "id": "balcony",
+      "name": "بالکن",
+      "type": "balcony",
+      "labelVisible": true,
+      "printedWidthMeters": 4,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 8.013260869565217,
+          "y": 8
+        },
+        {
+          "x": 12,
+          "y": 8
+        },
+        {
+          "x": 12,
+          "y": 4.488548586054485
+        },
+        {
+          "x": 8.013260869565217,
+          "y": 4.488548586054485
+        }
+      ],
+      "semanticType": "balcony",
+      "floorFinish": "utility_tile"
+    },
+    {
+      "id": "corridor",
+      "name": "راهرو",
+      "type": "circulation",
+      "labelVisible": true,
+      "printedWidthMeters": 12,
+      "printedDepthMeters": 1,
+      "polygon": [
+        {
+          "x": 0,
+          "y": 4.488548586054485
+        },
+        {
+          "x": 12,
+          "y": 4.488548586054485
+        },
+        {
+          "x": 12,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 0,
+          "y": 3.4865028724507248
+        }
+      ],
+      "semanticType": "circulation",
+      "floorFinish": "neutral_floor"
+    },
+    {
+      "id": "living",
+      "name": "نشیمن",
+      "type": "living",
+      "labelVisible": true,
+      "printedWidthMeters": 6,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 0,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 6,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 6,
+          "y": 0
+        },
+        {
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "semanticType": "living",
+      "floorFinish": "light_stone"
+    },
+    {
+      "id": "kitchen",
+      "name": "آشپزخانه",
+      "type": "kitchen",
+      "labelVisible": true,
+      "printedWidthMeters": 3,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 6,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 9.008152173913041,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 9.008152173913041,
+          "y": 0
+        },
+        {
+          "x": 6,
+          "y": 0
+        }
+      ],
+      "semanticType": "kitchen",
+      "floorFinish": "light_stone"
+    },
+    {
+      "id": "bathroom",
+      "name": "سرویس و حمام",
+      "type": "bathroom",
+      "labelVisible": true,
+      "printedWidthMeters": 1.8,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 9.008152173913041,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 10.817445652173912,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 10.817445652173912,
+          "y": 0
+        },
+        {
+          "x": 9.008152173913041,
+          "y": 0
+        }
+      ],
+      "semanticType": "bathroom",
+      "floorFinish": "wet_tile"
+    },
+    {
+      "id": "laundry",
+      "name": "رختشوی‌خانه",
+      "type": "laundry",
+      "labelVisible": true,
+      "printedWidthMeters": 1.2,
+      "printedDepthMeters": 3.5,
+      "polygon": [
+        {
+          "x": 10.817445652173912,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 12,
+          "y": 3.4865028724507248
+        },
+        {
+          "x": 12,
+          "y": 0
+        },
+        {
+          "x": 10.817445652173912,
+          "y": 0
+        }
+      ],
+      "semanticType": "laundry",
+      "floorFinish": "utility_tile"
+    }
+  ],
+  "walls": [
+    {
+      "id": "ext_1_outdoor_0",
+      "type": "external",
+      "start": {
+        "x": 0,
+        "y": 8
+      },
+      "end": {
+        "x": 8.013260869565217,
+        "y": 8
+      }
+    },
+    {
+      "id": "ext_1_outdoor_1",
+      "type": "railing",
+      "start": {
+        "x": 8.013260869565217,
+        "y": 8
+      },
+      "end": {
+        "x": 12,
+        "y": 8
+      },
+      "height": 1.1,
+      "heightSource": "visual_default_not_measured"
+    },
+    {
+      "id": "ext_2_outdoor_0",
+      "type": "railing",
+      "start": {
+        "x": 12,
+        "y": 8
+      },
+      "end": {
+        "x": 12,
+        "y": 4.488548586054485
+      },
+      "height": 1.1,
+      "heightSource": "visual_default_not_measured"
+    },
+    {
+      "id": "ext_2_outdoor_1",
+      "type": "external",
+      "start": {
+        "x": 12,
+        "y": 4.488548586054485
+      },
+      "end": {
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "id": "ext_3",
+      "type": "external",
+      "start": {
+        "x": 12,
+        "y": 0
+      },
+      "end": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "ext_4",
+      "type": "external",
+      "start": {
+        "x": 0,
+        "y": 0
+      },
+      "end": {
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": "p_v653",
+      "provenance": "observed",
+      "type": "internal",
+      "start": {
+        "x": 3.987,
+        "y": 8
+      },
+      "end": {
+        "x": 3.987,
+        "y": 4.489
+      }
+    },
+    {
+      "id": "p_v1147",
+      "provenance": "observed",
+      "type": "internal",
+      "start": {
+        "x": 8.013,
+        "y": 8
+      },
+      "end": {
+        "x": 8.013,
+        "y": 4.489
+      }
+    },
+    {
+      "id": "p_v900",
+      "provenance": "observed",
+      "type": "internal",
+      "start": {
+        "x": 6,
+        "y": 3.487
+      },
+      "end": {
+        "x": 6,
+        "y": 0
+      }
+    },
+    {
+      "id": "p_v1269",
+      "provenance": "observed",
+      "type": "internal",
+      "start": {
+        "x": 9.008,
+        "y": 3.487
+      },
+      "end": {
+        "x": 9.008,
+        "y": 0
+      }
+    },
+    {
+      "id": "p_v1491",
+      "provenance": "observed",
+      "type": "internal",
+      "start": {
+        "x": 10.817,
+        "y": 3.487
+      },
+      "end": {
+        "x": 10.817,
+        "y": 0
+      }
+    },
+    {
+      "id": "room_edge_kitchen_1",
+      "provenance": "room_boundary",
+      "type": "internal",
+      "start": {
+        "x": 6,
+        "y": 3.4865028724507248
+      },
+      "end": {
+        "x": 9.008152173913041,
+        "y": 3.4865028724507248
+      }
+    },
+    {
+      "id": "room_edge_bathroom_1",
+      "provenance": "room_boundary",
+      "type": "internal",
+      "start": {
+        "x": 9.008152173913041,
+        "y": 3.4865028724507248
+      },
+      "end": {
+        "x": 10.817445652173912,
+        "y": 3.4865028724507248
+      }
+    },
+    {
+      "id": "opening_support_door_bedroom_1",
+      "type": "internal",
+      "provenance": "observed_opening_shared_boundary",
+      "start": {
+        "x": 3.986739130434782,
+        "y": 4.488548586054485
+      },
+      "end": {
+        "x": 0,
+        "y": 4.488548586054485
+      }
+    },
+    {
+      "id": "opening_support_door_bedroom_2",
+      "type": "internal",
+      "provenance": "observed_opening_shared_boundary",
+      "start": {
+        "x": 8.013260869565217,
+        "y": 4.488548586054485
+      },
+      "end": {
+        "x": 3.986739130434782,
+        "y": 4.488548586054485
+      }
+    },
+    {
+      "id": "opening_support_door_balcony",
+      "type": "internal",
+      "provenance": "observed_opening_shared_boundary",
+      "start": {
+        "x": 12,
+        "y": 4.488548586054485
+      },
+      "end": {
+        "x": 8.013260869565217,
+        "y": 4.488548586054485
+      }
+    },
+    {
+      "id": "opening_support_door_living",
+      "type": "internal",
+      "provenance": "observed_opening_shared_boundary",
+      "start": {
+        "x": 6,
+        "y": 3.4865028724507248
+      },
+      "end": {
+        "x": 0,
+        "y": 3.4865028724507248
+      }
+    },
+    {
+      "id": "opening_support_door_laundry",
+      "type": "internal",
+      "provenance": "observed_opening_shared_boundary",
+      "start": {
+        "x": 12,
+        "y": 3.4865028724507248
+      },
+      "end": {
+        "x": 10.817445652173912,
+        "y": 3.4865028724507248
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "roomAId": "bedroom_1",
+      "roomBId": "bedroom_2",
+      "relation": "wall",
+      "direction": "right",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "bedroom_2",
+      "roomBId": "balcony",
+      "relation": "wall",
+      "direction": "right",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "bedroom_1",
+      "roomBId": "corridor",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "bedroom_2",
+      "roomBId": "corridor",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "balcony",
+      "roomBId": "corridor",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "corridor",
+      "roomBId": "living",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "corridor",
+      "roomBId": "kitchen",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "corridor",
+      "roomBId": "bathroom",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "corridor",
+      "roomBId": "laundry",
+      "relation": "door",
+      "direction": "below",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "living",
+      "roomBId": "kitchen",
+      "relation": "wall",
+      "direction": "right",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "kitchen",
+      "roomBId": "bathroom",
+      "relation": "wall",
+      "direction": "right",
+      "confidence": 0.99
+    },
+    {
+      "roomAId": "bathroom",
+      "roomBId": "laundry",
+      "relation": "wall",
+      "direction": "right",
+      "confidence": 0.99
+    }
+  ],
+  "observations": [
+    {
+      "id": "window_bedroom_1",
+      "type": "window",
+      "center": {
+        "x": 1.7328260869565215,
+        "y": 8
+      },
+      "widthMeters": 1.5,
+      "heightMeters": 1.2,
+      "sillHeightMeters": 0.9,
+      "wallIdHint": "exterior_top",
+      "wallAxis": "horizontal",
+      "hingeSide": "unknown",
+      "swingDirection": "unknown"
+    },
+    {
+      "id": "window_bedroom_2",
+      "type": "window",
+      "center": {
+        "x": 5.754945652173913,
+        "y": 8
+      },
+      "widthMeters": 1.5,
+      "heightMeters": 1.2,
+      "sillHeightMeters": 0.9,
+      "wallIdHint": "exterior_top",
+      "wallAxis": "horizontal",
+      "hingeSide": "unknown",
+      "swingDirection": "unknown"
+    },
+    {
+      "id": "window_living",
+      "type": "window",
+      "center": {
+        "x": 1.7328260869565215,
+        "y": 0
+      },
+      "widthMeters": 1.5,
+      "heightMeters": 1.2,
+      "sillHeightMeters": 0.9,
+      "wallIdHint": "exterior_bottom",
+      "wallAxis": "horizontal",
+      "hingeSide": "unknown",
+      "swingDirection": "unknown"
+    },
+    {
+      "id": "window_kitchen",
+      "type": "window",
+      "center": {
+        "x": 7.357336956521739,
+        "y": 0
+      },
+      "widthMeters": 1.5,
+      "heightMeters": 1.2,
+      "sillHeightMeters": 0.9,
+      "wallIdHint": "exterior_bottom",
+      "wallAxis": "horizontal",
+      "hingeSide": "unknown",
+      "swingDirection": "unknown"
+    },
+    {
+      "id": "door_entrance",
+      "type": "door",
+      "center": {
+        "x": 0,
+        "y": 3.9875257292526047
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "exterior_left",
+      "wallAxis": "vertical",
+      "hingeSide": "top",
+      "swingDirection": "counterclockwise"
+    },
+    {
+      "id": "door_bedroom_1",
+      "type": "door",
+      "center": {
+        "x": 2.286032608695652,
+        "y": 4.488548586054485
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_bedroom_2",
+      "type": "door",
+      "center": {
+        "x": 6.305217391304348,
+        "y": 4.488548586054485
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_balcony",
+      "type": "door",
+      "center": {
+        "x": 10.319999999999999,
+        "y": 4.488548586054485
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_living",
+      "type": "door",
+      "center": {
+        "x": 3.1914130434782604,
+        "y": 3.4865028724507248
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_kitchen",
+      "type": "door",
+      "center": {
+        "x": 7.41016304347826,
+        "y": 3.4865028724507248
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_bathroom",
+      "type": "door",
+      "center": {
+        "x": 9.716902173913041,
+        "y": 3.4865028724507248
+      },
+      "widthMeters": 0.8,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    },
+    {
+      "id": "door_laundry",
+      "type": "door",
+      "center": {
+        "x": 11.347173913043477,
+        "y": 3.4865028724507248
+      },
+      "widthMeters": 0.76,
+      "heightMeters": 2.1,
+      "sillHeightMeters": 0,
+      "wallIdHint": "",
+      "wallAxis": "horizontal",
+      "hingeSide": "left",
+      "swingDirection": "clockwise"
+    }
+  ],
+  "furniture": [
+    {
+      "id": "bed_bedroom_1",
+      "groupId": "bed_bedroom_1",
+      "roomId": "bedroom_1",
+      "type": "bed",
+      "backLeft": {
+        "x": 0.2861335289801908,
+        "y": 7.689955746278664
+      },
+      "backRight": {
+        "x": 1.7857666911225236,
+        "y": 7.689955746278664
+      },
+      "frontCenter": {
+        "x": 1.0359501100513573,
+        "y": 6.093603325734209
+      },
+      "confidence": 0.99,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "bed_bedroom_2",
+      "groupId": "bed_bedroom_2",
+      "roomId": "bedroom_2",
+      "type": "bed",
+      "backLeft": {
+        "x": 4.296404988994864,
+        "y": 7.689955746278664
+      },
+      "backRight": {
+        "x": 5.804842259721203,
+        "y": 7.689955746278664
+      },
+      "frontCenter": {
+        "x": 5.050623624358034,
+        "y": 6.093603325734209
+      },
+      "confidence": 0.99,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "living_sofa_vertical_leg",
+      "groupId": "living_l_sofa",
+      "roomId": "living",
+      "type": "sofa",
+      "backLeft": {
+        "x": 0.2861335289801908,
+        "y": 3.1776853962719587
+      },
+      "backRight": {
+        "x": 0.2861335289801908,
+        "y": 1.9793482633766932
+      },
+      "frontCenter": {
+        "x": 0.8231841526045487,
+        "y": 2.5779804210808637
+      },
+      "confidence": 0.97,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "living_sofa_horizontal_leg",
+      "groupId": "living_l_sofa",
+      "roomId": "living",
+      "type": "sofa",
+      "backLeft": {
+        "x": 0.8231841526045487,
+        "y": 3.1776853962719587
+      },
+      "backRight": {
+        "x": 2.584005869405722,
+        "y": 3.1776853962719587
+      },
+      "frontCenter": {
+        "x": 1.7035950110051354,
+        "y": 2.631621295427115
+      },
+      "confidence": 0.97,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "living_coffee_table",
+      "groupId": "living_coffee_table",
+      "roomId": "living",
+      "type": "coffee_table",
+      "backLeft": {
+        "x": 1.288334556126192,
+        "y": 2.378436368512806
+      },
+      "backRight": {
+        "x": 2.2831988261188556,
+        "y": 2.378436368512806
+      },
+      "frontCenter": {
+        "x": 1.7857666911225236,
+        "y": 1.9793482633766932
+      },
+      "confidence": 0.96,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "living_tv_unit",
+      "groupId": "living_tv_unit",
+      "roomId": "living",
+      "type": "tv_unit",
+      "backLeft": {
+        "x": 0.334556126192223,
+        "y": 0.21992758481963218
+      },
+      "backRight": {
+        "x": 2.3888481291269255,
+        "y": 0.21992758481963218
+      },
+      "frontCenter": {
+        "x": 1.3617021276595744,
+        "y": 0.3754861204237621
+      },
+      "confidence": 0.95,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "kitchen_counter_south",
+      "groupId": "kitchen_counter_south",
+      "roomId": "kitchen",
+      "type": "kitchen_counter",
+      "backLeft": {
+        "x": 6.21129860601614,
+        "y": 0.1716507979080049
+      },
+      "backRight": {
+        "x": 8.812912692589876,
+        "y": 0.1716507979080049
+      },
+      "frontCenter": {
+        "x": 7.512839325018342,
+        "y": 0.7252246211613249
+      },
+      "confidence": 0.99,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "kitchen_sink",
+      "groupId": "kitchen_sink",
+      "roomId": "kitchen",
+      "type": "sink",
+      "backLeft": {
+        "x": 6.399119589141598,
+        "y": 0.2692771892181832
+      },
+      "backRight": {
+        "x": 6.855465884079237,
+        "y": 0.2692771892181832
+      },
+      "frontCenter": {
+        "x": 6.628026412325751,
+        "y": 0.6190156899557461
+      },
+      "confidence": 0.98,
+      "embeddedInCounter": true
+    },
+    {
+      "id": "kitchen_stove",
+      "groupId": "kitchen_stove",
+      "roomId": "kitchen",
+      "type": "stove",
+      "backLeft": {
+        "x": 8.00586940572267,
+        "y": 0.3508113182244866
+      },
+      "backRight": {
+        "x": 8.567865003668379,
+        "y": 0.3508113182244866
+      },
+      "frontCenter": {
+        "x": 8.28613352898019,
+        "y": 0.586831165347995
+      },
+      "confidence": 0.96,
+      "embeddedInCounter": true
+    },
+    {
+      "id": "bathroom_sink",
+      "groupId": "bathroom_sink",
+      "roomId": "bathroom",
+      "type": "sink",
+      "backLeft": {
+        "x": 10.173147468818781,
+        "y": 3.2828215099906126
+      },
+      "backRight": {
+        "x": 10.670579603815114,
+        "y": 3.2828215099906126
+      },
+      "frontCenter": {
+        "x": 10.422597212032281,
+        "y": 2.7775244736489197
+      },
+      "confidence": 0.86,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "bathroom_toilet",
+      "groupId": "bathroom_toilet",
+      "roomId": "bathroom",
+      "type": "toilet",
+      "backLeft": {
+        "x": 9.19589141599413,
+        "y": 0.9698270081802326
+      },
+      "backRight": {
+        "x": 9.716801173881144,
+        "y": 0.9698270081802326
+      },
+      "frontCenter": {
+        "x": 9.457079970652972,
+        "y": 0.2692771892181832
+      },
+      "confidence": 0.98,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "bathroom_shower",
+      "groupId": "bathroom_shower",
+      "roomId": "bathroom",
+      "type": "shower",
+      "backLeft": {
+        "x": 9.815113719735876,
+        "y": 1.067453399490411
+      },
+      "backRight": {
+        "x": 10.670579603815114,
+        "y": 1.067453399490411
+      },
+      "frontCenter": {
+        "x": 10.24358033749083,
+        "y": 0.21992758481963218
+      },
+      "confidence": 0.99,
+      "embeddedInCounter": false
+    },
+    {
+      "id": "laundry_washing_machine",
+      "groupId": "laundry_washing_machine",
+      "roomId": "laundry",
+      "type": "washing_machine",
+      "backLeft": {
+        "x": 11.030080704328686,
+        "y": 0.9773367305887083
+      },
+      "backRight": {
+        "x": 11.665443873807778,
+        "y": 0.9773367305887083
+      },
+      "frontCenter": {
+        "x": 11.347028613352897,
+        "y": 0.21992758481963218
+      },
+      "confidence": 0.99,
+      "embeddedInCounter": false
+    }
+  ]
+}

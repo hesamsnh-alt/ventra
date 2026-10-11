@@ -1,9 +1,10 @@
 // Preserve source names; normalize only the use classifier.
 export function canonicalRoomType(room) {
   const name = String(room?.name || '').normalize('NFKC').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/ي/g, 'ی').replace(/ك/g, 'ک').toLowerCase();
-  const text = `${name} ${room?.type || ''}`.toLowerCase();
+  const text = `${name} ${room?.type || ''} ${room?.semanticType || ''}`.toLowerCase();
   // An explicit outdoor label outranks a generic/inferred indoor use.
   if (/(balcony|terrace|patio|تراس|بالکن|ایوان|شرفة|شرفه|بلكونة|بلکونة)/.test(text)) return 'balcony';
+  if (/(laundry|washing room|رخت.?شوی|لباس.?شوی|غرفة\s*غسیل|غرفه\s*غسیل)/.test(text)) return 'laundry';
   if (/(bath|toilet|\bwc\b|shower|washroom|powder|سرویس|حمام|توالت|دستشویی|دستشوئی|دورة\s*المیاه|مرحاض)/.test(text)) return 'bathroom';
   if (/(store|storage|closet|utility|pantry|انبار|مخزن)/.test(text)) return 'storage';
   const kitchen = /(kitchen|آشپزخانه|اشپزخانه|مطبخ)/.test(text);

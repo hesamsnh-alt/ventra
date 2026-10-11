@@ -1,4 +1,5 @@
 import {compileSourceFurniture} from './sourceFurniture.mjs';
+import {furnitureOverlaps} from './interiorPresentation.mjs';
 export function repairFixedFurniture(scene,boxes){
  const review=scene?.furnishingReview,p=scene?.geometryValidation?.sourceProjection,b=p?.sourceBounds;
  if(review?.observationCoordinateMode!=='scene_meters_y_up'||!b||!(b.maxX>b.minX)||!(b.maxY>b.minY))throw new Error('This scene has no source alignment for furniture repair.');
@@ -19,6 +20,13 @@ export function repairFixedFurniture(scene,boxes){
  // Accepted objects have priority and cannot be displaced by repairs.
  const ordered=[...original.filter(o=>!rejected.has(o.id)),...original.filter(o=>rejected.has(o.id)).map(o=>replacements.get(o.id)||o)];
  const result=compileSourceFurniture(ordered,scene.footprint,scene.rooms,scene.walls);
+ // A targeted repair must retain previously accepted objects, including legacy
+ // traces whose room bounds no longer satisfy newer validation rules.
+ const preserved=(scene.assets||[]).filter(a=>!rejected.has(a.id));
+ const restored=result.assets.filter(a=>rejected.has(a.id)).filter(a=>!preserved.some(b=>a.type!=='rug'&&b.type!=='rug'&&!(a.embeddedInCounter&&b.type==='kitchen_counter')&&!(b.embeddedInCounter&&a.type==='kitchen_counter')&&furnitureOverlaps(a,b,scene,-.03)));
+ result.assets=[...preserved,...restored];
+ const restoredIds=new Set(restored.map(a=>a.id));
+ result.rejected=[...result.rejected.filter(a=>rejected.has(a.id)),...Array.from(rejected).filter(id=>!restoredIds.has(id)&&!result.rejected.some(r=>r.id===id)).map(id=>({id,reason:'repair_not_validated'}))];
  const repairedIds=result.assets.filter(a=>rejected.has(a.id)).map(a=>a.id);
  return {...scene,assets:result.assets,furnishingReview:{...review,observations:ordered,acceptedCount:result.assets.length,rejected:result.rejected,requiresReview:result.rejected.length>0,repair:{mode:'fixed_geometry',repairedIds}},geometryValidation:{...scene.geometryValidation,furnishing:{...scene.geometryValidation.furnishing,assetCount:result.assets.length,byType:result.assets.reduce((counts,a)=>(counts[a.type]=(counts[a.type]||0)+1,counts),{}),byRoom:scene.rooms.map(r=>({roomId:r.id,type:r.type,assetCount:result.assets.filter(a=>a.roomId===r.id).length,assetTypes:result.assets.filter(a=>a.roomId===r.id).map(a=>a.type)}))}}};
 }

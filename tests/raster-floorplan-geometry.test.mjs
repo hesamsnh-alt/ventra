@@ -250,6 +250,8 @@ test("successful raster Analyze commits scene and original before publishing the
   const scene = compileRasterFloorplan(fixture(), size);
   const storage={setItem:(...args)=>writes.push(args),getItem:()=>null,removeItem(){}};
   const sandbox = {
+    applyDesignDefaults: (await import('../src/lib/designDefaults.mjs')).applyDesignDefaults,
+    drawingSceneMatches:()=>true,
     saveSchematic:(id,scene,options)=>saveSchematic(id,scene,{...options,storage}),
     saveActiveSource:(id,source)=>saveActiveSource(id,source,{storage}),
     crypto:{randomUUID:()=> 'test-request'},

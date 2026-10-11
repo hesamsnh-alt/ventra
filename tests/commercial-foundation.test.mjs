@@ -1,3 +1,4 @@
+import {operatorAllowance,isOperator} from '../src/lib/operatorAllowance.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
 import {subscriptionAccess,validateSnapshot,snapshotKeys} from '../src/lib/commercialAccess.mjs';
@@ -20,7 +21,7 @@ function server({authenticated=true,owner=true,status='active',price='p',duplica
  let consumed=0,handled=0;
  const db={from:()=>({select:()=>({eq(){return this;},maybeSingle:async()=>({data:{user_id:owner?'owner':'different'}})})}),rpc:async()=>{consumed++;return quotaError?{error:Error('missing migration')}:{data:{accepted:!duplicate,duplicate}};}};
  const source=readFileSync('src/lib/serverCommercial.js','utf8').replace(/^import .*;\n/gm,'').replaceAll('export ','');
- const methods=new Function('createHash','createClient','account','provider','customerFor','subscriptionFor','subscriptionAccess','validProjectId',source+'\nreturn {commercialRun};')(createHash,()=>db,async()=>{if(!authenticated)throw Object.assign(Error('Sign in'),{status:401});return {id:'owner'};},()=>({}),async()=>({id:'cus'}),async()=>({status,items:{data:[{price:{id:price}}]}}),subscriptionAccess,id=>id===project);
+ const methods=new Function('createHash','createClient','account','provider','customerFor','subscriptionFor','subscriptionAccess','validProjectId','operatorAllowance','isOperator',source+'\nreturn {commercialRun};')(createHash,()=>db,async()=>{if(!authenticated)throw Object.assign(Error('Sign in'),{status:401});return {id:'owner'};},()=>({}),async()=>({id:'cus'}),async()=>({status,items:{data:[{price:{id:price}}]}}),subscriptionAccess,id=>id===project,operatorAllowance,isOperator);
  const request=()=>new Request('https://ventra.test/api/ai/design-3d-preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({projectId:project,requestId:'same-request'})});
  const handler=async req=>{handled++;const b=await req.json();assert.match(b.requestId,/^owner:preview:/);return Response.json({ok:true});};
  return {run:()=>methods.commercialRun(request(),'preview',handler),counts:()=>({consumed,handled})};
@@ -35,4 +36,11 @@ test('Usage failures and duplicate submissions fail closed before AI',async()=>{
 });
 test('Concurrent identical submissions invoke AI once and reuse the response',async()=>{
  const s=server();const replies=await Promise.all([s.run(),s.run()]);assert.ok(replies.every(r=>r.status===200));assert.deepEqual(s.counts(),{consumed:1,handled:1});assert.equal((await s.run()).status,200);assert.deepEqual(s.counts(),{consumed:1,handled:1});
+});
+
+test('Owner free access skips quota RPC while retaining login and project checks',async()=>{
+ const prior=process.env.VENTRA_FREE_USER_ID;process.env.VENTRA_FREE_USER_ID='owner';
+ try{const s=server({status:'past_due',quotaError:true});assert.equal((await s.run()).status,200);assert.deepEqual(s.counts(),{consumed:0,handled:1});
+ assert.equal((await server({authenticated:false}).run()).status,401);assert.equal((await server({owner:false}).run()).status,403);
+ }finally{if(prior===undefined)delete process.env.VENTRA_FREE_USER_ID;else process.env.VENTRA_FREE_USER_ID=prior;}
 });

@@ -1,10 +1,26 @@
 import {indexedTakeoffRecords} from './takeoffStorage.mjs';
+import {applyDesignDefaults} from './designDefaults.mjs';
 
 // Large image scenes share the drawing database, never the localStorage quota.
 const cache = new Map();
 const writes = new Map();
 const keyFor = (id, kind) => `ventra:project-${kind}:${id}`;
 const local = () => typeof window === 'undefined' ? null : window.localStorage;
+export function selectedDrawingSync(id, storage = local()) {
+  const key=keyFor(id,'selected-drawing');
+  try{const stored=storage?.getItem(key);if(stored){cache.set(key,stored);return stored;}}catch{}
+  return cache.get(key)||null;
+}
+export function drawingSceneMatches(id,scene,storage=local()) {
+  const selected=selectedDrawingSync(id,storage);
+  return !selected || scene?.documentId===selected;
+}
+export function selectSchematicDrawing(id,documentId,storage=local()) {
+  if(!documentId)return;
+  const key=keyFor(id,'selected-drawing');cache.set(key,documentId);
+  try{storage?.setItem(key,documentId);}catch{ /* Session selection still isolates scenes. */ }
+  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId:id,source:'schematic',scene:readSchematicSync(id,'schematic3d',storage)}}));
+}
 export function activeSourceSync(id, storage = local()) {
   const key = keyFor(id, 'active-3d-source');
   if (cache.has(key)) return cache.get(key);
@@ -23,6 +39,7 @@ export function saveActiveSource(id, source, {storage = local(), records = index
     await records.put(key, source);
     cache.set(key, source);
     try { storage?.setItem(key, source); } catch { /* Database preserves the selection. */ }
+    const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,'selection',{source});
     return source;
   });
   writes.set(id, task);
@@ -31,14 +48,15 @@ export function saveActiveSource(id, source, {storage = local(), records = index
 }
 export function readSchematicSync(id, kind = 'schematic3d', storage = local()) {
   const key = keyFor(id, kind);
-  if (cache.has(key)) return cache.get(key);
+  if (cache.has(key)) {const value=cache.get(key);return ['schematic3d','schematic3d-base'].includes(kind)&&!drawingSceneMatches(id,value,storage)?null:value;}
   try {
     const value = JSON.parse(storage?.getItem(key) || 'null');
-    return value?.__schematicRecord ? null : value;
+    return value?.__schematicRecord || (['schematic3d','schematic3d-base'].includes(kind)&&!drawingSceneMatches(id,value,storage)) ? null : value;
   } catch { return null; }
 }
 export function saveSchematic(id, scene, {kind = 'schematic3d', preserveBase = true, storage = local(), records = indexedTakeoffRecords} = {}) {
   if (!id || !scene) return Promise.reject(new Error('Project and scene are required.'));
+  if (kind === 'schematic3d' || kind === 'schematic3d-base') scene=applyDesignDefaults(scene);
   const key = keyFor(id, kind);
   const entries = [[key, scene]];
   if (kind === 'schematic3d' && !preserveBase) entries.push([keyFor(id, 'schematic3d-base'), scene]);
@@ -50,6 +68,7 @@ export function saveSchematic(id, scene, {kind = 'schematic3d', preserveBase = t
       cache.set(recordKey, value);
       try { storage?.removeItem(recordKey); storage?.setItem(recordKey, recordKey === keyFor(id, 'active-3d-source') ? value : JSON.stringify({__schematicRecord: recordKey, revision: Date.now()})); } catch { /* IndexedDB remains authoritative. */ }
     }
+    if(kind==='schematic3d'){const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,'schematic',scene);}
     return scene;
   });
   writes.set(id, task);
@@ -60,7 +79,12 @@ export async function readSchematic(id, kind = 'schematic3d', {storage = local()
   if (writes.has(id)) await writes.get(id).catch(() => {});
   const key = keyFor(id, kind);
   const stored = await records.get(key);
-  if (stored) { cache.set(key, stored); return stored; }
+  if (stored) {
+    if (['schematic3d','schematic3d-base'].includes(kind)&&!drawingSceneMatches(id,stored,storage)) return null;
+    const upgraded=['schematic3d','schematic3d-base'].includes(kind)?applyDesignDefaults(stored):stored;
+    if(upgraded!==stored)await saveSchematic(id,upgraded,{kind,storage,records});
+    cache.set(key,upgraded);return upgraded;
+  }
   const legacy = readSchematicSync(id, kind, storage);
   if (legacy) await saveSchematic(id, legacy, {kind, storage, records});
   return legacy;

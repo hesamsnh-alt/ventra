@@ -1,7 +1,11 @@
+import { createPrintedDimensionAlignment, mapPrintedDimensionPoint } from '@/lib/printedDimensionAlignment.mjs';
+import { prepareObservedOpeningWalls } from '@/lib/sourceOpeningWalls.mjs';
+import {outdoorBoundaries,observedDoorOrientation} from '@/lib/schematicBoundaries.mjs';
 import { canonicalRoomType } from "@/lib/roomSemantics.mjs";
 import {commercialRun} from '@/lib/serverCommercial';
 import { repairFixedFurniture } from "@/lib/fixedFurnitureRepair.mjs";
 import { compileSourceFurniture } from "@/lib/sourceFurniture.mjs";
+import { applySourceFurnitureReview } from "@/lib/sourceFurnitureReview.mjs";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { repairOverlappingWalls } from "@/lib/wallOverlapRepair.mjs";
@@ -10,7 +14,7 @@ import { createHash } from "node:crypto";
 import { getOpenAIClient } from "@/services/openaiClient";
 import { prepareRasterImageEvidence, rasterEvidencePrompt } from "@/lib/rasterImageEvidence.mjs";
 
-const VERSION = "interactive-plan-multilingual-spaces-20261009";
+const VERSION = "room-design-defaults-v64-20261011";
 const MODEL = process.env.OPENAI_3D_PREVIEW_MODEL || "gpt-5.6-sol";
 const requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "medium";
 const REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "medium";
@@ -60,7 +64,7 @@ const sceneSchema = {
       items: {type:"object",additionalProperties:false,
         required:["id","groupId","roomId","type","backLeft","backRight","frontCenter","confidence","embeddedInCounter"],
         properties:{id:{type:"string"},groupId:{type:"string"},roomId:{type:"string"},
-          type:{type:"string",enum:["sofa","bed","armchair","chair","dining_table","coffee_table","rug","kitchen_counter","sink","stove","refrigerator","wardrobe","tv_unit","toilet","shower","desk","nightstand","cabinet","plant"]},
+          type:{type:"string",enum:["sofa","bed","armchair","chair","dining_table","coffee_table","rug","kitchen_counter","sink","stove","refrigerator","wardrobe","tv_unit","toilet","shower","washing_machine","desk","nightstand","cabinet","plant"]},
           backLeft:pointSchema,backRight:pointSchema,frontCenter:pointSchema,
           confidence:{type:"number"},embeddedInCounter:{type:"boolean"}}
       }
@@ -118,6 +122,23 @@ const sceneSchema = {
 function clamp(value, min, max, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+
+// A plan-view symbol does not provide an opening's vertical dimensions.
+// Zero is the legacy "not supplied" height, not a half-metre opening.
+function openingVerticalDimensions(opening, type) {
+  const supplied = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const rawHeight = Number(opening?.heightMeters);
+  const hasHeight = supplied(opening?.heightMeters) && rawHeight > 0;
+  const height = hasHeight ? Math.min(2.8, rawHeight) : type === 'window' ? 1.25 : 2.1;
+  const rawSill = Number(opening?.sillHeightMeters);
+  const hasSill = type === 'window' && supplied(opening?.sillHeightMeters) && rawSill >= 0 && (hasHeight || rawSill > 0);
+  const sillHeight = type === 'window' ? hasSill ? Math.min(rawSill, Math.max(0, 2.8 - height)) : Math.min(.9, 2.8 - height) : 0;
+  return {
+    height, sillHeight,
+    heightSource: hasHeight ? 'source_dimension' : 'visual_default_not_measured',
+    sillHeightSource: type === 'door' ? 'door_floor_level' : hasSill ? 'source_dimension' : 'visual_default_not_measured',
+  };
 }
 
 function dist(a, b) {
@@ -871,12 +892,24 @@ function chooseBestWallForOpening(center, type, walls, rooms, relationships, wal
     if (wallAxis === "vertical" && dx > dy * 0.2) continue;
     if (wallAxis === "diagonal" && (dx < dy * 0.2 || dy < dx * 0.2)) continue;
     const projection = projectToSegment(center, wall.start, wall.end);
-    const halfWidth = Math.max(0.225, Number(openingWidth) / 2 || 0.45);
+    const measuredWidth = Number(openingWidth);
+    const halfWidth = measuredWidth > 0 ? measuredWidth / 2 : 0.45;
     const endClearance = Math.min(projection.t, 1 - projection.t) * projection.length;
+    // A source opening must fit at its observed center. Do not slide it along
+    // the wall or attach it to the end of a segment beside the real gap.
+    if (projection.distance > 0.18 || endClearance < halfWidth - 0.005) continue;
     // A nearby perpendicular return must not win when the opening cannot fit.
     const endpointPenalty = Math.max(0, halfWidth - endClearance) * 2;
     const hintBonus = String(wall.id) === String(wallIdHint) && projection.distance < 0.35 ? -0.2 : 0;
-    const score = endpointPenalty + hintBonus + openingPlacementScore(type, wall, projection, rooms, relationships);
+    // Room semantics must be sampled beside this opening, not at the middle
+    // of a long wall that can border several unrelated rooms.
+    const ux = (wall.end.x - wall.start.x) / projection.length;
+    const uy = (wall.end.y - wall.start.y) / projection.length;
+    const localWall = {...wall,
+      start: {x:projection.point.x-ux*0.2,y:projection.point.y-uy*0.2},
+      end: {x:projection.point.x+ux*0.2,y:projection.point.y+uy*0.2},
+    };
+    const score = endpointPenalty + hintBonus + openingPlacementScore(type, localWall, projection, rooms, relationships);
     if (!Number.isFinite(score)) continue;
     if (!best || score < best.score) best = { wall, projection, score };
   }
@@ -923,29 +956,10 @@ function dedupeOpenings(openings) {
   return out;
 }
 
-function ensureRequiredDoors(openings, walls, rooms, relationships) {
-  const out = [...(Array.isArray(openings) ? openings : [])];
-  const roomById = new Map(rooms.map((r) => [String(r.id), r]));
-  let added = 0;
-  for (const rel of relationships) {
-    if (rel.relation !== 'door' || rel.confidence < 0.50) continue;
-    const a = roomById.get(String(rel.roomAId));
-    const b = roomById.get(String(rel.roomBId));
-    if (!a || !b) continue;
-    const boundary = sharedBoundaryForRelationship(a,b);
-    if (!boundary) continue;
-    const mid = {x:(boundary.start.x+boundary.end.x)/2,y:(boundary.start.y+boundary.end.y)/2};
-    const wall = walls.find((candidate) => String(candidate?.type)!=='external' && pointToSegmentDistance(mid,candidate.start,candidate.end)<0.16);
-    if (!wall) continue;
-    if (out.some((o) => o.type==='door' && String(o.wallId)===String(wall.id))) continue;
-    out.push({
-      id:`synthetic_door_${a.id}_${b.id}`.slice(0,64), type:'door', wallId:wall.id, offset:0.5,
-      width:Math.min(0.95,Math.max(0.82,dist(boundary.start,boundary.end)*0.28)), height:2.1,
-      sillHeight:0, hinge:'start', swing:'counterclockwise'
-    });
-    added += 1;
-  }
-  return { openings: dedupeOpenings(out), added };
+// Relationships describe connectivity, not the observed location of a door.
+// Do not convert a relationship into an invented opening at a wall midpoint.
+function ensureRequiredDoors(openings) {
+  return { openings: dedupeOpenings(openings), added: 0 };
 }
 
 
@@ -1101,87 +1115,10 @@ function bestFallbackDoorWall(room, walls, footprint) {
   return best?.wall || null;
 }
 
-function normalizeEnclosedRoomDoors(openings, walls, rooms, relationships, footprint) {
-  const windows = openings.filter((o) => o.type === "window");
-  const doors = openings.filter((o) => o.type === "door");
-  const wallsById = new Map(walls.map((w) => [String(w.id), w]));
-  const chosenDoorIds = new Set();
-  let removedExtraDoors = 0;
-  let synthesizedDoors = 0;
-
-  for (const room of rooms.filter(isEnclosedAccessRoom)) {
-    const touchingDoors = doors.filter((door) => {
-      const wall = openingWall(door, wallsById);
-      return wall && String(wall.type) !== "external" && wallTouchesRoom(wall, room);
-    });
-
-    if (touchingDoors.length > 0) {
-      const best = chooseBestDoorForRoom(room, touchingDoors, wallsById, rooms, relationships);
-      if (best) chosenDoorIds.add(String(best.id));
-      removedExtraDoors += Math.max(0, touchingDoors.length - 1);
-      continue;
-    }
-
-    const explicitRel = relationships.find((rel) => {
-      if (rel.relation !== "door" || rel.confidence < 0.45) return false;
-      return String(rel.roomAId) === String(room.id) || String(rel.roomBId) === String(room.id);
-    });
-
-    let targetWall = null;
-    if (explicitRel) {
-      const otherId = String(explicitRel.roomAId) === String(room.id) ? explicitRel.roomBId : explicitRel.roomAId;
-      const other = rooms.find((r) => String(r.id) === String(otherId));
-      if (other) {
-        const boundary = sharedBoundaryForRelationship(room, other);
-        if (boundary) {
-          const mid = wallMidpoint(boundary);
-          targetWall = walls.find((wall) =>
-            String(wall.type) !== "external" &&
-            pointToSegmentDistance(mid, wall.start, wall.end) < 0.18
-          ) || null;
-        }
-      }
-    }
-
-    if (!targetWall) targetWall = bestFallbackDoorWall(room, walls, footprint);
-    if (!targetWall) continue;
-
-    const width = Math.min(0.92, Math.max(0.80, dist(targetWall.start, targetWall.end) * 0.24));
-    const synthetic = {
-      id: `access_${room.id}`.slice(0, 64),
-      type: "door",
-      wallId: targetWall.id,
-      offset: 0.5,
-      width,
-      height: 2.1,
-      sillHeight: 0,
-      hinge: "start",
-      swing: "counterclockwise",
-      _syntheticAccess: true,
-    };
-    doors.push(synthetic);
-    chosenDoorIds.add(String(synthetic.id));
-    synthesizedDoors += 1;
-  }
-
-  // Keep all exterior doors (main entry), and only the selected internal access
-  // door for enclosed labeled rooms. Doors that do not touch enclosed rooms are
-  // preserved because they may serve unlabeled circulation.
-  const filteredDoors = doors.filter((door) => {
-    const wall = openingWall(door, wallsById);
-    if (!wall) return false;
-    if (String(wall.type) === "external") return true;
-
-    const touchingEnclosed = rooms.some((room) => isEnclosedAccessRoom(room) && wallTouchesRoom(wall, room));
-    if (!touchingEnclosed) return true;
-    return chosenDoorIds.has(String(door.id));
-  });
-
-  return {
-    openings: dedupeOpenings([...windows, ...filteredDoors]),
-    removedExtraDoors,
-    synthesizedDoors,
-  };
+// A room may have multiple observed doors. Preserve them all instead of
+// choosing one and replacing missing access with a guessed door.
+function normalizeEnclosedRoomDoors(openings) {
+  return { openings: dedupeOpenings(openings), removedExtraDoors: 0, synthesizedDoors: 0 };
 }
 
 function clusterAxisValues(values, tolerance = 0.20) {
@@ -1631,7 +1568,7 @@ function diningChairCandidates(table, chairSize = 0.44) {
 function floorFinishForRoom(room) {
   const type = canonicalRoomType(room);
   if (type === "bathroom") return "wet_tile";
-  if (type === "storage" || type === "balcony") return "utility_tile";
+  if (type === "storage" || type === "balcony" || type === "laundry") return "utility_tile";
   if (type === "bedroom") return "light_oak";
   if (["living", "kitchen", "kitchen_dining", "dining", "office"].includes(type)) return "light_stone";
   return "neutral_floor";
@@ -2316,7 +2253,7 @@ function requiredAssetTypesForRoom(room) {
   if (type === "kitchen") return ["kitchen_counter", "sink", "stove", "refrigerator"];
   if (type === "kitchen_dining") return ["kitchen_counter", "sink", "stove", "refrigerator", "dining_table"];
   if (type === "dining") return ["dining_table"];
-  if (type === "bathroom") return ["toilet", "sink", "shower"];
+  if (type === "bathroom") return /shower|حمام|دوش|استحمام/i.test(String(room.name)) ? ["toilet", "sink", "shower"] : ["toilet", "sink"];
   if (type === "storage") return ["cabinet"];
   if (type === "office") return ["desk", "chair"];
   return [];
@@ -2603,15 +2540,17 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
 
   // Labels are optional; distinct spaces can share the same name.
   const roomIds = new Set();
-  const roomsBeforeLock = roomCandidates.map(room => {
+  const observedRooms = roomCandidates.map(room => {
     if (roomIds.has(room.id)) throw Object.assign(new Error("Duplicate room identifier in trace."), {code:"PREVIEW_DUPLICATE_ROOM_ID"});
     roomIds.add(room.id); return room;
   });
-  // V13: preserve the source-image layout as one rigid/global coordinate system.
-  // Printed dimensions validate the observation but do not independently resize
-  // or translate rooms, because that destroys adjacency and open-plan geometry.
+  const dimensionAlignment = createPrintedDimensionAlignment(observedRooms, width, depth, footprint);
+  const alignedPoint = p => mapPrintedDimensionPoint(p, dimensionAlignment);
+  const sourceScenePoint = p => alignedPoint(sourcePoint(p, width, depth));
+  footprint = footprint.map(alignedPoint);
+  const roomsBeforeLock = observedRooms.map(room => ({...room, polygon:room.polygon.map(alignedPoint)}));
   const dimensionDiagnostic = dimensionLockRooms(roomsBeforeLock, width, depth);
-  const dimensionLock = { ...dimensionDiagnostic, rooms: roomsBeforeLock, applied: false, reason: "validation_only_global_affine_layout_v15" };
+  const dimensionLock = {...dimensionDiagnostic, rooms:roomsBeforeLock, applied:dimensionAlignment.applied, reason:dimensionAlignment.applied?'shared_printed_dimension_alignment_v54':'source_dimensions_preserved'};
   const relationships = normalizeRelationships(raw?.relationships, roomsBeforeLock.map((r) => r.id));
   const topology = {
     rooms: roomsBeforeLock,
@@ -2672,11 +2611,11 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
     id: String(wall?.id || `int_${index + 1}`).slice(0, 64),
     provenance: "observed",
     type: "internal",
-    start: sourcePoint(wall?.start, width, depth),
-    end: sourcePoint(wall?.end, width, depth),
+    start: sourceScenePoint(wall?.start),
+    end: sourceScenePoint(wall?.end),
   }, rooms)).filter((wall) => dist(wall.start, wall.end) > 0.15 && !partitionCrossesRoomInterior(wall, rooms));
   const synthesizedRoomWalls = synthesizeRoomBoundaryPartitions(rawPartitions, rooms, externalWalls);
-  const openPlanFiltered = filterOpenPlanPartitions(synthesizedRoomWalls.partitions, rooms, relationships, (raw.openings || []).map((opening) => ({ ...opening, center: sourcePoint(opening.center, width, depth) })));
+  const openPlanFiltered = filterOpenPlanPartitions(synthesizedRoomWalls.partitions, rooms, relationships, (raw.openings || []).map((opening) => ({ ...opening, center: sourceScenePoint(opening.center) })));
   const relationshipWalls = ensureRelationshipWalls(openPlanFiltered.partitions, rooms, relationships);
   let partitions = relationshipWalls.partitions;
 
@@ -2690,9 +2629,12 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
 
   walls = cleanupWallStubs(closeAlignedWallGaps(walls));
 
+  const sourceOpeningObservations = (raw.openings || []).map(opening => ({...opening, center:sourceScenePoint(opening.center)}));
+  const openingSupport = prepareObservedOpeningWalls(walls, rooms, sourceOpeningObservations, relationships);
+  walls = openingSupport.walls;
   const detectedOpenings = [];
   for (const opening of Array.isArray(raw?.openings) ? raw.openings : []) {
-    const center = sourcePoint(opening?.center, width, depth);
+    const center = sourceScenePoint(opening?.center);
     const type = opening?.type === 'window' ? 'window' : 'door';
     const best = chooseBestWallForOpening(center, type, walls, rooms, relationships, opening?.wallIdHint, opening?.wallAxis, opening?.widthMeters);
     if (!best || !best.projection || best.projection.length < 0.35) continue;
@@ -2704,17 +2646,16 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
     if (type === 'door' && best.score > 1.05) continue;
     if (type === 'window' && String(best.wall.type) !== 'external' && best.score > 0.85) continue;
 
-    const maxWidth = Math.max(0.5, best.projection.length * 0.72);
+    const observedWidth = Number(opening?.widthMeters);
     detectedOpenings.push({
       id: String(opening?.id || `opening_${detectedOpenings.length + 1}`).slice(0,64),
       type,
       wallId: best.wall.id,
-      offset: clamp(best.projection.t,0.04,0.96,0.5),
-      width: clamp(opening?.widthMeters,0.45,maxWidth,type==='window'?1.4:0.9),
-      height: clamp(opening?.heightMeters,0.5,2.8,type==='window'?1.25:2.1),
-      sillHeight: type==='window'?clamp(opening?.sillHeightMeters,0.35,1.6,0.9):0,
-      hinge: /end|right/i.test(String(opening?.hingeSide||''))?'end':'start',
-      swing: /clockwise/i.test(String(opening?.swingDirection||''))&&!/counter/i.test(String(opening?.swingDirection||''))?'clockwise':'counterclockwise',
+      offset: best.projection.t,
+      width: observedWidth > 0 ? observedWidth : type==='window'?1.4:0.9,
+      ...openingVerticalDimensions(opening, type),
+      ...observedDoorOrientation(opening,best.wall),
+      provenance: "source_observed",
       _sourceDistance: Number(best.projection.distance || 0),
       _score: Number(best.score || 0),
     });
@@ -2730,14 +2671,19 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   );
   const overlapRepair = repairOverlappingWalls(walls, accessDoorPass.openings);
   walls = overlapRepair.walls;
-  const finalOpenings = overlapRepair.openings;
+  const outdoor = outdoorBoundaries(walls, rooms, overlapRepair.openings);
+  walls = outdoor.walls;
+  const finalOpenings = outdoor.openings;
 
 
   const furnitureObservations = (raw.furniture || []).map(item => ({...item,
-    backLeft:sourcePoint(item.backLeft,width,depth),backRight:sourcePoint(item.backRight,width,depth),frontCenter:sourcePoint(item.frontCenter,width,depth)
+    backLeft:sourceScenePoint(item.backLeft),backRight:sourceScenePoint(item.backRight),frontCenter:sourceScenePoint(item.frontCenter)
   }));
   const sourceFurniture = compileSourceFurniture(furnitureObservations,footprint,rooms,walls);
-  const furnitureValidation = validateAndCompleteFurniture(sourceFurniture.assets, rooms, walls, finalOpenings);
+  // Source furniture has already passed oriented geometry checks. Generic
+  // room profiles inflate adjacent L legs and relocate rejected beds/fixtures.
+  // They must never replace observations in the source-fidelity path.
+  const furnitureValidation = {assets:sourceFurniture.assets,rejected:[],added:[],collisionAware:true,doorClearanceAware:false};
   let assets = furnitureValidation.assets;
 
   return {
@@ -2747,8 +2693,9 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
     presentationStyle: "ventra_architectural_cutaway_v21",
     width,
     depth,
-    height: 2.8,
-    cutawayHeight: 2.8,
+    height: 3.2,
+    cutawayHeight: 3.2,
+    heightSource: 'design_default_not_measured',
     wallThickness: 0.12,
     externalWallThickness: 0.20,
     footprint,
@@ -2793,6 +2740,7 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
       footprintRepair: { repaired: footprintRepair.repaired, reason: footprintRepair.reason },
       sourceProjection: sourceProjection.diagnostics,
       guideSnap: guideSnap.diagnostics,
+      dimensionAlignment,
       dimensionLock: {
         applied: dimensionLock.applied,
         reason: dimensionLock.reason,
@@ -2819,6 +2767,16 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
         sourceAnchorMeanShift: Number((topology.diagnostics.sourceAnchorMeanShift || 0).toFixed(4)),
         guardedRelationships: topology.diagnostics.guardedRelationships || 0,
         maxAllowedShiftMeters: topology.diagnostics.maxAllowedShiftMeters || 0.8,
+      },
+      openings: {
+        observations: sourceOpeningObservations,
+        observationCoordinateMode: "scene_meters_y_up",
+        sharedBoundarySupports: openingSupport.added,
+        sourceObservedCount: (raw.openings || []).length,
+        preservedCount: finalOpenings.length,
+        rejectedObservationIds: (raw.openings || []).filter(o => !finalOpenings.some(f => f.id === String(o.id))).map(o => o.id),
+        syntheticCount: 0,
+        sourceVerified: false,
       },
       roomContainmentAdjustments,
       furnishing: {
@@ -2967,7 +2925,7 @@ First understand the building layout, entrance, connected spaces, room labels, f
 For handwritten sketches, room labels may be generic ("Room") and the photograph may be rotated. Read text in its readable orientation to understand meaning, but return ALL coordinates in the original image orientation. A bed symbol can identify a bedroom even when the label is generic. A sofa/TV pair identifies a living use. Counters with a sink or cooker identify kitchen use. Persian/Arabic labels for balcony or terrace identify an outdoor zone; preserve its actual drawn location.
 Distinguish physical partitions from furniture edges, leader arrows, handwriting, dimension lines, door leaves and window strokes. An L-shaped sofa or kitchen counter is furniture, never a room boundary. A terrace separator follows the drawn boundary, never a conventional layout you expect.
 If a living area and kitchen are visibly one connected open space, represent them as one non-overlapping room of type kitchen_dining or living, or as adjacent use zones with an open relationship. Never add a wall between them. Each observed furniture item belongs to its containing zone regardless of whether that zone's label names the object.
-Use room.type for the understood use (bedroom, living, kitchen, kitchen_dining, bathroom, balcony, circulation, storage); preserve the actual source label in room.name. Do not erase generic or non-English labels.
+Use room.type for the understood use (bedroom, living, kitchen, kitchen_dining, bathroom, balcony, circulation, storage, laundry); preserve the actual source label in room.name. Do not erase generic or non-English labels.
 Where evidence is unclear, lower confidence and omit uncertain objects instead of substituting an invented partition or furnishing. Do not turn uncertain evidence into certainty to produce a complete-looking result.
 
 
@@ -3014,6 +2972,8 @@ OPENING RULES:
 15. Doors must correspond to visible swing/opening symbols. Windows must correspond to visible window symbols.
 15A. Before returning a door, verify that it sits on the wall actually interrupted by the swing symbol. Never assign a door to a nearby parallel wall merely because it is spatially close.
 15C. wallAxis describes the supporting wall as drawn in the source image, NOT the swung door leaf: horizontal, vertical, diagonal, or unknown only if genuinely unclear. Set wallIdHint to the matching partition id when identifiable.
+15D. hingeSide must identify the hinge in SOURCE IMAGE coordinates: left, right, top, bottom or unknown. swingDirection must be clockwise or counterclockwise as drawn in the image (Y down), or unknown. Do not guess a hinge or swing.
+15E. Only return heightMeters and sillHeightMeters from explicit vertical dimension annotations; never infer them from the plan symbol size. Use -1 for an unknown vertical dimension. A dimensioned floor-level window may have sillHeightMeters=0.
 15B. If a visible swing symbol interrupts a wall, include that door even when one side is an unlabeled corridor or passage.
 
 COORDINATES:
@@ -3032,7 +2992,7 @@ FINAL SELF-CHECK BEFORE ANSWERING:
 - Verify no wall crosses through a room that is visibly open-plan.
 - Count visible window symbols and door swing symbols and ensure openings contains both categories.
 
-Trace ALL visible furniture into furniture; do not invent objects or substitute a generic room furnishing profile. Include dining tables with each visible chair, coffee tables, rugs, kitchen counter runs and embedded fixtures, beds and wardrobes. Include unlabeled spaces (balcony, circulation, dining, study) as separate zones when supported by visible boundaries/use. Room IDs must be unique; names need not be unique. Do not combine zones into overlapping room polygons.
+Trace ALL visible furniture into furniture, including toilets, basins, shower trays and washing_machine symbols in laundry rooms. Do not add a shower to a WC when no shower symbol or explicit shower label exists. Trace ALL visible furniture into furniture; do not invent objects or substitute a generic room furnishing profile. Include dining tables with each visible chair, coffee tables, rugs, kitchen counter runs and embedded fixtures, beds and wardrobes. Include unlabeled spaces (balcony, circulation, dining, study) as separate zones when supported by visible boundaries/use. Room IDs must be unique; names need not be unique. Do not combine zones into overlapping room polygons.
 Each furniture item is an oriented rectangle: backLeft/backRight are the ends of its BACK edge and frontCenter is the midpoint of its FRONT edge. Use normalized FULL-IMAGE coordinates, like the walls. Either ordering of the back-edge endpoints is accepted; frontCenter determines the facing direction. Bed back is its headboard; sofa back is its backrest; TV front faces viewers. Other objects face their access side. Trace L-shaped sofas and L/U kitchen counters as multiple non-overlapping rectangular components sharing groupId. Use one sofa component for each leg. Keep every component at its observed location. Never fill the empty corner of an L shape with a bounding rectangle. Empty groupId for single objects. embeddedInCounter=true only for a sink/stove drawn in a counter. Confidence below 0.65 is rejected for review. Heights/materials are visual defaults, not measured evidence.
 
 DETERMINISTIC PIXEL-STROKE EVIDENCE FROM THE SAME IMAGE:
@@ -3083,7 +3043,43 @@ Return only the strict schema.`;
     diagnostics.stage = "normalizing_scene";
     const raw = parseJson(outputText);
     if (!raw) throw Object.assign(new Error("Preview scene JSON could not be parsed."), { code: "PREVIEW_JSON_PARSE_FAILED" });
-    const scene = normalizeScene(raw, { width: prepared.width, height: prepared.height }, imageEvidence);
+    let scene = normalizeScene(raw, { width: prepared.width, height: prepared.height }, imageEvidence);
+    // Separate visual attention to fixtures from the much larger wall/room task.
+    // Only furniture is returned; all architecture remains fixed.
+    diagnostics.stage = "source_furniture_review";
+    const remainingMs = Math.min(60000, TIMEOUT_MS - (Date.now() - startedAt));
+    if (remainingMs > 5000) {
+      const furnitureController = new AbortController();
+      const furnitureTimer = setTimeout(() => furnitureController.abort(), remainingMs);
+      try {
+        const reviewResponse = await getOpenAIClient().responses.create({
+          model: MODEL, reasoning: { effort: REASONING_EFFORT }, max_output_tokens: MAX_OUTPUT_TOKENS,
+          input: [{role:"user",content:[
+            {type:"input_text",text:`Review ONLY furniture and fixtures in this original floor plan. Read Persian, Arabic and English labels. Return ALL visible objects, not a generic furnished design. The attached fixed scene supplies room IDs and metre/Y-up polygons; use these IDs. Return coordinates normalized to the FULL ORIGINAL IMAGE, Y down. backLeft/backRight are BACK-edge endpoints; frontCenter is the midpoint of the FRONT edge. For beds the back is the pillow/headboard edge: trace the whole bed and preserve its position and facing. Split every L/U sofa or counter into non-overlapping rectangles sharing groupId, one rectangle per leg. Do not drop the shorter leg or fill its empty corner. Trace each visible toilet, basin, shower and washing-machine symbol, including narrow laundry rooms labeled رخت‌شوی‌خانه, لباس‌شویی, laundry or غرفة غسيل. A square with a circle inside may be a washing machine or basin: use its room and other symbols to distinguish them. Do not infer a shower from WC alone. Do not add refrigerators, wardrobes or fixtures absent from the drawing. Confidence below .65 must remain uncertain. Do not modify walls, rooms, doors or windows. Fixed scene: ${JSON.stringify({width:scene.width,depth:scene.depth,sourceBounds:scene.geometryValidation.sourceProjection.sourceBounds,rooms:scene.rooms})}`},
+            {type:"input_image",image_url:prepared.imageUrl,detail:"high"}
+          ]}],
+          text:{format:{type:"json_schema",name:"source_furniture_coverage",strict:true,schema:{type:"object",additionalProperties:false,required:["furniture"],properties:{furniture:sceneSchema.properties.furniture}}}}
+        },{signal:furnitureController.signal});
+        if(reviewResponse.status!=="completed")throw new Error("Furniture review did not complete.");
+        const reviewed=parseJson(reviewResponse.output_text||"");
+        if(!Array.isArray(reviewed?.furniture))throw new Error("Furniture review returned invalid observations.");
+        const reviewedScene=applySourceFurnitureReview(scene,reviewed.furniture);
+        // A failed/empty pass must not silently erase the first pass.
+        if(!reviewedScene.assets.length&&scene.assets.length)throw new Error("Furniture review found no validated objects.");
+        for(const prior of scene.assets){
+          const before=scene.assets.filter(a=>a.roomId===prior.roomId&&a.type===prior.type).length;
+          const after=reviewedScene.assets.filter(a=>a.roomId===prior.roomId&&a.type===prior.type).length;
+          if(after<before)throw new Error(`Furniture review lost source objects in room ${prior.roomId}; the first trace was preserved.`);
+        }
+        scene=reviewedScene;
+        diagnostics.furnitureReview={responseId:reviewResponse.id,usage:reviewResponse.usage,status:"completed"};
+      } catch(error) {
+        scene={...scene,furnishingReview:{...scene.furnishingReview,requiresReview:true,coverageReview:{status:"failed",reason:error?.message||"Furniture review failed"}}};
+        diagnostics.furnitureReview={status:"failed",message:error?.message};
+      } finally {clearTimeout(furnitureTimer);}
+    } else {
+      scene={...scene,furnishingReview:{...scene.furnishingReview,requiresReview:true,coverageReview:{status:"skipped",reason:"analysis_time_budget"}}};
+    }
 
     diagnostics.stage = "completed";
     diagnostics.accepted = true;

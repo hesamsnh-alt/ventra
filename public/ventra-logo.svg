@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 124" role="img" aria-labelledby="title">
+ <title id="title">Ventra — AI Architecture</title>
+ <rect width="420" height="124" rx="14" fill="#0b0f19"/>
+ <rect x="0" y="12" width="6" height="100" rx="3" fill="#ffda29"/>
+ <path d="M34 34 66 92 98 34" fill="none" stroke="#ffda29" stroke-width="8"/>
+ <path d="m48 32 18-10 18 10M66 22v32" fill="none" stroke="#ffda29" stroke-width="2.6"/>
+ <text x="124" y="62" fill="#fff" font-family="Arial,sans-serif" font-weight="700" font-size="48">VENTRA</text>
+ <text x="126" y="94" fill="#ffda29" font-family="Arial,sans-serif" font-size="18">AI ARCHITECTURE</text>
+</svg>

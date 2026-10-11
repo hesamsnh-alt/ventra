@@ -18,7 +18,7 @@ test('furniture preserves zero placement and measured small dimensions',()=>{
 test('legacy ambient color attenuation works where intensity argument does not',()=>{
  const a=new THREE.AmbientLight(0xffffff,.38);assert.equal(a.color.r,1);
  a.color.multiplyScalar(.38);assert.equal(a.color.r,.38);
- assert.match(src,/ambient\.color\.multiplyScalar\(0\.52\)/);
+ assert.match(src,/configureSchematicLighting\(THREE, renderer, threeScene/);
 });
 test('vertical fixture cylinders align with scene Z axis',()=>{
  const meshes=ctx.buildSchematicAssetMeshes({THREE,asset:{type:'shower',width:.8,depth:.8,height:2,xMeters:1,yMeters:1},palette:{},roomWidth:5,roomDepth:5});

@@ -4522,5 +4522,25 @@
   "Confirm against this project’s drawing and rate source. Reviewing a line does not establish that the whole project scope is complete.": {
     "fa": "با نقشه و منبع نرخ همین پروژه تطبیق دهید. بررسی یک ردیف به معنی کامل‌بودن دامنهٔ کل پروژه نیست.",
     "ar": "تحقق مقابل مخطط هذا المشروع ومصدر السعر. مراجعة بند لا تعني اكتمال نطاق المشروع كله."
+  },
+  "Geometry report": {
+    "fa": "گزارش هندسه",
+    "ar": "تقرير الهندسة"
+  },
+  "Show solid walls": {
+    "fa": "نمایش دیوارهای کامل",
+    "ar": "إظهار الجدران المصمتة"
+  },
+  "See through walls": {
+    "fa": "نمای داخلی؛ دیوارهای شفاف",
+    "ar": "رؤية الداخل عبر الجدران"
+  },
+  "Undo last prompt": {
+    "fa": "بازگرداندن آخرین پرامپت",
+    "ar": "التراجع عن آخر طلب"
+  },
+  "Repair observed geometry": {
+    "fa": "اصلاح هندسه بر اساس شواهد",
+    "ar": "إصلاح الهندسة وفق الأدلة"
   }
 }

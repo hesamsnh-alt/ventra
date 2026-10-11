@@ -12,9 +12,10 @@ const { chooseBestWallForOpening, furnishRoom, sceneSchema, synthesizeRoomBounda
 const wall = (id,x1,y1,x2,y2) => ({id,type:'external',start:{x:x1,y:y1},end:{x:x2,y:y2}});
 test('source wall axis keeps entry on its supporting wall at a corner', () => {
  const walls=[wall('return',0,0,0,3),wall('entry',0,0,4,0)];
- const chosen=chooseBestWallForOpening({x:0.3,y:0.05},'door',walls,[],[],null,'horizontal',0.9);
+ const chosen=chooseBestWallForOpening({x:0.6,y:0.05},'door',walls,[],[],null,'horizontal',0.9);
  assert.equal(chosen.wall.id,'entry');
- assert.equal(chooseBestWallForOpening({x:0.3,y:0.05},'door',[walls[0]],[],[],null,'horizontal',0.9),null);
+ assert.equal(chooseBestWallForOpening({x:.3,y:.05},'door',walls,[],[],null,'horizontal',.9),null,'a doorway crossing a wall end must not be shifted to fit');
+ assert.equal(chooseBestWallForOpening({x:0.6,y:0.05},'door',[walls[0]],[],[],null,'horizontal',0.9),null);
 });
 test('vertical kitchen appliances remain aligned with the real counter wall', () => {
  const room={id:'k',name:'Kitchen',type:'kitchen',polygon:[{x:0,y:0},{x:3,y:0},{x:3,y:5},{x:0,y:5}]};

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import {useLanguage} from '@/app/components/i18n/LanguageProvider';
 import {commercialFetch} from '@/lib/commercialFetch';
 import {readSchematic,saveSchematic} from '@/lib/schematicStorage.mjs';
+import {downloadBrandedImage} from '@/lib/brandWatermark.mjs';
 import styles from './PlanRenderPanel.module.css';
 const COPY={
  en:{title:'Realistic design render',intro:'Upload the original plan. Generate a furnished image with realistic materials and lighting.',file:'Original plan image',style:'Design style',modern:'Modern',minimal:'Minimal',luxury:'Luxury',notes:'Design preferences (any language)',shower:'Propose a compact shower where the sanitary room has sufficient space',generate:'Generate realistic render',busy:'Generating render…',download:'Download render',timeout:'The request timed out. Check usage before trying again.',mismatch:'The render changed the source layout and was rejected. It has not been saved.',unclear:'The layout could not be read reliably. Upload a clearer plan.',reviewFailed:'Layout comparison did not complete. No render was accepted.',old:'The previous image has no layout review. Generate a new render.',notice:'Source layout analysis and visual comparison are included. These checks can still miss errors. Concept image; furnishings may be proposed. This does not change your interactive model or BOQ. Each generation uses your analysis allowance and paid OpenAI API credit.',missing:'Select a plan image first.',large:'Choose a JPG, PNG or WebP up to 5 MB.',failed:'Could not generate the render.',saved:'Render saved on this device.',unsaved:'Render generated, but could not be saved on this device. Download it now.'},
@@ -50,6 +51,6 @@ export default function PlanRenderPanel({projectId}){
   <p className={styles.notice}>{t.notice}</p>
   <button type="button" disabled={busy||!imageUrl} onClick={generate}>{busy?t.busy:t.generate}</button>
   {message&&<p role="status">{t[message]||message}</p>}
-  {result?.imageUrl&&<figure><Image src={result.imageUrl} alt={t.title} width={1536} height={1024} unoptimized className={styles.render}/><a href={result.imageUrl} download={`ventra-${projectId}-render.jpg`}>{t.download}</a></figure>}
+  {result?.imageUrl&&<figure><Image src={result.imageUrl} alt={t.title} width={1536} height={1024} unoptimized className={styles.render}/><button type="button" onClick={()=>downloadBrandedImage(result.imageUrl,`ventra-${projectId}-render.jpg`).catch(error=>setMessage(error.message))}>{t.download}</button></figure>}
  </section>;
 }

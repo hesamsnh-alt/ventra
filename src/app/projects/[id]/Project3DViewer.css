@@ -88,7 +88,7 @@
 
 .ventra-model-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 270px;
   gap: 14px;
   min-height: 650px;
 }
@@ -311,3 +311,27 @@
 .ventra-schematic-overlay-controls { position:absolute; top:12px; left:12px; z-index:4; display:flex; flex-wrap:wrap; gap:6px; max-width:calc(100% - 24px); pointer-events:none; }
 .ventra-schematic-overlay-controls button { pointer-events:auto; min-width:42px; min-height:36px; border-radius:8px; color:#fff; background:#15202de8; border:1px solid #56616e; cursor:pointer; }
 .ventra-schematic-overlay-controls button.is-active { color:#ffd900; border-color:#ffd900; }
+
+.ventra-model-sidebar{min-width:0;display:flex;flex-direction:column;gap:12px;align-self:start;position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto;scrollbar-width:thin}
+.ventra-tool-drawer{min-width:0;width:100%;border:1px solid #394451;border-radius:10px;background:#111824;color:#eee}
+.ventra-tool-drawer>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;min-height:42px;font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+.ventra-tool-drawer>summary::-webkit-details-marker{display:none}
+.ventra-tool-drawer>summary:focus-visible{outline:2px solid #ffda28;outline-offset:-3px;border-radius:9px}
+.ventra-drawer-chevron{font-size:18px;transition:transform .15s}
+.ventra-tool-drawer[open]>summary .ventra-drawer-chevron{transform:rotate(180deg)}
+.ventra-drawer-content{padding:10px;border-top:1px solid #394451;min-width:0}
+.ventra-drawer-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-width:0;width:100%}
+.ventra-toolbar-drawer{flex-basis:100%}
+.ventra-drawer-content .ventra-model-reconstruction-summary{margin:0}
+.ventra-drawer-content .ventra-design-studio{margin:0}
+.ventra-tool-drawer .ventra-camera-dock{padding:0;border:0;min-width:0}
+.ventra-schematic-overlay-controls .ventra-overlay-drawer{pointer-events:auto;width:auto;max-width:260px;background:#15202de8}
+.ventra-overlay-drawer>summary{min-height:36px;padding:6px 10px;font-size:12px}
+.ventra-overlay-drawer .ventra-drawer-content{max-height:180px;overflow:auto}
+.ventra-model-sidebar .ventra-model-inspector{border:0;padding:8px;max-height:none}
+@media(max-width:1000px){.ventra-model-layout{grid-template-columns:minmax(0,1fr)}.ventra-model-sidebar{position:static;max-height:none;overflow:visible;grid-row:1}.ventra-model-sidebar .ventra-tool-drawer{max-width:100%}.ventra-model-toolbar{gap:6px}.ventra-model-toolbar>button{padding:0 9px;font-size:12px}}
+@media(prefers-reduced-motion:reduce){.ventra-drawer-chevron{transition:none}}
+@media (max-width: 600px) {
+  .ventra-model-canvas { min-width: 0; width: 100%; height: 65svh; min-height: 360px; }
+  .ventra-camera-dock button { min-height: 44px; }
+}

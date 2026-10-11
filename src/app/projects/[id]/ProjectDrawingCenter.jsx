@@ -1,5 +1,6 @@
 "use client";
-import {saveSchematic,saveActiveSource} from "@/lib/schematicStorage.mjs";
+import {saveSchematic,saveActiveSource,selectSchematicDrawing,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
+import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
@@ -1743,6 +1744,10 @@ export default function ProjectDrawingCenter({
     "webp",
   ].includes(selectedPreviewExtension);
 
+  useEffect(()=>{
+    if(selectedDocumentIsImage && selectedDocumentForPreview?.id)selectSchematicDrawing(projectId,selectedDocumentForPreview.id);
+  },[projectId,selectedDocumentIsImage,selectedDocumentForPreview?.id]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1982,15 +1987,16 @@ export default function ProjectDrawingCenter({
         throw apiError;
       }
 
-      const scene = {
+      const scene = applyDesignDefaults({
         ...payload.scene,
         projectId,
         documentId: document.id || null,
         documentName: document.file_name,
         source: "image-interactive-preview-v3",
         generatedAt: new Date().toISOString(),
-      };
+      });
 
+      if(!drawingSceneMatches(projectId,scene))throw new Error("The selected drawing changed during analysis. Select the analyzed drawing to run it again.");
       await saveSchematic(projectId,scene,{preserveBase:false});
       // Same-tab storage events do not fire. Tell the existing 3D Viewer to
       // switch to the new schematic scene immediately without touching APS state.
@@ -2109,13 +2115,14 @@ export default function ProjectDrawingCenter({
       }
 
       setSelectedDocumentId(document.id);
+      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
       setTakeoffResult(null);
 
       if (typeof window !== "undefined") {
-        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(file.name).catch(error=>setMessage(error.message)))
+        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(file.name))
             ? "schematic"
             : "aps"
-        );
+        ).catch(error=>setMessage(error.message));
       }
 
       if (typeof window !== "undefined") {
@@ -6194,11 +6201,12 @@ async function handleApsGeometryExtracted(analysis) {
                   tabIndex={0}
                   onClick={() => {
                     setSelectedDocumentId(document.id);
+      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                     if (typeof window !== "undefined") {
-                      void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name).catch(error=>setMessage(error.message)))
+                      void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
                           ? "schematic"
                           : "aps"
-                      );
+                      ).catch(error=>setMessage(error.message));
                     }
 
                     if (takeoffResult?.document_id !== document.id) {
@@ -6209,11 +6217,12 @@ async function handleApsGeometryExtracted(analysis) {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       setSelectedDocumentId(document.id);
+      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                       if (typeof window !== "undefined") {
-                        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name).catch(error=>setMessage(error.message)))
+                        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
                             ? "schematic"
                             : "aps"
-                        );
+                        ).catch(error=>setMessage(error.message));
                       }
 
                       if (takeoffResult?.document_id !== document.id) {

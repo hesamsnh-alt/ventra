@@ -1,15 +1,25 @@
 "use client";
 import PlanRenderPanel from "./PlanRenderPanel";
+import ToolDrawer from "./ToolDrawer";
+import FurnitureEditorPanel from "./FurnitureEditorPanel";
+import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
+import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
+import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
+import {waitForViewerSurface} from "@/lib/viewerSurface.mjs";
+import {schematicGeometryAudit} from "@/lib/schematicGeometryAudit.mjs";
+import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {readSchematicSync,readSchematic,saveSchematic,activeSourceSync,readActiveSource,saveActiveSource} from '@/lib/schematicStorage.mjs';
-import {readTakeoffSync,readPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
+import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource} from '@/lib/schematicStorage.mjs';
+import {readTakeoffSync,readPersistedTakeoff,persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import {resolveDwgCalibration,dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {bindProjectCameraInputs} from '@/lib/projectCameraInputs.mjs';
 import {applySceneStyle,engineeringUrn,rememberEngineeringTakeoff,chooseEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
 import {orbitOffset, cameraFitDistance, namedCameraOffset} from "@/lib/orbitCamera.mjs";
 import {commercialFetch,commercialHeaders} from '@/lib/commercialFetch';
-import { sourcePresentationAssets } from "@/lib/sourceFurniture.mjs";
+import { sourcePresentationAssets, restoreWallContactFurniture } from "@/lib/sourceFurniture.mjs";
+import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
+import {watermarkJpegCapture} from "@/lib/brandWatermark.mjs";
 import { arrangeLivingFurniture } from "@/lib/interiorPresentation.mjs";
 
 import { useEffect, useRef, useState, useSyncExternalStore, useEffectEvent } from "react";
@@ -4031,7 +4041,7 @@ function resetDesignMaterials(reconstruction) {
 function buildReconstructionOverlay({
   viewer,
   takeoff,
-  wallHeightMeters = 3,
+  wallHeightMeters = 3.2,
   wallThicknessMeters = 0.15,
 }) {
   const THREE = getThree();
@@ -4806,6 +4816,7 @@ function ventraNormalizeSchematicAssetType(asset) {
   if (/(tv_unit|tv_console|media_console|television_unit)/.test(raw)) return "tv_unit";
   if (/(kitchen_island|island_counter|island)/.test(raw)) return "kitchen_island";
   if (/(kitchen_counter|base_cabinet|wall_cabinet|kitchen_cabinet|countertop|counter)/.test(raw)) return "kitchen_counter";
+  if (/(range_hood|extractor_hood|cooker_hood)/.test(raw)) return "range_hood";
   if (/(rug|carpet)/.test(raw)) return "rug";
   if (/(plant|potted_plant|indoor_plant)/.test(raw)) return "plant";
   if (/(cabinet|storage_unit|shelving|shelf)/.test(raw)) return "cabinet";
@@ -4850,131 +4861,67 @@ function ventraGetPolygonBounds2D(points) {
   };
 }
 
-function ventraGetSchematicTexture({ THREE, kind, baseColor, detailColor, accentColor, repeatX = 4, repeatY = 4 }) {
+function ventraGetSchematicTexture({ THREE, kind, baseColor, detailColor, accentColor, repeatX = 1, repeatY = 1 }) {
   if (typeof document === 'undefined' || !THREE?.Texture) return null;
-  const cacheKey = [kind, baseColor, detailColor, accentColor, repeatX, repeatY].join('|');
-  if (VENTRA_SCHEMATIC_TEXTURE_CACHE.has(cacheKey)) {
-    return VENTRA_SCHEMATIC_TEXTURE_CACHE.get(cacheKey).clone();
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  ctx.fillStyle = baseColor;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  if (kind === 'tile') {
-    const tile = 64;
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 3;
-    for (let x = 0; x <= canvas.width; x += tile) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= canvas.height; y += tile) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= canvas.width; x += tile) {
-      ctx.beginPath();
-      ctx.moveTo(x + tile * 0.5, 0);
-      ctx.lineTo(x + tile * 0.5, canvas.height);
-      ctx.stroke();
-    }
-  } else if (kind === 'parquet') {
-    const plankW = 80;
-    const plankH = 28;
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 2;
-    for (let y = 0; y < canvas.height; y += plankH) {
-      const offset = Math.floor(y / plankH) % 2 === 0 ? 0 : plankW * 0.5;
-      for (let x = -offset; x < canvas.width; x += plankW) {
-        ctx.fillStyle = (Math.floor((x + offset) / plankW) + Math.floor(y / plankH)) % 3 === 0 ? accentColor : baseColor;
-        ctx.fillRect(x, y, plankW, plankH);
-        ctx.strokeRect(x, y, plankW, plankH);
+  const key = [kind,baseColor,detailColor,accentColor,repeatX,repeatY].join('|');
+  const clone = texture => {const result=texture.clone();result.needsUpdate=true;return result;};
+  if (VENTRA_SCHEMATIC_TEXTURE_CACHE.has(key)) return clone(VENTRA_SCHEMATIC_TEXTURE_CACHE.get(key));
+  try {
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
+    const ctx=canvas.getContext('2d');if(!ctx)return null;
+    ctx.fillStyle=baseColor;ctx.fillRect(0,0,512,512);
+    let seed=541;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+    if(kind==='doorwood'){
+      for(let i=0;i<180;i++){const x=random()*512;ctx.globalAlpha=.035+random()*.07;ctx.strokeStyle=detailColor;ctx.lineWidth=.4+random();ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x+5,170,x-5,340,x,512);ctx.stroke();}
+    }else if(kind==='parquet'){
+      for(let i=0;i<4;i++){
+        ctx.globalAlpha=i%2?.11:.05;ctx.fillStyle=i%2?detailColor:accentColor;ctx.fillRect(i*128,0,128,512);
+        for(let j=0;j<42;j++){
+          const x=i*128+random()*128;
+          ctx.globalAlpha=.04+random()*.09;ctx.strokeStyle=detailColor;ctx.lineWidth=.5+random()*1.5;
+          ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x+9,170,x-9,340,x,512);ctx.stroke();
+        }
+        ctx.globalAlpha=.28;ctx.strokeStyle=detailColor;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(i*128,0);ctx.lineTo(i*128,512);ctx.stroke();
+        const cut=i%2?256:0;ctx.beginPath();ctx.moveTo(i*128,cut);ctx.lineTo((i+1)*128,cut);ctx.stroke();
       }
+    }else{
+      for(let i=0;i<2200;i++){
+        ctx.globalAlpha=.015+random()*.04;ctx.fillStyle=random()>.5?detailColor:accentColor;
+        ctx.fillRect(random()*512,random()*512,1+random()*3,1+random()*3);
+      }
+      if(kind==='marble')for(let i=0;i<5;i++){
+        const y=i*120;ctx.globalAlpha=.10;ctx.strokeStyle=detailColor;ctx.lineWidth=.7+random()*1.5;
+        ctx.beginPath();ctx.moveTo(0,y);ctx.bezierCurveTo(160,y+90,360,y-60,512,y+30);ctx.stroke();
+      }
+      ctx.globalAlpha=.25;ctx.strokeStyle=detailColor;ctx.lineWidth=2;ctx.strokeRect(0,0,512,512);
     }
-  } else if (kind === 'stone') {
-    ctx.fillStyle = accentColor;
-    for (let i = 0; i < 1800; i += 1) {
-      ctx.globalAlpha = 0.04 + Math.random() * 0.05;
-      ctx.fillRect(
-        Math.random() * canvas.width,
-        Math.random() * canvas.height,
-        1 + Math.random() * 3,
-        1 + Math.random() * 3
-      );
-    }
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha=1;
+    const texture=new THREE.Texture(canvas);texture.needsUpdate=true;
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(repeatX,repeatY);
+    texture.generateMipmaps=true;texture.minFilter=THREE.LinearMipMapLinearFilter||THREE.LinearMipmapLinearFilter||THREE.LinearFilter;
+    texture.magFilter=THREE.LinearFilter;texture.anisotropy=4;
+    VENTRA_SCHEMATIC_TEXTURE_CACHE.set(key,texture);return clone(texture);
+  }catch{return null;}
+}
+
+// World-coordinate UVs keep grain and grout at a metric scale across triangles.
+function ventraApplyFloorMaterialUVs(THREE,geometry){
+  if(geometry?.vertices&&geometry?.faces&&THREE.Vector2){
+    geometry.faceVertexUvs[0]=geometry.faces.map(f=>[f.a,f.b,f.c].map(i=>new THREE.Vector2(geometry.vertices[i].x,geometry.vertices[i].y)));
+    geometry.uvsNeedUpdate=true;
+  }else if(geometry?.attributes?.position&&THREE.Float32BufferAttribute){
+    const p=geometry.attributes.position,uv=[];
+    for(let i=0;i<p.count;i++)uv.push(p.getX(i),p.getY(i));
+    geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
   }
-
-  const texture = new THREE.Texture(canvas);
-  texture.needsUpdate = true;
-
-  // Autodesk Viewer may expose an older THREE/WebGL runtime.
-  // Keep filtering explicitly WebGL1-safe so canvas textures do not spam
-  // NPOT warnings or silently lose the floor texture.
-  if (THREE.LinearFilter !== undefined) {
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-  }
-
-  texture.generateMipmaps = false;
-
-  const isPowerOfTwo =
-    (value) =>
-      value > 0 &&
-      (value & (value - 1)) === 0;
-
-  const canRepeat =
-    isPowerOfTwo(canvas.width) &&
-    isPowerOfTwo(canvas.height) &&
-    THREE.RepeatWrapping !== undefined;
-
-  if (canRepeat) {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(repeatX, repeatY);
-  } else {
-    texture.wrapS =
-      THREE.ClampToEdgeWrapping ??
-      texture.wrapS;
-    texture.wrapT =
-      THREE.ClampToEdgeWrapping ??
-      texture.wrapT;
-  }
-
-  console.log("[VENTRA JPG FLOOR TEXTURE v12.1]", {
-    kind,
-    width: canvas.width,
-    height: canvas.height,
-    repeatX,
-    repeatY,
-    minFilter: texture.minFilter,
-    mipmaps: texture.generateMipmaps,
-  });
-
-  VENTRA_SCHEMATIC_TEXTURE_CACHE.set(cacheKey, texture);
-  return texture.clone();
 }
 
 
 function ventraCreateRoomFloorMaterial({ THREE, room, palette = {}, polygon = [] }) {
   const OpaqueMaterial =
-    THREE.MeshLambertMaterial ||
     THREE.MeshPhongMaterial ||
+    THREE.MeshLambertMaterial ||
     THREE.MeshBasicMaterial;
 
   const roomType = String(room?.semanticType || room?.type || room?.name || '').toLowerCase();
@@ -5014,13 +4961,18 @@ function ventraCreateRoomFloorMaterial({ THREE, room, palette = {}, polygon = []
     spacingY = 0.55;
   }
 
-  if(palette.designPreset){
+  if(palette.designPreset && !explicitFinish){
     color=hexNumber(/bed/.test(roomType)?palette.bedroomWood:/(bath|wc|toilet|shower|laundry)/.test(roomType)?palette.bathroomTile:palette.mainStone||palette.floor,color);
     if(palette.designPreset==='luxury'&&!/(bath|wc|toilet|shower|laundry)/.test(roomType)){finish='marble';pattern='tile';spacingX=1.2;spacingY=1.2;lineOpacity=.14;}
     else if(palette.designPreset==='minimal'){lineOpacity=.06;spacingX=1.4;spacingY=1.4;}
   }
+  const css=hex=>`#${Number(hex).toString(16).padStart(6,'0')}`;
+  const wood=pattern==='wood';
+  const texture=ventraGetSchematicTexture({THREE,kind:wood?'parquet':finish==='marble'?'marble':'tile',baseColor:css(color),detailColor:css(lineColor),accentColor:'#f1e9da',repeatX:wood?1/.72:1/spacingX,repeatY:wood?1/2.4:1/spacingY});
   const material = new OpaqueMaterial({
-    color,
+    color: texture ? 0xffffff : color,
+    ...(texture?{map:texture,bumpMap:texture,bumpScale:wood?.008:.006}:{}),
+    specular: wood?0x181411:0x282828,
     side: THREE.DoubleSide,
     shininess: palette.designPreset==='luxury'?65:7,
   });
@@ -5600,12 +5552,16 @@ function ventraPresentationAssets(scene) {
   }
   // Do not synthesize extra seating during display. Existing seating is preserved;
   // adding chairs without a verified circulation plan can obstruct cabinetry.
-  return arrangeLivingFurniture(scene, assets);
+  return scene.promptEdit ? assets : arrangeLivingFurniture(scene, assets);
 }
 
 function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
   const meshes = [];
-  const { assetType, w, d, h, rot, cx, cy } = ventraResolveSchematicAssetPlacement(asset, roomWidth, roomDepth);
+  const base=asset.renderingBaseDimensions;
+  const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
+  const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
+  const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
+  const { assetType, w, d, h, rot, cx, cy } = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
   // Tiny, deterministic surface grain adds material depth without a network asset.
   // Textures belong to this asset and are released with its mesh materials.
   const surfaceTexture = (kind) => {
@@ -5654,14 +5610,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const accent = new OpaqueMaterial({
-    color: ventraReadableSchematicColor(asset?.color || palette?.furniture || palette?.accent, 0x815a3f, 176),
+    color: hexNumber(asset?.color || palette?.furniture || palette?.accent, 0x815a3f),
     side: THREE.DoubleSide,
     shininess: upholstery ? 3 : 24,
     specular: upholstery ? 0x111111 : 0x33302b,
     ...finish(upholstery ? 'fabric' : 'wood'),
   });
-  const light = new OpaqueMaterial({ color: hexNumber(palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
-  const white = new OpaqueMaterial({ color: 0xe8e2da, side: THREE.DoubleSide, shininess: 38, specular: 0x444444, ...finish('stone') });
+  const light = new OpaqueMaterial({ color: hexNumber(asset?.color || palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
+  const white = new OpaqueMaterial({ color: hexNumber(asset?.color, 0xe8e2da), side: THREE.DoubleSide, shininess: 38, specular: 0x444444, ...finish('stone') });
   const dark = new OpaqueMaterial({ color: 0x4d433b, side: THREE.DoubleSide, shininess: 9 });
   const sage = new OpaqueMaterial({ color: hexNumber(palette?.textileAccent, 0x8e9b78), side: THREE.DoubleSide, shininess: 3, ...finish('fabric') });
   const rugMat = new OpaqueMaterial({ color: 0xc7bbaa, side: THREE.DoubleSide, shininess: 1, ...finish('fabric') });
@@ -5678,7 +5634,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const addBox = (bw, bd, bh, ox = 0, oy = 0, oz = bh / 2, material = accent) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bd, bh), material);
     const shifted = rotateOffset(ox, oy);
-    mesh.position.set(cx + shifted.x, cy + shifted.y, oz);
+    mesh.position.set(cx + shifted.x, cy + shifted.y, oz + (Number(asset.zMeters) || 0));
     mesh.rotation.z = rot;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -5701,7 +5657,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     const geometry = new THREE.ExtrudeGeometry(shape, {
       amount: Math.max(0.001, bh - 2 * bevel), depth: Math.max(0.001, bh - 2 * bevel),
       steps: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.4,
-      bevelSegments: 2, curveSegments: 3,
+      bevelSegments: 3, curveSegments: 8,
     });
     const mesh = new THREE.Mesh(geometry, material);
     const shifted = rotateOffset(ox, oy);
@@ -5747,11 +5703,18 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addBox(w * 0.84, d * 0.84, 0.004, 0, 0, 0.026, light);
       break;
     }
+    case 'flower_pot':
     case 'plant': {
       addCylinder(Math.min(w, d) * 0.20, 0.28, 0, 0, 0.14, potMat, false);
       const crown = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, d) * 0.33, 14, 10), leafMat);
       crown.position.set(cx, cy, Math.max(0.55, h * 0.64));
       meshes.push(crown);
+      if (assetType === 'flower_pot') {
+        for (const [x,y] of [[0,0],[w*.2,0],[-w*.2,d*.15],[0,-d*.2]]) {
+          const flower = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w,d)*.12,12,8), accent);
+          const shifted=rotateOffset(x,y);flower.position.set(cx+shifted.x,cy+shifted.y,h*.9);meshes.push(flower);
+        }
+      }
       for (const [ox, oy, oz] of [
         [0.12,0.00,0.66],[-0.10,0.05,0.72],[0.02,0.11,0.78],[0.00,-0.11,0.70]
       ]) {
@@ -5778,7 +5741,23 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       if(designVariant==='luxury')for(const x of [-.32,-.16,0,.16,.32])addBox(w*.02,.035,Math.min(h,.9),w*x,-d*.40,Math.min(h,.9)/2,metal);
       addCushion(w * 0.30, d * 0.17, 0.11, -w * 0.19, -d * 0.29, 0.50, white);
       addCushion(w * 0.30, d * 0.17, 0.11,  w * 0.19, -d * 0.29, 0.50, white);
-      addBox(w * 0.88, d * 0.23, 0.035, 0, d * 0.18, 0.465, sage);
+      if(THREE.Geometry&&THREE.Face3){
+        const geometry=new THREE.Geometry(),nx=16,ny=20;
+        for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
+          const x=(i/nx-.5)*w*.88,y=(j/ny-.5)*d*.50+d*.16;
+          const edge=Math.pow(Math.abs(i/nx-.5)*2,8);
+          const z=.478+.012*Math.sin(i*.8+j*.32)+.008*Math.cos(j*.75)-edge*.055;
+          geometry.vertices.push(new THREE.Vector3(x,y,z));
+        }
+        for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+          const a=j*(nx+1)+i,b=a+1,c=a+nx+1,e=c+1;
+          geometry.faces.push(new THREE.Face3(a,b,e),new THREE.Face3(a,e,c));
+        }
+        geometry.computeFaceNormals();geometry.computeVertexNormals();
+        ventraApplyFloorMaterialUVs(THREE,geometry);
+        const blanket=new THREE.Mesh(geometry,sage);blanket.position.set(cx,cy,0);blanket.rotation.z=rot;
+        blanket.castShadow=blanket.receiveShadow=true;blanket.userData={ventraComponent:'bed_fabric'};meshes.push(blanket);
+      }else addCushion(w*.88,d*.5,.035,0,d*.16,.478,sage);
       addBox(w * 0.88, d * 0.05, 0.07, 0, d * 0.45, 0.07, dark);
       break;
     }
@@ -5793,6 +5772,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'dining_table':
     case 'desk': {
+      if (designVariant === 'round') {
+        addCylinder(Math.min(w,d)/2,.08,0,0,Math.min(h,.76),accent,false);
+        addCylinder(Math.min(w,d)*.13,Math.min(h,.72),0,0,Math.min(h,.72)/2,dark,false);
+        addCylinder(Math.min(w,d)*.32,.045,0,0,.025,dark,false);
+        break;
+      }
       addBox(w, d, 0.08, 0, 0, Math.min(h, 0.76), accent);
       addBox(w * 0.86, d * 0.82, 0.035, 0, 0, Math.min(h, 0.76) + 0.055, light);
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.08, 0.08, Math.min(h, 0.72), sx * w * 0.34, sy * d * 0.28, Math.min(h, 0.72) / 2, dark);
@@ -5837,6 +5822,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       }
       break;
     }
+    case 'range_hood': {
+      addBox(w,d,h*.24,0,0,h*.12,metal);
+      addBox(w*.35,d*.45,h*.76,0,d*.2,h*.62,metal);
+      addBox(w*.65,d*.55,.012,0,0,.012,dark);
+      break;
+    }
     case 'kitchen_counter': {
       addBox(w, d, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
       addBox(w * 1.03, d * 1.04, 0.045, 0, 0, Math.min(h, 0.88) + 0.03, white);
@@ -5847,6 +5838,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     case 'kitchen_island': {
       addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
       addBox(w, d, 0.05, 0, 0, Math.min(h, 0.88) + 0.03, white);
+      break;
+    }
+    case 'floor_lamp': {
+      addCylinder(Math.min(w,d)*.46, .045, 0, 0, .025, metal, false);
+      addCylinder(.014, h*.78, 0, 0, h*.4, metal, false);
+      addCylinder(Math.min(w,d)*.4, h*.2, 0, 0, h*.88, light, false);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 8), new OpaqueMaterial({color:0xffe7b0,emissive:0x665020}));
+      bulb.position.set(cx,cy,h*.86); meshes.push(bulb);
       break;
     }
     case 'nightstand': {
@@ -5861,6 +5860,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       meshes.push(shade);
       break;
     }
+    case 'freezer':
     case 'refrigerator': {
       addBox(w, d, h, 0, 0, h / 2, light);
       addBox(w * 0.03, d * 0.05, h * 0.34, w * 0.33, -d * 0.52, h * 0.60, metal);
@@ -6055,7 +6055,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   }
 
   for (const mesh of meshes) {
+    if(objectScale!==1){
+      const z=Number(asset.zMeters)||0;
+      mesh.position.set(cx+(mesh.position.x-cx)*objectScale,cy+(mesh.position.y-cy)*objectScale,z+(mesh.position.z-z)*objectScale);
+      mesh.scale.multiplyScalar(objectScale);
+    }
     mesh.userData = {
+      ...(mesh.userData || {}),
+      assetId: asset?.id || null,
       ventraType:
         `schematic_${assetType}`,
 
@@ -6108,7 +6115,7 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
 
   const safeWallHeight = Math.max(2.2, Number(wallHeight) || 2.8);
   const requestedHeight = Number(opening?.height);
-  const leafHeight = preserveTrace ? requestedHeight : Math.max(
+  const leafHeight = preserveTrace || opening.preserveSourceDimensions ? requestedHeight : Math.max(
     1.9,
     Math.min(
       Number.isFinite(requestedHeight) ? requestedHeight : 2.1,
@@ -6126,21 +6133,23 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
   const sign = preserveTrace
     ? (swingValue === "clockwise" ? -1 : 1)
     : ["right", "clockwise", "cw", "out"].includes(swingValue) ? -1 : 1;
-  const openAngle = closedAngle + sign * (Math.PI / 3.0);
+  const requestedAngle = Number(opening.openAngleDegrees);
+  const angleDegrees = Number.isFinite(requestedAngle) ? Math.max(0,Math.min(90,requestedAngle)) : preserveTrace ? 60 : 0;
+  const openAngle = closedAngle + sign * angleDegrees * Math.PI / 180;
 
-  const leafWidth = preserveTrace ? openingWidth * 0.94 : Math.max(0.52, openingWidth * 0.94);
+  const leafWidth = preserveTrace || opening.preserveSourceDimensions ? openingWidth * 0.94 : Math.max(0.52, openingWidth * 0.94);
   const leafThickness = 0.042;
   const frameDepth = 0.095;
   const frameWidth = 0.055;
 
   const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const frameMaterial = new OpaqueMaterial({
-    color: 0x624a39,
+    color: 0xb49a7d,
     side: THREE.DoubleSide,
     shininess: 24,
   });
   const handleMaterial = new OpaqueMaterial({
-    color: 0x4f4d49,
+    color: 0xb8bdc2,
     side: THREE.DoubleSide,
     shininess: 70,
   });
@@ -6170,10 +6179,14 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
   frameHeader.userData = { ventraType: 'schematic_door_frame_header', schematic: true };
   group.add(frameHeader);
 
-  // Real vertical leaf, clamped below the wall height.
+  const woodTexture=ventraGetSchematicTexture({THREE,kind:'doorwood',baseColor:'#ad8965',detailColor:'#71543d',accentColor:'#cfb99a'});
+  const leafMaterial=material.clone();
+  if(woodTexture){leafMaterial.color.setHex(0xffffff);leafMaterial.map=woodTexture;leafMaterial.bumpMap=woodTexture;leafMaterial.bumpScale=.002;}
+  leafMaterial.shininess=18;
+  // Leaf dimensions and hinge rotation remain tied to the observed opening.
   const leaf = new THREE.Mesh(
     new THREE.BoxGeometry(leafWidth, leafThickness, leafHeight),
-    material
+    leafMaterial
   );
   leaf.position.set(
     hinge.x + Math.cos(openAngle) * (leafWidth / 2),
@@ -6182,21 +6195,30 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
   );
   leaf.rotation.z = openAngle;
   leaf.userData = { ventraType: 'schematic_door_panel', schematic: true };
+  if(leaf.geometry.vertices&&THREE.Vector2){leaf.geometry.faceVertexUvs[0]=leaf.geometry.faces.map(f=>[f.a,f.b,f.c].map(i=>{const v=leaf.geometry.vertices[i];return new THREE.Vector2(v.x/leafWidth+.5,v.z/leafHeight+.5);}));leaf.geometry.uvsNeedUpdate=true;}
+  leaf.castShadow=true;leaf.receiveShadow=true;
   group.add(leaf);
 
-  const handle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.015, 0.015, 0.11, 12),
-    handleMaterial
-  );
-  handle.rotation.x = Math.PI / 2;
-  handle.rotation.z = openAngle;
-  handle.position.set(
-    hinge.x + Math.cos(openAngle) * (leafWidth * 0.80),
-    hinge.y + Math.sin(openAngle) * (leafWidth * 0.80),
-    Math.min(1.02, leafHeight * 0.52)
-  );
-  handle.userData = { ventraType: 'schematic_door_handle', schematic: true };
-  group.add(handle);
+  // Hardware uses leaf-local axes, so it follows every hinge/swing orientation.
+  const details=new THREE.Group();details.position.set(hinge.x,hinge.y,0);details.rotation.z=openAngle;
+  const addDetail=(geometry,mat,x,y,z,type)=>{const mesh=new THREE.Mesh(geometry,mat);mesh.position.set(x,y,z);mesh.userData={ventraType:type,schematic:true};mesh.castShadow=true;details.add(mesh);return mesh;};
+  const handleX=leafWidth*.86,handleZ=Math.min(1.02,leafHeight*.49);
+  for(const side of [-1,1]){
+    addDetail(new THREE.CylinderGeometry(.027,.027,.006,24),handleMaterial,handleX,side*(leafThickness/2+.003),handleZ,'schematic_door_rosette');
+    addDetail(new THREE.CylinderGeometry(.009,.009,.035,16),handleMaterial,handleX,side*(leafThickness/2+.02),handleZ,'schematic_door_spindle');
+    const lever=addDetail(new THREE.CylinderGeometry(.009,.009,.12,16),handleMaterial,handleX-.05,side*(leafThickness/2+.038),handleZ,'schematic_door_handle');lever.rotation.z=Math.PI/2;
+    // Shallow panel mouldings, contained inside the observed door leaf.
+    const inset=.085,panelW=Math.max(.05,leafWidth-2*inset);
+    for(const [bottom,top] of [[.18,leafHeight*.43],[leafHeight*.56,leafHeight-.16]]){
+      if(top<=bottom)continue;
+      for(const z of [bottom,top])addDetail(new THREE.BoxGeometry(panelW,.006,.012),frameMaterial,leafWidth/2,side*(leafThickness/2+.003),z,'schematic_door_moulding');
+      for(const x of [inset,leafWidth-inset])addDetail(new THREE.BoxGeometry(.012,.006,top-bottom),frameMaterial,x,side*(leafThickness/2+.003),(bottom+top)/2,'schematic_door_moulding');
+    }
+  }
+  for(const fraction of [.17,.5,.83]){
+    const hingeBar=addDetail(new THREE.CylinderGeometry(.012,.012,.075,16),handleMaterial,.01,0,leafHeight*fraction,'schematic_door_hinge');hingeBar.rotation.x=Math.PI/2;
+  }
+  group.add(details);
 
   // Plan swing arc stays near floor so opening direction remains readable.
   const arcPoints = [];
@@ -6241,8 +6263,8 @@ function ventraCreateWindowVisual({ THREE, opening, glassMaterial, frameMaterial
   const sy = Number(opening.start.y);
   const ex = Number(opening.end.x);
   const ey = Number(opening.end.y);
-  const sillHeight = opening.preserveRasterTrace ? Number(opening.sillHeight) : Math.max(0.55, Number(opening?.sillHeight) || 0.9);
-  const windowHeight = opening.preserveRasterTrace ? Number(opening.height) : Math.max(0.45, Number(opening?.height) || 1.2);
+  const sillHeight = opening.preserveRasterTrace || opening.preserveSourceDimensions ? Number(opening.sillHeight) : Math.max(0.55, Number(opening?.sillHeight) || 0.9);
+  const windowHeight = opening.preserveRasterTrace || opening.preserveSourceDimensions ? Number(opening.height) : Math.max(0.45, Number(opening?.height) || 1.2);
 
   if (![sx, sy, ex, ey, sillHeight, windowHeight].every(Number.isFinite)) return null;
 
@@ -6640,7 +6662,7 @@ function renderStructuredSchematicScene(viewer, scene) {
     shininess: 3,
   });
   const externalWallMat = new OpaqueMaterial({
-    color: ventraReadableSchematicColor(palette.externalWall, 0x474a4d, 112),
+    color: hexNumber(palette.externalWall, 0x474a4d),
     side: THREE.DoubleSide,
     shininess: 8,
   });
@@ -6689,7 +6711,7 @@ function renderStructuredSchematicScene(viewer, scene) {
 
   const add = (mesh) => {
     if (!mesh) return;
-    addReadableEdges(mesh);
+    if(scene.presentationEdges === true) addReadableEdges(mesh);
     try {
       if (mesh.geometry && mesh.material && !mesh.material?.transparent) {
         // Tall cutaway walls must not black out the plan. Keep furniture contact shadows.
@@ -6717,6 +6739,9 @@ function renderStructuredSchematicScene(viewer, scene) {
     color: ventraReadableSchematicColor(palette.floor, 0xb7a68f, 188),
     side: THREE.DoubleSide,
     shininess: 5,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
 
   const footprintPoints =
@@ -6730,7 +6755,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       THREE,
       polygon: footprintPoints,
       holes: preserveRasterTrace ? (scene.holes || []).map((hole) => hole.polygon.map((point) => ventraScenePointToLocal(point, width, depth))) : [],
-      z: -0.055,
+      z: 0,
       material: baseFloorMaterial,
     });
 
@@ -6851,11 +6876,13 @@ function renderStructuredSchematicScene(viewer, scene) {
       roomFloorBuilder({
         THREE,
         polygon,
-        z: 0.003,
+        z: 0,
         material,
       });
 
     if (result?.mesh) {
+      ventraApplyFloorMaterialUVs(THREE,result.mesh.geometry);
+      result.mesh.receiveShadow=true;
       result.mesh.userData = {
         ventraType:
           "schematic_room_floor",
@@ -6868,7 +6895,7 @@ function renderStructuredSchematicScene(viewer, scene) {
 
       add(result.mesh);
 
-      ventraAddVisibleFloorPattern({
+      if (!material.map) ventraAddVisibleFloorPattern({
         THREE,
         root:
           schematicRoot,
@@ -6939,19 +6966,32 @@ function renderStructuredSchematicScene(viewer, scene) {
     // Architectural wall geometry must use real wall height. Previous versions
     // reused the dollhouse cutaway height for internal partitions, which made
     // doors look taller than the walls and destroyed scale perception.
-    const displayHeight = Number.isFinite(requestedWallHeight) && requestedWallHeight >= 2.2
+    const displayHeight = wallType === 'railing' ? Math.max(.5,Math.min(1.2,requestedWallHeight||1.1)) : Number.isFinite(requestedWallHeight) && requestedWallHeight >= 2.2
       ? Math.min(fullHeight, requestedWallHeight)
       : fullHeight;
+
+    if(wallType === 'railing') {
+      const railMaterial=windowFrameMat;
+      for(const z of [.12,displayHeight])add(createWallMesh({THREE,start,end,height:.045,thickness:.045,zBase:z,material:railMaterial}));
+      const count=Math.max(1,Math.ceil(wallLength/.18));
+      for(let i=0;i<=count;i++){
+        const p=pointAlongSegment(start,end,i/count);
+        const post=new THREE.Mesh(new THREE.BoxGeometry(.035,.035,displayHeight),railMaterial);
+        post.position.set(p.x,p.y,displayHeight/2);post.userData={ventraType:'schematic_balcony_railing',wallId:wall.id,schematic:true};add(post);
+      }
+      continue;
+    }
 
     const wallOpenings = (scene.openings || [])
       .filter((opening) => String(opening?.wallId || '') === String(wall?.id || ''))
       .map((opening) => {
         // The raster compiler already checked the jamb span and owning wall.
         // Preserve it exactly, including narrow/low/edge-adjacent openings.
-        if (preserveRasterTrace) {
+        if (preserveRasterTrace || scene.furnishingMode === "source_observed") {
           return {
             ...opening,
-            preserveRasterTrace: true,
+            preserveRasterTrace,
+            preserveSourceDimensions: scene.furnishingMode === "source_observed",
             wallPosition: pointAlongSegment(start, end, Number(opening.offset)),
           };
         }
@@ -7014,7 +7054,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       start,
       end,
       openings: wallOpenings,
-      minimumWallPiece: preserveRasterTrace ? 0.001 : 0.06,
+      minimumWallPiece: preserveRasterTrace || scene.furnishingMode === "source_observed" ? 0.001 : 0.06,
       preserveRasterTrace,
     });
 
@@ -7121,6 +7161,11 @@ function renderStructuredSchematicScene(viewer, scene) {
     viewer.setBackgroundColor?.(r, g, b, r, g, b);
   } catch {}
 
+  if(scene.designDefaults?.viewOriginMeters){
+    const origin=scene.designDefaults.viewOriginMeters;
+    schematicRoot.position.set(width/2-origin.x,depth/2-origin.y,0);
+    bounds.translate(schematicRoot.position);
+  }
   schematicRoot.updateMatrixWorld(true);
   try { viewer.impl?.sceneUpdated?.(true); } catch {}
   viewer.impl?.invalidate?.(true, true, true);
@@ -7309,7 +7354,7 @@ function renderSchematicScene(viewer, scene) {
 
   const add = (mesh) => {
     if (!mesh) return;
-    addReadableEdges(mesh);
+    if(scene.presentationEdges === true) addReadableEdges(mesh);
     if (mesh.geometry && mesh.material && !mesh.material.transparent) {
       mesh.castShadow = mesh.userData?.ventraType !== 'schematic_floor';
       mesh.receiveShadow = true;
@@ -7479,7 +7524,15 @@ function renderSchematicScene(viewer, scene) {
   return { bounds:serializedBounds, schematic:true, sceneType:scene.sceneType||"room", title:scene.title||"AI Schematic", wallPieceCount, openingCount, assetCount:(scene.assets||[]).length, assetMeshCount, width, depth, height };
 }
 
-function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
+// Presentation only: restore every material/shadow property when disabled.
+function ventraCreateInteriorView(root){
+  const materials=new Map(),objects=new Map(),wallMaterials=new Set();
+  root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))wallMaterials.add(object.material);});
+  root.traverse(object=>{if(!wallMaterials.has(object.material))return;objects.set(object,object.castShadow);const mat=object.material;if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});});
+  return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.18,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
+}
+
+function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState) {
   const THREE = getThree();
   if (!container || !sceneData || !canvasElement || !THREE?.WebGLRenderer || !THREE?.PerspectiveCamera) {
     throw new Error("Standalone schematic renderer is not available.");
@@ -7494,7 +7547,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
     alpha: false,
     preserveDrawingBuffer: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width <= 600 ? 1.5 : 2));
   renderer.setSize(width, height, false);
   renderer.setClearColor(background, 1);
   try {
@@ -7521,66 +7574,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
   const threeScene = new THREE.Scene();
   threeScene.background = new THREE.Color(background);
 
-  if (THREE.AmbientLight) {
-    // r71 ignores AmbientLight's intensity argument. Encode intensity in the
-    // color, which is supported by both the legacy and modern Three.js APIs.
-    const ambient = new THREE.AmbientLight(0xffffff);
-    ambient.color.multiplyScalar(0.52);
-    threeScene.add(ambient);
-  }
-
-  if (THREE.DirectionalLight) {
-    const keyLight =
-      new THREE.DirectionalLight(
-        0xfffaf4,
-        0.48
-      );
-    keyLight.position.set(
-      6,
-      -8,
-      20
-    );
-    try {
-      keyLight.castShadow = true;
-      const shadowExtent = Math.max(6, Math.hypot(Number(sceneData.width) || 5, Number(sceneData.depth) || 5) * 0.7 + 2);
-      if (keyLight.shadow?.mapSize) {
-        keyLight.shadow.mapSize.width = 2048;
-        keyLight.shadow.mapSize.height = 2048;
-        if (keyLight.shadow.camera) {
-          Object.assign(keyLight.shadow.camera, {
-            left: -shadowExtent, right: shadowExtent,
-            top: shadowExtent, bottom: -shadowExtent, near: 0.5, far: 80,
-          });
-          keyLight.shadow.camera.updateProjectionMatrix?.();
-        }
-      }
-      // Autodesk's THREE r71 predates Light.shadow; its renderer reads these
-      // properties directly from DirectionalLight instead.
-      keyLight.shadowMapWidth = 2048;
-      keyLight.shadowMapHeight = 2048;
-      keyLight.shadowCameraLeft = -shadowExtent;
-      keyLight.shadowCameraRight = shadowExtent;
-      keyLight.shadowCameraTop = shadowExtent;
-      keyLight.shadowCameraBottom = -shadowExtent;
-      keyLight.shadowCameraNear = 0.5;
-      keyLight.shadowCameraFar = 80;
-      keyLight.shadowBias = -0.0003;
-      keyLight.shadowDarkness = 0.16;
-    } catch {}
-    threeScene.add(keyLight);
-
-    const fillLight =
-      new THREE.DirectionalLight(
-        0xdfe7ec,
-        0.18
-      );
-    fillLight.position.set(
-      -8,
-      9,
-      10
-    );
-    threeScene.add(fillLight);
-  }
+  configureSchematicLighting(THREE, renderer, threeScene, sceneData.width, sceneData.depth);
 
   const camera = new THREE.PerspectiveCamera(30, width / height, 0.02, 5000);
   camera.up.set(0, 0, 1);
@@ -7626,6 +7620,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
   };
 
   const model = renderSchematicScene(adapter, sceneData);
+  const setInteriorView=ventraCreateInteriorView(threeScene);
 
   const getBoundsInfo = () => {
     const b = model?.bounds || {};
@@ -7681,6 +7676,61 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
   };
 
   setNamedView("iso");
+  if(initialCameraState){
+    camera.position.fromArray(initialCameraState.position);camera.up.fromArray(initialCameraState.up);
+    target.fromArray(initialCameraState.target);render();
+  }
+
+  let furnitureTool=null, furniturePreview=null, furniturePreviewTransforms=[];
+  const raycaster=new THREE.Raycaster();
+  const origin=sceneData.designDefaults?.viewOriginMeters||{x:sceneData.width/2,y:sceneData.depth/2};
+  const rayFor=e=>{
+    const r=renderer.domElement.getBoundingClientRect();if(!r.width||!r.height)return false;
+    camera.updateMatrixWorld(true);threeScene.updateMatrixWorld(true);
+    raycaster.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),camera);return true;
+  };
+  const pickPoint=e=>{
+    if(!rayFor(e))return null;
+    const p=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1),0),new THREE.Vector3());
+    return p?{x:p.x+origin.x,y:p.y+origin.y}:null;
+  };
+  const clearFurniturePreview=()=>{
+    const changed=furniturePreview||furniturePreviewTransforms.length;
+    for(const {mesh,position,quaternion,scale} of furniturePreviewTransforms){mesh.position.copy(position);mesh.quaternion.copy(quaternion);mesh.scale.copy(scale);}
+    furniturePreviewTransforms=[];
+    if(furniturePreview){threeScene.remove(furniturePreview);furniturePreview.geometry.dispose();furniturePreview.material.dispose();furniturePreview=null;}
+    if(changed)render();
+  };
+  const unbindFurniture=bindFurnitureInputs(renderer.domElement,{
+    getTool:()=>furnitureTool,pickPoint,
+    pickAsset:e=>rayFor(e)?raycaster.intersectObjects(threeScene.children,true).find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
+    clearPreview:clearFurniturePreview,
+    preview:(a,valid)=>{
+      clearFurniturePreview();if(!a)return;
+      const original=sceneData.assets?.find(asset=>asset.id===a.id);
+      if(valid&&['rotate','resize'].includes(a.previewOperation)&&original){
+        const angle=((a.rotation||0)-(original.rotation||0))*Math.PI/180;
+        const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),angle);
+        const cx=original.xMeters-sceneData.width/2,cy=original.yMeters-sceneData.depth/2;
+        threeScene.traverse(mesh=>{
+          if(mesh.userData?.assetId!==a.id)return;
+          const position=mesh.position.clone(),quaternion=mesh.quaternion.clone(),scale=mesh.scale.clone();
+          furniturePreviewTransforms.push({mesh,position,quaternion,scale});
+          const x=position.x-cx,y=position.y-cy;
+          if(a.previewOperation==='resize'){
+            const factor=a.width/original.width,z=Number(original.zMeters)||0;
+            mesh.position.set(cx+x*factor,cy+y*factor,z+(position.z-z)*factor);mesh.scale.copy(scale).multiplyScalar(factor);
+          }else{
+            mesh.position.set(cx+x*Math.cos(angle)-y*Math.sin(angle),cy+x*Math.sin(angle)+y*Math.cos(angle),position.z);
+            mesh.quaternion.multiplyQuaternions(q,quaternion);
+          }
+        });
+      }
+      furniturePreview=new THREE.Mesh(new THREE.BoxGeometry(a.width,a.depth,.025),new THREE.MeshBasicMaterial({color:valid?0x39dd81:0xff5544,transparent:true,opacity:.65,depthTest:false}));
+      furniturePreview.position.set(a.xMeters-origin.x,a.yMeters-origin.y,.04);furniturePreview.rotation.z=(a.rotation||0)*Math.PI/180;
+      threeScene.add(furniturePreview);render();
+    }
+  });
 
   const stopMotion=()=>{};
   const unbindInputs=bindProjectCameraInputs(renderer.domElement,{
@@ -7705,6 +7755,10 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
   return {
     model,
     render,
+    getCameraState:()=>({position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray()}),
+    setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
+    clearFurniturePreview,
+    setInteriorView: enabled => {setInteriorView(enabled);render();},
     fitView: () => {stopMotion();setNamedView("iso");},
     homeView: () => {stopMotion();setNamedView("iso");},
     setNamedView: view => {stopMotion();setNamedView(view);},
@@ -7713,6 +7767,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement) {
     zoomIn: () => zoomBy(1),
     zoomOut: () => zoomBy(-1),
     dispose: () => {
+      unbindFurniture();
       unbindInputs();
       resizeObserver?.disconnect();
       threeScene.traverse?.((object) => {
@@ -8284,6 +8339,7 @@ export default function Project3DViewer({ projectId }) {
   const schematicCanvasRef = useRef(null);
   const viewerRef = useRef(null);
   const schematicRendererRef = useRef(null);
+  const furnitureCameraRef = useRef(null);
   const documentRef = useRef(null);
   const sourceModelRef = useRef(null);
   const schematicBaseSceneRef = useRef(null);
@@ -8304,9 +8360,12 @@ export default function Project3DViewer({ projectId }) {
   const [exportBusy, setExportBusy] = useState(false);
   const [schematicScene, setSchematicScene] = useState(null);
   const [furnitureRepairBusy, setFurnitureRepairBusy] = useState(false);
+  const [promptUndoScene, setPromptUndoScene] = useState(null);
+  const currentPromptSceneRef = useRef(null);
   const furnitureImageInput = useRef(null);
   const [schematicModel, setSchematicModel] = useState(null);
   const [active3DSource, setActive3DSource] = useState("aps");
+  useEffect(() => { currentPromptSceneRef.current = {scene: schematicScene, source: active3DSource}; }, [schematicScene, active3DSource]);
 
   function refreshProject3DSourceFromStorage(
     preferredSource = null,
@@ -8328,12 +8387,14 @@ export default function Project3DViewer({ projectId }) {
               return readTakeoffSync(projectId);
             })();
 
-      const storedScene =
+      const candidateScene =
         preferredScene !== undefined
           ? preferredScene
           : (() => {
               return readSchematicSync(projectId);
             })();
+
+      const storedScene=drawingSceneMatches(projectId,candidateScene)?candidateScene:null;
 
       const requestedSource =
         preferredSource ||
@@ -8424,6 +8485,9 @@ export default function Project3DViewer({ projectId }) {
   }
   const [schematicPreset, setSchematicPreset] = useState("classic");
   const [schematicNavMode, setSchematicNavMode] = useState("orbit");
+  const [interiorView,setInteriorView] = useState(false);
+  const interiorModeFromEffect=useEffectEvent(()=>interiorView);
+  useEffect(()=>{schematicRendererRef.current?.setInteriorView?.(interiorView);},[interiorView,status]);
   const [autoOrbit,setAutoOrbit] = useState(false);
 
   const refreshSourceFromEffect=useEffectEvent(refreshProject3DSourceFromStorage);
@@ -8478,7 +8542,7 @@ export default function Project3DViewer({ projectId }) {
         ) ||
         event.key.includes(
           "project-schematic3d"
-        ) ||
+        ) || event.key.includes("project-selected-drawing") ||
         event.key.includes(
           "project-takeoff"
         )
@@ -8516,6 +8580,8 @@ export default function Project3DViewer({ projectId }) {
     const sourceContainer=containerRef.current,apsContainer=apsContainerRef.current;
     let cancelled = false;
     let selectionHandler = null;
+    let ownedViewer = null;
+    const surfaceAbort = new AbortController();
 
     async function boot() {
       try {
@@ -8525,6 +8591,7 @@ export default function Project3DViewer({ projectId }) {
         automaticDwgAttemptRef.current=null;
         setReconstruction(null);
 
+        if (!await waitForViewerSurface(useSchematic ? sourceContainer : apsContainer, surfaceAbort.signal)) return;
         await loadViewerSdk();
 
         if (cancelled || !containerRef.current) return;
@@ -8551,7 +8618,8 @@ export default function Project3DViewer({ projectId }) {
           const standalone = mountStandaloneSchematicRenderer(
             containerRef.current,
             schematicScene,
-            schematicCanvasRef.current
+            schematicCanvasRef.current,
+            furnitureCameraRef.current?.key===`${projectId}:${schematicScene.documentId}`?furnitureCameraRef.current.state:null
           );
           if (cancelled) {
             standalone.dispose?.();
@@ -8559,6 +8627,7 @@ export default function Project3DViewer({ projectId }) {
           }
           schematicRendererRef.current = standalone;
           standalone.setControlMode?.(navigationModeFromEffect());
+          standalone.setInteriorView?.(interiorModeFromEffect());
           const model = standalone.model;
           setSchematicModel(model);
           setReconstruction(null);
@@ -8585,6 +8654,9 @@ export default function Project3DViewer({ projectId }) {
           }
         );
 
+        if(cancelled || !await waitForViewerSurface(apsContainer, surfaceAbort.signal)){viewer.finish();return;}
+        ownedViewer=viewer;
+        viewerRef.current=viewer;
         const code = viewer.start();
 
         if (code > 0) {
@@ -8710,6 +8782,8 @@ export default function Project3DViewer({ projectId }) {
           role: preferred.role,
         });
       } catch (error) {
+        if(cancelled)return;
+        if(ownedViewer){try{ownedViewer.finish();}catch{}if(viewerRef.current===ownedViewer)viewerRef.current=null;ownedViewer=null;}
         console.error("[VENTRA MODEL VIEWER v2]", error);
         setStatus("error");
         setMessage(error?.message || "The project model could not be loaded.");
@@ -8720,8 +8794,9 @@ export default function Project3DViewer({ projectId }) {
 
     return () => {
       cancelled = true;
+      surfaceAbort.abort();
 
-      const viewer = viewerRef.current;
+      const viewer = ownedViewer;
 
       if (viewer && selectionHandler && window.Autodesk?.Viewing) {
         viewer.removeEventListener(
@@ -8731,6 +8806,7 @@ export default function Project3DViewer({ projectId }) {
       }
 
       if (schematicRendererRef.current) {
+        furnitureCameraRef.current={key:`${projectId}:${schematicScene?.documentId}`,state:schematicRendererRef.current.getCameraState?.()};
         schematicRendererRef.current.dispose?.();
         schematicRendererRef.current = null;
       }
@@ -8745,9 +8821,32 @@ export default function Project3DViewer({ projectId }) {
   }, [projectId,urn, schematicScene, active3DSource]);
 
   useEffect(()=>{
+    const failed=event=>{if(event.detail?.projectId===projectId)setMessage(`3D cloud sync failed: ${event.detail.message}`);};
+    window.addEventListener('ventra:3d-cloud-error',failed);
+    return()=>window.removeEventListener('ventra:3d-cloud-error',failed);
+  },[projectId]);
+
+  useEffect(()=>{
     if(!projectId)return;
     let cancelled=false;
-    Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)]).then(([latest,engineering,scene,base,source])=>{
+    (async()=>{
+      const localScene=await readSchematic(projectId),localEngineering=await readPersistedTakeoff(projectId,'engineering');
+      const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      let cloud;
+      try{cloud=await restoreCloud3DState(projectId);}catch(error){if(localScene||engineeringUrn(localEngineering)){window.dispatchEvent(new CustomEvent('ventra:3d-cloud-error',{detail:{projectId,message:error.message}}));return;}throw error;}
+      if(!cloud.schematic&&!cloud.engineering&&(localScene||engineeringUrn(localEngineering))){
+        const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
+        const selectedSource=await readActiveSource(projectId);
+        if(selectedSource)await writeCloud3DState(projectId,'selection',{source:selectedSource});
+        if(localScene)await writeCloud3DState(projectId,'schematic',localScene);
+        if(engineeringUrn(localEngineering))await writeCloud3DState(projectId,'engineering',{aps_urn:engineeringUrn(localEngineering),document_id:localEngineering.document_id,source:localEngineering.source});
+        return;
+      }
+      if(cancelled)return;
+      if(cloud.engineering)await persistTakeoff(projectId,cloud.engineering,{kind:'engineering'});
+      if(cloud.schematic)await saveSchematic(projectId,cloud.schematic,{preserveBase:false});
+      if(cloud.selection?.source)await saveActiveSource(projectId,cloud.selection.source);
+    })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
       if(cancelled)return;
       const resolvedUrn=engineeringUrn(engineering)||engineeringUrn(latest);
       const selectedSource=source || (resolvedUrn?'aps':scene?'schematic':'aps');
@@ -8819,13 +8918,21 @@ export default function Project3DViewer({ projectId }) {
 
   async function persistSchematicScene(nextScene, { preserveBase = true } = {}) {
     if (!projectId || !nextScene) return;
-    await saveSchematic(projectId,nextScene,{preserveBase});
+    await saveSchematic(projectId,applyDesignDefaults(nextScene),{preserveBase});
     if (!preserveBase) schematicBaseSceneRef.current = ventraCloneScene(nextScene);
+  }
+
+  async function commitFurnitureScene(nextScene, expectedScene) {
+    if(currentPromptSceneRef.current?.scene!==expectedScene||currentPromptSceneRef.current?.source!=='schematic'||!drawingSceneMatches(projectId,expectedScene))throw new Error('The drawing changed. Retry on the current scene. / نقشه تغییر کرد؛ دوباره امتحان کن.');
+    for(const key of LOCKED_ARCHITECTURE)if(JSON.stringify(nextScene[key])!==JSON.stringify(expectedScene[key]))throw new Error(`Architecture is locked: ${key}`);
+    setDesignBusy(true);
+    try{await persistSchematicScene(nextScene,{preserveBase:true});rebuildStandaloneScene(nextScene);}
+    finally{setDesignBusy(false);}
   }
 
   function rebuildStandaloneScene(nextScene, nextMessage = null) {
     if (!containerRef.current) throw new Error('Schematic 3D canvas is not ready.');
-    setSchematicScene({...nextScene});
+    setSchematicScene({...applyDesignDefaults(nextScene)});
     setActive3DSource('schematic');
     if(nextMessage)setMessage(nextMessage);
     return {model:schematicRendererRef.current?.model||{}};
@@ -9018,7 +9125,7 @@ export default function Project3DViewer({ projectId }) {
       const result = buildReconstructionOverlay({
         viewer,
         takeoff: latestTakeoff,
-        wallHeightMeters: Number(latestTakeoff?.wall_height) || 3,
+        wallHeightMeters: /default/.test(String(latestTakeoff?.wall_height_source||'')) ? 3.2 : Number(latestTakeoff?.wall_height) || 3.2,
         wallThicknessMeters: 0.15,
       });
 
@@ -9072,7 +9179,42 @@ export default function Project3DViewer({ projectId }) {
     setMessage("Ventra reconstruction hidden. Autodesk source sheet restored.");
   }
 
+  async function restoreRejectedDoors() {
+    if (!schematicScene || designBusy) return;
+    try {
+      setDesignBusy(true);
+      const doorRepair = repairObservedDoors(schematicScene);
+      const {scene, restored: furnitureRestored} = restoreWallContactFurniture(doorRepair.scene);
+      const {restored, removedPartitions = []} = doorRepair;
+      if (!restored.length && !removedPartitions.length && !furnitureRestored.length) { setMessage("No evidence-backed geometry repair was found. / اصلاح هندسه با شواهد کافی پیدا نشد."); return; }
+      await persistSchematicScene(scene, {preserveBase: true});
+      rebuildStandaloneScene(scene);
+      setPromptUndoScene({...schematicScene, projectId});
+      setMessage(`Restored ${furnitureRestored.length} wall-contact cabinet(s) and ${restored.length} observed door(s); repaired ${removedPartitions.length} inferred wall(s). Room dimensions still require source review. / ${furnitureRestored.length} کابینت بازیابی شد؛ درها و دیوارهای استنباط‌شده اصلاح شدند؛ ابعاد اتاق‌ها هنوز نیاز به بررسی دارند.`);
+    } catch (error) { setMessage(error.message); }
+    finally { setDesignBusy(false); }
+  }
+
+  async function undoPromptEdit() {
+    if (!promptUndoScene || designBusy) return;
+    if (active3DSource !== "schematic" || promptUndoScene.projectId !== projectId || promptUndoScene.documentId !== schematicScene?.documentId || !drawingSceneMatches(projectId, promptUndoScene)) {
+      setPromptUndoScene(null);
+      setMessage("This undo belongs to a different drawing.");
+      return;
+    }
+    try {
+      setDesignBusy(true);
+      await persistSchematicScene(promptUndoScene, {preserveBase: true});
+      rebuildStandaloneScene(promptUndoScene);
+      setPromptUndoScene(null);
+      setDesignResult(null);
+      setMessage("Last prompt undone. / آخرین تغییر پرامپت برگردانده شد.");
+    } catch (error) { setMessage(error?.message || "Could not undo the edit."); }
+    finally { setDesignBusy(false); }
+  }
+
   async function applyDesignPrompt(promptOverride = null) {
+    if (designBusy) return;
     const viewer = viewerRef.current;
     const prompt = String(promptOverride ?? designPrompt).trim();
 
@@ -9082,46 +9224,43 @@ export default function Project3DViewer({ projectId }) {
     }
 
     if (schematicScene && active3DSource === "schematic") {
+      const originalScene = schematicScene;
       try {
         setDesignBusy(true);
-        setMessage("Ventra is applying the JPG schematic prompt locally…");
-        const requestedPreset = ventraSchematicPresetFromText(prompt);
-        const baseForEdit = ventraCloneScene(schematicBaseSceneRef.current || schematicScene) || ventraCloneScene(schematicScene);
-        const locallyEdited = ventraLocalEditSchematicScene(baseForEdit, prompt);
-        const presetToUse = requestedPreset || (locallyEdited?.style === 'modern_luxury'
-          ? 'luxury'
-          : locallyEdited?.style === 'warm_minimal'
-            ? 'minimal'
-            : locallyEdited?.style === 'facade_concept'
-              ? 'facade'
-              : 'modern');
-        const polishedScene = ventraRestyleSchematicScene(locallyEdited, presetToUse);
-        const nextScene = {
-          ...polishedScene,
-          projectId,
-          source: 'image-ai-schematic',
-          variant: presetToUse,
-          updatedAt: new Date().toISOString(),
-        };
-        await persistSchematicScene(nextScene, { preserveBase: true });
-        const standalone = rebuildStandaloneScene(nextScene);
-        const model = standalone.model;
+        setMessage("AI is interpreting your request and checking furniture placement… / هوش مصنوعی در حال بررسی درخواست و جای وسایل است…");
+        const result = await ventraFetchJson("/api/ai/scene-edit", {
+          method: "POST",
+          headers: await commercialHeaders({"Content-Type": "application/json"}),
+          body: JSON.stringify({projectId, prompt, language: document.documentElement.lang, scene: originalScene}),
+        }, 85000);
+        if (!result?.scene || !result?.changes?.length) throw new Error("No executable change was returned; the model was kept unchanged.");
+        for (const key of ["rooms","walls","openings","footprint","holes","width","depth","height"]) {
+          if (JSON.stringify(result.scene[key]) !== JSON.stringify(originalScene[key])) throw new Error("The edit changed architecture and was rejected. / ویرایش هندسه را تغییر داد و رد شد.");
+        }
+        if (currentPromptSceneRef.current?.scene !== originalScene || currentPromptSceneRef.current?.source !== "schematic" || !drawingSceneMatches(projectId, originalScene)) {
+          setMessage("The drawing changed while editing; the old response was discarded. / نقشه عوض شد؛ پاسخ قبلی اعمال نشد.");
+          return;
+        }
+        const requestedPreset = result.scene.promptStyle;
+        let nextScene = requestedPreset ? ventraRestyleSchematicScene(result.scene, requestedPreset) : result.scene;
+        if (requestedPreset && result.appearance) {
+          nextScene.palette = {...nextScene.palette, ...result.appearance.palette};
+          nextScene.assets = nextScene.assets.map(asset => {
+            const override = result.appearance.colors?.find(item => item.id === asset.id);
+            return override ? {...asset, color: override.color} : asset;
+          });
+        }
+        nextScene = {...nextScene, projectId, updatedAt: new Date().toISOString()};
+        delete nextScene.promptStyle;
+        await persistSchematicScene(nextScene, {preserveBase: true});
+        rebuildStandaloneScene(nextScene);
+        setPromptUndoScene({...originalScene, projectId});
         setDesignPrompt(prompt);
-        setDesignResult({
-          source: 'ventra-local-prompt',
-          prompt,
-          schematic: true,
-          design: {
-            style: nextScene.style || presetToUse,
-            floorFinish: nextScene.palette?.floor || 'schematic finish',
-            facadeFinish: nextScene.palette?.wall || 'schematic finish',
-          },
-        });
-        setSchematicPreset(presetToUse);
-        setMessage(`Prompt applied locally. ${model.assetCount} furniture/fixture object(s) are now in the scene.`);
+        setDesignResult({source: result.source, prompt, schematic: true, changes: result.changes});
+        if (requestedPreset) setSchematicPreset(requestedPreset);
+        setMessage(result.message || `Applied ${result.changes.length} change(s).`);
       } catch (error) {
-        setMessage(error?.message || "Could not apply the schematic 3D prompt.");
-        console.error("[VENTRA JPG SCHEMATIC PROMPT]", error);
+        setMessage(error?.message || "Could not edit the model; no changes were saved.");
       } finally {
         setDesignBusy(false);
       }
@@ -9221,6 +9360,11 @@ export default function Project3DViewer({ projectId }) {
 
 
   async function captureCurrent3DJpeg() {
+    return watermarkJpegCapture(await captureUnbranded3DJpeg());
+  }
+
+  async function captureUnbranded3DJpeg() {
+    schematicRendererRef.current?.clearFurniturePreview?.();
     if (active3DSource === "schematic") {
       const standalone = schematicRendererRef.current;
       const canvas = schematicCanvasRef.current;
@@ -9430,7 +9574,6 @@ export default function Project3DViewer({ projectId }) {
 
   return (
     <LocalizedElement as="section" className="ventra-model-panel">
-      <PlanRenderPanel key={projectId} projectId={projectId} />
       <LocalizedElement as="header" className="ventra-model-header">
         <LocalizedElement as="div">
           <LocalizedElement as="span">PROJECT MODEL</LocalizedElement>
@@ -9444,6 +9587,8 @@ export default function Project3DViewer({ projectId }) {
           {status === "loading" ? "Loading" : status === "ready" ? "Ready" : status}
         </LocalizedElement>
       </LocalizedElement>
+
+      <ToolDrawer title="render"><PlanRenderPanel key={projectId} projectId={projectId} /></ToolDrawer>
 
       {schematicScene && active3DSource === "schematic" && (
         <LocalizedElement as="p" role="status" style={{ padding: "12px 16px", border: "1px solid #a58a36", borderRadius: 8 }}>
@@ -9466,6 +9611,12 @@ export default function Project3DViewer({ projectId }) {
         <LocalizedElement as="button" type="button" onClick={homeView} disabled={status !== "ready"}>
           Home
         </LocalizedElement>
+        <LocalizedElement as="button" type="button" onClick={saveCurrentViewAsJpg} disabled={exportBusy || status !== "ready"}>
+          {exportBusy ? "Saving..." : "Save JPG"}
+        </LocalizedElement>
+
+        <ToolDrawer title="more" className="ventra-toolbar-drawer">
+        <div className="ventra-drawer-actions">
 
         <LocalizedElement as="button"
           type="button"
@@ -9486,12 +9637,16 @@ export default function Project3DViewer({ projectId }) {
 
         {schematicScene && active3DSource === "schematic" && (
           <>
+            <ToolDrawer title="styles">
+            <div className="ventra-drawer-actions">
             <LocalizedElement as="span" className="ventra-toolbar-label">JPG Presets</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'classic' ? 'is-active' : ''} onClick={restoreClassicSchematic}>Classic</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'modern' ? 'is-active' : ''} onClick={() => applySchematicPreset('modern')}>Modern</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'minimal' ? 'is-active' : ''} onClick={() => applySchematicPreset('minimal')}>Minimal</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'luxury' ? 'is-active' : ''} onClick={() => applySchematicPreset('luxury')}>Luxury</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'facade' ? 'is-active' : ''} onClick={() => applySchematicPreset('facade')}>Facade</LocalizedElement>
+            </div></ToolDrawer>
+            <ToolDrawer title="navigation"><div className="ventra-drawer-actions">
             <LocalizedElement as="span" className="ventra-toolbar-label">Camera</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicNavMode === 'orbit' ? 'is-active' : ''} onClick={() => setSchematicNavMode('orbit')}>Orbit</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicNavMode === 'pan' ? 'is-active' : ''} onClick={() => setSchematicNavMode('pan')}>Pan</LocalizedElement>
@@ -9501,12 +9656,14 @@ export default function Project3DViewer({ projectId }) {
             <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('front')}>Front</LocalizedElement>
             <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('left')}>Left</LocalizedElement>
             <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('top')}>Top</LocalizedElement>
+            </div></ToolDrawer>
           </>
         )}
 
 
-        <LocalizedElement as="div" className="ventra-camera-dock" aria-label="Project camera controls">
+        <ToolDrawer title="camera"><LocalizedElement as="div" className="ventra-camera-dock" aria-label="Project camera controls">
           <LocalizedElement as="strong">View around project</LocalizedElement>
+          {active3DSource==='schematic' && <LocalizedElement as="button" type="button" aria-pressed={interiorView} onClick={()=>setInteriorView(value=>!value)}>{interiorView?'Show solid walls':'See through walls'}</LocalizedElement>}
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} onClick={()=>{setAutoOrbit(false);orbitProject(Math.PI/4);}}>↶ Rotate 45°</LocalizedElement>
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} onClick={()=>{setAutoOrbit(false);orbitProject(-Math.PI/4);}}>Rotate 45° ↷</LocalizedElement>
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} aria-pressed={autoOrbit} onClick={()=>setAutoOrbit(value=>!value)}>{autoOrbit?'Stop rotation':'Auto 360°'}</LocalizedElement>
@@ -9514,16 +9671,11 @@ export default function Project3DViewer({ projectId }) {
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} onClick={()=>{setAutoOrbit(false);fitModel();}}>Center / Fit</LocalizedElement>
           <LocalizedElement as="small">Drag to orbit · right-drag / Shift to pan · scroll to zoom · touch: one finger rotates, two fingers pan/pinch</LocalizedElement>
         </LocalizedElement>
+        </ToolDrawer>
 
+        <ToolDrawer title="export"><div className="ventra-drawer-actions">
         <LocalizedElement as="span" className="ventra-toolbar-label">Export</LocalizedElement>
-
-        <LocalizedElement as="button"
-          type="button"
-          onClick={saveCurrentViewAsJpg}
-          disabled={exportBusy || status !== "ready"}
-        >
-          {exportBusy ? "Saving..." : "Save JPG"}
-        </LocalizedElement>
+        {schematicScene && <LocalizedElement as="button" type="button" onClick={()=>{const report=schematicGeometryAudit(schematicScene);const url=URL.createObjectURL(new Blob([JSON.stringify({report,scene:schematicScene},null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=`${projectId}-geometry-report.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>Geometry report</LocalizedElement>}
 
         <LocalizedElement as="button"
           type="button"
@@ -9541,6 +9693,7 @@ export default function Project3DViewer({ projectId }) {
         >
           Save DWG / CAD
         </LocalizedElement>
+        </div></ToolDrawer>
 
         {schematicScene?.furnishingReview?.observations?.length > 0 && (
           <>
@@ -9572,6 +9725,7 @@ export default function Project3DViewer({ projectId }) {
             ))}
           </LocalizedElement>
         )}
+        </div></ToolDrawer>
       </LocalizedElement>
 
       {message && (
@@ -9580,7 +9734,16 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
       )}
 
+      {schematicScene?.designDefaults && active3DSource === "schematic" && (
+        <div className="ventra-model-message" role="status">
+          <LocalizedElement as="span">Design defaults are proposed furnishings, not measured quantities.</LocalizedElement>
+          {!!schematicScene.designDefaults.warnings?.length && <span> · فضای امن کافی برای این وسایل پیدا نشد / No safe space / لا توجد مساحة آمنة: {schematicScene.designDefaults.warnings.map(w=>`${schematicScene.rooms?.find(r=>r.id===w.roomId)?.name||w.roomId}: ${w.type}`).join(" · ")}</span>}
+        </div>
+      )}
+      {active3DSource === "aps" && <div className="ventra-model-message">چیدمان پیش‌فرض فقط با مرز دقیق اتاق قابل اجراست؛ مدل اصلی APS دست‌نخورده است. / Default furnishing requires verified room boundaries; the original APS model is unchanged.</div>}
+
       {schematicModel && schematicScene && active3DSource === "schematic" && (
+        <ToolDrawer title="info">
         <LocalizedElement as="div" className="ventra-model-reconstruction-summary">
           <LocalizedElement as="strong">AI IMAGE SCHEMATIC 3D</LocalizedElement>
           <LocalizedElement as="span">{schematicScene.title || schematicScene.sceneType || "Room"}</LocalizedElement>
@@ -9589,16 +9752,21 @@ export default function Project3DViewer({ projectId }) {
           <LocalizedElement as="span">{schematicModel.assetCount || 0} furniture/fixture object(s)</LocalizedElement>
           {schematicScene.furnishingMode === 'source_observed' && (
             <LocalizedElement as="span" role="status">
-              Furniture traced from image: {sourcePresentationAssets(schematicScene).length} accepted;
-              {' '}{Math.max(0, (schematicScene.furnishingReview?.observedCount || 0) - sourcePresentationAssets(schematicScene).length)} need review. Verify against the original drawing.
+              Furniture traced from image: {sourcePresentationAssets(schematicScene).filter(a=>a.placementSource==='source_image_observation_v1').length} accepted;
+              {' '}{schematicScene.furnishingReview?.rejected?.length || 0} need review. Verify against the original drawing.
+              {!!schematicScene.furnishingReview?.missing?.length && ` Unconfirmed fixtures: ${schematicScene.furnishingReview.missing.map(item=>`${item.type} (${schematicScene.rooms?.find(room=>room.id===item.roomId)?.name||item.roomId})`).join(', ')}.`}
+              {schematicScene.furnishingReview?.coverageReview?.status && schematicScene.furnishingReview.coverageReview.status !== 'completed' && ' Furniture verification did not complete; inspect the source plan.'}
             </LocalizedElement>
           )}
           <LocalizedElement as="span">{schematicModel.openingCount || 0} opening(s)</LocalizedElement>
+          <LocalizedElement as="span">{schematicGeometryAudit(schematicScene).doorCount} doors · {schematicGeometryAudit(schematicScene).windowCount} windows · {schematicGeometryAudit(schematicScene).issues.length} opening geometry issue(s). Source comparison required.</LocalizedElement>
           <LocalizedElement as="span">Mode: schematic, not engineering BOQ</LocalizedElement>
         </LocalizedElement>
+        </ToolDrawer>
       )}
 
       {reconstruction && (
+        <ToolDrawer title="info">
         <LocalizedElement as="div" className="ventra-model-reconstruction-summary">
           <LocalizedElement as="strong">VENTRA RECONSTRUCTION</LocalizedElement>
           <LocalizedElement as="span">
@@ -9661,10 +9829,12 @@ export default function Project3DViewer({ projectId }) {
             Slab source provisional_convex_hull
           </LocalizedElement>
         </LocalizedElement>
+        </ToolDrawer>
       )}
 
 
       {(reconstruction || (schematicScene && active3DSource === "schematic")) && (
+        <ToolDrawer title="prompt">
         <LocalizedElement as="section" className="ventra-design-studio">
           <LocalizedElement as="div" className="ventra-design-studio-heading">
             <LocalizedElement as="div">
@@ -9674,6 +9844,12 @@ export default function Project3DViewer({ projectId }) {
                 Prompt-edit materials and scene objects. Image schematic mode stays separate from BOQ/Estimate engineering quantities.
               </LocalizedElement>
             </LocalizedElement>
+            {schematicScene && active3DSource === "schematic" && (schematicScene.geometryValidation?.openings?.rejectedObservationIds?.length > 0 || schematicScene.furnishingReview?.rejected?.some(r => r.reason === "intersects_wall")) && (
+              <LocalizedElement as="button" type="button" disabled={designBusy} onClick={restoreRejectedDoors}>Repair observed geometry</LocalizedElement>
+            )}
+            {promptUndoScene && promptUndoScene.projectId === projectId && promptUndoScene.documentId === schematicScene?.documentId && active3DSource === "schematic" && (
+              <LocalizedElement as="button" type="button" disabled={designBusy} onClick={undoPromptEdit}>Undo last prompt</LocalizedElement>
+            )}
             {designResult && (
               <LocalizedElement as="div" className="ventra-design-source">
                 {designResult.source === "openai" ? "OpenAI" : "Safe fallback"}
@@ -9749,6 +9925,7 @@ export default function Project3DViewer({ projectId }) {
             </LocalizedElement>
           )}
         </LocalizedElement>
+        </ToolDrawer>
       )}
 
       <LocalizedElement as="div" className="ventra-model-layout">
@@ -9777,10 +9954,12 @@ export default function Project3DViewer({ projectId }) {
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('zoomIn')}>+</LocalizedElement>
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('zoomOut')}>-</LocalizedElement>
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('iso')}>Iso</LocalizedElement>
+                    <ToolDrawer title="camera" className="ventra-overlay-drawer"><div className="ventra-drawer-actions">
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('top')}>Top</LocalizedElement>
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('front')}>Front</LocalizedElement>
                     <LocalizedElement as="button" type="button" onClick={() => runSchematicCameraAction('left')}>Left</LocalizedElement>
                     <LocalizedElement as="button" type="button" onClick={fitModel}>Fit</LocalizedElement>
+                    </div></ToolDrawer>
                   </LocalizedElement>
                 </>
               )}
@@ -9788,7 +9967,10 @@ export default function Project3DViewer({ projectId }) {
           )}
         </LocalizedElement>
 
-        <LocalizedElement as="aside" className="ventra-model-inspector">
+        <aside className="ventra-model-sidebar">
+          {schematicScene && active3DSource === 'schematic' && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
+        <ToolDrawer title="inspector">
+        <LocalizedElement as="div" className="ventra-model-inspector">
           {schematicScene && active3DSource === "schematic" ? (
             <>
               <LocalizedElement as="span">SCHEMATIC INSPECTOR</LocalizedElement>
@@ -9829,6 +10011,8 @@ export default function Project3DViewer({ projectId }) {
             </>
           )}
         </LocalizedElement>
+        </ToolDrawer>
+        </aside>
       </LocalizedElement>
     </LocalizedElement>
   );

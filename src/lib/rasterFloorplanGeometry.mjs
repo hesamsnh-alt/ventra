@@ -327,8 +327,8 @@ export function compileRasterFloorplan(raw, { imageWidth, imageHeight } = {}) {
     return { id: h.id, type: h.type, polygon: polygon(h.polygon, `hole ${h.id}`, transform) };
   });
   const assumptions = ["Wall thickness is schematic: internal 0.12 m, external 0.18 m."];
-  const height = raw.wallHeightMeters == null ? 2.8 : finite(raw.wallHeightMeters, "wallHeightMeters");
-  if (raw.wallHeightMeters == null) assumptions.push("Wall height is assumed to be 2.80 m; it is not measurable from the plan view alone.");
+  const height = raw.wallHeightMeters == null ? 3.2 : finite(raw.wallHeightMeters, "wallHeightMeters");
+  if (raw.wallHeightMeters == null) assumptions.push("Wall height is assumed to be 3.20 m; it is not measurable from the plan view alone.");
   if (height <= 0) fail("INVALID_HEIGHT", "Wall height must be positive.");
   const walls = [], wallMap = new Map();
   for (const w of rawWalls) {
@@ -437,6 +437,7 @@ export function compileRasterFloorplan(raw, { imageWidth, imageHeight } = {}) {
     sceneType: "apartment_floorplan", title: raw.title || "Image floor plan",
     rasterGeometryVersion: RASTER_GEOMETRY_VERSION,
     width, depth, height, wallThickness: 0.12, externalWallThickness: 0.18, cutawayHeight: height,
+    heightSource: raw.wallHeightMeters == null ? 'design_default_not_measured' : 'source_dimension',
     footprint, holes, rooms, walls, openings, assets: [],
     palette: { wall: "#B8B1A7", floor: "#92785D", ceiling: "#D7D1C7", accent: "#6D503B", glass: "#557F94", door: "#654736" },
     geometryValidation: validation,

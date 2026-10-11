@@ -1,3 +1,4 @@
+import {operatorAllowance,isOperator} from './operatorAllowance.mjs';
 import 'server-only';
 import {createHash} from 'node:crypto';
 import {createClient} from '@supabase/supabase-js';
@@ -20,10 +21,11 @@ export async function commercialContext(request,projectId,verifiedUser=null){
   const member=await db.from('ventra_project_members').select('role').eq('project_id',projectId).eq('user_id',user.id).maybeSingle();
   if(member.error||!['manager','supervisor'].includes(member.data?.role))throw fail('You cannot run analysis for this project.',403,'PROJECT_ACCESS_DENIED');
  }
+ if(isOperator(project.user_id,process.env)) return {user,db,owner:project.user_id,status:'operator',limit:operatorAllowance(project.user_id,0,process.env)};
  const stripe=provider(),customer=await customerFor(stripe,{id:project.user_id,email:project.user_id===user.id?user.email:undefined});
  const subscription=await subscriptionFor(stripe,customer);
  const access=subscriptionAccess(subscription,process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID);
- return {user,db,owner:project.user_id,...access};
+ return {user,db,owner:project.user_id,...access,limit:operatorAllowance(project.user_id,access.limit,process.env)};
 }
 export function commercialError(error){return Response.json({success:false,error:error.status?error.message:'Commercial service unavailable. Try later.',code:error.code||'COMMERCIAL_UNAVAILABLE'},{status:error.status||503});}
 const running=new Map(),done=new Map();
@@ -43,9 +45,11 @@ export async function commercialRun(request,action,handler){
   const task=(async()=>{
    if(action!=='boq'){
     if(!process.env.OPENAI_API_KEY)throw fail('AI analysis is not configured. Contact support.');
+    if(!isOperator(context.owner,process.env)){
     const {data,error}=await context.db.rpc('ventra_consume_analysis',{p_owner:context.owner,p_actor:user.id,p_project:body.projectId,p_action:action,p_request:suppliedId,p_hash:digest,p_limit:context.limit});
     if(error)throw fail('Usage tracking is unavailable. Contact support.');
     if(!data?.accepted)throw fail(data?.duplicate?'This analysis was already submitted. Check the project result before retrying.':'Monthly analysis allowance reached. Open Billing.',data?.duplicate?409:429,data?.duplicate?'ANALYSIS_ALREADY_SUBMITTED':'ANALYSIS_LIMIT_REACHED');
+    }
    }
    // Include user scope in legacy route-local cache identifiers.
    body.requestId=key;

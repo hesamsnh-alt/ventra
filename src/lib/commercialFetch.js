@@ -5,6 +5,6 @@ export async function commercialHeaders(initial={}){
  const headers=new Headers(initial);headers.set('Authorization','Bearer '+data.session.access_token);return headers;
 }
 export async function commercialFetch(url,options={}){
- if(!/^\/api\/(?:ai|aps)(?:\/|$)|^\/api\/aps-auth(?:\?|$)/.test(String(url)))return fetch(url,options);
+ if(!/^\/api\/(?:ai|aps)(?:\/|$)|^\/api\/(?:aps-auth|project-3d-state)(?:\?|$)/.test(String(url)))return fetch(url,options);
  return fetch(url,{...options,headers:await commercialHeaders(options.headers)});
 }
