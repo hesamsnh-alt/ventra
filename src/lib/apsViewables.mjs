@@ -2,14 +2,23 @@ const data=node=>node?.data||node||{};
 const role=node=>String(data(node).role||'').toLowerCase();
 export function apsGeometryNodes(root){
  if(!root)return [];
- let found=[];
- try{found=root.search?.({type:'geometry'})||[];}catch{}
- if(!Array.isArray(found))found=[];
- if(!found.length){
-  const seen=new Set();const visit=n=>{if(!n||seen.has(n))return;seen.add(n);if(String(data(n).type||'').toLowerCase()==='geometry')found.push(n);const children=n.children||data(n).children||[];if(Array.isArray(children))children.forEach(visit);};visit(root);
- }
- if(!found.length){try{const fallback=root.getDefaultGeometry?.();if(fallback)found=[fallback];}catch{}}
- return [...new Set(found)].filter(n=>!['failed','timeout'].includes(String(data(n).status||'').toLowerCase()));
+ const found=new Set(),seen=new Set();
+ const add=n=>{if(!n)return;const d=data(n);if(String(d.type||'').toLowerCase()==='geometry'&&['2d','3d'].includes(role(n))&&!['failed','timeout'].includes(String(d.status||'').toLowerCase()))found.add(n);};
+ const visit=n=>{
+  if(!n||seen.has(n))return;seen.add(n);
+  if(['failed','timeout'].includes(String(data(n).status||'').toLowerCase()))return;
+  add(n);
+  const children=n.children||data(n).children||data(n).derivatives||[];
+  if(Array.isArray(children))children.forEach(visit);
+ };
+ visit(root);
+ // Search and default are SDK compatibility fallbacks, not alternatives to
+ // traversing the tree. A partial/empty search must not hide a populated layout.
+ try{for(const n of root.search?.({type:'geometry'})||[])add(n);}catch{}
+ if(!found.size){try{add(root.getDefaultGeometry?.());}catch{}}
+ return [...found].filter(n=>{
+  const parents=new Set();for(let p=n?.parent;p&&!parents.has(p);p=p.parent){parents.add(p);if(['failed','timeout'].includes(String(data(p).status||'').toLowerCase()))return false;}return true;
+ });
 }
 export function selectApsGeometry(root,{prefer2D=true}={}){
  const nodes=apsGeometryNodes(root);

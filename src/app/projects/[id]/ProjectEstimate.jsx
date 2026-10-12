@@ -1,4 +1,5 @@
 "use client";
+import WorkspaceDisclosure from './WorkspaceDisclosure';
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 import CommercialSync from "./CommercialSync";
@@ -270,7 +271,7 @@ export default function ProjectEstimate({ projectId }) {
             </LocalizedElement>
           </LocalizedElement>
 
-          <LocalizedElement as="div" className="estimate-settings">
+          <WorkspaceDisclosure title="Budget settings"><LocalizedElement as="div" className="estimate-settings">
             <LocalizedElement as="label">
               Build Quality
               <LocalizedElement as="select" disabled={basis === "boq"} value={quality} onChange={(e)=>changeQuality(e.target.value)}>
@@ -317,7 +318,7 @@ export default function ProjectEstimate({ projectId }) {
                 onChange={(e)=>setVatPct(clamp(e.target.value,0,100))}
               />
             </LocalizedElement>
-          </LocalizedElement>
+          </LocalizedElement></WorkspaceDisclosure>
 
           <LocalizedElement as="div" className="estimate-table-wrap">
             <LocalizedElement as="table" className="estimate-table">

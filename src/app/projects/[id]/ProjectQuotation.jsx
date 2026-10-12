@@ -1,4 +1,5 @@
 "use client";
+import WorkspaceDisclosure from './WorkspaceDisclosure';
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 import CommercialSync from "./CommercialSync";
@@ -462,7 +463,7 @@ export default function ProjectQuotation({ projectId }) {
         )}
       </LocalizedElement>
 
-      <LocalizedElement as="div" className="quotation-card commercial-no-print">
+      <WorkspaceDisclosure title="Document details" className="commercial-no-print"><LocalizedElement as="div" className="quotation-card commercial-no-print">
         <LocalizedElement as="strong">Quotation Sync Status</LocalizedElement>
         <LocalizedElement as="p">
           Refresh count: <LocalizedElement as="strong">{refreshNonce}</LocalizedElement>
@@ -474,7 +475,7 @@ export default function ProjectQuotation({ projectId }) {
               : "Not saved yet"}
           </LocalizedElement>
         </LocalizedElement>
-      </LocalizedElement>
+      </LocalizedElement></WorkspaceDisclosure>
 
       {estimate && (
         <LocalizedElement as="div" className="quotation-card commercial-no-print">

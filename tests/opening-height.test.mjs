@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const source=fs.readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js',import.meta.url),'utf8');
+const source=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
 const context=vm.createContext({});
 vm.runInContext(source.slice(source.indexOf('function openingVerticalDimensions('),source.indexOf('\nfunction dist('))+'\nthis.resolve=openingVerticalDimensions;',context);
 test('unknown or legacy zero heights use labelled visual defaults, not 0.5m doors',()=>{

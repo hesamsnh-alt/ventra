@@ -1,3 +1,4 @@
+import {runPreviewAnalysis} from '../src/lib/previewJobClient.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -237,6 +238,7 @@ test("a failed raster request stops quiet Analyze and leaves existing persistenc
     crypto:{randomUUID:()=> 'test-request'},
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}, window: { dispatchEvent(){},localStorage: { setItem: (...args) => writes.push(args) } },
     projectId: "test-project", getFileExtension: () => "png", downloadProjectDocument: async () => ({ url: "https://example.invalid/fixture.png" }),
+    runPreviewAnalysis, commercialFetch:()=>{},
     ventraFetchWithTransientRetry: async () => ({ ok: false, status: 422, text: async () => JSON.stringify({ error: "Opening is off its wall" }) }),
     console: { error() {}, warn() {} }, setMessage() {}, setErrorMessage() {}, setRasterReview() {}, updateRasterReview() {}, getRasterReview:()=>null,
   };
@@ -257,6 +259,7 @@ test("successful raster Analyze commits scene and original before publishing the
     crypto:{randomUUID:()=> 'test-request'},
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}, window: { dispatchEvent(){},localStorage: { setItem: (...args) => writes.push(args) } },
     projectId: "test-project", getFileExtension: () => "png", downloadProjectDocument: async () => ({ url: "https://example.invalid/fixture.png" }),
+    runPreviewAnalysis, commercialFetch:()=>{},
     ventraFetchWithTransientRetry: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ scene }) }),
     console: { error() {}, warn() {} }, setMessage() {}, setErrorMessage() {}, setRasterReview() {}, updateRasterReview() {}, getRasterReview:()=>null,
   };

@@ -1,7 +1,8 @@
 "use client";
+import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
-import {saveSchematic,saveActiveSource,selectSchematicDrawing,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
+import {saveSchematic,saveActiveSource,selectSchematicDrawing,selectDrawingDocument,selectedDrawingSync,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
 import {collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
 import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
@@ -11,6 +12,7 @@ import {persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeof
 import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
+import {runPreviewAnalysis} from '@/lib/previewJobClient.mjs';
 import RasterTraceReview from "./RasterTraceReview";
 import { getRasterReview, subscribeRasterReview, updateRasterReview } from "@/lib/rasterReviewSession.mjs";
 import { buildTakeoffFromAps } from "@/services/apsTakeoffBuilder";
@@ -1691,19 +1693,9 @@ export default function ProjectDrawingCenter({
           const savedDocumentId =
             takeoffResultResponse?.takeoff?.document_id || null;
 
-          const savedDocumentExists =
-            savedDocumentId &&
-            loadedDocuments.some(
-              (item) => item.id === savedDocumentId
-            );
-
-          setSelectedDocumentId(
-            savedDocumentExists
-              ? savedDocumentId
-              : loadedDocuments.length === 1
-                ? loadedDocuments[0]?.id || null
-                : null
-          );
+          setSelectedDocumentId(resolveDrawingSelection(
+            loadedDocuments,selectedDrawingSync(projectId),savedDocumentId
+          ));
         }
 
         if (
@@ -1752,8 +1744,8 @@ export default function ProjectDrawingCenter({
   ].includes(selectedPreviewExtension);
 
   useEffect(()=>{
-    if(selectedDocumentIsImage && selectedDocumentForPreview?.id)selectSchematicDrawing(projectId,selectedDocumentForPreview.id);
-  },[projectId,selectedDocumentIsImage,selectedDocumentForPreview?.id]);
+    if(selectedDocumentId && selectedDocumentIsImage && selectedDocumentForPreview?.id===selectedDocumentId)selectSchematicDrawing(projectId,selectedDocumentId);
+  },[projectId,selectedDocumentId,selectedDocumentIsImage,selectedDocumentForPreview?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1831,7 +1823,7 @@ export default function ProjectDrawingCenter({
 
   async function generateImageSchematic3D(document, { quiet = false } = {}) {
     if (!document) return null;
-    const key = String(document.id || document.file_name || "unknown");
+    const key = schematicRequestKey(projectId,document);
 
     // V53: keep single-flight state on window, not on this React component.
     // ProjectDrawingCenter can remount while source/persistence state changes; a useRef map
@@ -1951,7 +1943,7 @@ export default function ProjectDrawingCenter({
       }
 
       const requestId = crypto.randomUUID();
-      const response = await ventraFetchWithTransientRetry(
+      const response = await runPreviewAnalysis(() => ventraFetchWithTransientRetry(
         "/api/ai/design-3d-preview",
         {
           method: "POST",
@@ -1969,7 +1961,11 @@ export default function ProjectDrawingCenter({
           cache: "no-store",
         },
         { attempts: 2, label: "interactive-3d-preview" }
-      );
+      ), {
+        key: `${projectId}:${document.id || document.file_name}`,
+        fetcher: commercialFetch,
+        storage: typeof window !== 'undefined' ? window.sessionStorage : null,
+      });
 
       const responseText = await response.text();
       let payload = null;
@@ -2122,6 +2118,7 @@ export default function ProjectDrawingCenter({
       }
 
       setSelectedDocumentId(document.id);
+      selectDrawingDocument(projectId,document.id);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
       setTakeoffResult(null);
 
@@ -2270,6 +2267,8 @@ export default function ProjectDrawingCenter({
         }
       );
     }
+
+    selectDrawingDocument(projectId,selectedDocument.id);
 
     analysisRunIdRef.current = crypto.randomUUID();
     setAnalysisRunId(analysisRunIdRef.current);
@@ -2611,6 +2610,7 @@ setMessage(
 
         if (selectedDocumentId === document.id) {
           setSelectedDocumentId(remaining[0]?.id || null);
+          selectDrawingDocument(projectId,remaining[0]?.id || null);
         }
 
         return remaining;
@@ -6152,8 +6152,7 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
-      {takeoffResult?.source === "autodesk-aps" &&
-        takeoffResult?.aps_urn && (
+      {isSelectedApsDrawing(takeoffResult,selectedDocumentForPreview) && (
           <div>
           <DwgUnitConfirmation key={takeoffResult.aps_urn} value={confirmedUnits[takeoffResult.aps_urn]} onConfirm={value=>{const units={...confirmedUnits,[takeoffResult.aps_urn]:value};localStorage.setItem(`ventra:confirmed-dwg-units:${projectId}`,JSON.stringify(units));setConfirmedUnits(units);}}/>
           <ApsViewer
@@ -6225,6 +6224,7 @@ async function handleApsGeometryExtracted(analysis) {
                   tabIndex={0}
                   onClick={() => {
                     setSelectedDocumentId(document.id);
+      selectDrawingDocument(projectId,document.id);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                     if (typeof window !== "undefined") {
                       void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
@@ -6241,6 +6241,7 @@ async function handleApsGeometryExtracted(analysis) {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       setSelectedDocumentId(document.id);
+      selectDrawingDocument(projectId,document.id);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                       if (typeof window !== "undefined") {
                         void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))

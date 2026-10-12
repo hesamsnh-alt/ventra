@@ -28,7 +28,7 @@ test('oriented furniture outside its assigned room and missing confidence are re
  const unknown={...wrong,roomId:'r',confidence:undefined};assert.equal(compileSourceFurniture([unknown],poly,s.rooms).rejected[0].reason,'uncertain_observation');
 });
 test('actual route keeps adjacent L legs and does not replace an invalid source bed with a default',()=>{
- const src=fs.readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js',import.meta.url),'utf8');
+ const src=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
  const context=vm.createContext({createPrintedDimensionAlignment,mapPrintedDimensionPoint,prepareObservedOpeningWalls,process:{env:{}},canonicalRoomType,compileSourceFurniture,repairOverlappingWalls,filterOpenPlanPartitions,outdoorBoundaries,observedDoorOrientation});
  vm.runInContext(src.replace(/^import .*;\n/gm,'').split('function parseJson')[0]+'\nthis.normalize=normalizeScene;',context);
  const normalized=poly.map(p=>({x:p.x/10,y:p.y/10}));
@@ -37,7 +37,7 @@ test('actual route keeps adjacent L legs and does not replace an invalid source 
 });
 
 test('connectivity never invents bedroom doors and multiple observed access doors survive',()=>{
- const src=fs.readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js',import.meta.url),'utf8');
+ const src=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
  const context=vm.createContext({createPrintedDimensionAlignment,mapPrintedDimensionPoint,prepareObservedOpeningWalls,process:{env:{}},canonicalRoomType,compileSourceFurniture,repairOverlappingWalls,filterOpenPlanPartitions,outdoorBoundaries,observedDoorOrientation});
  vm.runInContext(src.replace(/^import .*;\n/gm,'').split('function parseJson')[0]+'\nthis.required=ensureRequiredDoors;this.access=normalizeEnclosedRoomDoors;',context);
  const walls=[{id:'w',type:'internal',start:{x:0,y:2},end:{x:4,y:2}}],rooms=[{id:'bed',type:'bedroom',polygon:[{x:0,y:0},{x:4,y:0},{x:4,y:2},{x:0,y:2}]},{id:'corridor',type:'corridor',polygon:[{x:0,y:2},{x:4,y:2},{x:4,y:3},{x:0,y:3}]}],relationships=[{roomAId:'bed',roomBId:'corridor',relation:'door',confidence:.99}];

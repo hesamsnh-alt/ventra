@@ -672,12 +672,12 @@
     "ar": "جارٍ تحميل النشاط المشترك…"
   },
   "Description": {
-    "fa": "شرح",
-    "ar": "الوصف"
+    "fa": "شرح عملیات",
+    "ar": "وصف الأعمال"
   },
   "Section": {
-    "fa": "بخش",
-    "ar": "القسم"
+    "fa": "بخش عملیات",
+    "ar": "قسم الأعمال"
   },
   "Category": {
     "fa": "دسته‌بندی",
@@ -2060,11 +2060,11 @@
     "ar": "سباكة"
   },
   "Structure": {
-    "fa": "سازه",
-    "ar": "الهيكل"
+    "fa": "عملیات سازه",
+    "ar": "الأعمال الإنشائية"
   },
   "Site preparation": {
-    "fa": "تجهیز کارگاه",
+    "fa": "آماده‌سازی کارگاه",
     "ar": "تجهيز الموقع"
   },
   "External works": {
@@ -3760,8 +3760,8 @@
     "ar": "الخطوط:"
   },
   "lot": {
-    "fa": "مقطوع",
-    "ar": "مقطوعية"
+    "fa": "مجموعه",
+    "ar": "مجموعة"
   },
   "Magenta: footprint · Cyan: walls · Green: openings · Orange: dimension references. These are the AI's observations, including any rejected geometry.": {
     "fa": "ارغوانی: محدودهٔ بنا · فیروزه‌ای: دیوارها · سبز: بازشوها · نارنجی: مراجع اندازه‌گذاری. اینها تشخیص‌های هوش مصنوعی، شامل هندسهٔ ردشده هستند.",
@@ -5318,5 +5318,461 @@
   "Choose an execution method for the selected trade.": {
     "fa": "روش اجرای متناسب با رشته انتخاب‌شده را مشخص کنید.",
     "ar": "اختر طريقة تنفيذ للتخصص المحدد."
+  },
+  "Site manager": {
+    "fa": "مدیر کارگاه",
+    "ar": "مدير الموقع"
+  },
+  "Civil engineer": {
+    "fa": "مهندس عمران",
+    "ar": "مهندس مدني"
+  },
+  "Structural engineer": {
+    "fa": "مهندس سازه",
+    "ar": "مهندس إنشائي"
+  },
+  "Architect": {
+    "fa": "مهندس معمار",
+    "ar": "مهندس معماري"
+  },
+  "MEP engineer": {
+    "fa": "مهندس تأسیسات",
+    "ar": "مهندس الأنظمة الميكانيكية والكهربائية والصحية"
+  },
+  "Mechanical engineer": {
+    "fa": "مهندس مکانیک",
+    "ar": "مهندس ميكانيكي"
+  },
+  "Electrical engineer": {
+    "fa": "مهندس برق",
+    "ar": "مهندس كهربائي"
+  },
+  "Quality engineer": {
+    "fa": "مهندس کنترل کیفیت",
+    "ar": "مهندس ضبط الجودة"
+  },
+  "Safety officer": {
+    "fa": "مسئول ایمنی",
+    "ar": "مسؤول السلامة"
+  },
+  "Surveyor": {
+    "fa": "نقشه‌بردار",
+    "ar": "مسّاح"
+  },
+  "Foreman": {
+    "fa": "سرکارگر",
+    "ar": "مراقب العمال"
+  },
+  "Procurement officer": {
+    "fa": "مسئول تدارکات",
+    "ar": "مسؤول المشتريات"
+  },
+  "Quantity surveyor": {
+    "fa": "مهندس متره و برآورد",
+    "ar": "مهندس حصر الكميات"
+  },
+  "Services": {
+    "fa": "تأسیسات",
+    "ar": "أعمال الأنظمة"
+  },
+  "Management and handover": {
+    "fa": "مدیریت و تحویل",
+    "ar": "الإدارة والتسليم"
+  },
+  "Arrange site mobilisation and temporary facilities": {
+    "fa": "هماهنگی تجهیز کارگاه و تأسیسات موقت",
+    "ar": "تنسيق تجهيز الموقع والمرافق المؤقتة"
+  },
+  "Check setting-out and site levels": {
+    "fa": "کنترل پیاده‌سازی نقشه و ترازهای کارگاه",
+    "ar": "التحقق من توقيع المخطط ومناسيب الموقع"
+  },
+  "Check existing underground utilities before excavation": {
+    "fa": "بررسی تأسیسات زیرزمینی موجود پیش از گودبرداری",
+    "ar": "فحص المرافق الموجودة تحت الأرض قبل الحفر"
+  },
+  "Coordinate excavation access, equipment and spoil removal": {
+    "fa": "هماهنگی دسترسی، تجهیزات خاکبرداری و حمل خاک",
+    "ar": "تنسيق الوصول ومعدات الحفر ونقل ناتج الحفر"
+  },
+  "Inspect excavation access and safety measures": {
+    "fa": "بازرسی دسترسی و تمهیدات ایمنی گودبرداری",
+    "ar": "فحص الوصول وتدابير سلامة الحفر"
+  },
+  "Review foundation setting-out against approved drawings": {
+    "fa": "کنترل پیاده‌سازی فونداسیون طبق نقشه‌های مصوب",
+    "ar": "مراجعة توقيع الأساسات وفق المخططات المعتمدة"
+  },
+  "Inspect reinforcement before concrete placement": {
+    "fa": "بازرسی آرماتوربندی پیش از بتن‌ریزی",
+    "ar": "فحص التسليح قبل صب الخرسانة"
+  },
+  "Inspect formwork and supports before concrete placement": {
+    "fa": "بازرسی قالب‌بندی و شمع‌بندی پیش از بتن‌ریزی",
+    "ar": "فحص الشدات والدعامات قبل صب الخرسانة"
+  },
+  "Coordinate concrete delivery, testing and placement": {
+    "fa": "هماهنگی تحویل بتن، آزمایش‌ها و بتن‌ریزی",
+    "ar": "تنسيق توريد الخرسانة واختبارها وصبها"
+  },
+  "Record concrete curing and inspection follow-up": {
+    "fa": "ثبت عمل‌آوری بتن و پیگیری بازرسی‌ها",
+    "ar": "تسجيل معالجة الخرسانة ومتابعة الفحوصات"
+  },
+  "Check structural frame against approved drawings": {
+    "fa": "کنترل اسکلت طبق نقشه‌های مصوب",
+    "ar": "التحقق من الهيكل وفق المخططات المعتمدة"
+  },
+  "Check wall positions and door/window openings": {
+    "fa": "کنترل محل دیوارها و بازشوهای در و پنجره",
+    "ar": "التحقق من مواقع الجدران وفتحات الأبواب والنوافذ"
+  },
+  "Inspect plumbing and drainage before concealment": {
+    "fa": "بازرسی لوله‌کشی آب و فاضلاب پیش از پوشاندن",
+    "ar": "فحص تمديدات المياه والصرف قبل إخفائها"
+  },
+  "Inspect conduits and electrical routes before concealment": {
+    "fa": "بازرسی لوله‌های برق و مسیرها پیش از پوشاندن",
+    "ar": "فحص مواسير ومسارات الكهرباء قبل إخفائها"
+  },
+  "Check HVAC equipment positions and duct routes": {
+    "fa": "کنترل محل تجهیزات تهویه و مسیر کانال‌ها",
+    "ar": "التحقق من مواقع معدات التكييف ومسارات مجاري الهواء"
+  },
+  "Review coordination between structural and MEP works": {
+    "fa": "بررسی هماهنگی عملیات سازه و تأسیسات",
+    "ar": "مراجعة التنسيق بين الأعمال الإنشائية والأنظمة"
+  },
+  "Inspect wet-area waterproofing and record test results": {
+    "fa": "بازرسی آب‌بندی فضاهای مرطوب و ثبت نتیجه آزمایش",
+    "ar": "فحص عزل المناطق الرطبة وتسجيل نتائج الاختبار"
+  },
+  "Check tile, flooring and wall-finish samples": {
+    "fa": "کنترل نمونه کاشی، کف‌پوش و پوشش دیوار",
+    "ar": "فحص عينات البلاط والأرضيات وتشطيبات الجدران"
+  },
+  "Inspect installation of doors and windows": {
+    "fa": "بازرسی نصب درها و پنجره‌ها",
+    "ar": "فحص تركيب الأبواب والنوافذ"
+  },
+  "Prepare daily labour, equipment and progress report": {
+    "fa": "تهیه گزارش روزانه نیروها، تجهیزات و پیشرفت",
+    "ar": "إعداد تقرير يومي عن العمال والمعدات والتقدم"
+  },
+  "Confirm material availability for upcoming activities": {
+    "fa": "بررسی موجودی مصالح برای فعالیت‌های پیش رو",
+    "ar": "التأكد من توفر المواد للأنشطة القادمة"
+  },
+  "Review completed quantities against the BOQ": {
+    "fa": "بررسی مقادیر اجراشده با فهرست مقادیر",
+    "ar": "مراجعة الكميات المنفذة مقابل جدول الكميات"
+  },
+  "Record defects and follow up corrective work": {
+    "fa": "ثبت نواقص و پیگیری اصلاحات",
+    "ar": "تسجيل العيوب ومتابعة الأعمال التصحيحية"
+  },
+  "Collect inspection records and handover documents": {
+    "fa": "جمع‌آوری سوابق بازرسی و مدارک تحویل",
+    "ar": "جمع سجلات الفحص ووثائق التسليم"
+  },
+  "Task template": {
+    "fa": "الگوی آماده وظیفه",
+    "ar": "نموذج مهمة جاهز"
+  },
+  "Manual entry / choose a template": {
+    "fa": "ورود دستی / انتخاب الگوی آماده",
+    "ar": "إدخال يدوي / اختيار نموذج"
+  },
+  "Suggested responsible role": {
+    "fa": "سمت پیشنهادی مسئول",
+    "ar": "الدور المقترح للمسؤول"
+  },
+  "Manual entry / choose a role": {
+    "fa": "ورود دستی / انتخاب سمت",
+    "ar": "إدخال يدوي / اختيار دور"
+  },
+  "Responsible person or role": {
+    "fa": "نام مسئول یا سمت",
+    "ar": "اسم المسؤول أو دوره"
+  },
+  "A template fills the task, suggested role and priority. Edit any field before saving. A role is a text label, not a linked user or an automatic notification.": {
+    "fa": "الگو، عنوان وظیفه، سمت پیشنهادی و اولویت را تکمیل می‌کند؛ همه فیلدها پیش از ذخیره قابل ویرایش‌اند. سمت فقط یک عنوان متنی است و به حساب کاربر یا ارسال اعلان متصل نیست.",
+    "ar": "يملأ النموذج عنوان المهمة والدور المقترح والأولوية؛ يمكنك تعديل جميع الحقول قبل الحفظ. الدور تسمية نصية فقط ولا يرتبط بحساب مستخدم أو إشعار تلقائي."
+  },
+  "Preliminaries": {
+    "fa": "تجهیز کارگاه و هزینه‌های مقدماتی",
+    "ar": "الأعمال التمهيدية وتجهيز الموقع"
+  },
+  "Site Works": {
+    "fa": "عملیات خاکی و آماده‌سازی محوطه",
+    "ar": "أعمال الموقع والأعمال الترابية"
+  },
+  "Concrete Works": {
+    "fa": "عملیات بتن",
+    "ar": "الأعمال الخرسانية"
+  },
+  "Masonry Works": {
+    "fa": "عملیات بنایی و دیوارچینی",
+    "ar": "أعمال المباني والجدران"
+  },
+  "Metal Works": {
+    "fa": "عملیات فلزی",
+    "ar": "الأعمال المعدنية"
+  },
+  "Carpentry": {
+    "fa": "نجاری",
+    "ar": "النجارة"
+  },
+  "External Works": {
+    "fa": "محوطه‌سازی",
+    "ar": "الأعمال الخارجية"
+  },
+  "Mobilization and demobilization of site facilities": {
+    "fa": "تجهیز و برچیدن کارگاه و تأسیسات آن",
+    "ar": "تجهيز وإزالة مرافق الموقع"
+  },
+  "Temporary site office and basic welfare facilities": {
+    "fa": "دفتر موقت کارگاه و امکانات رفاهی پایه",
+    "ar": "مكتب موقع مؤقت ومرافق رفاهية أساسية"
+  },
+  "Excavation in normal soil including loading": {
+    "fa": "خاکبرداری در خاک معمولی، شامل بارگیری",
+    "ar": "الحفر في التربة العادية شاملاً التحميل"
+  },
+  "Excavation in normal soil including excavation and loading": {
+    "fa": "خاکبرداری در خاک معمولی، شامل حفاری و بارگیری",
+    "ar": "الحفر في التربة العادية شاملاً الحفر والتحميل"
+  },
+  "Approved selected backfilling material including compaction": {
+    "fa": "خاکریزی با مصالح منتخب مورد تأیید، شامل تراکم",
+    "ar": "ردم بمواد مختارة معتمدة شاملاً الدمك"
+  },
+  "Disposal of excavated material outside site": {
+    "fa": "حمل و دفع خاک حاصل از خاکبرداری به خارج از کارگاه",
+    "ar": "نقل والتخلص من ناتج الحفر خارج الموقع"
+  },
+  "Plain cement concrete blinding grade C15": {
+    "fa": "بتن مگر با رده مقاومتی C15",
+    "ar": "خرسانة نظافة عادية من رتبة C15"
+  },
+  "Reinforced concrete grade C25 excluding reinforcement and formwork": {
+    "fa": "بتن مسلح رده C25، بدون احتساب آرماتور و قالب‌بندی",
+    "ar": "خرسانة مسلحة رتبة C25 باستثناء التسليح والشدات"
+  },
+  "Formwork to columns including fixing and removal": {
+    "fa": "قالب‌بندی ستون‌ها، شامل نصب و بازکردن",
+    "ar": "شدات الأعمدة شاملاً التركيب والفك"
+  },
+  "200mm thick concrete block wall including mortar": {
+    "fa": "دیوار بلوک بتنی به ضخامت 200 میلی‌متر، شامل ملات",
+    "ar": "جدار بلوك خرساني بسماكة 200 مم شاملاً المونة"
+  },
+  "Single leaf timber door complete with frame and ironmongery": {
+    "fa": "در چوبی تک‌لنگه کامل، همراه چهارچوب و یراق‌آلات",
+    "ar": "باب خشبي مفرد كامل مع الإطار والحدايد"
+  },
+  "Aluminium framed glazed window complete": {
+    "fa": "پنجره شیشه‌دار با قاب آلومینیومی، کامل",
+    "ar": "نافذة زجاجية بإطار ألمنيوم كاملة"
+  },
+  "Internal cement sand plaster to walls": {
+    "fa": "اندود داخلی دیوار با ملات ماسه و سیمان",
+    "ar": "لياسة داخلية للجدران بمونة الأسمنت والرمل"
+  },
+  "Internal wall emulsion paint including primer and putty": {
+    "fa": "رنگ امولسیونی دیوار داخلی، شامل آستر و بتونه",
+    "ar": "دهان مستحلب للجدران الداخلية شاملاً الأساس والمعجون"
+  },
+  "Supply and installation of porcelain floor tiles": {
+    "fa": "تأمین و نصب سرامیک پرسلانی کف",
+    "ar": "توريد وتركيب بلاط بورسلان للأرضيات"
+  },
+  "Suspended gypsum board ceiling complete": {
+    "fa": "سقف کاذب گچی کامل",
+    "ar": "سقف مستعار من ألواح الجبس كامل"
+  },
+  "Porcelain tile skirting complete": {
+    "fa": "قرنیز سرامیک پرسلانی کامل",
+    "ar": "وزرة بلاط بورسلان كاملة"
+  },
+  "Reinforced concrete slab including placing and finishing": {
+    "fa": "دال بتن مسلح، شامل بتن‌ریزی و پرداخت سطح",
+    "ar": "بلاطة خرسانة مسلحة شاملاً الصب والتشطيب"
+  },
+  "Quantities were generated from detected drawing geometry.": {
+    "fa": "مقادیر از هندسه شناسایی‌شده نقشه استخراج شده‌اند.",
+    "ar": "تم استخراج الكميات من هندسة المخطط المكتشفة."
+  },
+  "Rates were loaded from the Ventra UAE price database.": {
+    "fa": "نرخ‌ها از پایگاه قیمت امارات ونترا بارگذاری شده‌اند.",
+    "ar": "تم تحميل الأسعار من قاعدة أسعار الإمارات في فينترا."
+  },
+  "• REVIEW REQUIRED": {
+    "fa": "• نیازمند بررسی",
+    "ar": "• يتطلب المراجعة"
+  },
+  "• MEASURED / RATE PENDING": {
+    "fa": "• اندازه‌گیری‌شده / نرخ در انتظار تعیین",
+    "ar": "• كمية مقاسة / السعر قيد التحديد"
+  },
+  "Review line": {
+    "fa": "بررسی ردیف",
+    "ar": "مراجعة البند"
+  },
+  "Review again": {
+    "fa": "بررسی دوباره",
+    "ar": "مراجعة مجدداً"
+  },
+  "New BOQ item": {
+    "fa": "ردیف جدید فهرست مقادیر",
+    "ar": "بند جديد في جدول الكميات"
+  },
+  "BOQ item": {
+    "fa": "ردیف فهرست مقادیر",
+    "ar": "بند كميات"
+  },
+  "Some project descriptions need translation. Translating uses the AI API and the project BOQ analysis allowance; original quantities and rates stay unchanged.": {
+    "fa": "برخی شرح‌های اختصاصی پروژه نیاز به ترجمه دارند. ترجمه از API هوش مصنوعی و سهمیه تحلیل BOQ پروژه استفاده می‌کند؛ مقادیر و نرخ‌های اصلی تغییر نمی‌کنند.",
+    "ar": "تحتاج بعض أوصاف المشروع إلى ترجمة. تستخدم الترجمة واجهة الذكاء الاصطناعي وحصة تحليل BOQ للمشروع؛ لا تتغير الكميات والأسعار الأصلية."
+  },
+  "Translating BOQ descriptions…": {
+    "fa": "در حال ترجمه شرح عملیات…",
+    "ar": "جارٍ ترجمة أوصاف الأعمال…"
+  },
+  "Translate remaining BOQ descriptions": {
+    "fa": "ترجمه شرح‌های باقی‌مانده BOQ",
+    "ar": "ترجمة أوصاف BOQ المتبقية"
+  },
+  "BOQ translation failed; the original descriptions and amounts remain unchanged.": {
+    "fa": "ترجمه BOQ ناموفق بود؛ شرح‌ها و مبالغ اصلی تغییر نکرده‌اند.",
+    "ar": "فشلت ترجمة BOQ؛ تبقى الأوصاف والمبالغ الأصلية دون تغيير."
+  },
+  "Item No.": {
+    "fa": "شماره ردیف",
+    "ar": "رقم البند"
+  },
+  "Quantity status": {
+    "fa": "وضعیت مقدار",
+    "ar": "حالة الكمية"
+  },
+  "Included in tender subtotal": {
+    "fa": "لحاظ‌شده در جمع مبنای پیشنهاد قیمت",
+    "ar": "مدرج في إجمالي أساس العطاء"
+  },
+  "Quantity basis": {
+    "fa": "مبنای مقدار",
+    "ar": "أساس الكمية"
+  },
+  "Rate source": {
+    "fa": "منبع نرخ",
+    "ar": "مصدر السعر"
+  },
+  "Verified / reviewed": {
+    "fa": "تأییدشده / بررسی‌شده",
+    "ar": "معتمد / مراجع"
+  },
+  "Unresolved / excluded": {
+    "fa": "حل‌نشده / خارج از جمع",
+    "ar": "غير محسوم / مستبعد"
+  },
+  "Verified / reviewed subtotal - tender basis": {
+    "fa": "جمع ردیف‌های تأییدشده؛ مبنای پیشنهاد قیمت",
+    "ar": "إجمالي البنود المعتمدة؛ أساس العطاء"
+  },
+  "Provisional subtotal - excluded from tender": {
+    "fa": "جمع برآوردهای موقت؛ خارج از پیشنهاد قیمت",
+    "ar": "إجمالي التقديرات المؤقتة؛ مستبعد من العطاء"
+  },
+  "Unresolved / excluded line amounts - excluded from tender": {
+    "fa": "مبالغ ردیف‌های حل‌نشده؛ خارج از پیشنهاد قیمت",
+    "ar": "مبالغ البنود غير المحسومة؛ مستبعدة من العطاء"
+  },
+  "All displayed line amounts - before markups, not tender subtotal": {
+    "fa": "جمع همه ردیف‌های نمایشی پیش از تعدیلات؛ جمع پیشنهاد قیمت نیست",
+    "ar": "مجموع جميع البنود المعروضة قبل الإضافات؛ ليس إجمالي العطاء"
+  },
+  "BOQ budget subtotal - including provisional, excluding unresolved": {
+    "fa": "جمع بودجه BOQ؛ شامل موقت و بدون حل‌نشده‌ها",
+    "ar": "إجمالي ميزانية BOQ؛ يشمل المؤقت ويستبعد غير المحسوم"
+  },
+  "BOQ budget total - including provisional and selected markups": {
+    "fa": "کل بودجه BOQ؛ شامل موقت و تعدیلات انتخابی",
+    "ar": "إجمالي ميزانية BOQ؛ يشمل المؤقت والإضافات المختارة"
+  },
+  "Tender price - verified / reviewed rows with selected markups": {
+    "fa": "مبلغ پیشنهاد قیمت؛ ردیف‌های تأییدشده با تعدیلات انتخابی",
+    "ar": "قيمة العطاء؛ البنود المعتمدة مع الإضافات المختارة"
+  },
+  "Budget overhead [[0]]%": {
+    "fa": "بالاسری بودجه [[0]]٪",
+    "ar": "مصاريف الميزانية العامة [[0]]٪"
+  },
+  "Budget profit [[0]]%": {
+    "fa": "سود بودجه [[0]]٪",
+    "ar": "ربح الميزانية [[0]]٪"
+  },
+  "Budget discount [[0]]%": {
+    "fa": "تخفیف بودجه [[0]]٪",
+    "ar": "خصم الميزانية [[0]]٪"
+  },
+  "Budget VAT [[0]]%": {
+    "fa": "مالیات ارزش افزوده بودجه [[0]]٪",
+    "ar": "ضريبة القيمة المضافة للميزانية [[0]]٪"
+  },
+  "Overhead [[0]]% - tender basis": {
+    "fa": "بالاسری [[0]]٪؛ مبنای پیشنهاد قیمت",
+    "ar": "المصاريف العامة [[0]]٪؛ أساس العطاء"
+  },
+  "Profit [[0]]% - tender basis": {
+    "fa": "سود [[0]]٪؛ مبنای پیشنهاد قیمت",
+    "ar": "الربح [[0]]٪؛ أساس العطاء"
+  },
+  "Discount [[0]]% - tender basis": {
+    "fa": "تخفیف [[0]]٪؛ مبنای پیشنهاد قیمت",
+    "ar": "الخصم [[0]]٪؛ أساس العطاء"
+  },
+  "VAT [[0]]% - tender basis": {
+    "fa": "مالیات ارزش افزوده [[0]]٪؛ مبنای پیشنهاد قیمت",
+    "ar": "ضريبة القيمة المضافة [[0]]٪؛ أساس العطاء"
+  },
+  "Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.": {
+    "fa": "ردیف‌های موقت و حل‌نشده از جمع پیشنهاد قیمت خارج‌اند. جمع همه ردیف‌های نمایش‌داده‌شده برای تطبیق مبالغ است و برآورد کامل پروژه محسوب نمی‌شود. کامل‌بودن دامنه کار و نرخ‌ها نیازمند بررسی است. برآورد از مبنا و تعدیلات انتخابی مستقل خود استفاده می‌کند.",
+    "ar": "تُستبعد البنود المؤقتة وغير المحسومة من إجمالي العطاء. مجموع البنود المعروضة للمطابقة وليس تقديراً كاملاً للمشروع. اكتمال نطاق الأعمال والأسعار يتطلب المراجعة. يستخدم التقدير أساسه وإضافاته المختارة بشكل مستقل."
+  },
+  "lump_sum": {
+    "fa": "مقطوع",
+    "ar": "مقطوعية"
+  },
+  "ls": {
+    "fa": "مقطوع",
+    "ar": "مقطوعية"
+  },
+  "nos": {
+    "fa": "عدد",
+    "ar": "عدد"
+  },
+  "Budget settings": {
+    "fa": "تنظیمات بودجه",
+    "ar": "إعدادات الميزانية"
+  },
+  "Document details": {
+    "fa": "جزئیات سند",
+    "ar": "تفاصيل المستند"
+  },
+  "Invite a team member": {
+    "fa": "دعوت عضو تیم",
+    "ar": "دعوة عضو فريق"
+  },
+  "Contract settings": {
+    "fa": "تنظیمات قرارداد",
+    "ar": "إعدادات العقد"
+  },
+  "Record a payment": {
+    "fa": "ثبت پرداخت",
+    "ar": "تسجيل دفعة"
+  },
+  "Export & reports": {
+    "fa": "خروجی و گزارش‌ها",
+    "ar": "التصدير والتقارير"
   }
 }

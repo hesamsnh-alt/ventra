@@ -1,0 +1,261 @@
+.vt-register {
+  min-height: 100vh;
+  padding: 32px 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(255, 212, 0, 0.14),
+      transparent 35%
+    ),
+    #070707;
+
+  color: #ffffff;
+}
+
+.vt-register__card {
+  width: 100%;
+  max-width: 760px;
+  padding: 42px;
+
+  background: #101010;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.vt-register__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  color: #ffffff;
+  text-decoration: none;
+
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.vt-register__logo-icon {
+  width: 42px;
+  height: 42px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color: #080808;
+  background: #ffd400;
+
+  border-radius: 12px;
+
+  font-weight: 900;
+}
+
+.vt-register__heading {
+  margin: 36px 0 28px;
+}
+
+.vt-register__heading > span {
+  color: #ffd400;
+
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vt-register__heading h1 {
+  margin: 10px 0;
+
+  font-size: clamp(36px, 6vw, 54px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.vt-register__heading p {
+  max-width: 520px;
+  margin: 0;
+
+  color: #929292;
+  line-height: 1.7;
+}
+
+.vt-register__form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vt-register__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.vt-register__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  color: #d6d6d6;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vt-register__field input {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 15px;
+
+  color: #ffffff;
+  background: #171717;
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 13px;
+  outline: none;
+
+  font: inherit;
+}
+
+.vt-register__field input:focus {
+  border-color: #ffd400;
+  box-shadow: 0 0 0 3px rgba(255, 212, 0, 0.08);
+}
+
+.vt-register__field input::placeholder {
+  color: #666666;
+}
+
+.vt-register__password {
+  position: relative;
+}
+
+.vt-register__password input {
+  padding-right: 70px;
+}
+
+.vt-register__password button {
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  transform: translateY(-50%);
+
+  color: #ffd400;
+  background: transparent;
+
+  border: 0;
+  cursor: pointer;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vt-register__terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+
+  color: #969696;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.vt-register__terms input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+
+  accent-color: #ffd400;
+}
+
+.vt-register__message {
+  padding: 13px 15px;
+
+  border-radius: 12px;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.vt-register__message--error {
+  color: #ffb1b1;
+  background: rgba(255, 80, 80, 0.09);
+
+  border: 1px solid rgba(255, 80, 80, 0.25);
+}
+
+.vt-register__message--success {
+  color: #c6f7d1;
+  background: rgba(60, 200, 100, 0.09);
+
+  border: 1px solid rgba(60, 200, 100, 0.25);
+}
+
+.vt-register__submit {
+  min-height: 56px;
+
+  color: #080808;
+  background: #ffd400;
+
+  border: 0;
+  border-radius: 13px;
+
+  cursor: pointer;
+
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.vt-register__submit:hover {
+  background: #ffe04a;
+}
+
+.vt-register__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vt-register__signin {
+  margin: 24px 0 0;
+
+  color: #858585;
+
+  text-align: center;
+  font-size: 14px;
+}
+
+.vt-register__signin a {
+  color: #ffd400;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+@media (max-width: 680px) {
+  .vt-register {
+    padding: 14px;
+    align-items: flex-start;
+  }
+
+  .vt-register__card {
+    margin-top: 12px;
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+
+  .vt-register__row {
+    grid-template-columns: 1fr;
+  }
+
+  .vt-register__heading h1 {
+    font-size: 38px;
+  }
+}

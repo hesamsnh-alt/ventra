@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceDisclosure from './WorkspaceDisclosure';
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 import {useEffect,useState} from 'react';
@@ -37,9 +38,11 @@ export default function CommercialSync({projectId}){
   }catch(e){setError(e.message||'Shared load failed.');}finally{setBusy(false);}
  }
  return <LocalizedElement as="aside" className="commercial-no-print" style={{border:'1px solid #64748b',borderRadius:12,padding:16,marginBottom:18}}>
+  <WorkspaceDisclosure title="Shared commercial documents">
   <LocalizedElement as="strong">Shared commercial documents</LocalizedElement><LocalizedElement as="p">Editing uses a browser draft. Save your quotation draft first, then save the shared version to make BOQ, estimate, quotation and company branding available on other devices.</LocalizedElement>
   <LocalizedElement as="div" style={{display:'flex',gap:12,flexWrap:'wrap'}}><LocalizedElement as="button" type="button" disabled={busy||revision===null} onClick={save}>{busy?'Please wait…':'Save shared version'}</LocalizedElement><LocalizedElement as="button" type="button" disabled={busy||!remote} onClick={load}>Load shared version</LocalizedElement></LocalizedElement>
   {remote&&<LocalizedElement as="small">Shared revision {remote.revision} · {new Date(remote.updated_at).toLocaleString()}</LocalizedElement>}
+  </WorkspaceDisclosure>
   {message&&<LocalizedElement as="p" role="status">{message}</LocalizedElement>}{error&&<LocalizedElement as="p" role="alert">{error}</LocalizedElement>}
  </LocalizedElement>;
 }

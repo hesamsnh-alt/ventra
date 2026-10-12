@@ -165,3 +165,14 @@ color:#7a7a7a;
 font-size:11px;
 
 }
+.task-entry-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0;padding:18px;border:1px solid #343434;border-radius:12px}
+.task-entry-form label{display:flex;flex-direction:column;gap:8px;color:#e5e7eb}
+.task-entry-form input,.task-entry-form select,.tasks-table select{width:100%;min-width:0;min-height:44px;padding:10px;background:#1f2937;color:#fff;border:1px solid #64748b;border-radius:8px;box-sizing:border-box;font:inherit}
+.task-entry-note,.task-entry-actions{grid-column:1/-1}
+.task-entry-note{color:#bac4d2;line-height:1.8;margin:0}
+.task-entry-actions{display:flex;gap:12px;flex-wrap:wrap}
+.task-entry-actions button{min-height:44px;padding:8px 16px;border-radius:8px;border:1px solid #64748b;background:#1f2937;color:white;cursor:pointer}
+.task-entry-actions button[type=submit]{background:#ffd400;color:#111827;border-color:#ffd400}
+.tasks-panel button:disabled{opacity:.5;cursor:not-allowed}
+.tasks-panel[dir=rtl] .tasks-table th,.tasks-panel[dir=rtl] .tasks-table td{text-align:right}
+@media(max-width:640px){.task-entry-form{grid-template-columns:1fr;padding:12px}.tasks-panel{padding:14px}}

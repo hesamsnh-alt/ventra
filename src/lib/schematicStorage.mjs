@@ -4,10 +4,12 @@ import {applyDesignDefaults} from './designDefaults.mjs';
 // Large image scenes share the drawing database, never the localStorage quota.
 const cache = new Map();
 const writes = new Map();
+const unsavedSelections = new Map();
 const keyFor = (id, kind) => `ventra:project-${kind}:${id}`;
 const local = () => typeof window === 'undefined' ? null : window.localStorage;
 export function selectedDrawingSync(id, storage = local()) {
   const key=keyFor(id,'selected-drawing');
+  if(unsavedSelections.has(key))return unsavedSelections.get(key);
   try{const stored=storage?.getItem(key);if(stored){cache.set(key,stored);return stored;}}catch{}
   return cache.get(key)||null;
 }
@@ -15,10 +17,15 @@ export function drawingSceneMatches(id,scene,storage=local()) {
   const selected=selectedDrawingSync(id,storage);
   return !selected || scene?.documentId===selected;
 }
+export function selectDrawingDocument(id,documentId,storage=local()) {
+  const key=keyFor(id,'selected-drawing');
+  if(!documentId){cache.delete(key);unsavedSelections.set(key,null);try{storage?.removeItem(key);unsavedSelections.delete(key);}catch{}return;}
+  cache.set(key,documentId);
+  try{storage?.setItem(key,documentId);unsavedSelections.delete(key);}catch{unsavedSelections.set(key,documentId); /* Session selection still isolates scenes. */ }
+}
 export function selectSchematicDrawing(id,documentId,storage=local()) {
   if(!documentId)return;
-  const key=keyFor(id,'selected-drawing');cache.set(key,documentId);
-  try{storage?.setItem(key,documentId);}catch{ /* Session selection still isolates scenes. */ }
+  selectDrawingDocument(id,documentId,storage);
   if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId:id,source:'schematic',scene:readSchematicSync(id,'schematic3d',storage)}}));
 }
 export function activeSourceSync(id, storage = local()) {

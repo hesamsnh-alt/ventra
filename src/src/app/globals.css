@@ -1,0 +1,778 @@
+@import "tailwindcss";
+:root{
+
+/* COLORS */
+
+--bg:#05070F;
+--surface:#0D121B;
+--surface-2:#121A24;
+
+--primary:#FFD400;
+--primary-hover:#FFE14B;
+
+--blue:#4D9FFF;
+--green:#42D67F;
+--red:#FF5B5B;
+
+--text:#FFFFFF;
+--muted:#9097A4;
+
+--border:rgba(255,255,255,.08);
+
+--glass:rgba(255,255,255,.04);
+
+/* SHADOWS */
+
+--shadow-sm:
+0 8px 20px rgba(0,0,0,.25);
+
+--shadow:
+0 20px 60px rgba(0,0,0,.45);
+
+--shadow-lg:
+0 35px 90px rgba(0,0,0,.55);
+
+/* RADIUS */
+
+--radius-sm:12px;
+--radius:20px;
+--radius-lg:28px;
+
+/* SPACING */
+
+--section-padding:120px;
+
+}
+:root {
+  --bg: #050505;
+  --surface: #111111;
+  --surface-soft: #171717;
+  --surface-light: #202020;
+
+  --primary: #ffd400;
+  --primary-hover: #ffd500;
+
+  --text: #ffffff;
+  --text-secondary: #a1a1aa;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --border-yellow: rgba(255, 213, 0, 0.986);
+
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  --yellow-shadow: 0 0 35px rgba(255, 212, 0, 0.22);
+
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+
+
+
+
+/* ===============================
+   VENTRA BUTTON
+================================ */
+
+.vt-btn {
+  border: none;
+  outline: none;
+  cursor: pointer;
+
+  padding: 14px 28px;
+  border-radius: 14px;
+
+  font-size: 15px;
+  font-weight: 700;
+
+  transition: 0.25s ease;
+}
+
+.vt-btn:hover {
+  transform: translateY(-2px);
+}
+
+.vt-btn:active {
+  transform: scale(0.98);
+}
+
+.vt-btn--primary {
+  background: var(--primary);
+  color: #050505;
+  box-shadow: var(--yellow-shadow);
+}
+
+.vt-btn--primary:hover {
+  background: var(--primary-hover);
+}
+
+.vt-btn--secondary {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.vt-btn--secondary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ===============================
+   SHARED SECTIONS
+================================ */
+
+section {
+  background: var(--bg);
+}
+
+.upload-section,
+.dashboard-section,
+.toolbox-section,
+.pricing-section,
+.testimonials-section,
+.cta-section {
+  background: var(--bg);
+  color: var(--text);
+  padding: 100px 20px;
+}
+
+.upload-container,
+.dashboard-container,
+.toolbox-container,
+.pricing-container,
+.testimonials-container,
+.cta-container,
+.footer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ===============================
+   UPLOAD SECTION
+================================ */
+
+.upload-content {
+  text-align: center;
+}
+
+.upload-badge,
+.dashboard-badge,
+.toolbox-title span,
+.pricing-title span,
+.testimonials-title span {
+  display: inline-block;
+
+  color: var(--primary);
+  background: rgba(255, 212, 0, 0.08);
+  border: 1px solid var(--border-yellow);
+
+  padding: 8px 16px;
+  border-radius: 999px;
+
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.upload-content h2,
+.dashboard-text h2,
+.toolbox-title h2,
+.pricing-title h2,
+.testimonials-title h2 {
+  color: var(--text);
+  font-size: 42px;
+  line-height: 1.2;
+
+  max-width: 760px;
+  margin: 22px auto 18px;
+}
+
+.upload-content p,
+.dashboard-text p,
+.toolbox-title p,
+.pricing-title p,
+.testimonials-title p {
+  color: var(--text-secondary);
+  max-width: 660px;
+  margin: 0 auto 42px;
+
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+.upload-box {
+  max-width: 620px;
+  margin: 0 auto;
+
+  padding: 45px 30px;
+
+  border: 1px dashed var(--border-yellow);
+  border-radius: var(--radius-lg);
+
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.upload-icon {
+  width: 60px;
+  height: 60px;
+
+  margin: 0 auto 20px;
+
+  border-radius: 50%;
+  background: var(--primary);
+  color: #050505;
+
+  font-size: 34px;
+  font-weight: 900;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-box h3 {
+  color: var(--text);
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.upload-box p {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+}
+
+.upload-box button {
+  background: var(--primary);
+  color: #050505;
+
+  border: none;
+  padding: 14px 28px;
+
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
+
+  transition: 0.25s ease;
+}
+
+.upload-box button:hover {
+  background: var(--primary-hover);
+}
+
+/* ===============================
+   DASHBOARD PREVIEW
+================================ */
+
+.dashboard-text,
+.toolbox-title,
+.pricing-title,
+.testimonials-title {
+  text-align: center;
+  margin-bottom: 55px;
+}
+
+.dashboard-preview {
+  display: flex;
+
+  border: 1px solid var(--border);
+  border-radius: 28px;
+
+  overflow: hidden;
+  background: var(--surface);
+
+  box-shadow: var(--shadow);
+}
+
+.dashboard-sidebar {
+  width: 240px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 28px;
+}
+
+.dashboard-sidebar div {
+  padding: 14px 0;
+  color: var(--text-secondary);
+}
+
+.dashboard-content {
+  flex: 1;
+
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+
+  padding: 32px;
+}
+
+.dashboard-card,
+.tool-card,
+.price-card,
+.testimonial-card {
+  background: var(--surface-soft);
+
+  border: 1px solid var(--border);
+  border-radius: 22px;
+
+  padding: 28px;
+
+  transition: 0.3s ease;
+}
+
+.dashboard-card:hover,
+.tool-card:hover,
+.price-card:hover,
+.testimonial-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--border-yellow);
+  box-shadow: var(--yellow-shadow);
+}
+
+.dashboard-card h3,
+.tool-card h3 {
+  color: var(--text);
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.dashboard-card span {
+  color: var(--primary);
+  font-size: 42px;
+  font-weight: 900;
+}
+
+/* ===============================
+   TOOLBOX
+================================ */
+
+.toolbox-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.tool-icon {
+  width: 46px;
+  height: 46px;
+
+  background: var(--primary);
+  color: #050505;
+
+  border-radius: 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+
+.tool-card p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* ===============================
+   PRICING
+================================ */
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+}
+
+.price-card {
+  position: relative;
+}
+
+.price-card h3 {
+  color: var(--text);
+  font-size: 24px;
+}
+
+.price-card h4 {
+  color: var(--primary);
+  font-size: 46px;
+  margin: 20px 0;
+  font-weight: bold;
+}
+
+.price-card h4 span {
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.price-card p {
+  color: var(--text-secondary);
+  margin-bottom: 22px;
+}
+
+.price-card ul {
+  list-style: none;
+  padding: 0;
+}
+
+.price-card li {
+  color: var(--text);
+  margin: 12px 0;
+}
+
+.price-card button {
+  width: 100%;
+  margin-top: 25px;
+
+  padding: 14px;
+
+  border: none;
+  border-radius: 12px;
+
+  background: var(--primary);
+  color: #050505;
+
+  cursor: pointer;
+  font-weight: 800;
+
+  transition: 0.25s ease;
+}
+
+.price-card button:hover {
+  background: var(--primary-hover);
+}
+
+.featured {
+  border: 2px solid var(--primary);
+}
+
+.popular {
+  position: absolute;
+  top: -14px;
+  right: 25px;
+
+  background: var(--primary);
+  color: #050505;
+
+  padding: 6px 14px;
+  border-radius: 999px;
+
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* ===============================
+   TESTIMONIALS
+================================ */
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+}
+
+.testimonial-card p {
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.testimonial-card h3 {
+  margin-top: 25px;
+  color: var(--text);
+}
+
+.testimonial-card span {
+  color: var(--primary);
+}
+
+/* ===============================
+   CTA
+================================ */
+
+.cta-section {
+  text-align: center;
+  background:
+    radial-gradient(circle at center, rgba(255, 212, 0, 0.08), transparent 35%),
+    var(--bg);
+}
+
+.cta-container {
+  max-width: 850px;
+}
+
+.cta-container h2 {
+  color: var(--text);
+  font-size: 50px;
+  line-height: 1.15;
+}
+
+.cta-container p {
+  color: var(--text-secondary);
+  margin: 25px auto 40px;
+  line-height: 1.8;
+}
+
+.cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.cta-primary,
+.cta-secondary {
+  padding: 16px 34px;
+  border-radius: 14px;
+
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+
+  transition: 0.25s ease;
+}
+
+.cta-primary {
+  background: var(--primary);
+  border: none;
+  color: #050505;
+}
+
+.cta-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-3px);
+}
+
+.cta-secondary {
+  background: transparent;
+  border: 1px solid var(--border-yellow);
+  color: var(--text);
+}
+
+.cta-secondary:hover {
+  color: #050505;
+  background: var(--primary);
+}
+
+/* ===============================
+   FOOTER
+================================ */
+
+.footer {
+  background: #030303;
+  padding: 70px 20px 30px;
+  border-top: 1px solid var(--border);
+}
+
+.footer-container {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 50px;
+}
+
+.footer-brand h2 {
+  color: var(--primary);
+  font-size: 30px;
+}
+
+.footer-brand p {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-top: 20px;
+}
+
+.footer-links {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.footer-links h4 {
+  color: var(--text);
+  margin-bottom: 18px;
+}
+
+.footer-links a {
+  display: block;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.footer-links a:hover {
+  color: var(--primary);
+}
+
+.footer-bottom {
+  margin-top: 60px;
+
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+
+  color: #777;
+  text-align: center;
+}
+
+/* ===============================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 900px) {
+  .container {
+    height: auto;
+    padding: 18px 22px;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+
+  .header-buttons {
+    margin-left: auto;
+  }
+
+  .dashboard-preview {
+    flex-direction: column;
+  }
+
+  .dashboard-sidebar {
+    width: 100%;
+  }
+
+  .dashboard-content,
+  .toolbox-grid,
+  .pricing-grid,
+  .testimonials-grid,
+  .footer-container,
+  .footer-links {
+    grid-template-columns: 1fr;
+  }
+
+  .cta-buttons {
+    flex-direction: column;
+  }
+
+  .upload-content h2,
+  .dashboard-text h2,
+  .toolbox-title h2,
+  .pricing-title h2,
+  .testimonials-title h2,
+  .cta-container h2 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 600px) {
+  .logo-text {
+    font-size: 22px;
+  }
+
+  .logo-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .header-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .vt-btn,
+  .login-btn,
+  .trial-btn {
+    padding: 12px 18px;
+  }
+}
+.footer-contact {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+.whatsapp-btn {
+  background: #25d366;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  text-decoration: none;
+}.footer-contact {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 35px;
+}
+.footer-brand{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+}
+
+.whatsapp-btn{
+    margin-top:20px;
+    align-self:flex-end;
+
+    background:#25D366;
+    color:white;
+
+    padding:12px 22px;
+    border-radius:12px;
+
+    text-decoration:none;
+    font-weight:700;
+}/* ===========================
+      VENTRA CARD
+=========================== */
+
+.vt-card{
+
+    background:#171717;
+
+    border:1px solid rgba(255,255,255,.08);
+
+    border-radius:22px;
+
+    padding:24px;
+
+    transition:.3s;
+
+    box-shadow:0 15px 40px rgba(0,0,0,.35);
+
+}
+
+.vt-card:hover{
+
+    transform:translateY(-6px);
+
+    border-color:#FFD400;
+
+    box-shadow:0 0 30px rgba(255,212,0,.15);
+
+}

@@ -1,4 +1,8 @@
 "use client";
+import WorkspaceDisclosure from './WorkspaceDisclosure';
+import {useLanguage} from '@/app/components/i18n/LanguageProvider';
+import {translateText} from '@/lib/i18n/translate.mjs';
+import {localizeBoqText,missingBoqTranslations} from '@/lib/boqLocalization.mjs';
 import {useEffectEvent} from "react";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
@@ -8,7 +12,7 @@ import { getDrawingEvidence } from "@/lib/drawingEvidence.mjs";
 import { saveReadyBoq } from "@/lib/boqDraftPersistence.mjs";
 import CommercialSync from "./CommercialSync";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Download,
   FileSpreadsheet,
@@ -167,6 +171,22 @@ export default function ProjectBOQ({
   projectId,
   projectName = "Untitled Project",
 }) {
+  const {language}=useLanguage();
+  const translationContext=useRef({projectId,language});translationContext.current={projectId,language};
+  const [boqTranslations,setBoqTranslations]=useState({}),[translatingBoq,setTranslatingBoq]=useState(false),[editingSection,setEditingSection]=useState(null);
+  const tr=text=>localizeBoqText(text,language,boqTranslations);
+  useEffect(()=>{setBoqTranslations({});try{setBoqTranslations(JSON.parse(sessionStorage.getItem(`ventra:boq-translations:${projectId}:${language}`)||'{}'));}catch{}},[projectId,language]);
+  async function translateDescriptions(){
+   if(translatingBoq)return;
+   const texts=missingBoqTranslations([...items.flatMap(i=>[i.section,i.description,i.quantityBasis,i.notes]),...assumptions,...warnings],language,boqTranslations);
+   if(!texts.length)return;setTranslatingBoq(true);setErrorMessage('');
+   const selectedLanguage=language,selectedProject=projectId;
+   try{
+    const response=await commercialFetch('/api/ai/boq-translation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,language,texts:texts.slice(0,150)})});const payload=await response.json();if(!response.ok||!payload.translations)throw new Error(payload.error||'BOQ translation failed; the original descriptions and amounts remain unchanged.');
+    const merged={...boqTranslations,...payload.translations};try{sessionStorage.setItem(`ventra:boq-translations:${selectedProject}:${selectedLanguage}`,JSON.stringify(merged));}catch{}
+    if(translationContext.current.projectId===selectedProject&&translationContext.current.language===selectedLanguage)setBoqTranslations(merged);
+   }catch(e){setErrorMessage(e.message);}finally{setTranslatingBoq(false);}
+  }
   const [takeoff, setTakeoff] = useState(null);
   const [items, setItems] = useState([]);
   const [branding, updateBranding] = useDocumentBranding(projectId);
@@ -540,7 +560,7 @@ export default function ProjectBOQ({
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total });
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations});
     const rows = [
       [branding.companyName, branding.address, branding.contact, branding.taxNumber],
       [projectName + " - Bill of Quantities"],
@@ -576,11 +596,11 @@ export default function ProjectBOQ({
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total });
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations});
     const rows = exportDocument.rows.map(row => `<tr>${row.map(value => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("");
     const headers = exportDocument.headers.map(value => `<th>${escapeHtml(value)}</th>`).join("");
     const summary = exportDocument.summary.map(([label, amount]) => `<tr><td colspan="6">${escapeHtml(label)}</td><td>${escapeHtml(amount)}</td><td colspan="6"></td></tr>`).join("");
-    const workbook = `<!doctype html><html><head><meta charset="utf-8"></head><body><p>${escapeHtml(exportDocument.note)}</p><table border="1"><tr><th colspan="13">${escapeHtml(projectName)} - Bill of Quantities</th></tr><tr>${headers}</tr>${rows}${summary}</table></body></html>`;
+    const workbook = `<!doctype html><html lang="${language}" dir="${language==='en'?'ltr':'rtl'}"><head><meta charset="utf-8"></head><body><p>${escapeHtml(exportDocument.note)}</p><table border="1"><tr><th colspan="13">${escapeHtml(projectName)} - ${escapeHtml(tr("Bill of Quantities"))}</th></tr><tr>${headers}</tr>${rows}${summary}</table></body></html>`;
 
     downloadBlob(workbook.replace("<body>", `<body>${brandingHtml(branding)}`), `${safeProjectName(projectName)}-boq.xls`, "application/vnd.ms-excel;charset=utf-8");
   }
@@ -648,7 +668,7 @@ export default function ProjectBOQ({
             Add Item
           </LocalizedElement>
 
-          <LocalizedElement as="button" type="button" className="boq-secondary" onClick={exportCsv}>
+          <WorkspaceDisclosure title="Export & reports" className="workspace-export-drawer commercial-no-print"><LocalizedElement as="button" type="button" className="boq-secondary" onClick={exportCsv}>
             <Download size={17} />
             CSV
           </LocalizedElement>
@@ -661,7 +681,7 @@ export default function ProjectBOQ({
           <LocalizedElement as="button" type="button" className="boq-secondary" onClick={exportPdf}>
             <FileText size={17} />
             PDF
-          </LocalizedElement>
+          </LocalizedElement></WorkspaceDisclosure>
         </LocalizedElement>
       </LocalizedElement>
 
@@ -709,7 +729,7 @@ export default function ProjectBOQ({
           <LocalizedElement as="strong">Warnings</LocalizedElement>
           <LocalizedElement as="ul">
             {warnings.map((warning, index) => (
-              <LocalizedElement as="li" key={`${warning}-${index}`}>{warning}</LocalizedElement>
+              <LocalizedElement as="li" key={`${warning}-${index}`}>{tr(warning)}</LocalizedElement>
             ))}
           </LocalizedElement>
         </LocalizedElement>
@@ -720,14 +740,15 @@ export default function ProjectBOQ({
           <LocalizedElement as="strong">Assumptions</LocalizedElement>
           <LocalizedElement as="ul">
             {assumptions.map((assumption, index) => (
-              <LocalizedElement as="li" key={`${assumption}-${index}`}>{assumption}</LocalizedElement>
+              <LocalizedElement as="li" key={`${assumption}-${index}`}>{tr(assumption)}</LocalizedElement>
             ))}
           </LocalizedElement>
         </LocalizedElement>
       )}
 
+      {language!=='en'&&missingBoqTranslations([...items.flatMap(i=>[i.section,i.description,i.quantityBasis,i.notes]),...assumptions,...warnings],language,boqTranslations).length>0&&<LocalizedElement as="div" className="boq-assumption-box"><LocalizedElement as="p">Some project descriptions need translation. Translating uses the AI API and the project BOQ analysis allowance; original quantities and rates stay unchanged.</LocalizedElement><LocalizedElement as="button" type="button" className="boq-secondary" disabled={translatingBoq||generating} onClick={translateDescriptions}>{translatingBoq?'Translating BOQ descriptions…':'Translate remaining BOQ descriptions'}</LocalizedElement></LocalizedElement>}
       <LocalizedElement as="datalist" id="boq-section-options">
-        {SECTION_OPTIONS.map((section) => <LocalizedElement as="option" key={section} value={section} />)}
+        {SECTION_OPTIONS.map((section) => <LocalizedElement as="option" key={section} value={tr(section)} />)}
       </LocalizedElement>
 
       <LocalizedElement as="div" className="boq-table-wrap">
@@ -786,9 +807,10 @@ export default function ProjectBOQ({
                       <LocalizedElement as="input"
                         className="boq-searchable-field"
                         list="boq-section-options"
-                        value={item.section}
+                        value={editingSection===item.id?item.section:tr(item.section)}
+                        onFocus={()=>setEditingSection(item.id)} onBlur={()=>setEditingSection(null)}
                         title={item.section}
-                        onChange={(event) => updateItem(item.id, "section", event.target.value)}
+                        onChange={(event) => updateItem(item.id, "section", SECTION_OPTIONS.find(s=>tr(s)===event.target.value)||event.target.value)}
                         aria-label={`Section for item ${item.itemNumber}`}
                       />
                     </LocalizedElement>
@@ -796,13 +818,13 @@ export default function ProjectBOQ({
                       <LocalizedElement as="button"
                         type="button"
                         className="boq-description-button"
-                        title={tooltip}
+                        title={tr(item.description)+" • "+[item.quantityBasis,item.notes,item.source].filter(Boolean).map(tr).join(" • ")}
                         onDoubleClick={() => openDescriptionEditor(item)}
                         onClick={() => openDescriptionEditor(item)}
                       >
                         <LocalizedElement as="span">
-                          {item.description}
-                          {item.reviewRequired ? "  •  REVIEW REQUIRED" : item.status === "measured_rate_pending" ? "  •  MEASURED / RATE PENDING" : ""}
+                          {tr(item.description)}
+                          {item.reviewRequired ? tr("  •  REVIEW REQUIRED") : item.status === "measured_rate_pending" ? tr("  •  MEASURED / RATE PENDING") : ""}
                         </LocalizedElement>
                         <Pencil className="boq-edit-icon" size={15} aria-hidden="true" />
                       </LocalizedElement>
@@ -958,7 +980,7 @@ export default function ProjectBOQ({
         <LocalizedElement as="div" className="boq-modal-backdrop" onMouseDown={() => setReviewEditor(null)}>
           <LocalizedElement as="div" className="boq-modal" role="dialog" aria-modal="true" aria-label="Review BOQ line" onMouseDown={(event) => event.stopPropagation()}>
             <LocalizedElement as="div" className="boq-modal-header"><LocalizedElement as="h3">Review BOQ line</LocalizedElement><LocalizedElement as="button" type="button" onClick={() => setReviewEditor(null)}><X size={18} /></LocalizedElement></LocalizedElement>
-            <LocalizedElement as="p"><OriginalText>{items.find((entry) => entry.id === reviewEditor.id)?.description}</OriginalText></LocalizedElement>
+            <LocalizedElement as="p"><OriginalText>{tr(items.find((entry) => entry.id === reviewEditor.id)?.description)}</OriginalText></LocalizedElement>
             <LocalizedElement as="p">Confirm against this project’s drawing and rate source. Reviewing a line does not establish that the whole project scope is complete.</LocalizedElement>
             {[['scope', 'Scope and material/specification match the drawing'], ['quantity', 'Quantity and unit are checked, including schedule conflicts'], ['rate', 'Rate applies to this specification, unit and project']].map(([key, label]) => (
               <LocalizedElement as="label" key={key} style={{display: 'block', marginBottom: 12}}><LocalizedElement as="input" type="checkbox" checked={reviewEditor[key]} onChange={(event) => setReviewEditor((current) => ({...current, [key]: event.target.checked}))} /> {label}</LocalizedElement>
@@ -977,7 +999,7 @@ export default function ProjectBOQ({
               <LocalizedElement as="button" type="button" onClick={() => setMeasurementInfo(null)}><X size={18}/></LocalizedElement>
             </LocalizedElement>
             <LocalizedElement as="dl" className="boq-measurement-details">
-              <LocalizedElement as="div"><LocalizedElement as="dt">Item</LocalizedElement><LocalizedElement as="dd"><OriginalText>{measurementInfo.description}</OriginalText></LocalizedElement></LocalizedElement>
+              <LocalizedElement as="div"><LocalizedElement as="dt">Item</LocalizedElement><LocalizedElement as="dd"><OriginalText>{tr(measurementInfo.description)}</OriginalText></LocalizedElement></LocalizedElement>
               <LocalizedElement as="div"><LocalizedElement as="dt">Quantity</LocalizedElement><LocalizedElement as="dd">{measurementInfo.quantity} {measurementInfo.unit}</LocalizedElement></LocalizedElement>
               <LocalizedElement as="div"><LocalizedElement as="dt">Source</LocalizedElement><LocalizedElement as="dd">{measurementInfo.source || "Drawing geometry"}</LocalizedElement></LocalizedElement>
               <LocalizedElement as="div"><LocalizedElement as="dt">Basis</LocalizedElement><LocalizedElement as="dd">{measurementInfo.quantityBasis || "Detected from the latest Quantity Takeoff"}</LocalizedElement></LocalizedElement>
@@ -1007,9 +1029,9 @@ export default function ProjectBOQ({
             <LocalizedElement as="div" className="boq-modal-header"><LocalizedElement as="div"><LocalizedElement as="span">UAE 2026</LocalizedElement><LocalizedElement as="h3">Ventra Price Library</LocalizedElement></LocalizedElement><LocalizedElement as="button" type="button" onClick={() => setPriceLibraryItemId(null)}><X size={18}/></LocalizedElement></LocalizedElement>
             <LocalizedElement as="input" className="boq-library-search" autoFocus placeholder="Search item, section or unit..." value={priceSearch} onChange={(event) => setPriceSearch(event.target.value)} />
             <LocalizedElement as="div" className="boq-library-list">
-              {UAE_PRICE_LIBRARY.filter((entry) => `${entry.section} ${entry.description} ${entry.unit}`.toLowerCase().includes(priceSearch.toLowerCase())).map((entry) => (
+              {UAE_PRICE_LIBRARY.filter((entry) => `${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).map((entry) => (
                 <LocalizedElement as="button" type="button" key={entry.id} onClick={() => applyLibraryRate(entry)}>
-                  <LocalizedElement as="span"><LocalizedElement as="strong"><OriginalText>{entry.description}</OriginalText></LocalizedElement><LocalizedElement as="small">{entry.section} · {entry.unit}</LocalizedElement></LocalizedElement>
+                  <LocalizedElement as="span"><LocalizedElement as="strong"><OriginalText>{tr(entry.description)}</OriginalText></LocalizedElement><LocalizedElement as="small">{tr(entry.section)} · {tr(entry.unit)}</LocalizedElement></LocalizedElement>
                   <LocalizedElement as="b">{formatCurrency(entry.rate)}</LocalizedElement>
                 </LocalizedElement>
               ))}

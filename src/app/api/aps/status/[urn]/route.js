@@ -1,3 +1,4 @@
+import {apsManifestGeometry} from '@/lib/apsViewables.mjs';
 import {apsModelAccess} from "@/lib/serverApsAccess";
 import {getApsAccessToken} from "@/services/apsService";
 import {commercialError} from "@/lib/serverCommercial";
@@ -139,6 +140,7 @@ export async function GET(
           manifest?.status,
         progress:
           manifest?.progress,
+        ...apsManifestGeometry(manifest),
       }
     );
 

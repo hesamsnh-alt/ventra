@@ -1,5 +1,6 @@
 "use client";
-import {selectApsGeometry,isPlanCadUrn} from "@/lib/apsViewables.mjs";
+import {resolveApsDocumentView} from '@/lib/apsDocumentView.mjs';
+import {isPlanCadUrn} from "@/lib/apsViewables.mjs";
 import {commercialFetch} from "@/lib/commercialFetch";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
@@ -321,16 +322,21 @@ function loadDocument(viewer, urn, isCancelled) {
             );
           }
 
-          const geometryNode = selectApsGeometry(root,{prefer2D:isPlanCadUrn(urn)});
-
-          if (!geometryNode) {
-            throw new Error(
-              "APS returned no loadable 2D/3D view. Translation success alone is not extracted geometry. Reopen Drawings; check the DWG Model/layout content and Autodesk translation diagnostics."
-            );
-          }
-
+          const resolved = await resolveApsDocumentView(viewerDocument,{
+            prefer2D:isPlanCadUrn(urn),
+            loadManifest:async()=>{
+              const response=await commercialFetch(`/api/aps/status/${encodeURIComponent(urn)}`,{cache:"no-store"});
+              const payload=await response.json();
+              if(!response.ok||!payload.success)throw new Error(payload.error||"Could not read Autodesk translation diagnostics.");
+              return payload.manifest;
+            },
+            createDocument:(manifest,path,session)=>new window.Autodesk.Viewing.Document(manifest,path,session),
+          });
+          if(isCancelled()||!viewer?.impl){resolve(null);return;}
+          const geometryNode=resolved.node;
+          if(resolved.recovered)console.info("[VENTRA APS VIEW RECOVERED v85]",resolved.diagnostics);
           const model = await viewer.loadDocumentNode(
-            viewerDocument,
+            resolved.document,
             geometryNode
           );
 

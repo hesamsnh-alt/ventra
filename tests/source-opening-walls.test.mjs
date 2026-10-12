@@ -32,7 +32,7 @@ test('binding is independent of drawing language and rotation, including reverse
  assert.equal(r.added.length,1);assert.equal(r.walls[0].start.x,4);assert.equal(r.walls[0].end.x,4);
 });
 test('actual route retains all eight source doors and four windows without moving their centers',()=>{
- const source=fs.readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js',import.meta.url),'utf8');
+ const source=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
  const c=vm.createContext({createPrintedDimensionAlignment,mapPrintedDimensionPoint,process:{env:{}},prepareObservedOpeningWalls,canonicalRoomType,compileSourceFurniture,repairOverlappingWalls,filterOpenPlanPartitions,outdoorBoundaries,observedDoorOrientation});
  vm.runInContext(source.replace(/^import .*;\n/gm,'').split('function parseJson')[0]+'\nthis.normalize=normalizeScene;',c);
  const point=p=>({x:p.x/fixture.width,y:1-p.y/fixture.depth});

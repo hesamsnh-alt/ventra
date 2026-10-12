@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/lib/serverPreviewAnalysis.js', import.meta.url), 'utf8');
 const sandbox = { canonicalRoomType, process: { env: {} } };
 vm.createContext(sandbox);
 vm.runInContext(source.replace(/^import .*;\n/gm, '').split('function parseJson')[0] +

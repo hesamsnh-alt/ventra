@@ -1,0 +1,233 @@
+/* Ventra APS Viewer layout hotfix
+   Keeps the viewer toolbar usable and constrains Autodesk docking panels. */
+
+.aps-viewer-card {
+  position: relative;
+  min-width: 0;
+  margin-top: 28px;
+  padding: 16px;
+  overflow: hidden;
+  background: #101010;
+  border: 1px solid #242424;
+  border-radius: 18px;
+}
+
+.aps-viewer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.aps-viewer-header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.aps-viewer-header span {
+  color: #ffd400;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.aps-viewer-header h3 {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aps-viewer-header p {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+}
+
+.aps-viewer-status {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.aps-viewer-status-ready {
+  color: #ffd400;
+  border-color: rgba(255, 212, 0, 0.28);
+}
+
+.aps-viewer-status-error {
+  color: #ff9b9b;
+  border-color: rgba(255, 80, 80, 0.3);
+}
+
+.aps-diagnostic-button {
+  min-height: 30px;
+  margin-top: 8px;
+  padding: 0 10px;
+  color: #111;
+  background: #ffd400;
+  border: 0;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* This summary used to grow with every opened model. Keep it compact. */
+.aps-geometry-summary {
+  display: flex;
+  max-width: 100%;
+  max-height: 74px;
+  margin-top: 8px;
+  padding-right: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 8px;
+  scrollbar-width: thin;
+}
+
+.aps-geometry-summary p {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 7px 9px;
+  color: rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.aps-geometry-summary strong {
+  color: #fff;
+}
+
+.aps-viewer-shell {
+  position: relative;
+  width: 100%;
+  height: clamp(430px, 62vh, 680px);
+  min-height: 430px;
+  overflow: hidden;
+  background: #090909;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  isolation: isolate;
+}
+
+.aps-viewer-container,
+.aps-viewer-container > div,
+.aps-viewer-container .adsk-viewing-viewer {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.aps-viewer-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.aps-viewer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.76);
+  background: rgba(8, 8, 8, 0.82);
+  text-align: center;
+}
+
+.aps-viewer-overlay-error {
+  color: #ffb2b2;
+}
+
+/* Autodesk toolbar must remain above ViewCube, panels, and model content. */
+.aps-viewer-container .adsk-viewing-viewer .adsk-toolbar,
+.aps-viewer-container .adsk-viewing-viewer #guiviewer3d-toolbar,
+.aps-viewer-container .adsk-viewing-viewer .toolbar-horizontal-bottom {
+  z-index: 90 !important;
+  max-width: calc(100% - 24px) !important;
+}
+
+/* Constrain Properties / Model Browser / Layers panels instead of letting
+   them cover the complete model and bottom toolbar. */
+.aps-viewer-container .adsk-viewing-viewer .docking-panel {
+  top: 12px !important;
+  right: 12px !important;
+  bottom: auto !important;
+  left: auto;
+  width: min(360px, calc(100% - 24px)) !important;
+  max-width: min(360px, calc(100% - 24px)) !important;
+  height: auto !important;
+  max-height: calc(100% - 92px) !important;
+  overflow: hidden !important;
+  z-index: 70 !important;
+}
+
+.aps-viewer-container .adsk-viewing-viewer .docking-panel .docking-panel-scroll,
+.aps-viewer-container .adsk-viewing-viewer .docking-panel .property-panel-scroll,
+.aps-viewer-container .adsk-viewing-viewer .docking-panel .treeview {
+  max-height: calc(100% - 46px) !important;
+  overflow: auto !important;
+}
+
+/* Keep the ViewCube visible without allowing it to cover the toolbar. */
+.aps-viewer-container .adsk-viewing-viewer .viewcubeWrapper {
+  z-index: 65 !important;
+}
+
+@media (max-width: 900px) {
+  .aps-viewer-card {
+    padding: 12px;
+  }
+
+  .aps-viewer-shell {
+    height: 500px;
+    min-height: 420px;
+  }
+
+  .aps-viewer-container .adsk-viewing-viewer .docking-panel {
+    width: min(310px, calc(100% - 20px)) !important;
+    max-width: min(310px, calc(100% - 20px)) !important;
+    max-height: calc(100% - 86px) !important;
+    top: 10px !important;
+    right: 10px !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .aps-viewer-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .aps-viewer-status {
+    align-self: flex-start;
+  }
+
+  .aps-viewer-shell {
+    height: 460px;
+    min-height: 400px;
+  }
+
+  .aps-viewer-container .adsk-viewing-viewer .docking-panel {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    max-height: 230px !important;
+    top: 8px !important;
+    right: 8px !important;
+  }
+}

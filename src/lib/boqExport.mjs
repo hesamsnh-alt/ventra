@@ -1,3 +1,4 @@
+import {localizeBoqText} from './boqLocalization.mjs';
 import { classifyEstimateItem } from './estimateClassification.mjs';
 import { calculateBoqBudget } from './boqBudget.mjs';
 
@@ -5,17 +6,18 @@ export const BOQ_EXPORT_HEADERS = ['Item No.', 'Section', 'Description', 'Unit',
 
 // Export the same commercial selection as the BOQ screen, while accounting
 // separately for every displayed row. Inclusion is not proof of scope completeness.
-export function buildBoqExport(items = [], commercial = {}) {
+export function buildBoqExport(items = [], commercial = {}, {language="en",translations={}} = {}) {
+  const tr=text=>localizeBoqText(text,language,translations);
   const sums = { verified: 0, provisional: 0, pending: 0 };
   const rows = items.map(item => {
     const status = classifyEstimateItem(item);
     const amount = Number(item.quantity) * Number(item.rate);
     const finiteAmount = Number.isFinite(amount) ? amount : 0;
     sums[status] += finiteAmount;
-    return [item.itemNumber, item.section, item.description, item.unit,
+    return [item.itemNumber, tr(item.section), tr(item.description), tr(item.unit),
       item.quantity, item.rate, Number.isFinite(amount) ? amount.toFixed(2) : '',
-      {verified:'Verified / reviewed', provisional:'Provisional estimate', pending:'Unresolved / excluded'}[status],
-      status === 'verified' ? 'Yes' : 'No', item.source || '', item.quantityBasis || '', item.rateSource || '', item.notes || ''];
+      tr({verified:'Verified / reviewed', provisional:'Provisional estimate', pending:'Unresolved / excluded'}[status]),
+      tr(status === 'verified' ? 'Yes' : 'No'), item.source || '', item.quantityBasis || '', item.rateSource || '', tr(item.notes || '')];
   });
   const money = value => Number(value || 0).toFixed(2);
   const budget = calculateBoqBudget(sums, commercial);
@@ -36,6 +38,6 @@ export function buildBoqExport(items = [], commercial = {}) {
     [`VAT ${commercial.vatPercentage || 0}% - tender basis`, money(commercial.vat)],
     ['Tender price - verified / reviewed rows with selected markups', money(commercial.total)],
   ];
-  return { headers: BOQ_EXPORT_HEADERS, rows, summary, sums,
-    note: 'Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.' };
+  return { headers: BOQ_EXPORT_HEADERS.map(tr), rows, summary:summary.map(([label,value])=>[tr(label),value]), sums,
+    note: tr('Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.') };
 }

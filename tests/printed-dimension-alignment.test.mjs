@@ -32,7 +32,7 @@ test('conflicting, absent or rotated dimensions do not force a new layout',()=>{
  assert.equal(createPrintedDimensionAlignment([{polygon:diagonal}],12,8,diagonal).applied,false);
 });
 test('actual route aligns architecture and both furniture passes with the same map, retaining all openings',()=>{
- const source=fs.readFileSync(new URL('../src/app/api/ai/design-3d-preview/route.js',import.meta.url),'utf8');
+ const source=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
  const c=vm.createContext({process:{env:{}},createPrintedDimensionAlignment,mapPrintedDimensionPoint,prepareObservedOpeningWalls,canonicalRoomType,compileSourceFurniture,repairOverlappingWalls,filterOpenPlanPartitions,outdoorBoundaries,observedDoorOrientation});
  vm.runInContext(source.replace(/^import .*;\n/gm,'').split('function parseJson')[0]+'\nthis.normalize=normalizeScene;',c);
  const point=p=>({x:p.x/12,y:1-p.y/8});

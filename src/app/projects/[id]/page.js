@@ -41,6 +41,7 @@ import ProjectDrawingCenter from "./ProjectDrawingCenter";
 import Project3DViewer from "./Project3DViewer";
 
 import "./ProjectWorkspace.css";
+import "./WorkspacePolish.css";
 
 const PROJECT_TABS = [
   {id:"control",label:"Team & Contract"},
