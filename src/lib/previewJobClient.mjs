@@ -18,8 +18,17 @@ export async function runPreviewAnalysis(start,{key,fetcher,storage,delay=wait,m
   if(response.status===202)continue;
   // A transient service outage leaves the ID available for the next retry.
   if([502,503].includes(response.status))continue;
-  try{storage?.removeItem(cacheKey);}catch{}
+  if(!response.ok){try{storage?.removeItem(cacheKey);}catch{}}
   return response;
  }
  throw new Error('Analysis is still pending. Retry to check the same job; do not upload again.');
+}
+
+export function acknowledgePreviewJob(key,storage){
+ try{storage?.removeItem(`ventra:preview-job:${key}`);}catch{}
+}
+
+export async function boqAnalysisKey(input){
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(input)));
+ return `boq:${input.projectId}:${Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('')}`;
 }

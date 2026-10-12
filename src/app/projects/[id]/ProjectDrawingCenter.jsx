@@ -12,7 +12,7 @@ import {persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeof
 import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
-import {runPreviewAnalysis} from '@/lib/previewJobClient.mjs';
+import {runPreviewAnalysis,acknowledgePreviewJob} from '@/lib/previewJobClient.mjs';
 import RasterTraceReview from "./RasterTraceReview";
 import { getRasterReview, subscribeRasterReview, updateRasterReview } from "@/lib/rasterReviewSession.mjs";
 import { buildTakeoffFromAps } from "@/services/apsTakeoffBuilder";
@@ -1727,10 +1727,13 @@ export default function ProjectDrawingCenter({
     };
   }, [projectId]);
 
+  const analysisSelectionRef=useRef(null);
   const selectedDocumentForPreview =
     (selectedDocumentId
       ? documents.find((item) => item.id === selectedDocumentId)
       : null) || documents[0] || null;
+
+  analysisSelectionRef.current={projectId,documentId:selectedDocumentForPreview?.id||null};
 
   const selectedPreviewExtension = getFileExtension(
     selectedDocumentForPreview?.file_name
@@ -1965,6 +1968,7 @@ export default function ProjectDrawingCenter({
         key: `${projectId}:${document.id || document.file_name}`,
         fetcher: commercialFetch,
         storage: typeof window !== 'undefined' ? window.sessionStorage : null,
+        onProgress: transport => updateRasterReview(projectId,{...getRasterReview(projectId),report:{...getRasterReview(projectId)?.report,transport}}),
       });
 
       const responseText = await response.text();
@@ -1999,8 +2003,11 @@ export default function ProjectDrawingCenter({
         generatedAt: new Date().toISOString(),
       });
 
-      if(!drawingSceneMatches(projectId,scene))throw new Error("The selected drawing changed during analysis. Select the analyzed drawing to run it again.");
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)
+        throw Object.assign(new Error('Analysis completed for another selected drawing. Select the analyzed drawing and press Analyze to recover its saved result.'),{code:'PREVIEW_SELECTION_CHANGED'});
+      selectDrawingDocument(projectId,document.id);
       await saveSchematic(projectId,scene,{preserveBase:false});
+      acknowledgePreviewJob(`${projectId}:${document.id||document.file_name}`,window.sessionStorage);
       // Same-tab storage events do not fire. Tell the existing 3D Viewer to
       // switch to the new schematic scene immediately without touching APS state.
       window.dispatchEvent(new CustomEvent("ventra:3d-source-updated", {
@@ -2021,7 +2028,7 @@ export default function ProjectDrawingCenter({
       updateRasterReview(projectId, {
         report: {
           ...current,
-          status: "rejected",
+          status: error?.code==='PREVIEW_SELECTION_CHANGED'?"awaiting_selection":"rejected",
           accepted: false,
           failure: current.failure?.code
             ? current.failure

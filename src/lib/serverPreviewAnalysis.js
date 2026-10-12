@@ -2829,9 +2829,9 @@ function parseJson(text) {
   return null;
 }
 
-async function prepareImage(imageUrl) {
+async function prepareImage(imageUrl, signal) {
   if (!imageUrl) throw Object.assign(new Error("No floor-plan image URL was supplied."), { code: "PREVIEW_NO_IMAGE" });
-  const response = await fetch(imageUrl, { cache: "no-store" });
+  const response = await fetch(imageUrl, { cache: "no-store", signal });
   if (!response.ok) throw Object.assign(new Error(`Could not download the floor-plan image (${response.status}).`), { code: "PREVIEW_IMAGE_DOWNLOAD_FAILED" });
   const buffer = Buffer.from(await response.arrayBuffer());
   const image = sharp(buffer, { failOn: "none" });
@@ -3197,3 +3197,8 @@ async function handleCommercialRequest(request) {
 }
 
 export async function runPreviewRequest(request){return commercialRun(request,'preview',handleCommercialRequest);}
+
+export async function previewImageFingerprint(imageUrl){
+ const prepared=await prepareImage(imageUrl,AbortSignal.timeout(12000));
+ return {hash:createHash('sha256').update(prepared.buffer).digest('hex').slice(0,16),version:VERSION};
+}

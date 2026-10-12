@@ -1,3 +1,4 @@
+import {runPreviewAnalysis,acknowledgePreviewJob,boqAnalysisKey} from '@/lib/previewJobClient.mjs';
 import {commercialFetch} from '@/lib/commercialFetch';
 export async function generateBoq({
   projectId,
@@ -19,9 +20,12 @@ export async function generateBoq({
   });
 
   let response;
+  const input={projectId,takeoff,projectName,priceLevel,vatPercentage};
+  const jobKey=await boqAnalysisKey(input);
+  const storage=typeof window!=='undefined'?window.sessionStorage:null;
 
   try {
-    response = await commercialFetch("/api/ai/generate-boq", {
+    response = await runPreviewAnalysis(()=>commercialFetch("/api/ai/generate-boq", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,9 +37,10 @@ export async function generateBoq({
         projectName,
         priceLevel,
         vatPercentage,
+        requestId:crypto.randomUUID(),
       }),
       cache: "no-store",
-    });
+    }),{key:jobKey,fetcher:commercialFetch,storage});
   } catch (error) {
     console.error(
       "[VENTRA BOQ CLIENT] fetch failed",
@@ -151,5 +156,6 @@ export async function generateBoq({
     );
   }
 
+  acknowledgePreviewJob(jobKey,storage);
   return data.boq;
 }

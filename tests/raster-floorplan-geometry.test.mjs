@@ -1,4 +1,4 @@
-import {runPreviewAnalysis} from '../src/lib/previewJobClient.mjs';
+import {runPreviewAnalysis,acknowledgePreviewJob} from '../src/lib/previewJobClient.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -238,7 +238,7 @@ test("a failed raster request stops quiet Analyze and leaves existing persistenc
     crypto:{randomUUID:()=> 'test-request'},
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}, window: { dispatchEvent(){},localStorage: { setItem: (...args) => writes.push(args) } },
     projectId: "test-project", getFileExtension: () => "png", downloadProjectDocument: async () => ({ url: "https://example.invalid/fixture.png" }),
-    runPreviewAnalysis, commercialFetch:()=>{},
+    runPreviewAnalysis, acknowledgePreviewJob, selectDrawingDocument:()=>{}, analysisSelectionRef:{current:{projectId:'test-project',documentId:'d1'}}, commercialFetch:()=>{},
     ventraFetchWithTransientRetry: async () => ({ ok: false, status: 422, text: async () => JSON.stringify({ error: "Opening is off its wall" }) }),
     console: { error() {}, warn() {} }, setMessage() {}, setErrorMessage() {}, setRasterReview() {}, updateRasterReview() {}, getRasterReview:()=>null,
   };
@@ -253,13 +253,13 @@ test("successful raster Analyze commits scene and original before publishing the
   const storage={setItem:(...args)=>writes.push(args),getItem:()=>null,removeItem(){}};
   const sandbox = {
     applyDesignDefaults: (await import('../src/lib/designDefaults.mjs')).applyDesignDefaults,
-    drawingSceneMatches:()=>true,
+    drawingSceneMatches:()=>false,
     saveSchematic:(id,scene,options)=>saveSchematic(id,scene,{...options,storage}),
     saveActiveSource:(id,source)=>saveActiveSource(id,source,{storage}),
     crypto:{randomUUID:()=> 'test-request'},
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}, window: { dispatchEvent(){},localStorage: { setItem: (...args) => writes.push(args) } },
     projectId: "test-project", getFileExtension: () => "png", downloadProjectDocument: async () => ({ url: "https://example.invalid/fixture.png" }),
-    runPreviewAnalysis, commercialFetch:()=>{},
+    runPreviewAnalysis, acknowledgePreviewJob, selectDrawingDocument:()=>{}, analysisSelectionRef:{current:{projectId:'test-project',documentId:'d1'}}, commercialFetch:()=>{},
     ventraFetchWithTransientRetry: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ scene }) }),
     console: { error() {}, warn() {} }, setMessage() {}, setErrorMessage() {}, setRasterReview() {}, updateRasterReview() {}, getRasterReview:()=>null,
   };

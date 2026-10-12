@@ -12,7 +12,7 @@ test('synchronous localhost result remains unchanged',async()=>{
 test('queued job survives transient outage and returns the original scene',async()=>{
  const cache=storage(),responses=[new Response('',{status:503}),Response.json({status:'running'},{status:202}),Response.json({scene:{width:12}})];let starts=0;
  const r=await runPreviewAnalysis(async()=>{starts++;return Response.json({jobId:id},{status:202});},{key:'x',storage:cache,delay:async()=>{},fetcher:async()=>responses.shift()});
- assert.equal(starts,1);assert.equal((await r.json()).scene.width,12);assert.equal(cache.getItem('ventra:preview-job:x'),undefined);
+ assert.equal(starts,1);assert.equal((await r.json()).scene.width,12);assert.equal(cache.getItem('ventra:preview-job:x'),id);
 });
 test('retry resumes a pending job without submitting or charging again',async()=>{
  const cache=storage();cache.setItem('ventra:preview-job:x',id);
@@ -43,4 +43,13 @@ test('background job SQL installs twice and prevents direct browser access',asyn
   const sql=fs.readFileSync(new URL('../supabase/migrations/20261012_preview_background_jobs.sql',import.meta.url),'utf8');await db.exec(sql);await db.exec(sql);
   await db.exec('set role authenticated');await assert.rejects(db.query('select * from public.ventra_preview_jobs'),/permission denied/);await db.exec('reset role');
  }finally{await db.close();}
+});
+test('completed source result is recovered before enqueueing a paid analysis',async()=>{
+ const filters=[];const q={select(){return q},eq(k,v){filters.push([k,v]);return q},gte(){return q},order(){return q},limit(){return q},maybeSingle:async()=>({data:{result:{scene:{width:12}}}})};
+ const context=vm.createContext({table:'ventra_preview_jobs',process:{env:{URL:'https://example.netlify.app'}},Response,URL,Date,AbortSignal,account:async()=>({id:'actor'}),commercialContext:async()=>({db:{from:()=>q}}),previewImageFingerprint:async()=>({hash:'exact-source-hash',version:'current'}),commercialError:()=>{throw Error('unexpected failure')},billingError:()=>Error('unexpected failure')});
+ const a=source.indexOf('export async function startPreviewJob'),b=source.indexOf('export async function readPreviewJob');
+ vm.runInContext(source.slice(a,b).replace('export async function','async function')+'\nthis.start=startPreviewJob;',context);
+ const response=await context.start({text:async()=>JSON.stringify({projectId:'project',mode:'schematic_analyze',imageUrl:'signed-source'})});
+ assert.equal(response.status,200);assert.equal((await response.json()).recovered,true);
+ assert.ok(filters.some(([k,v])=>k==='actor_id'&&v==='actor'));assert.ok(filters.some(([k,v])=>k==='project_id'&&v==='project'));assert.ok(filters.some(([k,v])=>k==='result->diagnostics->>imageHash'&&v==='exact-source-hash'));
 });
