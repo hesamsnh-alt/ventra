@@ -22,6 +22,7 @@ const semanticOpen = (a,b) => {
 export function filterOpenPlanPartitions(partitions = [], rooms = [], relationships = [], openings = []) {
   const relations = new Map(relationships.map(r => [key(r.roomAId,r.roomBId), r]));
   const removedIds = [];
+  const replacements = new Map();
   const filtered = partitions.filter(wall => {
     if (wall.type === 'external' || !String(wall.id || '').startsWith('room_edge_') || wall.provenance === 'observed') return true;
     if (!wall.start || !wall.end) return true;
@@ -52,9 +53,39 @@ export function filterOpenPlanPartitions(partitions = [], rooms = [], relationsh
       });
       if (matches) { removedIds.push(wall.id); return false; }
     }
+    // A corridor may join only part of a living-room edge; the remainder can
+    // bound a WC. Remove only the explicitly open interval, never that WC wall.
+    const partialOffset=Math.max(offset,Math.min(0.3,Number(wall.thickness||wall.width)||0.3));
+    const cuts=[0,1];
+    for(const room of rooms) for(let i=0;i<(room.polygon||[]).length;i++) {
+      const a=room.polygon[i],b=room.polygon[(i+1)%room.polygon.length];
+      const ex=b.x-a.x,ey=b.y-a.y,den=dx*ey-dy*ex;
+      if(Math.abs(den)<1e-10)continue;
+      for(const side of [-1,1]) {
+        const origin={x:wall.start.x-side*dy/length*partialOffset,y:wall.start.y+side*dx/length*partialOffset};
+        const ax=a.x-origin.x,ay=a.y-origin.y;
+        const t=(ax*ey-ay*ex)/den,u=(ax*dy-ay*dx)/den;
+        if(t>0&&t<1&&u>=0&&u<=1)cuts.push(t);
+      }
+    }
+    const sorted=[...new Set(cuts.map(t=>Number(t.toFixed(9))))].sort((a,b)=>a-b),kept=[];
+    let changed=false;
+    for(let i=1;i<sorted.length;i++) {
+      const start=sorted[i-1],end=sorted[i],t=(start+end)/2;
+      const p={x:wall.start.x+t*dx,y:wall.start.y+t*dy};
+      const left=rooms.filter(r=>inside({x:p.x-dy/length*partialOffset,y:p.y+dx/length*partialOffset},r.polygon));
+      const right=rooms.filter(r=>inside({x:p.x+dy/length*partialOffset,y:p.y-dx/length*partialOffset},r.polygon));
+      const open=relationships.some(r=>r.relation==='open'&&r.confidence>=0.45&&
+        [...left,...right].every(room=>room.id===r.roomAId||room.id===r.roomBId)&&
+        ((left.some(a=>a.id===r.roomAId)&&right.some(b=>b.id===r.roomBId))||
+         (left.some(a=>a.id===r.roomBId)&&right.some(b=>b.id===r.roomAId))));
+      if(open&&(end-start)*length>=0.15){changed=true;continue;}
+      const last=kept.at(-1);if(last&&Math.abs(last[1]-start)<1e-8)last[1]=end;else kept.push([start,end]);
+    }
+    if(changed){removedIds.push(wall.id);replacements.set(wall.id,kept.filter(([a,b])=>(b-a)*length>1e-8).map(([a,b],i)=>({...wall,id:`${wall.id}__open_trim_${i+1}`,start:{x:wall.start.x+a*dx,y:wall.start.y+a*dy},end:{x:wall.start.x+b*dx,y:wall.start.y+b*dy}})));}
     return true;
   });
-  return { partitions: filtered, removed: removedIds.length, removedIds };
+  return { partitions: filtered.flatMap(w=>replacements.get(w.id)||[w]), removed: removedIds.length, removedIds };
 }
 
 export function repairOpenPlanScene(scene) {

@@ -3,7 +3,7 @@ import {furnitureOverlaps} from './interiorPresentation.mjs';
 export const PROMPT_ASSET_DEFAULTS={
  sofa:[2.2,.9,.85],armchair:[.85,.85,.9],bed:[1.8,2,.65],wardrobe:[1.6,.6,2.1],
  dining_table:[1.8,.95,.76],chair:[.48,.52,.9],coffee_table:[1.1,.65,.42],desk:[1.3,.65,.76],
- cabinet:[1.2,.55,.9],kitchen_counter:[2.2,.65,.92],kitchen_island:[1.8,.9,.92],tv_unit:[1.8,.35,.65],
+ cabinet:[1.2,.55,.9],cabinet_door:[.45,.05,.75],kitchen_counter:[2.2,.65,.92],kitchen_island:[1.8,.9,.92],tv_unit:[1.8,.35,.65],
  toilet:[.7,.8,.78],shower:[.95,.95,2.1],sink:[.8,.5,.85],bathtub:[1.7,.75,.58],
  washing_machine:[.65,.65,.88],refrigerator:[.85,.75,1.85],stove:[.7,.65,.9],
  nightstand:[.5,.45,.5],rug:[2.2,1.6,.025],plant:[.45,.45,.9],mirror:[.75,.04,1.1],
@@ -27,7 +27,8 @@ export function preparePromptScene(scene){
  return next;
 }
 
-export function placementProblem(a,s){
+export function placementProblem(a,s,{manualDwgPlacement=false}={}){
+ const relaxed=manualDwgPlacement&&s.source==='dwg-engineering-interior';
  const room=s.rooms.find(r=>r.id===a.roomId);
  if(!room?.polygon?.length)return 'unknown room';
  const ps=points(a);
@@ -35,9 +36,9 @@ export function placementProblem(a,s){
  if(s.footprint?.length&&(!ps.every(p=>inside(p,s.footprint))||crossing(a,s.footprint,s)))return 'outside building';
  const corners=[ps[0],ps[2],ps[8],ps[6]];
  if((s.holes||[]).some(h=>ps.some(p=>inside(p,h.polygon))||(h.polygon||[]).some(p=>inside(p,corners))||crossing(a,h.polygon||[],s)))return 'inside shaft or void';
- if((s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,.03)))return 'intersects wall';
+ if(!relaxed&&(s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,.03)))return 'intersects wall';
  if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,.03)))return 'overlaps furniture';
- if((s.openings||[]).some(o=>{
+ if(!relaxed&&(s.openings||[]).some(o=>{
   if(o.type!=='door')return false;const w=s.walls?.find(w=>w.id===o.wallId);if(!w)return false;
   const x=w.start.x+(w.end.x-w.start.x)*o.offset,y=w.start.y+(w.end.y-w.start.y)*o.offset,r=Math.max(.8,Number(o.width)||.8);
   return furnitureOverlaps(a,{xMeters:x,yMeters:y,width:r*2,depth:r*2,rotation:0},s,0);
@@ -45,7 +46,7 @@ export function placementProblem(a,s){
  return null;
 }
 
-export function applyPromptActions(input,plan){
+export function applyPromptActions(input,plan,{manualDwgPlacement=false}={}){
  if(!plan||!Array.isArray(plan.actions)||plan.actions.length>40||!['apply','clarify','unsupported'].includes(plan.status))fail('Invalid edit plan.');
  if(plan.status!=='apply')fail(plan.message||'Please clarify your request.',plan.status==='clarify'?'SCENE_EDIT_CLARIFY':'SCENE_EDIT_UNSUPPORTED');
  if(!plan.actions.length)fail('No executable edit was returned; the model is unchanged.');
@@ -84,7 +85,7 @@ export function applyPromptActions(input,plan){
   changes.push(`${op.action}:${a.id}`);
  }
  // Validate the FINAL batch, permitting swaps/removals before repositioning.
- for(const id of spatial){const a=next.assets.find(a=>a.id===id);if(!a)continue;const problem=placementProblem(a,next);if(problem)fail(`${id}: ${problem}. / جای‌گذاری پیشنهادی با هندسه یا وسایل تداخل دارد؛ مدل تغییر نکرد.`);}
+ for(const id of spatial){const a=next.assets.find(a=>a.id===id);if(!a)continue;const problem=placementProblem(a,next,{manualDwgPlacement});if(problem)fail(`${id}: ${problem}. / جای‌گذاری پیشنهادی با هندسه یا وسایل تداخل دارد؛ مدل تغییر نکرد.`);}
  if(next.assets.length>300)fail('Too many furniture objects.');
  if(JSON.stringify(next)===before)fail('The requested state already exists; no change was made.','SCENE_EDIT_NO_CHANGE');
  next.updatedAt=new Date().toISOString();next.promptEdit={version:'ai-actions-v61',changes};

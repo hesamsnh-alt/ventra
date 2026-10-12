@@ -8,6 +8,14 @@ export const FURNITURE_CATALOG=Object.freeze([
  ['dining-set','dining_table','Dining + 4 chairs','غذاخوری و ۴ صندلی','طاولة و٤ كراسي',1.4,.8,.76,'modern','#b99266',4],
  ['bed-modern','bed','Bed · Modern','تخت مدرن','سرير حديث',1.6,2,.85,'modern','#b5a596'],
  ['bed-luxury','bed','Bed · Luxury','تخت لوکس','سرير فاخر',1.8,2.1,1.05,'luxury','#b79777'],
+ ['bed-single','bed','Single bed','تخت یک‌نفره','سرير مفرد',.95,2,.85,'minimal','#b5a596'],
+ ['cabinet-storage','cabinet','Storage cabinet','کمد کوتاه','خزانة تخزين',1.2,.55,.9,'modern','#bca487'],
+ ['cabinet-door','cabinet_door','Cabinet door','در کابینت','باب خزانة',.45,.05,.75,'modern','#bca487'],
+ ['wardrobe','wardrobe','Wardrobe','کمد لباس','خزانة ملابس',1.6,.6,2.2,'modern','#bca487'],
+ ['counter-L','kitchen_counter','L-shaped kitchen cabinet','کابینت آشپزخانه L','خزانة مطبخ L',2.2,1.8,.92,'l-shape','#bca487'],
+ ['nightstand','nightstand','Bedside table','پاتختی','طاولة بجانب السرير',.5,.45,.5,'modern','#bca487'],
+ ['desk','desk','Desk','میز کار','مكتب',1.3,.65,.76,'modern','#bca487'],
+ ['lamp','floor_lamp','Floor lamp','چراغ ایستاده','مصباح أرضي',.4,.4,1.6,'modern','#bca487'],
  ['chair','chair','Chair','صندلی','كرسي',.45,.5,.9,'modern','#bca487'],
  ['plant','plant','Indoor plant','گیاه آپارتمانی','نبات داخلي',.4,.4,1.05,'modern','#70845c'],
  ['tv','tv_unit','TV console','تلویزیون و میز','تلفاز وطاولة',1.6,.35,.65,'modern','#947050'],
@@ -39,8 +47,12 @@ export function furnitureSizeFromDrag(dimensions,startX,event){
 const inside=(p,poly=[])=>{let hit=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)hit=!hit;}return hit;};
 export function roomAtPoint(scene,point){
  if(!Number.isFinite(point?.x)||!Number.isFinite(point?.y))return null;
- const rooms=scene.rooms.filter(r=>inside(point,r.polygon));
- return rooms.length===1?rooms[0]:null;
+ const hits=scene.rooms.filter(r=>inside(point,r.polygon));
+ // DWG floor scopes cover areas without room metadata. Prefer a real room
+ // when present, without making its overlap with the fallback ambiguous.
+ const classified=hits.filter(r=>!r.scopeOnly);
+ const rooms=classified.length?classified:hits;
+ return rooms.length===1?rooms[0]:scene.source==='dwg-engineering-interior'?hits.find(r=>r.scopeOnly)||null:null;
 }
 export function furnitureDraft(scene,edit){
  const catalog=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId),original=scene.assets.find(a=>a.id===edit.assetId);
@@ -48,7 +60,11 @@ export function furnitureDraft(scene,edit){
  if(edit.kind!=='add'&&!original)fail('Select a furniture object.');
  if(edit.kind==='replace'&&!catalog)fail('Unknown furniture model.');
  const p=edit.point||{x:original?.xMeters,y:original?.yMeters};
- const room=roomAtPoint(scene,p);if(!room)fail('Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
+ // DWG room faces may be incomplete/overlapping. Manual design uses the floor
+ // envelope; actual walls, openings, voids and other furniture still constrain it.
+ const room=scene.source==='dwg-engineering-interior'
+  ?scene.rooms.find(r=>r.scopeOnly&&inside(p,r.polygon))||roomAtPoint(scene,p)
+  :roomAtPoint(scene,p);if(!room)fail('Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
  const model=edit.kind==='add'||edit.kind==='replace'?catalog:null;
  const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:room.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
  if(draft.type==='range_hood')draft.zMeters=1.95;
@@ -68,7 +84,7 @@ export function furnitureDraft(scene,edit){
 export function previewFurnitureEdit(scene,edit){
  let candidate;
  try{
-  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};const problem=placementProblem(candidate,scene);
+  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true});
   // Sets need room for the chairs too; the full transaction is checked at commit.
   if(problem)return {candidate,valid:false,error:problem};
   applyFurnitureEdit(scene,edit);
@@ -91,14 +107,14 @@ export function applyFurnitureEdit(scene,edit){
   const a=candidate,t=a.rotation*Math.PI/180;
   for(const [x,y,rotation] of [[-a.width/2-.3,0,-90],[a.width/2+.3,0,90],[0,-a.depth/2-.32,0],[0,a.depth/2+.32,180]])actions.push({action:'add',type:'chair',roomId:a.roomId,xMeters:a.xMeters+x*Math.cos(t)-y*Math.sin(t),yMeters:a.yMeters+x*Math.sin(t)+y*Math.cos(t),width:.45,depth:.5,height:.9,rotation:rotation+a.rotation,color:model.color});
  }
- const next=applyPromptActions(scene,{status:'apply',actions}).scene;
+ const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
   next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
  }
  if(edit.kind==='resize')next.assets=next.assets.map(a=>a.id===original.id?{...a,renderingBaseDimensions:original.renderingBaseDimensions||{width:original.width,depth:original.depth,height:original.height}}:a);
  const editedIds=new Set(edit.kind==='add'?next.assets.slice(scene.assets.length).map(a=>a.id):[edit.assetId]);
- next.assets=next.assets.map(a=>editedIds.has(a.id)?{...a,placementSource:'manual_furniture_editor',provenance:'proposed',excludeFromTakeoff:true,...(['move','replace'].includes(edit.kind)?{embeddedInCounter:false}:{})}:a);
+ next.assets=next.assets.map(a=>editedIds.has(a.id)?{...a,...(edit.freePlacement===true&&scene.source==='dwg-engineering-interior'?{placementReview:'unverified_dwg_wall_clearance'}:{}),placementSource:'manual_furniture_editor',provenance:'proposed',excludeFromTakeoff:true,...(['move','replace'].includes(edit.kind)?{embeddedInCounter:false}:{})}:a);
  for(const key of LOCKED_ARCHITECTURE)if(JSON.stringify(next[key])!==JSON.stringify(scene[key]))fail(`Architecture is locked: ${key}`);
  next.furnitureEditor={version:'furniture-editor-v67',lastOperation:edit.kind};
  return next;

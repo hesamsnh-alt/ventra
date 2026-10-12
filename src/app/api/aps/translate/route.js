@@ -1,3 +1,4 @@
+import {apsModelAccess} from "@/lib/serverApsAccess";
 import {commercialContext,commercialError} from "@/lib/serverCommercial";
 import { NextResponse } from "next/server";
 import { translateApsModel } from "@/services/apsService";
@@ -8,6 +9,7 @@ export async function POST(request) {
   try {
     const body = await request.json();
     await commercialContext(request,body.projectId);
+    await apsModelAccess(request,body.urn,body.projectId);
     const result = await translateApsModel({
       urn: body?.urn,
       rootFilename: body?.rootFilename || "",

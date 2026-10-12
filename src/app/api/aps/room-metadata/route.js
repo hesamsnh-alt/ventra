@@ -1,4 +1,4 @@
-import {account} from "@/lib/serverBilling";
+import {apsModelAccess} from "@/lib/serverApsAccess";
 import {commercialError} from "@/lib/serverCommercial";
 import {selectApsMetadataViews} from "@/lib/apsMetadataViews.mjs";
 import { NextResponse } from "next/server";
@@ -92,7 +92,6 @@ async function apsJson(url, token) {
 
 export async function POST(request) {
   try {
-    await account(request);
     const {
       urn,
       viewGuid = null, viewName = null, viewRole = null,
@@ -104,7 +103,8 @@ export async function POST(request) {
       });
     }
 
-    const { accessToken } = await getApsAccessToken(["data:read"]);
+    const model=await apsModelAccess(request,urn);
+    const { accessToken } = await getApsAccessToken([`data:read:${model.resource}`]);
     const encodedUrn = encodeURIComponent(urn);
     const metadataResult = await apsJson(
       `${APS_BASE}/modelderivative/v2/designdata/${encodedUrn}/metadata`,

@@ -1,4 +1,5 @@
 "use client";
+import {commercialFetch} from "@/lib/commercialFetch";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 import { extractModelProperties } from "@/services/apsPropertyExtractor";
@@ -87,7 +88,7 @@ function loadViewerSdk() {
 }
 
 async function requestViewerToken(url) {
-  const response = await fetch(url, {
+  const response = await commercialFetch(url, {
     method: "GET",
     cache: "no-store",
     headers: {
@@ -110,18 +111,18 @@ async function requestViewerToken(url) {
   return payload;
 }
 
-async function fetchViewerToken(callback) {
+async function fetchViewerToken(callback,urn) {
   try {
     let payload;
 
     try {
-      payload = await requestViewerToken("/api/aps/token");
+      payload = await requestViewerToken(`/api/aps/token?urn=${encodeURIComponent(urn)}`);
     } catch (primaryError) {
       console.warn(
         "[APS Viewer Token] Primary token route failed; trying compatibility route.",
         primaryError
       );
-      payload = await requestViewerToken("/api/aps/viewer-token");
+      payload = await requestViewerToken(`/api/aps/viewer-token?urn=${encodeURIComponent(urn)}`);
     }
 
     callback(
@@ -870,7 +871,7 @@ export default function ApsViewer({
                 env: "AutodeskProduction2",
                 api: "streamingV2_EU",
                 getAccessToken:
-                  fetchViewerToken,
+                  (callback)=>fetchViewerToken(callback,urn),
               },
               resolve,
               reject

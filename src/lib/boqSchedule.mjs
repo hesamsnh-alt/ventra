@@ -42,10 +42,25 @@ export const METHODS = {
  tiling:[{id:'standard',label:'Conventional tiles',rate:1,note:'Rounded granite study rate, subject to tile size, cuts, pattern and substrate.'},{id:'large',label:'Large-format / complex pattern',rate:null,note:'Enter measured output for the chosen tile system and lifting crew.'}],
 };
 export function methodsFor(trade){return [...(METHODS[trade]||[]),{id:'custom',label:'Site / contractor rate',rate:null}].map(m=>({...m,note:m.note||'Enter verified output in this BOQ unit per complete crew per productive hour; review method and crew.'}));}
-export function methodDays(quantity,rate,crews,calendar){const c=validateCalendar(calendar);return Math.ceil(num(quantity,'Quantity',0.000001,1e12)/(num(rate,'Hourly output',0.000001,1e9)*num(crews,'Crews',1,100)*c.effectiveHours));}
-export function unitOf(value){return String(value||'').toLowerCase().replace(/²/g,'2').replace(/³/g,'3').replace(/\s/g,'').replace(/^sqm$/,'m2').replace(/^cum$/,'m3').replace(/^(nos?\.?|pcs?|each|ea)$/,'item').replace(/^(lm|rm|m1)$/,'m');}
+export function validateScheduleUnit(trade,unit){
+ const normalized=unitOf(unit);
+ if(!['m','m2','m3','kg','t','item','lot','ls','point'].includes(normalized))throw new Error('Unsupported schedule unit; review the BOQ.');
+ if(trade==='excavation'&&normalized!=='m3')throw new Error(`Excavation requires m³; this row uses ${unit}. Review the BOQ quantity and trade.`);
+ if(trade==='backfill'&&normalized!=='m3')throw new Error(`Backfill requires m³; this row uses ${unit}. Review the BOQ quantity and trade.`);
+ if(trade==='concrete'&&normalized!=='m3')throw new Error('Concrete placement requires m³. Correct the BOQ volume; area alone is insufficient.');
+}
+export function methodDays(quantity,rate,crews,calendar,context){
+ if(context)validateScheduleUnit(context.trade,context.unit);
+ const c=validateCalendar(calendar),teams=num(crews,'Crews',1,100);
+ if(!Number.isInteger(teams))throw new Error('Crews and waiting days must be whole numbers.');
+ const days=Math.ceil(num(quantity,'Quantity',0.000001,1e12)/(num(rate,'Hourly output',0.000001,1e9)*teams*c.effectiveHours));
+ if(days>3660)throw new Error('Duration exceeds ten years; review quantity, unit and hourly output.');
+ return days;
+}
+export function unitOf(value){return String(value||'').toLowerCase().replace(/²/g,'2').replace(/³/g,'3').replace(/\s/g,'').replace(/^(lump_sum|lump-sum|lumpsum)$/,'ls').replace(/^sqm$/,'m2').replace(/^cum$/,'m3').replace(/^(nos?\.?|pcs?|each|ea)$/,'item').replace(/^(lm|rm|m1)$/,'m');}
 export function inferTrade(description){
  const s=String(description||'').toLowerCase();
+ if(/mobilis|mobiliz|demobilis|demobiliz|site.setup|site.facilities|تجهیز\s*کارگاه|تجهيز\s*الموقع/.test(s))return 'prelim';
  if(/demoli|strip.out|تخریب/.test(s))return 'demolition';
  if(/excavat|خاکبرداری/.test(s))return 'excavation';
  if(/formwork|shutter|قالب/.test(s))return 'formwork';
@@ -105,6 +120,8 @@ export function generateSchedule(input,settings){
  for(const r of active){
   if(!TRADES.some(t=>t.id===r.trade))throw new Error(`${r.name}: select a trade.`);
   if(!String(r.name||'').trim()||!String(r.crewNote||'').trim())throw new Error('Each activity needs a description and crew/method note.');
+  validateScheduleUnit(r.trade,r.unit);
+  if(!methodsFor(r.trade).some(m=>m.id===r.method))throw new Error('Choose an execution method for the selected trade.');
   const quantity=num(r.quantity,r.name+' quantity',0.000001,1e12),rate=num(r.rate,r.name+' hourly rate',0.000001,1e9),crews=num(r.crews,'Crews',1,100),wait=num(r.waitDays,r.name+' calendar waiting days',0,365),order=num(r.order,'Sequence',1,999);
   if(!Number.isInteger(crews)||!Number.isInteger(wait))throw new Error('Crews and waiting days must be whole numbers.');
   if(!['m','m2','m3','kg','t','item','lot','ls','point'].includes(unitOf(r.unit)))throw new Error(`${r.name}: unsupported unit; review the BOQ.`);

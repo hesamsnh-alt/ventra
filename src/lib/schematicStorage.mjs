@@ -29,17 +29,17 @@ export function activeSourceSync(id, storage = local()) {
 export async function readActiveSource(id, {storage = local(), records = indexedTakeoffRecords} = {}) {
   if (writes.has(id)) await writes.get(id).catch(() => {});
   const value = await records.get(keyFor(id, 'active-3d-source'));
-  if (value === 'aps' || value === 'schematic') { cache.set(keyFor(id, 'active-3d-source'), value); return value; }
+  if (['aps','schematic','dwg-interior'].includes(value)) { cache.set(keyFor(id, 'active-3d-source'), value); return value; }
   return activeSourceSync(id, storage);
 }
-export function saveActiveSource(id, source, {storage = local(), records = indexedTakeoffRecords} = {}) {
-  if (!['aps','schematic'].includes(source)) return Promise.reject(new Error('Unsupported 3D source.'));
+export function saveActiveSource(id, source, {storage = local(), records = indexedTakeoffRecords, syncCloud = true} = {}) {
+  if (!['aps','schematic','dwg-interior'].includes(source)) return Promise.reject(new Error('Unsupported 3D source.'));
   const key = keyFor(id, 'active-3d-source');
   const task = (writes.get(id) || Promise.resolve()).catch(() => {}).then(async () => {
     await records.put(key, source);
     cache.set(key, source);
     try { storage?.setItem(key, source); } catch { /* Database preserves the selection. */ }
-    const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,'selection',{source});
+    if(syncCloud){const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,'selection',{source});}
     return source;
   });
   writes.set(id, task);
@@ -54,7 +54,7 @@ export function readSchematicSync(id, kind = 'schematic3d', storage = local()) {
     return value?.__schematicRecord || (['schematic3d','schematic3d-base'].includes(kind)&&!drawingSceneMatches(id,value,storage)) ? null : value;
   } catch { return null; }
 }
-export function saveSchematic(id, scene, {kind = 'schematic3d', preserveBase = true, storage = local(), records = indexedTakeoffRecords} = {}) {
+export function saveSchematic(id, scene, {kind = 'schematic3d', preserveBase = true, storage = local(), records = indexedTakeoffRecords, syncCloud = true} = {}) {
   if (!id || !scene) return Promise.reject(new Error('Project and scene are required.'));
   if (kind === 'schematic3d' || kind === 'schematic3d-base') scene=applyDesignDefaults(scene);
   const key = keyFor(id, kind);
@@ -68,7 +68,7 @@ export function saveSchematic(id, scene, {kind = 'schematic3d', preserveBase = t
       cache.set(recordKey, value);
       try { storage?.removeItem(recordKey); storage?.setItem(recordKey, recordKey === keyFor(id, 'active-3d-source') ? value : JSON.stringify({__schematicRecord: recordKey, revision: Date.now()})); } catch { /* IndexedDB remains authoritative. */ }
     }
-    if(kind==='schematic3d'){const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,'schematic',scene);}
+    if(syncCloud&&(kind==='schematic3d'||kind==='concept-render')){const {writeCloud3DState}=await import('./cloud3DState.mjs');await writeCloud3DState(id,kind==='concept-render'?'render':'schematic',scene);}
     return scene;
   });
   writes.set(id, task);

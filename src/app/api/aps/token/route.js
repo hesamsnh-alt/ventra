@@ -1,4 +1,4 @@
-import {account} from "@/lib/serverBilling";
+import {apsModelAccess} from "@/lib/serverApsAccess";
 import {commercialError} from "@/lib/serverCommercial";
 import { NextResponse } from "next/server";
 import { getApsViewerToken } from "@/services/apsService";
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request) {
   try {
-    await account(request);
-    const token = await getApsViewerToken();
+    const model = await apsModelAccess(request,new URL(request.url).searchParams.get('urn'));
+    const token = await getApsViewerToken(model.resource);
 
     return NextResponse.json(
       {

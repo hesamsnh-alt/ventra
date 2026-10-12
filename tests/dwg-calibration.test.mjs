@@ -23,3 +23,16 @@ test('calibration alone, unrelated lines or wrong source do not reconstruct',()=
  assert.equal(dwgReconstructionReadiness({aps_urn:'other',geometry:{meterFactor:1,wallLineSegments:walls}},'u').ready,false);
  assert.equal(dwgReconstructionReadiness({aps_urn:'u',geometry:{meterFactor:1,lineSegments:walls},object_details:{walls:[{dbId:1}]}},'u').ready,true);
 });
+test('nested full engineering geometry supplies walls and factor when top-level is a placeholder',()=>{
+ const complete={aps_urn:'u',geometry:{meterFactor:.001,wallLineSegments:walls}};
+ const wrapped={aps_urn:'u',geometry:{},advanced_takeoff:complete};
+ assert.equal(resolveDwgCalibration(wrapped).geometry,complete.geometry);
+ assert.equal(dwgReconstructionReadiness(wrapped,'u').ready,true);
+ assert.equal(dwgReconstructionReadiness({raw_result:complete},'u').ready,true);
+ assert.equal(dwgReconstructionReadiness({aps_urn:'u',raw_result:{aps_urn:'u',meter_factor:.001,geometry:{wallLineSegments:walls}}},'u').ready,true);
+});
+test('nested geometry and factors for a different DWG are rejected',()=>{
+ const other={aps_urn:'other',meter_factor:.001,geometry:{meterFactor:.001,wallLineSegments:walls}};
+ assert.equal(dwgReconstructionReadiness({aps_urn:'u',geometry:{},advanced_takeoff:other},'u').ready,false);
+ assert.equal(dwgReconstructionReadiness({aps_urn:'u',geometry:{},raw_result:other},'u').ready,false);
+});

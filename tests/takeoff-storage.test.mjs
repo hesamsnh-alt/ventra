@@ -7,3 +7,11 @@ test('JPG latest pointer does not overwrite CAD; reads restore full latest data 
 test('quota failure on summary does not lose committed full drawing and does not clear other projects',async()=>{const h=harness(10);h.m.set('unrelated','keep');await persistTakeoff('quota',large,h);assert.equal(h.m.get('unrelated'),'keep');assert.deepEqual(await readPersistedTakeoff('quota','latest',h),large);});
 test('failed IndexedDB save leaves legacy data intact and never reports committed success',async()=>{const h=harness();const key='ventra:project-takeoff:failed';h.m.set(key,'{"floor_area":42}');await assert.rejects(persistTakeoff('failed',large,{...h,records:{...h.records,put:async()=>{throw new Error('disk full');}}}),/disk full/);assert.equal(h.m.get(key),'{"floor_area":42}');});
 test('legacy migration commits before shrinking local data and keeps all geometry',async()=>{const h=harness();h.m.set('ventra:project-takeoff:legacy',JSON.stringify({...large,geometry:{meterFactor:.001,wallLineSegments:large.geometry.wallLineSegments.slice(0,10)}}));const expected=JSON.parse(h.m.get('ventra:project-takeoff:legacy'));assert.deepEqual(await readPersistedTakeoff('legacy','latest',h),expected);assert.ok(JSON.parse(h.m.get('ventra:project-takeoff:legacy')).__ventraTakeoffRecord);await clearPersistedTakeoff('legacy',h);assert.equal(h.db.size,0);assert.equal(h.m.size,0);});
+test('newer legacy translation summary does not overwrite the same DWG full IndexedDB geometry',async()=>{
+ const h=harness(),id='protect-extraction',full={...large,geometry:{meterFactor:.001,wallLineSegments:large.geometry.wallLineSegments.slice(0,4)}};
+ await persistTakeoff(id,full,h);
+ const placeholder={aps_urn:'cad',source:'autodesk-aps',extraction_status:'translation-complete',analyzed_at:'2026-10-11'};
+ h.m.set(`ventra:project-takeoff:${id}`,JSON.stringify(placeholder));
+ assert.deepEqual(await readPersistedTakeoff(id,'latest',h),full);
+ assert.deepEqual(h.db.get(`${id}:engineering`),full);
+});

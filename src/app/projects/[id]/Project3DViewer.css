@@ -335,3 +335,25 @@
   .ventra-model-canvas { min-width: 0; width: 100%; height: 65svh; min-height: 360px; }
   .ventra-camera-dock button { min-height: 44px; }
 }
+/* Keep DWG recovery actions visible as controls on desktop and touch screens. */
+.ventra-dwg-floor-panel button,
+.ventra-dwg-floor-panel a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  margin: 8px 8px 0 0;
+  border: 1px solid #53677c;
+  border-radius: 10px;
+  background: #172335;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ventra-dwg-floor-panel button:disabled { opacity: .55; cursor: wait; }
+.ventra-dwg-floor-panel button:focus-visible,
+.ventra-dwg-floor-panel a:focus-visible { outline: 2px solid #ffdc35; outline-offset: 3px; }
+
+.ventra-dwg-floor-buttons {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.ventra-dwg-floor-buttons button {min-height:44px;padding:8px 16px;border:1px solid #475569;border-radius:10px;background:#111827;color:#fff;}
+.ventra-dwg-floor-buttons button[aria-pressed="true"] {background:#facc15;color:#111827;border-color:#facc15;}

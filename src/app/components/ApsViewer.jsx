@@ -1,4 +1,5 @@
 "use client";
+import {selectApsGeometry,isPlanCadUrn} from "@/lib/apsViewables.mjs";
 import {commercialFetch} from "@/lib/commercialFetch";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
@@ -226,6 +227,7 @@ async function requestViewerToken(url, { signal } = {}) {
 }
 
 function createViewerTokenProvider({
+  urn,
   isCancelled,
   signal,
   onTokenError,
@@ -237,7 +239,7 @@ function createViewerTokenProvider({
 
     try {
       const payload = await requestViewerToken(
-        "/api/aps/token",
+        `/api/aps/token?urn=${encodeURIComponent(urn)}`,
         { signal }
       );
 
@@ -319,11 +321,11 @@ function loadDocument(viewer, urn, isCancelled) {
             );
           }
 
-          const geometryNode = root.getDefaultGeometry();
+          const geometryNode = selectApsGeometry(root,{prefer2D:isPlanCadUrn(urn)});
 
           if (!geometryNode) {
             throw new Error(
-              "The Autodesk model does not contain viewable geometry."
+              "APS returned no loadable 2D/3D view. Translation success alone is not extracted geometry. Reopen Drawings; check the DWG Model/layout content and Autodesk translation diagnostics."
             );
           }
 
@@ -2046,6 +2048,7 @@ export default function ApsViewer({
 
         const getAccessToken =
           createViewerTokenProvider({
+            urn,
             isCancelled: () => cancelled,
             signal:
               tokenAbortController.signal,

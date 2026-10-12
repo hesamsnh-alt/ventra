@@ -286,4 +286,17 @@
   .daily-report-full-field {
     grid-column: auto;
   }
-}
+}.daily-report-form fieldset { border:0;padding:0;min-width:0; }
+.daily-report-form select { width:100%;padding:12px;color:#fff;background:#0d0d0d;border:1px solid #333;border-radius:10px;font:inherit; }
+.daily-report-form hr { border:0;border-top:1px solid #333;margin:24px 0; }
+.daily-report-form-actions { flex-wrap:wrap; }
+.daily-report-form-actions button,.daily-evidence-photos button,.daily-report-form button { min-height:44px;padding:10px 14px;background:#ffd400;color:#111;border:1px solid #333;border-radius:10px;cursor:pointer; }
+.daily-report-form button:disabled,.daily-reports-panel button:disabled { opacity:.5;cursor:default; }
+.daily-evidence-check { flex-direction:row!important;align-items:flex-start;margin:16px 0; }
+.daily-evidence-check input { width:20px!important;min-width:20px;height:20px; }
+.daily-evidence-photos { display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px; }
+.daily-evidence-photos figure { margin:0;min-width:0; }
+.daily-evidence-photos img { width:100%;height:160px;object-fit:contain; }
+.daily-evidence-photos figcaption { overflow-wrap:anywhere; }
+.daily-evidence-result { margin:18px 0;padding:16px;border:1px solid #555;border-radius:12px; }
+.daily-report-card p,.daily-evidence-result li { white-space:pre-wrap;overflow-wrap:anywhere; }

@@ -2,27 +2,41 @@
 import {useEffect,useRef,useState} from 'react';
 import {useLanguage} from '@/app/components/i18n/LanguageProvider';
 import {FURNITURE_CATALOG,applyFurnitureEdit,previewFurnitureEdit,furnitureRotationFromDrag,furnitureSizeFromDrag} from '@/lib/furnitureEditor.mjs';
+import {OPENING_CATALOG,applyOpeningEdit,previewOpeningEdit} from '@/lib/manualOpenings.mjs';
 import styles from './FurnitureEditorPanel.module.css';
 import ToolDrawer from './ToolDrawer';
 const words={en:{title:'Furniture studio',note:'Lightweight models · walls, doors and building materials locked · no BOQ changes',camera:'Camera',add:'Place selected model',select:'Select / drag furniture',top:'Top view',help:'Choose a model, then tap the floor. Desktop: drag a model onto the floor. Green = valid; red = blocked. Switch to Camera to orbit.',choose:'Furniture in scene',rotate:'Rotate 15°',color:'Apply color',replace:'Replace with selected model',remove:'Delete',undo:'Undo',saved:'Furniture saved.',busy:'Saving…'},fa:{title:'پنل مبلمان',note:'مدل‌های سبک · دیوار، در و مصالح ساختمان قفل‌اند · بدون تغییر BOQ',camera:'دوربین',add:'جای‌گذاری مدل انتخاب‌شده',select:'انتخاب / کشیدن مبلمان',top:'نمای بالا',help:'مدل را انتخاب کن و روی کف بزن. روی کامپیوتر می‌توانی مدل را روی کف بکشی. سبز: مجاز؛ قرمز: مسدود. برای چرخش به حالت دوربین برو.',choose:'مبلمان داخل مدل',rotate:'چرخش ۱۵ درجه',color:'اعمال رنگ',replace:'تعویض با مدل انتخاب‌شده',remove:'حذف',undo:'برگشت',saved:'مبلمان ذخیره شد.',busy:'در حال ذخیره…'},ar:{title:'لوحة الأثاث',note:'نماذج خفيفة · الجدران والأبواب ومواد المبنى مقفلة · دون تغيير BOQ',camera:'الكاميرا',add:'وضع النموذج المختار',select:'اختيار / سحب الأثاث',top:'منظر علوي',help:'اختر نموذجاً ثم المس الأرضية. على الحاسوب اسحب النموذج إلى الأرضية. الأخضر مسموح والأحمر محظور. اختر الكاميرا للدوران.',choose:'أثاث المشهد',rotate:'دوران ١٥°',color:'تطبيق اللون',replace:'استبدال بالنموذج المختار',remove:'حذف',undo:'تراجع',saved:'تم حفظ الأثاث.',busy:'جارٍ الحفظ…'}};
-export default function FurnitureEditorPanel({scene,getRenderer,onCommit,disabled=false}){
+export default function FurnitureEditorPanel({scene,getRenderer,onCommit,onCommitOpenings,disabled=false}){
  const {language}=useLanguage(),lang=words[language]?language:'en',t=words[lang];
  const [open,setOpen]=useState(false),[mode,setMode]=useState('camera'),[catalogId,setCatalogId]=useState('sofa-modern'),[selected,setSelected]=useState(''),[color,setColor]=useState('#b4a28f'),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[undoCount,setUndoCount]=useState(0);
- const latest=useRef(null),history=useRef([]),working=useRef(false);
+ const [freePlacement,setFreePlacement]=useState(false),[openingModel,setOpeningModel]=useState('manual-door'),[wallId,setWallId]=useState(''),[openingWidth,setOpeningWidth]=useState(.9),[openingHeight,setOpeningHeight]=useState(2.1),[sill,setSill]=useState(0),[offset,setOffset]=useState(50),[replaceOpenings,setReplaceOpenings]=useState(false),[selectedOpening,setSelectedOpening]=useState(''),[openingUndoCount,setOpeningUndoCount]=useState(0);
+ const latest=useRef(null),history=useRef([]),openingHistory=useRef([]),working=useRef(false);
+ const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
+ const openingConfig={catalogId:openingModel,wallId:wallId||undefined,width:openingWidth,height:openingHeight,sillHeight:sill,offset:offset/100,replaceOverlapping:replaceOpenings};
+ async function saveOpening(edit,undo=false){
+  const state=latest.current;if(working.current||state.disabled||!state.onCommitOpenings)return;
+  working.current=true;setBusy(true);setMessage('');
+  try{
+   const next=applyOpeningEdit(state.scene,undo?{kind:'restore',openings:openingHistory.current.at(-1)}:edit);
+   await state.onCommitOpenings(next,state.scene);
+   if(undo)openingHistory.current.pop();else{openingHistory.current.push(state.scene.openings);if(openingHistory.current.length>20)openingHistory.current.shift();}
+   setOpeningUndoCount(openingHistory.current.length);setMessage(text('Opening saved as a design proposal.','بازشو به عنوان طرح پیشنهادی ذخیره شد.','تم حفظ الفتحة كمقترح تصميم.'));
+  }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
+ }
  const object=scene.assets.find(a=>a.id===selected);
  const label=a=>FURNITURE_CATALOG.find(m=>m.id===a.catalogId||(!a.catalogId&&m.type===a.type))?.[lang]||a.type;
  async function save(edit,undo=false){
   const state=latest.current;if(working.current||state.disabled)return;
   working.current=true;setBusy(true);setMessage('');
   try{
-   const next=undo?history.current.at(-1):applyFurnitureEdit(state.scene,edit);
+   const next=undo?history.current.at(-1):applyFurnitureEdit(state.scene,{...edit,freePlacement:state.freePlacement});
    if(!next)return;
    await state.onCommit(next,state.scene);
    if(undo)history.current.pop();else{history.current.push(state.scene);if(history.current.length>20)history.current.shift();}
    setUndoCount(history.current.length);setMessage(state.t.saved);
   }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
  }
- useEffect(()=>{latest.current={scene,disabled:disabled||busy,mode,catalogId,selected,onCommit,t,save};});
+ useEffect(()=>{latest.current={scene,disabled:disabled||busy,mode,catalogId,selected,onCommit,onCommitOpenings,openingConfig,freePlacement,t,save,saveOpening};});
  useEffect(()=>{
   const renderer=getRenderer();if(!renderer)return;
   if(mode==='camera'||disabled||busy){renderer.setFurnitureTool?.(null);return;}
@@ -34,13 +48,13 @@ export default function FurnitureEditorPanel({scene,getRenderer,onCommit,disable
   };
   renderer.setFurnitureTool?.({
    start:(id,point,event)=>{
-    const s=latest.current;if(s.mode==='add')return {};
+    const s=latest.current;if(['add','opening'].includes(s.mode))return {};
     const a=s.scene.assets.find(a=>a.id===(id||(['rotate','resize'].includes(s.mode)?s.selected:null)));if(!a)return false;
     setSelected(a.id);if(a.color)setColor(a.color);
     return {id:a.id,dx:a.xMeters-point.x,dy:a.yMeters-point.y,rotation:a.rotation||0,startX:event.clientX,dimensions:{width:a.width,depth:a.depth,height:a.height}};
    },
-   preview:(point,data,event)=>{const operation=edit(point,data,event);return operation?previewFurnitureEdit(latest.current.scene,operation):null;},
-   commit:(point,data,moved,event)=>{const s=latest.current;if(s.disabled)return;if(['select','rotate','resize'].includes(s.mode)&&!moved)return;const operation=edit(point,data,event);if(operation)return s.save(operation);}
+   preview:(point,data,event)=>{const state=latest.current;const operation=edit(point,data,event);const result=state.mode==='opening'?previewOpeningEdit(state.scene,{...state.openingConfig,point}):operation?previewFurnitureEdit(state.scene,{...operation,freePlacement:state.freePlacement}):null;if(result?.error)setMessage(result.error);else setMessage('');return result;},
+   commit:(point,data,moved,event)=>{const s=latest.current;if(s.disabled)return;if(s.mode==='opening')return s.saveOpening({kind:'add',...s.openingConfig,point});if(['select','rotate','resize'].includes(s.mode)&&!moved)return;const operation=edit(point,data,event);if(operation)return s.save(operation);}
   });
   return()=>renderer.setFurnitureTool?.(null);
  },[getRenderer,open,mode,disabled,busy]);
@@ -52,9 +66,9 @@ export default function FurnitureEditorPanel({scene,getRenderer,onCommit,disable
    <button type="button" disabled={blocked} aria-pressed={mode==='rotate'} onClick={()=>setMode('rotate')}>{lang==='fa'?'چرخش با ماوس':lang==='ar'?'الدوران بالسحب':'Rotate by dragging'}</button>
    <button type="button" disabled={blocked} aria-pressed={mode==='resize'} onClick={()=>setMode('resize')}>{lang==='fa'?'تغییر اندازه با ماوس':lang==='ar'?'تغيير الحجم بالسحب':'Resize by dragging'}</button>
   </div>
-  {mode!=='camera'&&<p role="status">{lang==='fa'?'روی وسیله کلیک کن و بکش؛ رها کردن برای ذخیره.':lang==='ar'?'اضغط على الأثاث واسحب؛ أفلت للحفظ.':'Click furniture and drag; release to save.'}</p>}
+  {mode!=='camera'&&<p role="status">{mode==='opening'?text('Click near the target wall.','نزدیک دیوار هدف کلیک کن.','اضغط قرب الجدار المستهدف.'):lang==='fa'?'روی وسیله کلیک کن و بکش؛ رها کردن برای ذخیره.':lang==='ar'?'اضغط على الأثاث واسحب؛ أفلت للحفظ.':'Click furniture and drag; release to save.'}</p>}
   <button type="button" aria-expanded={open} onClick={()=>{setOpen(!open);setMode('camera');}}>{t.title} {open?'−':'+'}</button>
-  {open&&<><p>{t.note}</p><div className={styles.tools}>
+  {open&&<><p>{text('Furniture does not change walls or BOQ. Doors and windows have a separate manual design tool below.','مبلمان، دیوار و BOQ را تغییر نمی‌دهد. ابزار افزودن دستی در و پنجره پایین همین پنل است.','الأثاث لا يغير الجدران أو BOQ. أداة الأبواب والنوافذ اليدوية أدناه.')}</p>{scene.source==='dwg-engineering-interior'&&<label><input type="checkbox" disabled={blocked} checked={freePlacement} onChange={e=>setFreePlacement(e.target.checked)}/>{text('Ignore uncertain DWG wall lines for manual furniture','نادیده گرفتن خطوط دیوار نامطمئن برای چیدمان دستی','تجاهل خطوط جدران DWG غير المؤكدة للأثاث اليدوي')}</label>}{freePlacement&&<p role="status">{text('Wall and doorway clearance is unverified in this mode. Check the placement against your plan.','در این حالت فاصله از دیوار و مسیر در تأیید نمی‌شود؛ جای وسیله را با نقشه کنترل کن.','في هذا الوضع لا يتم التحقق من الجدران ومسار الأبواب؛ راجع موضع الأثاث مع المخطط.')}</p>}<div className={styles.tools}>
    <button type="button" disabled={blocked} aria-pressed={mode==='add'} onClick={()=>setMode('add')}>{t.add}</button>
    <button type="button" disabled={blocked} onClick={()=>getRenderer()?.setNamedView?.('top')}>{t.top}</button>
    <button type="button" disabled={blocked||!undoCount} onClick={()=>save(null,true)}>{t.undo}</button>
@@ -71,6 +85,21 @@ export default function FurnitureEditorPanel({scene,getRenderer,onCommit,disable
    <button type="button" disabled={blocked||!object||FURNITURE_CATALOG.find(m=>m.id===catalogId)?.type!==object.type} onClick={()=>save({kind:'replace',assetId:selected,catalogId})}>{t.replace}</button>
    <button type="button" disabled={blocked||!object} onClick={()=>save({kind:'remove',assetId:selected})}>{t.remove}</button>
   </div></ToolDrawer></>}
+  {open&&onCommitOpenings&&<ToolDrawer title={text('Doors & windows','در و پنجره','الأبواب والنوافذ')}><div className={styles.tools}>
+   <p>{text('Click near a wall to cut a real opening. Or choose a wall number and position below. These are proposed edits, excluded from BOQ.','برای ساخت بازشوی واقعی نزدیک دیوار کلیک کن، یا شماره دیوار و موقعیت را مشخص کن. این تغییر پیشنهادی وارد BOQ نمی‌شود.','اضغط قرب الجدار لإنشاء فتحة، أو اختر رقم الجدار وموقعها. تعديلات مقترحة لا تدخل BOQ.')}</p>
+   <label>{text('Model','مدل','النموذج')}<select disabled={blocked} value={openingModel} onChange={e=>{const m=OPENING_CATALOG.find(m=>m.id===e.target.value);setOpeningModel(m.id);setOpeningWidth(m.width);setOpeningHeight(m.height);setSill(m.sillHeight);setMode('opening');}}>{OPENING_CATALOG.map(m=><option key={m.id} value={m.id}>{m[lang]}</option>)}</select></label>
+   <label>{text('Target wall','دیوار هدف','الجدار المستهدف')}<select disabled={blocked} value={wallId} onChange={e=>setWallId(e.target.value)}><option value="">{text('Nearest wall on click','نزدیک‌ترین دیوار به کلیک','أقرب جدار للنقرة')}</option>{scene.walls.filter(w=>w.type!=='railing').map((w,i)=><option key={w.id} value={w.id}>{i+1} · {w.start.x.toFixed(1)},{w.start.y.toFixed(1)} → {w.end.x.toFixed(1)},{w.end.y.toFixed(1)} m</option>)}</select></label>
+   <label>{text('Width (m)','عرض (متر)','العرض (متر)')}<input type="number" min=".3" max="4" step=".05" value={openingWidth} disabled={blocked} onChange={e=>setOpeningWidth(Number(e.target.value))}/></label>
+   <label>{text('Height (m)','ارتفاع (متر)','الارتفاع (متر)')}<input type="number" min=".3" max="3.15" step=".05" value={openingHeight} disabled={blocked} onChange={e=>setOpeningHeight(Number(e.target.value))}/></label>
+   {OPENING_CATALOG.find(m=>m.id===openingModel)?.type==='window'&&<label>{text('Sill height (m)','ارتفاع زیر پنجره (متر)','ارتفاع عتبة النافذة (متر)')}<input type="number" min="0" max="3" step=".05" value={sill} disabled={blocked} onChange={e=>setSill(Number(e.target.value))}/></label>}
+   <label>{text('Position along chosen wall (%)','موقعیت روی دیوار انتخاب‌شده (%)','الموقع على الجدار المختار (%)')}<input type="number" min="0" max="100" step="1" disabled={blocked} value={offset} onChange={e=>setOffset(Number(e.target.value))}/></label>
+   <label><input type="checkbox" disabled={blocked} checked={replaceOpenings} onChange={e=>setReplaceOpenings(e.target.checked)}/>{text('Replace overlapping openings in this preview','جایگزینی بازشوهای متداخل در این پیش‌نمایش','استبدال الفتحات المتداخلة في المعاينة')}</label>
+   <button type="button" disabled={blocked} aria-pressed={mode==='opening'} onClick={()=>{setMode('opening');getRenderer()?.setNamedView?.('top');}}>{text('Place opening with mouse / touch','گذاشتن بازشو با ماوس / لمس','وضع فتحة بالماوس / اللمس')}</button>
+   <button type="button" disabled={blocked||!wallId} onClick={()=>saveOpening({kind:'add',...openingConfig})}>{text('Add to chosen wall','افزودن روی دیوار انتخاب‌شده','إضافة إلى الجدار المختار')}</button>
+   <label>{text('Existing opening','بازشوی موجود','الفتحة الحالية')}<select disabled={blocked} value={selectedOpening} onChange={e=>setSelectedOpening(e.target.value)}><option value="">—</option>{scene.openings.filter(o=>!o.cutOnly).map((o,i)=><option key={o.id} value={o.id}>{i+1} · {o.type} · {o.width?.toFixed(2)} m</option>)}</select></label>
+   <button type="button" disabled={blocked||!selectedOpening} onClick={()=>saveOpening({kind:'remove',openingId:selectedOpening})}>{text('Remove selected opening','حذف بازشوی انتخاب‌شده','حذف الفتحة المختارة')}</button>
+   <button type="button" disabled={blocked||!openingUndoCount} onClick={()=>saveOpening(null,true)}>{text('Undo opening edit','برگشت تغییر بازشو','التراجع عن تعديل الفتحة')}</button>
+  </div></ToolDrawer>}
   {(busy||message)&&<p role="status">{busy?t.busy:message}</p>}
  </section>;
 }

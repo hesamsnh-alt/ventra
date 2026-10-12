@@ -39,6 +39,7 @@ test('Actual render panel displays Persian, Arabic and English controls without 
   if(id==='@/app/components/i18n/LanguageProvider')return language;
   if(id==='@/lib/commercialFetch')return{commercialFetch:()=>{calls++;throw new Error('Unexpected paid call');}};
   if(id==='@/lib/schematicStorage.mjs')return{readSchematic:async()=>null,saveSchematic:async()=>{}};
+  if(id==='@/lib/cloud3DState.mjs')return{restoreCloud3DState:async()=>({})};
   if(id==='@/lib/brandWatermark.mjs')return{downloadBrandedImage:()=>{throw new Error('Unexpected export during render');}};
   if(id.endsWith('.module.css'))return{};return require(id);
  }};vm.createContext(sandbox);vm.runInContext(code.code,sandbox);

@@ -43,6 +43,12 @@ export async function commercialRun(request,action,handler){
   if(done.has(key))return done.get(key).response.clone();
   if(running.has(key))return (await running.get(key)).clone();
   const task=(async()=>{
+   let reserved=false;
+   async function release(){
+    if(!reserved)return;
+    reserved=false;
+    try{const {error}=await context.db.rpc('ventra_release_analysis',{p_owner:context.owner,p_actor:user.id,p_project:body.projectId,p_action:action,p_request:suppliedId,p_hash:digest});if(error)throw error;}catch{console.error('[VENTRA USAGE RELEASE] Failed to release unsuccessful analysis; operator reconciliation required.',{projectId:body.projectId,action,requestId:suppliedId});}
+   }
    if(action!=='boq'){
     if(!process.env.OPENAI_API_KEY)throw fail('AI analysis is not configured. Contact support.');
     if(!isOperator(context.owner,process.env)){
@@ -51,13 +57,18 @@ export async function commercialRun(request,action,handler){
     if(!data?.accepted)throw fail(data?.duplicate?'This analysis was already submitted. Check the project result before retrying.':'Monthly analysis allowance reached. Open Billing.',data?.duplicate?409:429,data?.duplicate?'ANALYSIS_ALREADY_SUBMITTED':'ANALYSIS_LIMIT_REACHED');
     }
    }
+   reserved=action!=='boq'&&!isOperator(context.owner,process.env);
+   try{
    // Include user scope in legacy route-local cache identifiers.
    body.requestId=key;
    const headers=new Headers(request.headers);headers.set('x-ventra-request-id',key);headers.delete('content-length');
    const scoped=new Request(request.url,{method:'POST',headers,body:JSON.stringify(body),signal:request.signal});
-   const response=await handler(scoped);
+   let response;
+   response=await handler(scoped);
+   if(!response.ok)await release();
    if(response.ok){if(done.size>=50)done.delete(done.keys().next().value);done.set(key,{response:response.clone(),until:Date.now()+300000});}
    return response;
+   }catch(error){await release();throw error;}
   })();
   running.set(key,task);try{return await task;}finally{if(running.get(key)===task)running.delete(key);}
  }catch(error){return commercialError(error);}

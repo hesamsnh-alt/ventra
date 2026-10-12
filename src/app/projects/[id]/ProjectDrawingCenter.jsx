@@ -1,5 +1,8 @@
 "use client";
+import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
+import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {saveSchematic,saveActiveSource,selectSchematicDrawing,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
+import {collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
 import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
@@ -1529,6 +1532,7 @@ async function waitForApsTranslation(
   const timeout = 10 * 60 * 1000;
   const interval = 5000;
   const startedAt = Date.now();
+  let emptySuccess=0;
 
   while (Date.now() - startedAt < timeout) {
     const manifest =
@@ -1544,7 +1548,10 @@ async function waitForApsTranslation(
     onProgress?.(progress);
 
     if (status === "success") {
-      return manifest;
+      const check=apsManifestGeometry(manifest);
+      if(check.views.length)return manifest;
+      emptySuccess++;
+      if(emptySuccess>=3)throw new Error(`Autodesk finished without a viewable 2D/3D drawing. ${check.messages.join(' ')||'Check that the DWG contains a populated Model/layout; translation success is not geometry extraction.'}`);
     }
 
     if (
@@ -2704,6 +2711,11 @@ async function handleApsGeometryExtracted(analysis) {
     ...geometry
   } = analysis;
 
+  const extractionSource=takeoffResultRef.current;
+  if(!extractionSource||extractionSource.source!=="autodesk-aps"||extractionSource.aps_urn!==apsUrn||selectedDocumentId&&extractionSource.document_id!==selectedDocumentId){
+    console.warn("[VENTRA APS] ignored stale geometry before AI analysis");return;
+  }
+
   // v16: The property-level APS centroid is unreliable for this 2D DWG
   // (47 electrical blocks were all reporting the same point). The geometry
   // extractor already builds a per-dbId centroid from transformed line/arc
@@ -2715,6 +2727,8 @@ async function handleApsGeometryExtracted(analysis) {
       "object"
       ? geometry.objectGeometryCentroids
       : {};
+
+  geometry.roomLabelEvidence=collectInteriorRoomLabels([...objects,...collectDrawingText(objects).records],geometryCentroidsByDbId,viewerRoomLabels);
 
   const attachDbIdGeometryCentroid =
     (items) =>
@@ -2882,6 +2896,16 @@ async function handleApsGeometryExtracted(analysis) {
         spatialProperties,
       layers,
     });
+
+  // Publish verified geometry independently; optional AI room/schedule reads must not block 3D.
+  const preview={...extractionSource,geometry,object_details:generatedTakeoff.object_details,model_unit:generatedTakeoff.model_unit,meter_factor:generatedTakeoff.meter_factor,geometry_status:"ready-for-3d",extraction_status:"geometry-ready-analysis-pending",analyzed_at:new Date().toISOString()};
+  if(dwgReconstructionReadiness(preview,apsUrn).ready){
+    try{
+      await persistTakeoff(projectId,preview,{kind:"engineering"});
+      if(takeoffResultRef.current?.aps_urn!==apsUrn)return;
+      window.dispatchEvent(new CustomEvent('ventra:engineering-takeoff-updated',{detail:{projectId,urn:apsUrn}}));
+    }catch(error){console.warn("[VENTRA APS] early geometry save failed",error.message);}
+  }
 
   generatedTakeoff.drawing_evidence = collectDrawingText(spatialProperties);
 

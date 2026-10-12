@@ -81,7 +81,7 @@ test('actual furniture panel renders localized controls without executing saves'
  const {transform,loadBindings}=require('next/dist/build/swc');await loadBindings();
  const compiled=await transform(readFileSync('src/app/projects/[id]/FurnitureEditorPanel.jsx','utf8'),{filename:'FurnitureEditorPanel.jsx',jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'commonjs'}});
  const drawer=await loadComponent('src/app/projects/[id]/ToolDrawer.jsx');
- const editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='./ToolDrawer'?drawer:id.endsWith('.module.css')?{}:require(id)};
+ const openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='./ToolDrawer'?drawer:id.endsWith('.module.css')?{}:require(id)};
  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
  for(const [locale,title] of [['en','Furniture studio'],['fa','پنل مبلمان'],['ar','لوحة الأثاث']])assert.ok(renderToStaticMarkup(React.createElement(language.default,{initialLanguage:locale},React.createElement(sandbox.exports.default,{scene:scene(),getRenderer:()=>null,onCommit:()=>{throw new Error('Unexpected save');}}))).includes(title));
 });

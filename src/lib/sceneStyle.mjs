@@ -1,3 +1,4 @@
+import {resolveDwgCalibration} from './dwgCalibration.mjs';
 import {persistTakeoff} from './takeoffStorage.mjs';
 export function applySceneStyle(scene,preset) {
  const next=structuredClone(scene);
@@ -18,4 +19,24 @@ export function rememberEngineeringTakeoff(storage,projectId,takeoff){
  if(!takeoff||!engineeringUrn(takeoff))return;
  return persistTakeoff(projectId,takeoff,{kind:'engineering',storage});
 }
-export function chooseEngineeringTakeoff(current,saved){return engineeringUrn(current)?current:engineeringUrn(saved)?saved:current;}
+export function chooseEngineeringTakeoff(current,saved,expectedUrn=''){
+ const currentUrn=engineeringUrn(current),savedUrn=engineeringUrn(saved);
+ if(expectedUrn){
+  if(currentUrn!==expectedUrn)current=null;
+  if(savedUrn!==expectedUrn)saved=null;
+ }
+ if(!engineeringUrn(current))return engineeringUrn(saved)?saved:current;
+ if(!engineeringUrn(saved)||engineeringUrn(current)!==engineeringUrn(saved))return current;
+ // A translation placeholder or localStorage summary must not mask full CAD evidence.
+ const quality=t=>{
+  const {geometry:g,meterFactor}=resolveDwgCalibration(t);
+  const walls=Array.isArray(g.wallLineSegments)?g.wallLineSegments:[];
+  const ids=new Set((t.object_details?.walls||t.advanced_takeoff?.object_details?.walls||[]).map(w=>String(w.dbId)));
+  const usable=walls.length||(Array.isArray(g.lineSegments)?g.lineSegments:[]).filter(l=>ids.has(String(l.dbId))).length;
+  return (usable?2:0)+(usable&&Number.isFinite(meterFactor)&&meterFactor>0?4:0)+(t.__geometryStoredInIndexedDB?0:1);
+ };
+ const cq=quality(current),sq=quality(saved);
+ if(sq!==cq)return sq>cq?saved:current;
+ const stamp=t=>Math.max(0,...[t.analyzed_at,t.updated_at,t.created_at].map(v=>{const n=Date.parse(v);return Number.isFinite(n)?n:0;}));
+ return stamp(saved)>stamp(current)?saved:current;
+}

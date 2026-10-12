@@ -532,6 +532,7 @@ export default function ProjectWorkspacePage() {
 
         {activeTab === "reports" && (
           <ProjectDailyReports
+            key={project.id}
             projectId={project.id}
           />
         )}

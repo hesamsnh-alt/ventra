@@ -1,3 +1,4 @@
+import {resolveDwgCalibration} from './dwgCalibration.mjs';
 // Full geometry lives in IndexedDB; localStorage carries a small compatibility
 // summary. Engineering and latest pointers share one stored CAD record.
 const cache=new Map();const writes=new Map();let opening;
@@ -59,7 +60,11 @@ export async function readPersistedTakeoff(id,kind='latest',{storage=local(),rec
  const recordKey=pointer?.recordKey||legacy?.__ventraTakeoffRecord||`${id}:${kind==='engineering'?'engineering':'raster'}`;
  const stored=await records.get(recordKey);
  const stamp=t=>Math.max(0,...[t?.analyzed_at,t?.updated_at,t?.created_at].map(v=>{const n=new Date(v||0).getTime();return Number.isFinite(n)?n:0;}));
- if(legacy&&!legacy.__ventraTakeoffRecord&&(!stored||stamp(legacy)>stamp(stored))){await persistTakeoff(id,legacy,{kind,storage,records});return legacy;}
+ const urn=t=>t?.aps_urn||t?.apsUrn||t?.urn||t?.advanced_takeoff?.aps_urn||t?.raw_result?.aps_urn||'';
+ const hasWalls=t=>{const {geometry:g}=resolveDwgCalibration(t);return !!(g.wallLineSegments?.length||g.lineSegments?.length);};
+ // Preserve extracted source data when an older client writes a newer translation-only placeholder.
+ const preserveStored=stored&&legacy&&isEngineering(stored)&&isEngineering(legacy)&&urn(stored)===urn(legacy)&&hasWalls(stored)&&!hasWalls(legacy);
+ if(legacy&&!legacy.__ventraTakeoffRecord&&!preserveStored&&(!stored||stamp(legacy)>stamp(stored))){await persistTakeoff(id,legacy,{kind,storage,records});return legacy;}
  if(stored){cache.set(recordKey,stored);cache.set(`${id}:${kind}`,stored);return stored;}
  if(kind==='latest'){const engineering=await records.get(`${id}:engineering`);if(engineering){cache.set(`${id}:latest`,engineering);return engineering;}}
  return legacy;

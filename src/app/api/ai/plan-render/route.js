@@ -1,3 +1,4 @@
+import {renderFailure} from '@/lib/renderFailure.mjs';
 import {commercialRun} from '@/lib/serverCommercial';
 import {getOpenAIClient} from '@/services/openaiClient';
 import {toFile} from 'openai';
@@ -24,10 +25,9 @@ async function render(request) {
    return Response.json(payload);
   } finally {clearTimeout(timer);request.signal.removeEventListener('abort',abort);}
  } catch(error) {
-  if(['RENDER_PLAN_UNCLEAR','RENDER_LAYOUT_MISMATCH','RENDER_REVIEW_FAILED'].includes(error.code))return Response.json({success:false,error:error.message,code:error.code},{status:422});
-  const status=['AbortError','APIUserAbortError','APIConnectionTimeoutError'].includes(error.name)?504:Number(error.status)||502;
-  const message=status===504?'Render timed out. Check usage before trying again.':status===400?error.message:status===403?'Image generation is unavailable for this API account. Check model access.':status===429?'Image generation limit reached. Try later.':'Could not generate the render. Check API model access and usage.';
-  return Response.json({success:false,error:message},{status});
+  const failure=renderFailure(error);
+  console.warn('[VENTRA RENDER FAILED]',{code:failure.body.code,stage:failure.body.stage,status:failure.status});
+  return Response.json(failure.body,{status:failure.status,headers:failure.body.retryAfterSeconds?{'Retry-After':String(failure.body.retryAfterSeconds)}:{}});
  }
 }
 // Existing authenticated project access and analysis quota; no new schema.

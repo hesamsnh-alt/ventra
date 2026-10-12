@@ -1,3 +1,4 @@
+import {apsModelAccess} from "@/lib/serverApsAccess";
 import {commercialRun} from '@/lib/serverCommercial';
 import { NextResponse } from "next/server";
 import { getOpenAIClient } from "@/services/openaiClient";
@@ -5024,6 +5025,7 @@ async function handleRoomLabels(
 
     const urn =
       body?.urn || null;
+    if(urn)await apsModelAccess(request,urn,body.projectId);
     const image =
       body?.image || null;
     const geometryWindowCount =

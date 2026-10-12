@@ -1,4 +1,5 @@
-import {account} from "@/lib/serverBilling";
+import {apsModelAccess} from "@/lib/serverApsAccess";
+import {getApsAccessToken} from "@/services/apsService";
 import {commercialError} from "@/lib/serverCommercial";
 import { NextResponse } from "next/server";
 
@@ -37,58 +38,11 @@ async function readJsonSafely(response) {
   }
 }
 
-async function getApsAccessToken(request) {
-  const tokenUrl =
-    new URL(
-      "/api/aps/token",
-      request.url
-    );
-
-  const response =
-    await fetch(
-      tokenUrl,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-          Authorization: request.headers.get("authorization") || "",
-        },
-        cache: "no-store",
-      }
-    );
-
-  const payload =
-    await readJsonSafely(
-      response
-    );
-
-  const accessToken =
-    payload?.access_token ||
-    payload?.accessToken ||
-    payload?.token ||
-    null;
-
-  if (
-    !response.ok ||
-    !accessToken
-  ) {
-    const message =
-      payload?.error ||
-      payload?.message ||
-      `APS token request failed. HTTP ${response.status}`;
-
-    throw new Error(message);
-  }
-
-  return accessToken;
-}
-
 export async function GET(
   request,
   context
 ) {
   try {
-    await account(request);
     const params =
       await context.params;
 
@@ -123,10 +77,8 @@ export async function GET(
       );
     }
 
-    const accessToken =
-      await getApsAccessToken(
-        request
-      );
+    const model=await apsModelAccess(request,urn);
+    const {accessToken}=await getApsAccessToken([`data:read:${model.resource}`]);
 
     const manifestUrl =
       `https://developer.api.autodesk.com/modelderivative/v2/designdata/${encodeURIComponent(

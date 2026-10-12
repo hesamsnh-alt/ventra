@@ -1,6 +1,10 @@
 "use client";
+import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
+import DwgFloorPanel from "./DwgFloorPanel";
 import ToolDrawer from "./ToolDrawer";
+import CloudSyncPanel from "./CloudSyncPanel";
+import {assertOpeningOnlyEdit} from '@/lib/manualOpenings.mjs';
 import FurnitureEditorPanel from "./FurnitureEditorPanel";
 import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
 import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
@@ -15,9 +19,13 @@ import {readTakeoffSync,readPersistedTakeoff,persistTakeoff} from "@/lib/takeoff
 import {resolveDwgCalibration,dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {bindProjectCameraInputs} from '@/lib/projectCameraInputs.mjs';
 import {applySceneStyle,engineeringUrn,rememberEngineeringTakeoff,chooseEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
+import {reconcileEngineering,restoreEngineeringSnapshot} from '@/lib/engineeringRestore.mjs';
 import {orbitOffset, cameraFitDistance, namedCameraOffset} from "@/lib/orbitCamera.mjs";
 import {commercialFetch,commercialHeaders} from '@/lib/commercialFetch';
 import { sourcePresentationAssets, restoreWallContactFurniture } from "@/lib/sourceFurniture.mjs";
+import {isInteriorSource,dwgInteriorMatches,savedDwgInterior,upgradeDwgInterior,dwgInteriorScene,rebuildDwgInterior,repairDwgInterior,updateDwgInterior,patchDwgPresentation,dwgInteriorCameraKey,dwgFloorIndices} from "@/lib/dwgInterior.mjs";
+import {recoverInteriorRoomBoundaries,collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
+import {splitDwgRegions,dwgRoomScene} from "@/lib/dwgFloors.mjs";
 import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import {watermarkJpegCapture} from "@/lib/brandWatermark.mjs";
 import { arrangeLivingFurniture } from "@/lib/interiorPresentation.mjs";
@@ -66,11 +74,11 @@ function loadViewerSdk() {
   });
 }
 
-async function requestToken() {
-  let response = await commercialFetch("/api/aps/token", { cache: "no-store" });
+async function requestToken(urn) {
+  let response = await commercialFetch(`/api/aps/token?urn=${encodeURIComponent(urn)}`, { cache: "no-store" });
 
   if (!response.ok) {
-    response = await commercialFetch("/api/aps/viewer-token", { cache: "no-store" });
+    response = await commercialFetch(`/api/aps/viewer-token?urn=${encodeURIComponent(urn)}`, { cache: "no-store" });
   }
 
   const payload = await response.json();
@@ -82,7 +90,7 @@ async function requestToken() {
   return payload;
 }
 
-function initializeViewer() {
+function initializeViewer(urn) {
   return new Promise((resolve, reject) => {
     window.Autodesk.Viewing.Initializer(
       {
@@ -90,7 +98,7 @@ function initializeViewer() {
         api: "streamingV2_EU",
         getAccessToken: async (callback) => {
           try {
-            const token = await requestToken();
+            const token = await requestToken(urn);
             callback(token.access_token, Number(token.expires_in) || 3599);
           } catch (error) {
             console.error("[VENTRA 3D TOKEN]", error);
@@ -127,81 +135,7 @@ function getViewables(documentNode) {
     return [];
   }
 
-  let geometries = [];
-
-  // Viewer SDK versions differ here. Prefer the Viewable Tree search API,
-  // then fall back to recursive traversal. Do not depend on the removed
-  // Autodesk.Viewing.Document.getSubItemsWithProperties helper.
-  try {
-    if (
-      typeof root.search ===
-      "function"
-    ) {
-      geometries =
-        root.search({
-          type: "geometry",
-        }) || [];
-    }
-  } catch (error) {
-    console.warn(
-      "[VENTRA MODEL VIEWER v2] root.search failed",
-      error
-    );
-  }
-
-  if (
-    !Array.isArray(geometries) ||
-    geometries.length === 0
-  ) {
-    const collected = [];
-
-    const visit = (node) => {
-      if (!node) return;
-
-      const type =
-        String(
-          node?.data?.type ||
-          node?.type?.() ||
-          ""
-        ).toLowerCase();
-
-      if (type === "geometry") {
-        collected.push(node);
-      }
-
-      const children =
-        node?.children ||
-        node?.data?.children ||
-        [];
-
-      if (
-        Array.isArray(children)
-      ) {
-        children.forEach(visit);
-      }
-    };
-
-    visit(root);
-    geometries = collected;
-  }
-
-  // Final safe fallback: Autodesk's default geometry must at least be
-  // loadable if the document itself was translated successfully.
-  if (
-    (!Array.isArray(geometries) ||
-      geometries.length === 0) &&
-    typeof root.getDefaultGeometry ===
-      "function"
-  ) {
-    const defaultGeometry =
-      root.getDefaultGeometry();
-
-    if (defaultGeometry) {
-      geometries = [
-        defaultGeometry,
-      ];
-    }
-  }
+  const geometries=apsGeometryNodes(root);
 
   return (
     Array.isArray(geometries)
@@ -1399,177 +1333,7 @@ function splitWallLinesIntoStoreys(
   wallLines,
   meterFactor
 ) {
-  const usable =
-    (wallLines || [])
-      .map((line) => ({
-        line,
-        midpoint:
-          lineMidpointMeters(
-            line,
-            meterFactor
-          ),
-      }))
-      .filter(
-        (item) =>
-          item.midpoint
-      );
-
-  if (usable.length < 20) {
-    return [
-      {
-        index: 0,
-        lines:
-          wallLines || [],
-        axis: "none",
-        splitGapMeters: 0,
-      },
-    ];
-  }
-
-  function findLargestGap(
-    axis
-  ) {
-    const sorted =
-      [...usable].sort(
-        (a, b) =>
-          a.midpoint[axis] -
-          b.midpoint[axis]
-      );
-
-    let best = null;
-
-    for (
-      let i = 1;
-      i < sorted.length;
-      i += 1
-    ) {
-      const gap =
-        sorted[i]
-          .midpoint[axis] -
-        sorted[i - 1]
-          .midpoint[axis];
-
-      const leftCount = i;
-      const rightCount =
-        sorted.length - i;
-
-      if (
-        leftCount < 12 ||
-        rightCount < 12
-      ) {
-        continue;
-      }
-
-      if (
-        !best ||
-        gap > best.gap
-      ) {
-        best = {
-          gap,
-          index: i,
-          sorted,
-        };
-      }
-    }
-
-    return best;
-  }
-
-  const xGap =
-    findLargestGap("x");
-  const yGap =
-    findLargestGap("y");
-
-  const candidates =
-    [
-      xGap && {
-        axis: "x",
-        ...xGap,
-      },
-      yGap && {
-        axis: "y",
-        ...yGap,
-      },
-    ].filter(Boolean);
-
-  if (
-    candidates.length === 0
-  ) {
-    return [
-      {
-        index: 0,
-        lines:
-          wallLines || [],
-        axis: "none",
-        splitGapMeters: 0,
-      },
-    ];
-  }
-
-  candidates.sort(
-    (a, b) =>
-      b.gap - a.gap
-  );
-
-  const best =
-    candidates[0];
-
-  // Do not invent multiple storeys unless there is a meaningful physical gap
-  // between two substantial drawing clusters.
-  if (
-    best.gap < 1.25
-  ) {
-    return [
-      {
-        index: 0,
-        lines:
-          wallLines || [],
-        axis: "none",
-        splitGapMeters:
-          best.gap,
-      },
-    ];
-  }
-
-  const left =
-    best.sorted
-      .slice(
-        0,
-        best.index
-      )
-      .map(
-        (item) =>
-          item.line
-      );
-
-  const right =
-    best.sorted
-      .slice(
-        best.index
-      )
-      .map(
-        (item) =>
-          item.line
-      );
-
-  return [
-    {
-      index: 0,
-      lines: left,
-      axis:
-        best.axis,
-      splitGapMeters:
-        best.gap,
-    },
-    {
-      index: 1,
-      lines: right,
-      axis:
-        best.axis,
-      splitGapMeters:
-        best.gap,
-    },
-  ];
+  return splitDwgRegions(wallLines,meterFactor);
 }
 
 function getStoreyFrame(
@@ -2630,68 +2394,17 @@ function resolveOpeningHeightMeters(
     : 1.20;
 }
 
-function chooseStoreyForPoint(
-  point,
-  storeyFrames,
-  meterFactor
-) {
-  if (
-    !point ||
-    !Array.isArray(
-      storeyFrames
-    ) ||
-    storeyFrames.length === 0
-  ) {
-    return null;
+function chooseStoreyForPoint(point,storeyFrames,meterFactor) {
+  if(!point||!Array.isArray(storeyFrames)||!storeyFrames.length)return null;
+  const bounded=storeyFrames.filter(s=>[s.frame?.minX,s.frame?.maxX,s.frame?.minY,s.frame?.maxY].every(Number.isFinite));
+  if(bounded.length===storeyFrames.length){
+    const tolerance=.4/meterFactor;
+    const contains=storeyFrames.filter(s=>point.x>=s.frame.minX-tolerance&&point.x<=s.frame.maxX+tolerance&&point.y>=s.frame.minY-tolerance&&point.y<=s.frame.maxY+tolerance);
+    // The nearest floor centre is not evidence that an opening belongs to it.
+    return contains.length===1?contains[0]:null;
   }
-
-  let best = null;
-  let bestDistance =
-    Infinity;
-
-  for (
-    const storey of
-    storeyFrames
-  ) {
-    const dx =
-      (
-        Number(point.x) -
-        Number(
-          storey
-            ?.frame
-            ?.centerX
-        )
-      ) *
-      meterFactor;
-
-    const dy =
-      (
-        Number(point.y) -
-        Number(
-          storey
-            ?.frame
-            ?.centerY
-        )
-      ) *
-      meterFactor;
-
-    const distance =
-      Math.hypot(
-        dx,
-        dy
-      );
-
-    if (
-      distance <
-      bestDistance
-    ) {
-      bestDistance =
-        distance;
-      best = storey;
-    }
-  }
-
-  return best;
+  // Compatibility for older callers without full frame bounds.
+  return [...storeyFrames].sort((a,b)=>Math.hypot(point.x-a.frame.centerX,point.y-a.frame.centerY)-Math.hypot(point.x-b.frame.centerX,point.y-b.frame.centerY))[0]||null;
 }
 
 function projectPointToSegment2D(
@@ -2998,9 +2711,13 @@ function snapOpeningObjectToWall({
     }
   }
 
-  nearest =
-    nearestContaining ||
-    nearest;
+  // A containing span cannot justify jumping past the closest wall.
+  if(nearestContaining && nearest && nearestContaining.distance<=nearest.distance+.12)nearest=nearestContaining;
+  else if(nearestContaining!==nearest && nearest) {
+    const projection=projectPointToSegment2D(localCentroid,nearest.start,nearest.end);
+    if(Math.min(projection.t,1-projection.t)*nearest.wallLength+.02<openingHalfWidth)
+      return {valid:false,reason:'opening_does_not_fit_nearest_wall'};
+  }
 
   if (!nearest) {
     return {
@@ -3011,9 +2728,7 @@ function snapOpeningObjectToWall({
   }
 
   const maxSnapDistance =
-    type === "door"
-      ? 1.35
-      : 1.60;
+    0.40;
 
   if (
     nearest.distance >
@@ -4038,11 +3753,41 @@ function resetDesignMaterials(reconstruction) {
   }
 }
 
+function buildDwgInteriorRuntime(takeoff){
+  const {geometry:sourceGeometry,meterFactor}=resolveDwgCalibration(takeoff||{});
+  let geometry=sourceGeometry;
+  if(!Number.isFinite(meterFactor)||meterFactor<=0)throw new Error('Saved DWG calibration is missing.');
+  let lines=geometry.wallLineSegments||[];
+  if(!lines.length){const ids=new Set(getLegacyObjectList(takeoff,'walls').map(o=>String(o.dbId)));lines=(geometry.lineSegments||[]).filter(l=>ids.has(String(l.dbId)));}
+  const records=takeoff.drawing_evidence?.records||takeoff.advanced_takeoff?.drawing_evidence?.records||[];
+  const labels=geometry.roomLabelEvidence?.length?geometry.roomLabelEvidence:collectInteriorRoomLabels([...records,...getLegacyObjectList(takeoff,'rooms')],geometry.objectGeometryCentroids||{});
+  const roomRecovery=recoverInteriorRoomBoundaries({wallLines:lines,openingLines:[...getVerifiedLinesByType(takeoff,geometry,'door').lines,...getVerifiedLinesByType(takeoff,geometry,'window').lines],meterFactor,labels});
+  if(roomRecovery.rooms.length&&labels.length)geometry={...geometry,roomPolygons:roomRecovery.rooms,interiorRoomRecovery:{version:82,labelCount:labels.length,portalCount:roomRecovery.closures.length,unmatchedLabels:roomRecovery.unmatchedLabels.map(l=>l.name)}};
+  const candidates=splitWallLinesIntoStoreys(lines,meterFactor);
+  const storeyFrames=candidates.map(s=>({...s,sourceRegionIndex:s.index,frame:getStoreyFrame(s.lines,meterFactor)}));
+  if(!storeyFrames.length||storeyFrames.some(s=>!s.frame))throw new Error('Saved calibrated DWG wall geometry is unavailable.');
+  const storeys=storeyFrames.map(s=>({index:s.index,hull:convexHull2D(s.lines.flatMap(l=>[toStoreyLocalMeters(l.start,s.frame,meterFactor),toStoreyLocalMeters(l.end,s.frame,meterFactor)]).filter(Boolean))}));
+  const openings=type=>{
+    const groups=new Map(groupLinesByDbId(getVerifiedLinesByType(takeoff,geometry,type).lines).map(g=>[String(g.dbId),g]));
+    const count=type==='door'?takeoff.doors:takeoff.windows;
+    const result=[],seen=new Set();
+    for(const object of uniqueOpeningObjects(getLegacyObjectList(takeoff,type==='door'?'doors':'windows'),count)){
+      const opening=snapOpeningObjectToWall({object,type,storeyFrames,meterFactor,fallbackGroup:groups.get(String(object.dbId))});
+      if(!opening.valid)continue;
+      const key=`${opening.storey.index}:${opening.dbId}`;if(seen.has(key))continue;seen.add(key);
+      result.push({...opening,type,sillHeight:type==='door'?0:.9});
+    }
+    return result;
+  };
+  return {geometry,meterFactor,regionCount:candidates.length,storeyFrames,storeys,doors:openings('door'),windows:openings('window'),semanticRooms:takeoff.object_details?.rooms||takeoff.advanced_takeoff?.object_details?.rooms||[],wallThicknessMeters:.15};
+}
+
 function buildReconstructionOverlay({
   viewer,
   takeoff,
   wallHeightMeters = 3.2,
   wallThicknessMeters = 0.15,
+  regionIndex = null,
 }) {
   const THREE = getThree();
 
@@ -4180,11 +3925,9 @@ function buildReconstructionOverlay({
   let hasReconstructionBounds =
     false;
 
-  const storeys =
-    splitWallLinesIntoStoreys(
-      wallLines,
-      meterFactor
-    );
+  const candidates = splitWallLinesIntoStoreys(wallLines,meterFactor);
+  if(regionIndex !== null && !candidates[regionIndex])throw new Error("Select an available drawing region.");
+  const storeys = (regionIndex === null ? candidates : [candidates[regionIndex]]).map((s,i)=>({...s,index:i,sourceRegionIndex:s.index}));
 
   const storeyHeightMeters =
     Math.max(
@@ -4734,6 +4477,11 @@ function buildReconstructionOverlay({
       doorMaterial,
       windowMaterial,
       storeys: designStoreys,
+      storeyFrames, geometry, meterFactor,
+      semanticRooms: takeoff?.object_details?.rooms||takeoff?.advanced_takeoff?.object_details?.rooms||[],
+      doors: uniqueSnappedDoorOpenings,
+      windows: uniqueSnappedWindowOpenings,
+      regionCount: candidates.length,
       wallHeightMeters,
       wallThicknessMeters,
       storeyHeightMeters,
@@ -4819,6 +4567,7 @@ function ventraNormalizeSchematicAssetType(asset) {
   if (/(range_hood|extractor_hood|cooker_hood)/.test(raw)) return "range_hood";
   if (/(rug|carpet)/.test(raw)) return "rug";
   if (/(plant|potted_plant|indoor_plant)/.test(raw)) return "plant";
+  if (raw === "cabinet_door") return "cabinet_door";
   if (/(cabinet|storage_unit|shelving|shelf)/.test(raw)) return "cabinet";
   if (/(bathtub|bath_tub|bath)/.test(raw)) return "bathtub";
   if (/(wash_basin|basin|vanity_sink|sink)/.test(raw)) return "sink";
@@ -5805,6 +5554,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addCylinder(0.012, Math.min(0.16, h * 0.25), w * 0.04, -d * 0.53, h * 0.53, metal);
       break;
     }
+    case 'cabinet_door': {
+      addBox(w,d,h,0,0,h/2,accent);
+      addBox(w*.8,.012,h*.8,0,-d/2,h/2,light);
+      addBox(.02,.03,h*.2,w*.35,-d/2-.01,h*.5,metal);
+      break;
+    }
     case 'cabinet':
     case 'tv_unit': {
       addBox(w, d, Math.min(h, assetType === 'tv_unit' ? 0.52 : h), 0, 0, Math.min(h, assetType === 'tv_unit' ? 0.52 : h) / 2, accent);
@@ -5829,6 +5584,15 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_counter': {
+      if(designVariant==='l-shape'){
+        const run=Math.min(.6,d*.4,w*.4),body=Math.min(h,.88);
+        addBox(w,run,body,0,d/2-run/2,body/2,accent);
+        addBox(run,d-run,body,-w/2+run/2,-run/2,body/2,accent);
+        addBox(w,run,.04,0,d/2-run/2,body+.02,white);
+        addBox(run,d-run,.04,-w/2+run/2,-run/2,body+.02,white);
+        for(let i=0;i<4;i++)addBox(w/4-.02,.02,body*.8,-w/2+w*(i+.5)/4,d/2-run-.01,body/2,light);
+        break;
+      }
       addBox(w, d, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
       addBox(w * 1.03, d * 1.04, 0.045, 0, 0, Math.min(h, 0.88) + 0.03, white);
       addBox(w * 0.44, d * 0.03, Math.min(h, 0.72), -w * 0.25, -d * 0.52, Math.min(h, 0.72) / 2, light);
@@ -6124,6 +5888,14 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
     )
   );
 
+  if(opening.variant==='double'){
+    const mid={x:(sx+ex)/2,y:(sy+ey)/2},group=new THREE.Group();
+    for(const half of [{start:{x:sx,y:sy},end:mid,hinge:'start'},{start:mid,end:{x:ex,y:ey},hinge:'end'}]){
+      const leaf=ventraCreateDoorLeafVisual({THREE,opening:{...opening,...half,width:openingWidth/2,variant:'single'},material,wallHeight});
+      if(leaf)group.add(leaf);
+    }
+    return group;
+  }
   const group = new THREE.Group();
   const hingeAtEnd = String(opening?.hinge || opening?.hingeSide || '').toLowerCase() === 'end';
   const hinge = hingeAtEnd ? { x: ex, y: ey } : { x: sx, y: sy };
@@ -6858,6 +6630,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       : Array.isArray(room?.points)
         ? room.points
         : [];
+    if(room.scopeOnly)continue;
     const polygon = rawPolygon
       .map((point) => ventraScenePointToLocal(point, width, depth))
       .filter(Boolean);
@@ -7108,14 +6881,14 @@ function renderStructuredSchematicScene(viewer, scene) {
         });
         add(headerWall);
 
-        const windowAssembly = ventraCreateWindowVisual({
+        const windowAssembly = opening.cutOnly ? null : ventraCreateWindowVisual({
           THREE,
           opening,
           glassMaterial: glassMat,
           frameMaterial: windowFrameMat,
           wallThickness: thickness,
         });
-        add(windowAssembly);
+        if(!opening.cutOnly)add(windowAssembly);
       } else {
         // Fill wall above the door opening; otherwise the renderer leaves an
         // unrealistic floor-to-ceiling slot above every door.
@@ -7129,15 +6902,15 @@ function renderStructuredSchematicScene(viewer, scene) {
         });
         add(doorHeaderWall);
 
-        const doorLeaf = ventraCreateDoorLeafVisual({
+        const doorLeaf = opening.cutOnly||opening.variant==='passage' ? null : ventraCreateDoorLeafVisual({
           THREE,
           opening,
           material: doorMat,
           wallHeight: displayHeight,
         });
-        add(doorLeaf);
+        if(!opening.cutOnly&&opening.variant!=='passage')add(doorLeaf);
       }
-      openingCount += 1;
+      if(!opening.cutOnly)openingCount += 1;
     }
   }
 
@@ -8352,6 +8125,11 @@ export default function Project3DViewer({ projectId }) {
   const [selectedObject, setSelectedObject] = useState(null);
   const [takeoff, setTakeoff] = useState(null);
   const [reconstruction, setReconstruction] = useState(null);
+  const [dwgRegion,setDwgRegion]=useState(null);
+  const [dwgRoomUses,setDwgRoomUses]=useState({});
+  const [dwgFurnitureBusy,setDwgFurnitureBusy]=useState(false);
+  const dwgFurnitureBusyRef=useRef(false);
+  const [dwgFurnitureCount,setDwgFurnitureCount]=useState(0);
   const [reconstructing, setReconstructing] = useState(false);
   const automaticDwgAttemptRef = useRef(null);
   const [designPrompt, setDesignPrompt] = useState("");
@@ -8366,6 +8144,9 @@ export default function Project3DViewer({ projectId }) {
   const [schematicModel, setSchematicModel] = useState(null);
   const [active3DSource, setActive3DSource] = useState("aps");
   useEffect(() => { currentPromptSceneRef.current = {scene: schematicScene, source: active3DSource}; }, [schematicScene, active3DSource]);
+  function currentSceneMatches(scene){
+    return scene?.source==='dwg-engineering-interior'?dwgInteriorMatches(scene,readTakeoffSync(projectId,'engineering')):drawingSceneMatches(projectId,scene);
+  }
 
   function refreshProject3DSourceFromStorage(
     preferredSource = null,
@@ -8394,7 +8175,7 @@ export default function Project3DViewer({ projectId }) {
               return readSchematicSync(projectId);
             })();
 
-      const storedScene=drawingSceneMatches(projectId,candidateScene)?candidateScene:null;
+      let storedScene=drawingSceneMatches(projectId,candidateScene)?candidateScene:null;
 
       const requestedSource =
         preferredSource ||
@@ -8402,7 +8183,8 @@ export default function Project3DViewer({ projectId }) {
         "aps";
 
       const savedEngineering=readTakeoffSync(projectId,'engineering');
-      if(requestedSource==='aps')takeoff=chooseEngineeringTakeoff(takeoff,savedEngineering);
+      if(requestedSource==='dwg-interior')storedScene=savedDwgInterior(savedEngineering);
+      if(requestedSource==='aps'||requestedSource==='dwg-interior')takeoff=chooseEngineeringTakeoff(takeoff,savedEngineering);
       const resolvedUrn=engineeringUrn(takeoff)||engineeringUrn(savedEngineering);
 
       const hasSchematic =
@@ -8422,7 +8204,7 @@ export default function Project3DViewer({ projectId }) {
           )
         );
 
-      const resolvedSource=requestedSource==='aps'?'aps':requestedSource==='schematic'?'schematic':resolvedUrn?'aps':hasSchematic?'schematic':'aps';
+      const resolvedSource=requestedSource==='dwg-interior'&&storedScene?'dwg-interior':requestedSource==='aps'?'aps':requestedSource==='schematic'?'schematic':resolvedUrn?'aps':hasSchematic?'schematic':'aps';
 
       setTakeoff(takeoff);
       setSchematicScene(
@@ -8436,9 +8218,10 @@ export default function Project3DViewer({ projectId }) {
       setActive3DSource(
         resolvedSource
       );
+      if(resolvedSource==='dwg-interior')setInteriorView(true);
 
       if (storedScene) {
-        const baseScene = readSchematicSync(projectId,'schematic3d-base') || storedScene;
+        const baseScene = requestedSource==='dwg-interior'?storedScene:readSchematicSync(projectId,'schematic3d-base') || storedScene;
         schematicBaseSceneRef.current =
           baseScene;
 
@@ -8573,7 +8356,7 @@ export default function Project3DViewer({ projectId }) {
   }, [projectId]);
 
   useEffect(() => {
-    const useSchematic = Boolean(schematicScene) && active3DSource === "schematic";
+    const useSchematic = Boolean(schematicScene) && isInteriorSource(active3DSource);
     if(!containerRef.current)return;
     if(!urn&&!useSchematic)return;
 
@@ -8619,7 +8402,7 @@ export default function Project3DViewer({ projectId }) {
             containerRef.current,
             schematicScene,
             schematicCanvasRef.current,
-            furnitureCameraRef.current?.key===`${projectId}:${schematicScene.documentId}`?furnitureCameraRef.current.state:null
+            furnitureCameraRef.current?.key===dwgInteriorCameraKey(projectId,schematicScene)?furnitureCameraRef.current.state:null
           );
           if (cancelled) {
             standalone.dispose?.();
@@ -8642,7 +8425,7 @@ export default function Project3DViewer({ projectId }) {
         }
 
         if(apsContainerRef.current) apsContainerRef.current.innerHTML = "";
-        await initializeViewer();
+        await initializeViewer(urn);
         if (cancelled || !containerRef.current) return;
 
         const viewer = new window.Autodesk.Viewing.GuiViewer3D(
@@ -8806,7 +8589,7 @@ export default function Project3DViewer({ projectId }) {
       }
 
       if (schematicRendererRef.current) {
-        furnitureCameraRef.current={key:`${projectId}:${schematicScene?.documentId}`,state:schematicRendererRef.current.getCameraState?.()};
+        furnitureCameraRef.current={key:dwgInteriorCameraKey(projectId,schematicScene),state:schematicRendererRef.current.getCameraState?.()};
         schematicRendererRef.current.dispose?.();
         schematicRendererRef.current = null;
       }
@@ -8834,26 +8617,30 @@ export default function Project3DViewer({ projectId }) {
       const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
       let cloud;
       try{cloud=await restoreCloud3DState(projectId);}catch(error){if(localScene||engineeringUrn(localEngineering)){window.dispatchEvent(new CustomEvent('ventra:3d-cloud-error',{detail:{projectId,message:error.message}}));return;}throw error;}
-      if(!cloud.schematic&&!cloud.engineering&&(localScene||engineeringUrn(localEngineering))){
-        const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      if(cancelled)return;
+      const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      // Migrate each missing source independently, without overwriting existing cloud data.
+      if(!cloud.schematic&&localScene)await writeCloud3DState(projectId,'schematic',localScene);
+      if(!cloud.engineering&&engineeringUrn(localEngineering))await writeCloud3DState(projectId,'engineering',localEngineering);
+      if(!cloud.selection&&(localScene||engineeringUrn(localEngineering))){
         const selectedSource=await readActiveSource(projectId);
         if(selectedSource)await writeCloud3DState(projectId,'selection',{source:selectedSource});
-        if(localScene)await writeCloud3DState(projectId,'schematic',localScene);
-        if(engineeringUrn(localEngineering))await writeCloud3DState(projectId,'engineering',{aps_urn:engineeringUrn(localEngineering),document_id:localEngineering.document_id,source:localEngineering.source});
-        return;
       }
       if(cancelled)return;
-      if(cloud.engineering)await persistTakeoff(projectId,cloud.engineering,{kind:'engineering'});
-      if(cloud.schematic)await saveSchematic(projectId,cloud.schematic,{preserveBase:false});
-      if(cloud.selection?.source)await saveActiveSource(projectId,cloud.selection.source);
+      await restoreEngineeringSnapshot(projectId,cloud.engineering,{read:readPersistedTakeoff,persist:persistTakeoff});
+      if(cloud.schematic)await saveSchematic(projectId,cloud.schematic,{preserveBase:false,syncCloud:false});
+      if(cloud.selection?.source)await saveActiveSource(projectId,cloud.selection.source,{syncCloud:false});
     })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
       if(cancelled)return;
-      const resolvedUrn=engineeringUrn(engineering)||engineeringUrn(latest);
+      const selectedEngineering=reconcileEngineering(engineering,latest);
+      const resolvedUrn=engineeringUrn(selectedEngineering);
       const selectedSource=source || (resolvedUrn?'aps':scene?'schematic':'aps');
-      const selected=selectedSource==='aps'?chooseEngineeringTakeoff(latest,engineering):latest;
+      const selected=selectedSource==='aps'||selectedSource==='dwg-interior'?selectedEngineering:latest;
       setTakeoff(selected || null);setUrn(resolvedUrn || '');
-      setActive3DSource(selectedSource);setSchematicScene(scene || null);
-      schematicBaseSceneRef.current=base||scene||null;
+      const interior=selectedSource==='dwg-interior'?savedDwgInterior(selectedEngineering):null;
+      setActive3DSource(selectedSource==='dwg-interior'&&!interior?'aps':selectedSource);setSchematicScene(interior||scene||null);
+      if(interior)setInteriorView(true);
+      schematicBaseSceneRef.current=interior||base||scene||null;
       setSchematicPreset(scene?.variant || 'classic');
       if(!resolvedUrn&&!scene){setStatus('missing');setMessage('No Autodesk model or image schematic is linked yet. Open Drawings and upload/analyze a supported drawing or JPG/PNG/WebP image.');}
       else if(selectedSource==='aps'&&!resolvedUrn){setStatus('missing');setMessage('No engineering model is saved for this project. Analyze the DWG in Drawings again to restore its Autodesk source and calibrated geometry.');}
@@ -8864,8 +8651,10 @@ export default function Project3DViewer({ projectId }) {
   useEffect(()=>{
     const updated=event=>{
       if(event.detail?.projectId!==projectId)return;
-      const latest=takeoffFromEffect();
-      if(active3DSource==='aps'&&engineeringUrn(latest)===urn)setTakeoff(latest);
+      const latest=reconcileEngineering(readTakeoffSync(projectId,'engineering'),readTakeoffSync(projectId));
+      if(active3DSource==='aps'&&engineeringUrn(latest)){
+        setTakeoff(latest);setUrn(engineeringUrn(latest));
+      }
     };
     window.addEventListener('ventra:engineering-takeoff-updated',updated);
     return()=>window.removeEventListener('ventra:engineering-takeoff-updated',updated);
@@ -8877,7 +8666,7 @@ export default function Project3DViewer({ projectId }) {
     let cancelled=false;
     readPersistedTakeoff(projectId,'engineering').then(saved=>{
       if(cancelled||viewerRef.current!==viewer)return;
-      const latest=chooseEngineeringTakeoff(takeoffFromEffect(),saved),check=dwgReconstructionReadiness(latest,urn);
+      const latest=chooseEngineeringTakeoff(takeoffFromEffect(),saved,urn),check=dwgReconstructionReadiness(latest,urn);
       if(!check.ready){setMessage(`DWG source sheet loaded. ${check.reason}`);return;}
       const fingerprint=JSON.stringify([urn,latest?.analyzed_at,check.meterFactor,check.geometry]);
       if(automaticDwgAttemptRef.current===fingerprint)return;
@@ -8918,22 +8707,40 @@ export default function Project3DViewer({ projectId }) {
 
   async function persistSchematicScene(nextScene, { preserveBase = true } = {}) {
     if (!projectId || !nextScene) return;
+    if(nextScene.source==='dwg-engineering-interior'){
+      let latest=await readPersistedTakeoff(projectId,'engineering');
+      const next=updateDwgInterior(latest,applyDesignDefaults(nextScene));
+      await persistTakeoff(projectId,next,{kind:'engineering'});
+      const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      const saved=await writeCloud3DState(projectId,'engineering',next);
+      setTakeoff(next);
+      if(!saved.saved)throw new Error(`Interior saved locally; cloud sync failed: ${saved.error}`);
+      return;
+    }
     await saveSchematic(projectId,applyDesignDefaults(nextScene),{preserveBase});
     if (!preserveBase) schematicBaseSceneRef.current = ventraCloneScene(nextScene);
   }
 
   async function commitFurnitureScene(nextScene, expectedScene) {
-    if(currentPromptSceneRef.current?.scene!==expectedScene||currentPromptSceneRef.current?.source!=='schematic'||!drawingSceneMatches(projectId,expectedScene))throw new Error('The drawing changed. Retry on the current scene. / نقشه تغییر کرد؛ دوباره امتحان کن.');
+    if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current scene. / نقشه تغییر کرد؛ دوباره امتحان کن.');
     for(const key of LOCKED_ARCHITECTURE)if(JSON.stringify(nextScene[key])!==JSON.stringify(expectedScene[key]))throw new Error(`Architecture is locked: ${key}`);
     setDesignBusy(true);
     try{await persistSchematicScene(nextScene,{preserveBase:true});rebuildStandaloneScene(nextScene);}
     finally{setDesignBusy(false);}
   }
 
+  async function commitOpeningScene(nextScene,expectedScene){
+    if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current floor. / طبقه یا نقشه تغییر کرده؛ دوباره روی طبقه فعلی امتحان کن.');
+    assertOpeningOnlyEdit(expectedScene,nextScene);
+    setDesignBusy(true);
+    try{await persistSchematicScene(nextScene,{preserveBase:false});schematicBaseSceneRef.current=nextScene;rebuildStandaloneScene(nextScene);}
+    finally{setDesignBusy(false);}
+  }
+
   function rebuildStandaloneScene(nextScene, nextMessage = null) {
     if (!containerRef.current) throw new Error('Schematic 3D canvas is not ready.');
     setSchematicScene({...applyDesignDefaults(nextScene)});
-    setActive3DSource('schematic');
+    setActive3DSource(nextScene.source==='dwg-engineering-interior'?'dwg-interior':'schematic');
     if(nextMessage)setMessage(nextMessage);
     return {model:schematicRendererRef.current?.model||{}};
   }
@@ -8951,7 +8758,7 @@ export default function Project3DViewer({ projectId }) {
   }
 
   function orbitProject(yaw=0, view=null) {
-    if(active3DSource==='schematic'&&schematicRendererRef.current) {
+    if(isInteriorSource(active3DSource)&&schematicRendererRef.current) {
       if(view)runSchematicCameraAction(view);else schematicRendererRef.current.orbitBy?.(yaw);return;
     }
     const viewer=viewerRef.current, nav=viewer?.navigation, THREE=getThree();
@@ -8978,7 +8785,7 @@ export default function Project3DViewer({ projectId }) {
   async function applySchematicPreset(presetId) {
     if (
       !schematicScene ||
-      active3DSource !== "schematic"
+      !isInteriorSource(active3DSource)
     ) {
       setMessage("Schematic presets are available when a JPG/PNG/WebP 3D scene is active.");
       return;
@@ -8989,7 +8796,7 @@ export default function Project3DViewer({ projectId }) {
       const nextScene = {
         ...ventraRestyleSchematicScene(baseScene, presetId),
         projectId,
-        source: "image-ai-schematic",
+        source: baseScene.source === "dwg-engineering-interior" ? baseScene.source : "image-ai-schematic",
         variant: presetId,
         updatedAt: new Date().toISOString(),
       };
@@ -9021,7 +8828,7 @@ export default function Project3DViewer({ projectId }) {
     }
     try {
       const baseScene = ventraRestyleSchematicScene(schematicBaseSceneRef.current, 'classic');
-      const nextScene = { ...baseScene, projectId, source: 'image-ai-schematic', variant: 'classic', updatedAt: new Date().toISOString() };
+      const nextScene = { ...baseScene, projectId, source: baseScene.source === 'dwg-engineering-interior' ? baseScene.source : 'image-ai-schematic', variant: 'classic', updatedAt: new Date().toISOString() };
       await persistSchematicScene(nextScene, { preserveBase: true });
       rebuildStandaloneScene(nextScene, 'Classic JPG schematic restored.');
       setDesignResult({ source: 'ventra-local-preset', prompt: 'classic', schematic: true, design: { style: 'classic' } });
@@ -9075,7 +8882,7 @@ export default function Project3DViewer({ projectId }) {
       const fresh = readTakeoffSync(projectId);
       if (fresh && typeof fresh === "object") {
         const saved=readTakeoffSync(projectId,'engineering');
-        return active3DSource==='aps'?chooseEngineeringTakeoff(fresh,saved):fresh;
+        return active3DSource==='aps'||active3DSource==='dwg-interior'?chooseEngineeringTakeoff(fresh,saved,urn):fresh;
       }
     } catch (error) {
       console.warn("[VENTRA 3D] Could not refresh takeoff from localStorage", error);
@@ -9083,10 +8890,10 @@ export default function Project3DViewer({ projectId }) {
     return takeoff;
   }
 
-  function reconstruct3D() {
+  async function reconstruct3D(region = dwgRegion) {
     const viewer = viewerRef.current;
 
-    if (schematicScene && active3DSource === "schematic") {
+    if (schematicScene && isInteriorSource(active3DSource)) {
       try {
         setReconstructing(true);
         const standalone = rebuildStandaloneScene(
@@ -9102,17 +8909,21 @@ export default function Project3DViewer({ projectId }) {
       return;
     }
 
-    const latestTakeoff = getFreshProjectTakeoff();
-
-    if (!viewer || !latestTakeoff) {
-      setMessage("The Autodesk model/takeoff is not ready.");
-      return;
-    }
-
-    const readiness=dwgReconstructionReadiness(latestTakeoff,urn);
-    if(!readiness.ready){setMessage(readiness.reason);return;}
+    if(!viewer){setMessage("The Autodesk model is not ready.");return;}
+    const expectedModel=viewer.model;
     try {
       setReconstructing(true);
+      // Await IndexedDB: synchronous localStorage data can contain only a pointer/summary.
+      const reads=await Promise.allSettled([readPersistedTakeoff(projectId,'engineering'),readPersistedTakeoff(projectId)]);
+      const [saved,latest]=reads.map(r=>r.status==='fulfilled'?r.value:null);
+      if(viewerRef.current!==viewer||viewer.model!==expectedModel)return;
+      const latestTakeoff=chooseEngineeringTakeoff(chooseEngineeringTakeoff(getFreshProjectTakeoff(),latest,urn),saved,urn);
+      const storageFailure=reads.find(r=>r.status==='rejected');
+      if(storageFailure&&!dwgReconstructionReadiness(latestTakeoff||{},urn).ready){setMessage(`Could not load full DWG geometry: ${storageFailure.reason?.message||'Drawing storage is unavailable.'}`);return;}
+      if(!latestTakeoff){setMessage("No extracted engineering geometry matches this DWG. Open Drawings and extract the selected file.");return;}
+      const readiness=dwgReconstructionReadiness(latestTakeoff,urn);
+      setTakeoff(latestTakeoff);
+      if(!readiness.ready){setMessage(readiness.reason);return;}
 
       if (!sourceModelRef.current) {
         sourceModelRef.current = viewer.model;
@@ -9127,6 +8938,7 @@ export default function Project3DViewer({ projectId }) {
         takeoff: latestTakeoff,
         wallHeightMeters: /default/.test(String(latestTakeoff?.wall_height_source||'')) ? 3.2 : Number(latestTakeoff?.wall_height) || 3.2,
         wallThicknessMeters: 0.15,
+        regionIndex: region,
       });
 
       setReconstruction({
@@ -9134,6 +8946,8 @@ export default function Project3DViewer({ projectId }) {
         sourceViewIndex: activeViewIndex,
       });
       setDesignResult(null);
+      setDwgFurnitureCount(0);
+      if(latestTakeoff.geometry?.dwgPresentation?.furnished){try{renderDwgFurniture(viewer,result,latestTakeoff.geometry.dwgPresentation.roomUses||{});}catch(error){console.warn("[VENTRA DWG FURNITURE]",error.message);}}
 
       setMessage(
         `Ventra architectural 3D ready: ${result.wallCount} verified wall segment(s) rebuilt into ${result.wallPieceCount} wall piece(s), ${result.wallOpeningCutCount} single-parent opening cut(s), doors ${result.doorCount}/${result.expectedDoorCount}, windows ${result.windowCount}/${result.expectedWindowCount}, ${result.slabCount} slab(s), ${result.storeyCount} storey(s).`
@@ -9197,7 +9011,7 @@ export default function Project3DViewer({ projectId }) {
 
   async function undoPromptEdit() {
     if (!promptUndoScene || designBusy) return;
-    if (active3DSource !== "schematic" || promptUndoScene.projectId !== projectId || promptUndoScene.documentId !== schematicScene?.documentId || !drawingSceneMatches(projectId, promptUndoScene)) {
+    if (!isInteriorSource(active3DSource) || promptUndoScene.projectId !== projectId || promptUndoScene.documentId !== schematicScene?.documentId || promptUndoScene.dwgRegion !== schematicScene?.dwgRegion || !currentSceneMatches(promptUndoScene)) {
       setPromptUndoScene(null);
       setMessage("This undo belongs to a different drawing.");
       return;
@@ -9223,7 +9037,7 @@ export default function Project3DViewer({ projectId }) {
       return;
     }
 
-    if (schematicScene && active3DSource === "schematic") {
+    if (schematicScene && isInteriorSource(active3DSource)) {
       const originalScene = schematicScene;
       try {
         setDesignBusy(true);
@@ -9237,7 +9051,7 @@ export default function Project3DViewer({ projectId }) {
         for (const key of ["rooms","walls","openings","footprint","holes","width","depth","height"]) {
           if (JSON.stringify(result.scene[key]) !== JSON.stringify(originalScene[key])) throw new Error("The edit changed architecture and was rejected. / ویرایش هندسه را تغییر داد و رد شد.");
         }
-        if (currentPromptSceneRef.current?.scene !== originalScene || currentPromptSceneRef.current?.source !== "schematic" || !drawingSceneMatches(projectId, originalScene)) {
+        if (currentPromptSceneRef.current?.scene !== originalScene || !isInteriorSource(currentPromptSceneRef.current?.source) || !currentSceneMatches(originalScene)) {
           setMessage("The drawing changed while editing; the old response was discarded. / نقشه عوض شد؛ پاسخ قبلی اعمال نشد.");
           return;
         }
@@ -9330,6 +9144,98 @@ export default function Project3DViewer({ projectId }) {
   }
 
 
+  useEffect(()=>{setDwgRegion(null);setDwgFurnitureCount(0);},[projectId,urn]);
+  useEffect(()=>{setDwgRoomUses(takeoff?.geometry?.dwgPresentation?.roomUses||{});},[takeoff?.geometry?.dwgPresentation]);
+
+  async function openDwgInterior(region=null){
+    if(dwgFurnitureBusyRef.current)return;
+    dwgFurnitureBusyRef.current=true;setDwgFurnitureBusy(true);
+    try{
+      let latest=await readPersistedTakeoff(projectId,'engineering');
+      if(engineeringUrn(latest)!==urn)throw new Error('The selected DWG changed. Reconstruct its current geometry first.');
+      const presentation=latest.geometry?.dwgPresentation;
+      const index=region??reconstruction?._runtime?.storeyFrames?.[0]?.sourceRegionIndex??presentation?.activeRegion??0;
+      let scene=presentation?.interiorScenes?.[index];
+      const runtime=buildDwgInteriorRuntime(latest);
+      // A single-region engineering view must not limit the available interior floors.
+
+      if(runtime?.storeyFrames?.length){
+        const storey=runtime?.storeyFrames?.find(s=>(s.sourceRegionIndex??s.index)===index);
+        if(!storey)throw new Error('Reconstruct this DWG region first, then open its interior.');
+        for(const floor of runtime.storeyFrames){
+          const stored=latest.geometry?.dwgPresentation?.interiorScenes?.[floor.sourceRegionIndex??floor.index];
+          const input={runtime,storey:floor,projectId,documentId:latest.document_id,urn,roomUses:dwgRoomUses};
+          const converted=stored?.dwgReview?.bindingVersion===82?repairDwgInterior(stored,input,latest):rebuildDwgInterior(stored,input);
+          latest=updateDwgInterior(latest,converted);
+          if((floor.sourceRegionIndex??floor.index)===index)scene=converted;
+        }
+        await persistTakeoff(projectId,latest,{kind:'engineering'});
+      }
+      scene=upgradeDwgInterior(scene,latest);
+      await persistSchematicScene(scene);
+      await saveActiveSource(projectId,'dwg-interior');
+      schematicBaseSceneRef.current=scene;setSchematicScene(scene);setActive3DSource('dwg-interior');setInteriorView(true);
+      setMessage(scene.dwgReview?.missingRooms?'DWG interior opened. Room boundaries are missing; automatic room furnishing is unavailable. You can place furniture manually.':'DWG floor interior opened. Furniture is a design proposal, excluded from BOQ.');
+    }catch(error){setMessage(error.message);}
+    finally{dwgFurnitureBusyRef.current=false;setDwgFurnitureBusy(false);}
+  }
+
+  async function assignInteriorRoomUse(roomId,type){
+    if(active3DSource!=='dwg-interior'||!schematicScene)return;
+    setDesignBusy(true);
+    try{
+      const scene=applyDesignDefaults({...schematicScene,designDefaults:undefined,
+        rooms:schematicScene.rooms.map(room=>room.id===roomId?{...room,type,semanticType:type,roomUseSource:'user_confirmed',floorFinish:undefined}:room),
+        assets:schematicScene.assets.filter(asset=>asset.roomId!==roomId||asset.placementSource!=='design_default_not_measured')
+      },{force:true});
+      await persistSchematicScene(scene);rebuildStandaloneScene(scene);
+    }catch(error){setMessage(error.message);}
+    finally{setDesignBusy(false);}
+  }
+
+  function renderDwgFurniture(viewer,result,roomUses) {
+      const THREE=getThree(),runtime=result?._runtime;
+      if(!viewer||!runtime)throw new Error("ابتدا DWG را با مقیاس تأییدشده بازسازی کنید / Reconstruct the calibrated DWG first / أعد بناء DWG بمقياس مؤكد");
+      const scenes=runtime.storeyFrames.map((storey,index)=>dwgRoomScene({geometry:runtime.geometry,frame:storey.frame,factor:runtime.meterFactor,wallPieces:runtime.storeys[index].wallPieces,doors:runtime.doors.filter(d=>d.storey.index===storey.index),roomUses}));
+      if(!scenes.some(s=>s.rooms.length))throw new Error("مرز اتاق‌ها استخراج نشده؛ در Drawings تحلیل هندسی را تکمیل کنید / No room boundaries extracted; complete geometry analysis in Drawings / أكمل تحليل حدود الغرف");
+      clearDesignOverlay(viewer);viewer.impl.createOverlayScene(VENTRA_DESIGN_OVERLAY);
+      let count=0,missing=0;
+      scenes.forEach((scene,index)=>{
+        missing+=scene.designDefaults?.warnings?.length||0;
+        for(const room of scene.rooms){
+          if(!room.floorFinish)continue;
+          const polygon=room.polygon.map(p=>({x:p.x-scene.width/2,y:p.y-scene.depth/2}));
+          const material=ventraCreateRoomFloorMaterial({THREE,room,polygon});
+          const floor=buildFloorMesh({THREE,polygon,z:index*runtime.storeyHeightMeters+.015,material});
+          if(floor?.mesh)viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY,floor.mesh);
+        }
+        for(const asset of scene.assets){
+          const meshes=buildSchematicAssetMeshes({THREE,asset,palette:{},roomWidth:scene.width,roomDepth:scene.depth});
+          for(const mesh of meshes){mesh.position.z+=index*runtime.storeyHeightMeters;viewer.impl.addOverlay(VENTRA_DESIGN_OVERLAY,mesh);}
+          count++;
+        }
+      });
+      viewer.impl.invalidate(true,true,true);setDwgFurnitureCount(count);
+      setMessage(`مبلمان پیشنهادی: ${count}؛ موارد بدون فضای امن: ${missing}. نوع اتاق‌های بی‌نام را انتخاب کنید. / Proposed furniture: ${count}; no safe space: ${missing}. Assign uses to unnamed rooms. / أثاث مقترح: ${count}؛ حدد استخدام الغرف غير المسماة.`);
+      return {count,missing};
+  }
+  async function furnishDwgRooms() {
+    if(dwgFurnitureBusyRef.current)return;
+    dwgFurnitureBusyRef.current=true;setDwgFurnitureBusy(true);
+    try {
+      const latest=await readPersistedTakeoff(projectId,'engineering');
+      if(!latest||engineeringUrn(latest)!==urn)throw new Error("The selected DWG source changed. Reconstruct the current source first.");
+      renderDwgFurniture(viewerRef.current,reconstruction,dwgRoomUses);
+      const next=patchDwgPresentation(latest,{roomUses:dwgRoomUses,furnished:true});
+      await persistTakeoff(projectId,next,{kind:'engineering'});
+      const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      const cloud=await writeCloud3DState(projectId,'engineering',next);
+      setTakeoff(next);
+      if(!cloud.saved)setMessage(`چیدمان محلی ذخیره شد؛ همگام‌سازی ابری ناموفق / Saved locally; cloud sync failed: ${cloud.error}`);
+    }catch(error){setMessage(error.message);}
+    finally{dwgFurnitureBusyRef.current=false;setDwgFurnitureBusy(false);}
+  }
+
   function applyDwgInteriorStyle() {
     try {
       const viewer=viewerRef.current;
@@ -9345,7 +9251,7 @@ export default function Project3DViewer({ projectId }) {
 
   function resetDesign() {
     const viewer = viewerRef.current;
-    if (schematicScene && active3DSource === "schematic") {
+    if (schematicScene && isInteriorSource(active3DSource)) {
       setDesignResult(null);
       setDesignPrompt("");
       restoreClassicSchematic();
@@ -9365,7 +9271,7 @@ export default function Project3DViewer({ projectId }) {
 
   async function captureUnbranded3DJpeg() {
     schematicRendererRef.current?.clearFurniturePreview?.();
-    if (active3DSource === "schematic") {
+    if (isInteriorSource(active3DSource)) {
       const standalone = schematicRendererRef.current;
       const canvas = schematicCanvasRef.current;
 
@@ -9502,7 +9408,7 @@ export default function Project3DViewer({ projectId }) {
 
   function saveSchematicAsCad() {
     try {
-      if (!schematicScene || active3DSource !== "schematic") {
+      if (!schematicScene || !isInteriorSource(active3DSource)) {
         setMessage(
           "CAD export for the JPG schematic is available as metric DXF. Original DWG files remain available from Drawings."
         );
@@ -9531,7 +9437,7 @@ export default function Project3DViewer({ projectId }) {
   function fitModel() {
     const viewer = viewerRef.current;
 
-    if (schematicRendererRef.current && active3DSource === 'schematic') {
+    if (schematicRendererRef.current && isInteriorSource(active3DSource)) {
       runSchematicCameraAction('fit');
       setMessage('Camera fitted to the JPG schematic scene.');
       return;
@@ -9555,7 +9461,7 @@ export default function Project3DViewer({ projectId }) {
   function homeView() {
     const viewer = viewerRef.current;
 
-    if (schematicRendererRef.current && active3DSource === 'schematic') {
+    if (schematicRendererRef.current && isInteriorSource(active3DSource)) {
       runSchematicCameraAction('home');
       return;
     }
@@ -9588,9 +9494,10 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
       </LocalizedElement>
 
+      <CloudSyncPanel key={`cloud:${projectId}`} projectId={projectId} />
       <ToolDrawer title="render"><PlanRenderPanel key={projectId} projectId={projectId} /></ToolDrawer>
 
-      {schematicScene && active3DSource === "schematic" && (
+      {schematicScene && active3DSource==='schematic' && (
         <LocalizedElement as="p" role="status" style={{ padding: "12px 16px", border: "1px solid #a58a36", borderRadius: 8 }}>
           {rasterReview?.report?.status === "analyzing"
             ? "Image analysis is still running. The model shown here is from an earlier analysis."
@@ -9604,7 +9511,8 @@ export default function Project3DViewer({ projectId }) {
 
       <LocalizedElement as="div" className="ventra-model-toolbar">
         <LocalizedElement as="button" type="button" aria-pressed={active3DSource==='aps'} onClick={()=>{void saveActiveSource(projectId,'aps').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('aps');}}>DWG / Engineering</LocalizedElement>
-        <LocalizedElement as="button" type="button" disabled={!schematicScene} aria-pressed={active3DSource==='schematic'} onClick={()=>{void saveActiveSource(projectId,'schematic').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('schematic');}}>JPG / Image</LocalizedElement>
+        <LocalizedElement as="button" type="button" disabled={!readSchematicSync(projectId)} aria-pressed={active3DSource==='schematic'} onClick={()=>{void saveActiveSource(projectId,'schematic').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('schematic');}}>JPG / Image</LocalizedElement>
+        <LocalizedElement as="button" type="button" disabled={designBusy||dwgFurnitureBusy||(!reconstruction&&!dwgFloorIndices(takeoff).length)} aria-pressed={active3DSource==='dwg-interior'} onClick={()=>openDwgInterior()}>DWG Interior / داخل طبقه / داخل الطابق</LocalizedElement>
         <LocalizedElement as="button" type="button" onClick={fitModel} disabled={status !== "ready"}>
           Fit to View
         </LocalizedElement>
@@ -9615,12 +9523,9 @@ export default function Project3DViewer({ projectId }) {
           {exportBusy ? "Saving..." : "Save JPG"}
         </LocalizedElement>
 
-        <ToolDrawer title="more" className="ventra-toolbar-drawer">
-        <div className="ventra-drawer-actions">
-
         <LocalizedElement as="button"
           type="button"
-          onClick={reconstruct3D}
+          onClick={()=>reconstruct3D()}
           disabled={
             status !== "ready" ||
             reconstructing
@@ -9630,12 +9535,17 @@ export default function Project3DViewer({ projectId }) {
             ? "Building 3D..."
             : reconstruction
               ? "Rebuild 3D"
-              : schematicScene && active3DSource === "schematic"
+              : schematicScene && isInteriorSource(active3DSource)
                 ? "Rebuild Schematic"
                 : "Reconstruct 3D"}
         </LocalizedElement>
 
-        {schematicScene && active3DSource === "schematic" && (
+        <ToolDrawer title="more" className="ventra-toolbar-drawer">
+        <div className="ventra-drawer-actions">
+
+
+
+        {schematicScene && isInteriorSource(active3DSource) && (
           <>
             <ToolDrawer title="styles">
             <div className="ventra-drawer-actions">
@@ -9663,7 +9573,7 @@ export default function Project3DViewer({ projectId }) {
 
         <ToolDrawer title="camera"><LocalizedElement as="div" className="ventra-camera-dock" aria-label="Project camera controls">
           <LocalizedElement as="strong">View around project</LocalizedElement>
-          {active3DSource==='schematic' && <LocalizedElement as="button" type="button" aria-pressed={interiorView} onClick={()=>setInteriorView(value=>!value)}>{interiorView?'Show solid walls':'See through walls'}</LocalizedElement>}
+          {isInteriorSource(active3DSource) && <LocalizedElement as="button" type="button" aria-pressed={interiorView} onClick={()=>setInteriorView(value=>!value)}>{interiorView?'Show solid walls':'See through walls'}</LocalizedElement>}
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} onClick={()=>{setAutoOrbit(false);orbitProject(Math.PI/4);}}>↶ Rotate 45°</LocalizedElement>
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} onClick={()=>{setAutoOrbit(false);orbitProject(-Math.PI/4);}}>Rotate 45° ↷</LocalizedElement>
           <LocalizedElement as="button" type="button" disabled={status!=='ready'} aria-pressed={autoOrbit} onClick={()=>setAutoOrbit(value=>!value)}>{autoOrbit?'Stop rotation':'Auto 360°'}</LocalizedElement>
@@ -9734,23 +9644,42 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
       )}
 
-      {schematicScene?.designDefaults && active3DSource === "schematic" && (
+      {schematicScene?.designDefaults && isInteriorSource(active3DSource) && (
         <div className="ventra-model-message" role="status">
           <LocalizedElement as="span">Design defaults are proposed furnishings, not measured quantities.</LocalizedElement>
           {!!schematicScene.designDefaults.warnings?.length && <span> · فضای امن کافی برای این وسایل پیدا نشد / No safe space / لا توجد مساحة آمنة: {schematicScene.designDefaults.warnings.map(w=>`${schematicScene.rooms?.find(r=>r.id===w.roomId)?.name||w.roomId}: ${w.type}`).join(" · ")}</span>}
         </div>
       )}
-      {active3DSource === "aps" && <div className="ventra-model-message">چیدمان پیش‌فرض فقط با مرز دقیق اتاق قابل اجراست؛ مدل اصلی APS دست‌نخورده است. / Default furnishing requires verified room boundaries; the original APS model is unchanged.</div>}
+      {active3DSource === "aps" && <DwgFloorPanel reconstruction={reconstruction} region={dwgRegion} roomUses={dwgRoomUses} count={dwgFurnitureCount} busy={reconstructing||dwgFurnitureBusy} projectId={projectId} onReload={()=>reconstruct3D()} onRegion={i=>{setDwgRegion(i);reconstruct3D(i);}} onRoomUse={(id,value)=>setDwgRoomUses(v=>({...v,[id]:value}))} onFurnish={furnishDwgRooms} />}
+      {active3DSource==='dwg-interior'&&<LocalizedElement as="div" className="ventra-model-message ventra-dwg-floor-panel">
+        <LocalizedElement as="label">DWG floor / طبقه / الطابق <LocalizedElement as="select" value={schematicScene?.dwgRegion??0} disabled={designBusy||dwgFurnitureBusy} onChange={event=>openDwgInterior(Number(event.target.value))}>
+          {dwgFloorIndices(takeoff).map(index=><LocalizedElement as="option" key={index} value={index}>Region {Number(index)+1}</LocalizedElement>)}
+        </LocalizedElement></LocalizedElement>
+        <div className="ventra-dwg-floor-buttons" role="group" aria-label="DWG floors">
+          {dwgFloorIndices(takeoff).map(index=><LocalizedElement as="button" type="button" key={index} disabled={designBusy||dwgFurnitureBusy} aria-pressed={schematicScene?.dwgRegion===index} onClick={()=>openDwgInterior(index)}>Region {index+1}</LocalizedElement>)}
+        </div>
+        <LocalizedElement as="p">Available drawing regions: {dwgFloorIndices(takeoff).length}. Extracted room boundaries on this region: {schematicScene?.rooms.filter(room=>!room.scopeOnly).length||0}.</LocalizedElement>
+        <LocalizedElement as="p">هر محدوده جدا در تراز صفر نمایش داده می‌شود؛ ترتیب طبقات را با نقشه بررسی کنید. / Each region is shown separately at floor level zero. Verify its floor order against the drawing.</LocalizedElement>
+        {!!schematicScene?.dwgReview?.openingConflicts?.length&&<LocalizedElement as="p" role="status">{schematicScene.dwgReview.openingConflicts.length} uncertain opening bindings were excluded from this interior preview; their actual positions need review.</LocalizedElement>}
+        {!schematicScene?.dwgReview?.roomRecovery&&<LocalizedElement as="p" role="status">CAD room labels are unavailable for boundary recovery. Open Drawings and analyze the current drawing to capture its text and geometry.</LocalizedElement>}
+        {schematicScene?.dwgReview?.missingRooms&&<LocalizedElement as="p">مرز و نوع اتاق‌ها موجود نیست؛ مبلمان خودکار اضافه نشده است. از پنل Furniture برای چیدمان دستی استفاده کنید. / Room boundaries are missing; use Furniture for manual placement.</LocalizedElement>}
+        {!schematicScene?.dwgReview?.missingRooms&&<LocalizedElement as="details"><LocalizedElement as="summary">Room uses / نوع اتاق‌ها / استخدام الغرف</LocalizedElement>
+          {schematicScene?.rooms.filter(room=>!room.scopeOnly).map(room=><LocalizedElement as="label" key={room.id} style={{display:'block'}}>{room.name||room.id} <LocalizedElement as="select" value={room.semanticType||room.type||'unknown'} disabled={designBusy} onChange={event=>assignInteriorRoomUse(room.id,event.target.value)}>
+            <LocalizedElement as="option" value="unknown">Unknown / نامشخص</LocalizedElement>
+            {[['living','Living / نشیمن'],['kitchen','Kitchen / آشپزخانه'],['bedroom','Bedroom / اتاق خواب'],['bathroom','WC + Shower / سرویس و دوش'],['dining','Dining / ناهارخوری'],['terrace','Terrace / تراس']].map(([type,label])=><LocalizedElement as="option" key={type} value={type}>{label}</LocalizedElement>)}
+          </LocalizedElement></LocalizedElement>)}
+        </LocalizedElement>}
+      </LocalizedElement>}
 
-      {schematicModel && schematicScene && active3DSource === "schematic" && (
+      {schematicModel && schematicScene && isInteriorSource(active3DSource) && (
         <ToolDrawer title="info">
         <LocalizedElement as="div" className="ventra-model-reconstruction-summary">
-          <LocalizedElement as="strong">AI IMAGE SCHEMATIC 3D</LocalizedElement>
+          <LocalizedElement as="strong">{active3DSource==='dwg-interior'?'DWG INTERIOR':'AI IMAGE SCHEMATIC 3D'}</LocalizedElement>
           <LocalizedElement as="span">{schematicScene.title || schematicScene.sceneType || "Room"}</LocalizedElement>
           <LocalizedElement as="span">Approx. {Number(schematicModel.width || 0).toFixed(2)} × {Number(schematicModel.depth || 0).toFixed(2)} m</LocalizedElement>
           <LocalizedElement as="span">Height {Number(schematicModel.height || 0).toFixed(2)} m</LocalizedElement>
           <LocalizedElement as="span">{schematicModel.assetCount || 0} furniture/fixture object(s)</LocalizedElement>
-          {schematicScene.furnishingMode === 'source_observed' && (
+          {active3DSource!=='dwg-interior'&&schematicScene.furnishingMode === 'source_observed' && (
             <LocalizedElement as="span" role="status">
               Furniture traced from image: {sourcePresentationAssets(schematicScene).filter(a=>a.placementSource==='source_image_observation_v1').length} accepted;
               {' '}{schematicScene.furnishingReview?.rejected?.length || 0} need review. Verify against the original drawing.
@@ -9833,7 +9762,7 @@ export default function Project3DViewer({ projectId }) {
       )}
 
 
-      {(reconstruction || (schematicScene && active3DSource === "schematic")) && (
+      {(reconstruction || (schematicScene && isInteriorSource(active3DSource))) && (
         <ToolDrawer title="prompt">
         <LocalizedElement as="section" className="ventra-design-studio">
           <LocalizedElement as="div" className="ventra-design-studio-heading">
@@ -9844,10 +9773,10 @@ export default function Project3DViewer({ projectId }) {
                 Prompt-edit materials and scene objects. Image schematic mode stays separate from BOQ/Estimate engineering quantities.
               </LocalizedElement>
             </LocalizedElement>
-            {schematicScene && active3DSource === "schematic" && (schematicScene.geometryValidation?.openings?.rejectedObservationIds?.length > 0 || schematicScene.furnishingReview?.rejected?.some(r => r.reason === "intersects_wall")) && (
+            {schematicScene && isInteriorSource(active3DSource) && (schematicScene.geometryValidation?.openings?.rejectedObservationIds?.length > 0 || schematicScene.furnishingReview?.rejected?.some(r => r.reason === "intersects_wall")) && (
               <LocalizedElement as="button" type="button" disabled={designBusy} onClick={restoreRejectedDoors}>Repair observed geometry</LocalizedElement>
             )}
-            {promptUndoScene && promptUndoScene.projectId === projectId && promptUndoScene.documentId === schematicScene?.documentId && active3DSource === "schematic" && (
+            {promptUndoScene && promptUndoScene.projectId === projectId && promptUndoScene.documentId === schematicScene?.documentId && isInteriorSource(active3DSource) && (
               <LocalizedElement as="button" type="button" disabled={designBusy} onClick={undoPromptEdit}>Undo last prompt</LocalizedElement>
             )}
             {designResult && (
@@ -9865,7 +9794,7 @@ export default function Project3DViewer({ projectId }) {
           />
 
           <LocalizedElement as="div" className="ventra-design-actions">
-            {reconstruction && active3DSource !== "schematic" && (
+            {reconstruction && !isInteriorSource(active3DSource) && (
               <LocalizedElement as="button" type="button" className="secondary" onClick={applyDwgInteriorStyle} disabled={designBusy}>
                 DWG Interior Materials
               </LocalizedElement>
@@ -9880,7 +9809,7 @@ export default function Project3DViewer({ projectId }) {
             <LocalizedElement as="button"
               type="button"
               className="secondary"
-              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("modern") : applyDesignPrompt("Modern interior with clean neutral walls, stone-look floor, contemporary furniture and dark metal accents.")}
+              onClick={() => (schematicScene && isInteriorSource(active3DSource)) ? applySchematicPreset("modern") : applyDesignPrompt("Modern interior with clean neutral walls, stone-look floor, contemporary furniture and dark metal accents.")}
               disabled={designBusy}
             >
               Modern
@@ -9888,7 +9817,7 @@ export default function Project3DViewer({ projectId }) {
             <LocalizedElement as="button"
               type="button"
               className="secondary"
-              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("minimal") : applyDesignPrompt("Warm minimal interior, light greige walls, natural oak floor, warm wood doors and simple neutral finishes.")}
+              onClick={() => (schematicScene && isInteriorSource(active3DSource)) ? applySchematicPreset("minimal") : applyDesignPrompt("Warm minimal interior, light greige walls, natural oak floor, warm wood doors and simple neutral finishes.")}
               disabled={designBusy}
             >
               Minimal
@@ -9896,7 +9825,7 @@ export default function Project3DViewer({ projectId }) {
             <LocalizedElement as="button"
               type="button"
               className="secondary"
-              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("luxury") : applyDesignPrompt("Modern luxury interior, warm ivory walls, beige marble floor, walnut doors and refined bronze accents.")}
+              onClick={() => (schematicScene && isInteriorSource(active3DSource)) ? applySchematicPreset("luxury") : applyDesignPrompt("Modern luxury interior, warm ivory walls, beige marble floor, walnut doors and refined bronze accents.")}
               disabled={designBusy}
             >
               Luxury
@@ -9904,7 +9833,7 @@ export default function Project3DViewer({ projectId }) {
             <LocalizedElement as="button"
               type="button"
               className="secondary"
-              onClick={() => (schematicScene && active3DSource === "schematic") ? applySchematicPreset("facade") : applyDesignPrompt("Contemporary exterior facade with light limestone, charcoal accents, dark doors and blue-grey glass.")}
+              onClick={() => (schematicScene && isInteriorSource(active3DSource)) ? applySchematicPreset("facade") : applyDesignPrompt("Contemporary exterior facade with light limestone, charcoal accents, dark doors and blue-grey glass.")}
               disabled={designBusy}
             >
               Facade
@@ -9940,8 +9869,8 @@ export default function Project3DViewer({ projectId }) {
           ) : (
             <div ref={containerRef} className="ventra-model-canvas" dir="ltr">
               {/* The SDK host must not subscribe to UI translation context. */}
-              <div ref={apsContainerRef} dir="ltr" translate="no" style={{width:"100%",height:"100%",display:active3DSource==='schematic'?'none':'block'}} />
-              {schematicScene && active3DSource === "schematic" && (
+              <div ref={apsContainerRef} dir="ltr" translate="no" style={{width:"100%",height:"100%",display:isInteriorSource(active3DSource)?'none':'block'}} />
+              {schematicScene && isInteriorSource(active3DSource) && (
                 <>
                   <LocalizedElement as="canvas"
                     ref={schematicCanvasRef}
@@ -9968,10 +9897,10 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
 
         <aside className="ventra-model-sidebar">
-          {schematicScene && active3DSource === 'schematic' && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
         <ToolDrawer title="inspector">
         <LocalizedElement as="div" className="ventra-model-inspector">
-          {schematicScene && active3DSource === "schematic" ? (
+          {schematicScene && isInteriorSource(active3DSource) ? (
             <>
               <LocalizedElement as="span">SCHEMATIC INSPECTOR</LocalizedElement>
               <LocalizedElement as="h3">{schematicScene.title || "JPG Schematic 3D"}</LocalizedElement>
