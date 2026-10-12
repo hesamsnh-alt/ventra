@@ -237,6 +237,7 @@ export async function getApsManifest(urn) {
   });
 }
 
-export async function getApsViewerToken() {
-  return getApsAccessToken(["viewables:read"]);
+export async function getApsViewerToken(resource) {
+  if(!resource)throw new Error("A verified model is required for a viewer token.");
+  return getApsAccessToken([`data:read:${resource}`]);
 }

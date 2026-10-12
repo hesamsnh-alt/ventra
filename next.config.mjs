@@ -6,6 +6,7 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {turbopackFileSystemCacheForDev: process.env.VENTRA_DISABLE_DEV_CACHE !== "1"},
   turbopack: {
     root: __dirname,
   },

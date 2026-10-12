@@ -1,8 +1,10 @@
 {
   "scope": "Static JSX display text only. No customer data, keys, API prompts or diagnostics. Review before authorizing any external translation.",
-  "translatedEntries": 1131,
-  "staticEntries": 845,
+  "translatedEntries": 1153,
+  "staticEntries": 866,
   "pendingEntries": 0,
-  "skippedLegacyFiles": [],
+  "skippedLegacyFiles": [
+    "src/app/components/ProjectDrawingCenter.jsx"
+  ],
   "pending": []
 }

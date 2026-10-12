@@ -2657,6 +2657,7 @@ wall_area_estimated:
           centroid: polygon?.centroid || null,
           volume: 0,
           source: "geometry_closed_face",
+          geometryPolygonId: polygon?.id || `room-${index + 1}`,
         })),
 
       slabs:
