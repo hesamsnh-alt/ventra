@@ -1,0 +1,35 @@
+Included assets from Poly Haven, licensed CC0 (public domain dedication).
+These files are self-hosted with Ventra. The live Poly Haven API is not called by the application.
+License: https://polyhaven.com/license
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+
+Sofa 02 — Kirill Sannikov
+https://polyhaven.com/a/sofa_02
+1K glTF; diffuse, roughness and OpenGL normal maps.
+
+Dining Chair 02 — James Ray Cock
+https://polyhaven.com/a/dining_chair_02
+1K glTF and included textures.
+
+Potted Plant 02 — Rico Cilliers
+https://polyhaven.com/a/potted_plant_02
+1K glTF and included textures.
+
+Wood Floor — Dimitrios Savva
+https://polyhaven.com/a/wood_floor
+1K diffuse, OpenGL normal and roughness maps.
+
+Downloaded files were checked against the MD5 hashes published with the asset download metadata.
+Only the downloadable CC0 asset files are included; website preview renders and branding are not included.
+
+Potted Plant 01 — Rico Cilliers
+https://polyhaven.com/a/potted_plant_01
+1K glTF and included textures.
+
+Potted Plant 04 — Rico Cilliers
+https://polyhaven.com/a/potted_plant_04
+1K glTF and included textures.
+
+Calathea Orbifolia 01 — Rob Tuytel (scanning), Rico Cilliers (modeling)
+https://polyhaven.com/a/calathea_orbifolia_01
+1K glTF and included textures. Ventra selects a single variant and adds a simple pot.

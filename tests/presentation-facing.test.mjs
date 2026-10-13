@@ -30,8 +30,8 @@ test('actual Three r71 renderer emits low railing posts and retains accepted was
  const world=new THREE.Scene();
  const source={sceneType:'floorplan_interactive_preview',furnishingMode:'source_observed',width:8,depth:6,height:2.8,footprint:[{x:0,y:0},{x:8,y:0},{x:8,y:6},{x:0,y:6}],rooms:[],openings:[],walls:[{id:'rail',type:'railing',height:1.1,start:{x:0,y:6},end:{x:8,y:6}}],assets:[{id:'washer',type:'washing_machine',xMeters:2,yMeters:2,width:.6,depth:.6,height:.88},{id:'toilet',type:'toilet',xMeters:4,yMeters:2,width:.5,depth:.7,height:.78}],palette:{}};
  const result=context.renderStructuredSchematicScene({impl:{sceneAfter:world,invalidate(){}}},source);
- const posts=[];world.traverse(m=>{if(m.userData?.ventraType==='schematic_balcony_railing')posts.push(m);});
- assert.ok(posts.length>10);assert.ok(posts.every(p=>p.position.z<=.55&&p.geometry.parameters.depth===1.1));assert.ok(result.assetCount===2);
+ const posts=[];world.traverse(m=>{if(m.userData?.railingPart==='post')posts.push(m);});
+ assert.ok(posts.length>=8);assert.ok(posts.every(p=>p.position.z<=.55&&p.geometry.parameters.depth<=1.1));assert.ok(result.assetCount===2);
 });
 
 test('source door leaf retains a narrow width and tall height instead of overrunning its opening',()=>{

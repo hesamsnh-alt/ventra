@@ -11,6 +11,7 @@ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
 import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
 import {waitForViewerSurface} from "@/lib/viewerSurface.mjs";
 import {schematicGeometryAudit} from "@/lib/schematicGeometryAudit.mjs";
+import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
@@ -4720,7 +4721,7 @@ function ventraCreateRoomFloorMaterial({ THREE, room, palette = {}, polygon = []
   const texture=ventraGetSchematicTexture({THREE,kind:wood?'parquet':finish==='marble'?'marble':'tile',baseColor:css(color),detailColor:css(lineColor),accentColor:'#f1e9da',repeatX:wood?1/.72:1/spacingX,repeatY:wood?1/2.4:1/spacingY});
   const material = new OpaqueMaterial({
     color: texture ? 0xffffff : color,
-    ...(texture?{map:texture,bumpMap:texture,bumpScale:wood?.008:.006}:{}),
+    ...(texture?{map:texture,bumpMap:texture,bumpScale:wood?.0015:.0007}:{}),
     specular: wood?0x181411:0x282828,
     side: THREE.DoubleSide,
     shininess: palette.designPreset==='luxury'?65:7,
@@ -5304,6 +5305,50 @@ function ventraPresentationAssets(scene) {
   return scene.promptEdit ? assets : arrangeLivingFurniture(scene, assets);
 }
 
+// Render-only edge treatment. Source footprints and furniture dimensions stay intact.
+// Soft contact shading is a display overlay, never a selectable furniture item.
+function ventraFurnitureContactShade({THREE,asset,roomWidth,roomDepth}){
+ if(typeof document==='undefined'||!THREE.Texture||!THREE.PlaneGeometry)return null;
+ if(!['sofa','armchair','bed','cabinet','wardrobe','kitchen_counter','plant','dressing_table','refrigerator','washing_machine'].includes(asset?.type)||Number(asset.zMeters)>0.08)return null;
+ try{
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=64;
+  const ctx=canvas.getContext('2d');if(!ctx?.createRadialGradient)return null;
+  const gradient=ctx.createRadialGradient(32,32,5,32,32,32);gradient.addColorStop(0,'rgba(20,16,12,0.24)');gradient.addColorStop(.55,'rgba(20,16,12,0.13)');gradient.addColorStop(1,'rgba(20,16,12,0)');
+  ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);
+  const texture=new THREE.Texture(canvas);texture.needsUpdate=true;
+  const p=ventraResolveSchematicAssetPlacement(asset,roomWidth,roomDepth);
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(p.w*.96,p.d*.96),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
+  mesh.position.set(p.cx,p.cy,.004);mesh.rotation.z=p.rot;mesh.renderOrder=2;
+  mesh.userData={ventraType:'furniture_contact_shade',schematic:true,nonSelectable:true};return mesh;
+ }catch{return null;}
+}
+
+function ventraSoftFurnitureBox(THREE,w,d,h){
+ const b=Math.min(.006,w*.04,d*.04,h*.12);
+ if(!THREE.Shape||!THREE.ExtrudeGeometry||b<.0004)return new THREE.BoxGeometry(w,d,h);
+ try{
+  const shape=new THREE.Shape(),x=w/2-b,y=d/2-b;
+  shape.moveTo(-x,-y);shape.lineTo(x,-y);shape.lineTo(x,y);shape.lineTo(-x,y);shape.lineTo(-x,-y);
+  const geometry=new THREE.ExtrudeGeometry(shape,{amount:h-2*b,depth:h-2*b,bevelEnabled:true,bevelThickness:b,bevelSize:b,bevelSegments:2,steps:1,curveSegments:1});
+  // r71 uses Geometry, newer runtimes use BufferGeometry.
+  if(geometry.translate)geometry.translate(0,0,b-h/2);
+  else if(geometry.vertices)for(const v of geometry.vertices)v.z+=b-h/2;
+  geometry.parameters={...(geometry.parameters||{}),width:w,height:d,depth:h};
+  return geometry;
+ }catch{return new THREE.BoxGeometry(w,d,h);}
+}
+
+// Soft upholstery geometry, generated inside the existing measured dimensions.
+function ventraUpholsteryGeometry(THREE,w,d,h){
+ const g=new THREE.BoxGeometry(w,d,h,10,8,6),r=Math.min(w*.12,d*.16,h*.42);
+ if(!g.vertices)return ventraSoftFurnitureBox(THREE,w,d,h);
+ for(const v of g.vertices){
+  const q=new THREE.Vector3(Math.max(-w/2+r,Math.min(w/2-r,v.x)),Math.max(-d/2+r,Math.min(d/2-r,v.y)),Math.max(-h/2+r,Math.min(h/2-r,v.z)));
+  const delta=v.clone().sub(q);if(delta.length()>0)v.copy(q.add(delta.normalize().multiplyScalar(r)));
+ }
+ g.computeFaceNormals();g.computeVertexNormals();g.userData={upholstery:true};return g;
+}
+
 function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
   const meshes = [];
   const base=asset.renderingBaseDimensions;
@@ -5330,7 +5375,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         const wave = Math.sin(2 * Math.PI * y / 256);
         const grain = Math.sin(2 * Math.PI * (x * 13 / 256 + 0.28 * wave));
         const value = kind === 'wood'
-          ? 238 + grain * 7 + Math.sin(2 * Math.PI * (x * 37 / 256 + 0.15 * wave)) * 3 + noise * 5
+          ? 240 + Math.sin(2 * Math.PI * (x * 79 / 256 + 0.28 * wave)) * 6 + Math.sin(2 * Math.PI * (x * 173 / 256 + 0.15 * wave)) * 2 + noise * 3
           : kind === 'fabric'
             ? 242 + ((x % 4 < 2) !== (y % 4 < 2) ? 4 : -4) + noise * 5
             : 246 + noise * 6 + Math.sin(2 * Math.PI * (x + y) / 256) * 2;
@@ -5346,7 +5391,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       texture.minFilter = THREE.LinearMipMapLinearFilter || THREE.LinearMipmapLinearFilter || THREE.LinearFilter;
       texture.magFilter = THREE.LinearFilter;
       texture.anisotropy = 4;
-      texture.repeat.set(kind === 'fabric' ? 3 : 1, kind === 'fabric' ? 3 : 1);
+      texture.repeat.set(kind === 'fabric' ? 8 : 1, kind === 'fabric' ? 8 : 1);
       return texture;
     } catch { return null; }
   };
@@ -5354,15 +5399,15 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const upholstery = assetType === 'sofa' || assetType === 'armchair';
   const finish = (kind) => {
     const map = surfaceTexture(kind);
-    return map ? { map } : {};
+    return map ? {map,bumpMap:map,bumpScale:kind==='fabric'?.0005:kind==='wood'?.0012:.00035} : {};
   };
   const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const accent = new OpaqueMaterial({
-    color: hexNumber(asset?.color || palette?.furniture || palette?.accent, 0x815a3f),
+    color: hexNumber(asset?.color || (upholstery ? palette?.upholstery : palette?.furniture || palette?.accent), upholstery ? 0xb8afa2 : 0x815a3f),
     side: THREE.DoubleSide,
-    shininess: upholstery ? 3 : 24,
-    specular: upholstery ? 0x111111 : 0x33302b,
+    shininess: upholstery ? 5 : 36,
+    specular: upholstery ? 0x121212 : 0x302b25,
     ...finish(upholstery ? 'fabric' : 'wood'),
   });
   const light = new OpaqueMaterial({ color: hexNumber(asset?.color || palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
@@ -5373,7 +5418,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const leafMat = new OpaqueMaterial({ color: 0x6f805c, side: THREE.DoubleSide, shininess: 4 });
   const potMat = new OpaqueMaterial({ color: 0x8f7358, side: THREE.DoubleSide, shininess: 6 });
   const glass = new GlassMaterial({ color: hexNumber(palette?.glass, 0x8fb6cc), transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, shininess: 80 });
-  const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 90 });
+  const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 110, specular:0xb8b6b1 });
 
   const rotateOffset = (ox, oy) => ({
     x: ox * Math.cos(rot) - oy * Math.sin(rot),
@@ -5381,7 +5426,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   });
 
   const addBox = (bw, bd, bh, ox = 0, oy = 0, oz = bh / 2, material = accent) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bd, bh), material);
+    const mesh = new THREE.Mesh(ventraSoftFurnitureBox(THREE,bw,bd,bh), material);
     const shifted = rotateOffset(ox, oy);
     mesh.position.set(cx + shifted.x, cy + shifted.y, oz + (Number(asset.zMeters) || 0));
     mesh.rotation.z = rot;
@@ -5394,23 +5439,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   // Rounded rectangle extruded along Z: an actual cushion silhouette, including
   // rounded plan corners and a narrow softened upper/lower edge in legacy r71.
   const addCushion = (bw, bd, bh, ox, oy, oz, material = light) => {
-    const corner = Math.min(bw, bd) * 0.10;
-    const bevel = Math.min(corner * 0.4, bh * 0.18);
-    const x = bw / 2, y = bd / 2, r = corner;
-    const shape = new THREE.Shape();
-    shape.moveTo(-x + r, -y);
-    shape.lineTo(x - r, -y); shape.quadraticCurveTo(x, -y, x, -y + r);
-    shape.lineTo(x, y - r); shape.quadraticCurveTo(x, y, x - r, y);
-    shape.lineTo(-x + r, y); shape.quadraticCurveTo(-x, y, -x, y - r);
-    shape.lineTo(-x, -y + r); shape.quadraticCurveTo(-x, -y, -x + r, -y);
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      amount: Math.max(0.001, bh - 2 * bevel), depth: Math.max(0.001, bh - 2 * bevel),
-      steps: 1, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.4,
-      bevelSegments: 3, curveSegments: 8,
-    });
+    const geometry = ventraUpholsteryGeometry(THREE,bw,bd,bh);
     const mesh = new THREE.Mesh(geometry, material);
     const shifted = rotateOffset(ox, oy);
-    mesh.position.set(cx + shifted.x, cy + shifted.y, oz - bh / 2 + bevel);
+    mesh.position.set(cx + shifted.x, cy + shifted.y, oz + (Number(asset.zMeters)||0));
     mesh.rotation.z = rot;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -5452,8 +5484,24 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addBox(w * 0.84, d * 0.84, 0.004, 0, 0, 0.026, light);
       break;
     }
-    case 'flower_pot':
     case 'plant': {
+      const potH=Math.min(.32,h*.26),radius=Math.min(w,d)*.20;
+      addCylinder(radius,potH,0,0,potH/2,potMat,false);
+      addCylinder(radius*.92,.018,0,0,potH,dark,false);
+      addCylinder(Math.min(.012,radius*.07),h*.66,0,0,potH+h*.33,leafMat,false);
+      for(let i=0;i<36;i++){
+        const angle=i*2.399963,reach=Math.min(w,d)*(.13+(i%3)*.035),length=Math.min(Math.min(w,d)*.30,h*.18);
+        const geometry=new THREE.SphereGeometry(1,10,6);
+        if(geometry.vertices){for(const v of geometry.vertices){v.x*=length;v.y*=length*.40;v.z*=length*.065;}geometry.computeFaceNormals?.();geometry.computeVertexNormals?.();}
+        else geometry.scale?.(length,length*.40,length*.065);
+        const leaf=new THREE.Mesh(geometry,leafMat),shift=rotateOffset(Math.cos(angle)*reach,Math.sin(angle)*reach);
+        leaf.position.set(cx+shift.x,cy+shift.y,potH+(h-potH)*(.23+i*.019));
+        leaf.rotation.set(0,(i%2?.22:-.16),angle+rot);leaf.castShadow=true;leaf.receiveShadow=true;
+        meshes.push(leaf);
+      }
+      break;
+    }
+    case 'flower_pot': {
       addCylinder(Math.min(w, d) * 0.20, 0.28, 0, 0, 0.14, potMat, false);
       const crown = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, d) * 0.33, 14, 10), leafMat);
       crown.position.set(cx, cy, Math.max(0.55, h * 0.64));
@@ -5729,13 +5777,17 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'washing_machine': {
-      addBox(w, d, h, 0, 0, h / 2, white);
-      const drum = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w, h) * 0.22, Math.min(w, h) * 0.22, 0.055, 24), glass);
-      const shifted = rotateOffset(0, -d * 0.51);
-      drum.position.set(cx + shifted.x, cy + shifted.y, h * 0.54);
-      drum.rotation.x = Math.PI / 2;
-      drum.rotation.z = rot;
-      meshes.push(drum);
+      addBox(w,d,h,0,0,h/2,white);
+      const radius=Math.min(w,h)*.22;
+      const front=(geometry,mat,z)=>{
+        const mesh=new THREE.Mesh(geometry,mat),shift=rotateOffset(0,-d*.515);
+        mesh.position.set(cx+shift.x,cy+shift.y,z);mesh.rotation.z=rot;mesh.rotation.x=Math.PI/2;mesh.castShadow=true;meshes.push(mesh);
+      };
+      if(THREE.TorusGeometry)front(new THREE.TorusGeometry(radius,.022,8,32),metal,h*.52);
+      front(new THREE.CircleGeometry(radius*.88,32),dark,h*.52);
+      addBox(w*.94,.018,h*.10,0,-d*.51,h*.88,light);
+      addCylinder(w*.045,.035,-w*.28,-d*.54,h*.88,metal,true);
+      addBox(w*.25,.012,h*.045,w*.16,-d*.535,h*.88,dark);
       break;
     }
     case 'mirror': {
@@ -6431,7 +6483,8 @@ function renderStructuredSchematicScene(viewer, scene) {
   const wallMat = new OpaqueMaterial({
     color: ventraReadableSchematicColor(palette.wall, 0xe8e2d9, 220),
     side: THREE.DoubleSide,
-    shininess: 3,
+    shininess: 4,
+    specular:0x0c0c0c,
   });
   const externalWallMat = new OpaqueMaterial({
     color: hexNumber(palette.externalWall, 0x474a4d),
@@ -6720,6 +6773,7 @@ function renderStructuredSchematicScene(viewer, scene) {
     }
   }
 
+  const railingPostKeys = new Set();
   const wallMap = new Map();
   for (const wall of scene.walls || []) {
     if (wall?.id) wallMap.set(String(wall.id), wall);
@@ -6744,14 +6798,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       : fullHeight;
 
     if(wallType === 'railing') {
-      const railMaterial=windowFrameMat;
-      for(const z of [.12,displayHeight])add(createWallMesh({THREE,start,end,height:.045,thickness:.045,zBase:z,material:railMaterial}));
-      const count=Math.max(1,Math.ceil(wallLength/.18));
-      for(let i=0;i<=count;i++){
-        const p=pointAlongSegment(start,end,i/count);
-        const post=new THREE.Mesh(new THREE.BoxGeometry(.035,.035,displayHeight),railMaterial);
-        post.position.set(p.x,p.y,displayHeight/2);post.userData={ventraType:'schematic_balcony_railing',wallId:wall.id,schematic:true};add(post);
-      }
+      for(const mesh of ventraBuildBalconyRailing({THREE,wall,start,end,height:displayHeight,palette,postKeys:railingPostKeys}))add(mesh);
       continue;
     }
 
@@ -6923,6 +6970,8 @@ function renderStructuredSchematicScene(viewer, scene) {
       roomDepth: depth,
     });
     meshes.forEach(add);
+    const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
+    if(shade)schematicRoot.add(shade);
     assetMeshCount += meshes.length;
   }
 
@@ -7247,6 +7296,8 @@ function renderSchematicScene(viewer, scene) {
   for(const asset of scene.assets || []){
     const meshes=buildSchematicAssetMeshes({THREE,asset,palette,roomWidth:width,roomDepth:depth});
     meshes.forEach(add); assetMeshCount += meshes.length;
+    const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
+    if(shade)schematicRoot.add(shade);
   }
 
   try {
@@ -7298,11 +7349,36 @@ function renderSchematicScene(viewer, scene) {
 }
 
 // Presentation only: restore every material/shadow property when disabled.
+function ventraBuildBalconyRailing({THREE,wall,start,end,height,palette={},postKeys=new Set()}){
+ const length=Math.hypot(end.x-start.x,end.y-start.y);if(length<.05)return [];
+ const angle=Math.atan2(end.y-start.y,end.x-start.x),h=height,meshes=[];
+ const metal=new THREE.MeshPhongMaterial({color:hexNumber(palette.metal,0x374148),shininess:110,specular:0xb8b6b1});
+ const glass=new THREE.MeshPhongMaterial({color:0xdcebf1,transparent:true,opacity:.24,depthWrite:false,shininess:90,side:THREE.DoubleSide});glass.userData={ventraMaterial:'railing_glass'};
+ const point=t=>({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t});
+ const register=(mesh,part)=>{mesh.userData={ventraType:'schematic_balcony_railing',railingPart:part,wallId:wall.id,schematic:true};mesh.castShadow=part!=='glass';mesh.receiveShadow=true;meshes.push(mesh);return mesh;};
+ const box=(w,d,z,p,center,mat,part)=>{const mesh=new THREE.Mesh(ventraSoftFurnitureBox(THREE,w,d,z),mat);mesh.position.set(p.x,p.y,center);mesh.rotation.z=angle;return register(mesh,part);};
+ const tube=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,length,24),metal);
+ tube.position.set((start.x+end.x)/2,(start.y+end.y)/2,h-.022);tube.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(end.x-start.x,end.y-start.y,0).normalize());register(tube,'handrail');
+ const bays=Math.max(1,Math.ceil(length/1.05)),span=length/bays;
+ for(let i=0;i<=bays;i++){
+  const p=point(i/bays),key=[p.x.toFixed(4),p.y.toFixed(4),h.toFixed(3)].join(':');
+  if(!postKeys.has(key)){
+   postKeys.add(key);box(.038,.038,h-.04,p,(h-.04)/2,metal,'post');box(.086,.086,.012,p,.006,metal,'base_plate');
+   for(const offset of [-1,1]){const bolt=new THREE.Mesh(new THREE.CylinderGeometry(.0045,.0045,.003,8),metal);bolt.rotation.x=Math.PI/2;bolt.position.set(p.x+Math.cos(angle)*offset*.025,p.y+Math.sin(angle)*offset*.025,.014);register(bolt,'bolt');}
+  }
+  if(i===bays)continue;
+  const center=point((i+.5)/bays),panelWidth=Math.max(.01,span-.068);
+  box(panelWidth,.012,h-.17,center,(h-.17)/2+.10,glass,'glass');
+  for(const t of [(i+.03)/bays,(i+.97)/bays])for(const z of [.18,h-.16])box(.032,.031,.044,point(t),z,metal,'glass_clamp');
+ }
+ return meshes;
+}
+
 function ventraCreateInteriorView(root){
   const materials=new Map(),objects=new Map(),wallMaterials=new Set();
   root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))wallMaterials.add(object.material);});
   root.traverse(object=>{if(!wallMaterials.has(object.material))return;objects.set(object,object.castShadow);const mat=object.material;if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});});
-  return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.18,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
+  return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.045,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
 }
 
 function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState) {
@@ -7314,12 +7390,18 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   const width = Math.max(320, container.clientWidth || 960);
   const height = Math.max(320, container.clientHeight || 640);
   const background = hexNumber(sceneData?.backgroundColor || "#D9DADC", 0x262a30);
-  const renderer = new THREE.WebGLRenderer({
+  const rendererOptions = {
+    sceneData,
+    span: Math.max(4, Math.hypot(Number(sceneData.width)||12,Number(sceneData.depth)||8)),
+    mobile: width <= 600,
     canvas: canvasElement,
     antialias: true,
     alpha: false,
     preserveDrawingBuffer: true,
-  });
+  };
+  let renderer;
+  try { renderer = createPhysicalPreview(rendererOptions); }
+  catch { renderer = new THREE.WebGLRenderer(rendererOptions); }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width <= 600 ? 1.5 : 2));
   renderer.setSize(width, height, false);
   renderer.setClearColor(background, 1);
@@ -7528,6 +7610,18 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   return {
     model,
     render,
+    ready:()=>renderer.readyResources?.(),
+    captureCanvas:()=>{
+      const size={width:renderer.domElement.width,height:renderer.domElement.height};
+      const ratio=renderer.getPixelRatio?.()||1,logical={width:size.width/ratio,height:size.height/ratio};
+      const scale=2048/Math.max(size.width,size.height);
+      if(scale<=1){render();return renderer.domElement;}
+      try{
+        renderer.setPixelRatio(1);renderer.setSize(Math.round(size.width*scale),Math.round(size.height*scale),false);render();
+        const copy=document.createElement('canvas');copy.width=renderer.domElement.width;copy.height=renderer.domElement.height;
+        copy.getContext('2d').drawImage(renderer.domElement,0,0);return copy;
+      }finally{renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);render();}
+    },
     getCameraState:()=>({position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray()}),
     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
     clearFurniturePreview,
@@ -9279,13 +9373,14 @@ export default function Project3DViewer({ projectId }) {
         throw new Error("Schematic 3D is not ready.");
       }
 
+      await standalone.ready?.();
       standalone.render?.();
 
       // Capture immediately after render. preserveDrawingBuffer keeps the
       // visible WebGL frame available for the 2D export copy.
       const exportCanvas =
         ventraCropCanvasToContent(
-          canvas
+          standalone.captureCanvas?.() || canvas
         );
 
       return {

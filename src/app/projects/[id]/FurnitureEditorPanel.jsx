@@ -59,6 +59,9 @@ export default function FurnitureEditorPanel({scene,getRenderer,onCommit,onCommi
   return()=>renderer.setFurnitureTool?.(null);
  },[getRenderer,open,mode,disabled,busy]);
  const blocked=disabled||busy;
+ const renderCatalogItem=m=>(<button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);setMode('add');}} onClick={()=>{setCatalogId(m.id);setMode('add');}}>
+    <span className={styles.swatch} style={{background:m.color}} aria-hidden="true"/>{m[lang]}<small>{m.width} × {m.depth} m</small>
+   </button>);
  return <section className={styles.panel} dir={lang==='en'?'ltr':'rtl'}>
   <div className={styles.quickTools} role="group" aria-label={t.title}>
    <button type="button" aria-pressed={mode==='camera'} onClick={()=>setMode('camera')}>{t.camera}</button>
@@ -73,10 +76,8 @@ export default function FurnitureEditorPanel({scene,getRenderer,onCommit,onCommi
    <button type="button" disabled={blocked} onClick={()=>getRenderer()?.setNamedView?.('top')}>{t.top}</button>
    <button type="button" disabled={blocked||!undoCount} onClick={()=>save(null,true)}>{t.undo}</button>
   </div>{mode==='resize'&&<p>{lang==='fa'?'روی وسیله کلیک کن و به راست بکش تا بزرگ‌تر، یا به چپ بکش تا کوچک‌تر شود. تناسب طول، عرض و ارتفاع حفظ می‌شود؛ با رها کردن ذخیره می‌شود.':lang==='ar'?'اسحب الأثاث يميناً للتكبير أو يساراً للتصغير؛ تبقى نسب الطول والعرض والارتفاع ثابتة. أفلت للحفظ.':'Drag furniture right to enlarge or left to shrink. Width, depth and height scale together; release to save.'}</p>}<p>{mode==='rotate'?(lang==='fa'?'روی وسیله کلیک کن و به چپ یا راست بکش؛ با رها کردن ذخیره می‌شود. Shift: گام‌های ۱۵ درجه. روی گوشی با انگشت بکش.':lang==='ar'?'اضغط على الأثاث واسحب يميناً أو يساراً؛ يتم الحفظ عند الإفلات. Shift: خطوات ١٥ درجة. على الهاتف اسحب بإصبعك.':'Drag furniture left or right to rotate; release to save. Hold Shift for 15° steps. On mobile, drag with one finger.'):mode==='resize'?'':t.help}</p><ToolDrawer title="catalog"><div className={styles.catalog}>
-   {FURNITURE_CATALOG.map(m=><button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);setMode('add');}} onClick={()=>{setCatalogId(m.id);setMode('add');}}>
-    <span className={styles.swatch} style={{background:m.color}} aria-hidden="true"/>{m[lang]}<small>{m.width} × {m.depth} m</small>
-   </button>)}
-  </div></ToolDrawer><ToolDrawer title="edit"><div className={styles.tools}>
+   {FURNITURE_CATALOG.filter(m=>m.type!=='plant').map(renderCatalogItem)}
+  </div><ToolDrawer title="plants"><div className={styles.catalog}>{FURNITURE_CATALOG.filter(m=>m.type==='plant').map(renderCatalogItem)}</div></ToolDrawer></ToolDrawer><ToolDrawer title="edit"><div className={styles.tools}>
    <label>{t.choose}<select disabled={blocked} value={object?selected:''} onChange={e=>{setSelected(e.target.value);const a=scene.assets.find(a=>a.id===e.target.value);if(a?.color)setColor(a.color);}}><option value="">—</option>{scene.assets.map(a=><option key={a.id} value={a.id}>{label(a)} · {scene.rooms.find(r=>r.id===a.roomId)?.name||a.roomId} · {a.id}</option>)}</select></label>
    {object&&<span dir="ltr">{object.width?.toFixed(2)} × {object.depth?.toFixed(2)} × {object.height?.toFixed(2)} m</span>}
    <button type="button" disabled={blocked||!object} onClick={()=>save({kind:'rotate',assetId:selected,rotation:(object.rotation||0)+15})}>{t.rotate}</button>

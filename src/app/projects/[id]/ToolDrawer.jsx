@@ -9,6 +9,7 @@ const labels={
  render:{en:'Realistic render',fa:'رندر واقعی',ar:'التصيير الواقعي'},
  prompt:{en:'Design with a prompt',fa:'طراحی با پرامپت',ar:'التصميم بالوصف'},
  info:{en:'Model details',fa:'جزئیات مدل',ar:'تفاصيل النموذج'},
+ plants:{en:'Indoor plants & trees',fa:'گیاهان و درختچه‌های آپارتمانی',ar:'نباتات وشجيرات داخلية'},
  catalog:{en:'Furniture catalog',fa:'کاتالوگ مبلمان',ar:'كتالوج الأثاث'},
  edit:{en:'Selected furniture settings',fa:'تنظیمات مبلمان انتخاب‌شده',ar:'إعدادات الأثاث المختار'},
  inspector:{en:'Object inspector',fa:'اطلاعات اجزای مدل',ar:'معلومات عناصر النموذج'},
