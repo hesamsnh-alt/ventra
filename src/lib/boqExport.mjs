@@ -16,7 +16,9 @@ export function buildBoqExport(items = [], commercial = {}, {language="en",trans
     sums[status] += finiteAmount;
     return [item.itemNumber, tr(item.section), tr(item.description), tr(item.unit),
       item.quantity, item.rate, Number.isFinite(amount) ? amount.toFixed(2) : '',
-      tr({verified:'Verified / reviewed', provisional:'Provisional estimate', pending:'Unresolved / excluded'}[status]),
+      tr(item.status === 'measured_rate_pending' && Number(item.quantity) > 0
+        ? 'Quantity recorded / rate and specification pending'
+        : {verified:'Verified / reviewed', provisional:'Provisional estimate', pending:'Unresolved / excluded'}[status]),
       tr(status === 'verified' ? 'Yes' : 'No'), item.source || '', item.quantityBasis || '', item.rateSource || '', tr(item.notes || '')];
   });
   const money = value => Number(value || 0).toFixed(2);

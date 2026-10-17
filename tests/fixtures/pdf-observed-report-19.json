@@ -1,0 +1,1605 @@
+{
+  "page_results": [
+    {
+      "pageNumber": 1,
+      "rooms": 9,
+      "doors": 11,
+      "windows": 6,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 192,
+      "ceiling_area": 192,
+      "confidence": 85,
+      "notes": "Architectural floor plan A01 shows a 16.00 m x 12.00 m rectangular envelope with measurement convention: floor areas to wall centrelines and no wall-strip deductions. Room areas are printed for all spaces except G05 Hall; its area (24.00 m2) is derived directly from printed dimensions 2.00 m (central band) x 12.00 m building depth. Door and window set COUNTS are based on visible tags GD01–GD11 and GW01–GW06. Door and window SIZES are not shown on this page; opening areas are set to 0. Internal wall lengths/areas cannot be completed from this single plan because many partition extents and opening widths are not fully dimensioned; only external perimeter is dimensioned. Geometry coverage is partial: some spaces (Laundry, WC/Shower, Stairs, Foyer) lack independent dimensions for their internal splits; polygons are provided only where spans are explicitly dimensioned. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.",
+      "detected_items": [
+        {
+          "name": "G01 Garage",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "EPOXY | independently dimensioned polygon: 7.00 m bottom segment x 4.00 m left segment; label 28 m2 EPOXY."
+        },
+        {
+          "name": "G02 Laundry",
+          "quantity": 16,
+          "unit": "m2",
+          "description": "TILE | printed 16 m2"
+        },
+        {
+          "name": "G03 WC / Shower",
+          "quantity": 12,
+          "unit": "m2",
+          "description": "TILE | printed 12 m2"
+        },
+        {
+          "name": "G04 Kitchen / Dining",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "TILE | independently dimensioned polygon: Top-left cell 7.00 x 4.00; label 28 m2 TILE."
+        },
+        {
+          "name": "G05 Hall",
+          "quantity": 24,
+          "unit": "m2",
+          "description": "TILE | independently dimensioned polygon: Central band width 2.00 m (bottom chain) x 12.00 m depth (left chain)."
+        },
+        {
+          "name": "G06 Stairs",
+          "quantity": 16,
+          "unit": "m2",
+          "description": "TILE | printed 16 m2"
+        },
+        {
+          "name": "G07 Foyer",
+          "quantity": 12,
+          "unit": "m2",
+          "description": "TILE | printed 12 m2"
+        },
+        {
+          "name": "G08 Study",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "WOOD | independently dimensioned polygon: Middle-right cell 7.00 x 4.00; label 28 m2 WOOD."
+        },
+        {
+          "name": "G09 Living / TV",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "WOOD | independently dimensioned polygon: Top-right cell 7.00 x 4.00; label 28 m2 WOOD."
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "floor_plan",
+        "scope_id": "GROUND FLOOR",
+        "drawing_id": "A01",
+        "revision": "R1",
+        "quantities": [
+          {
+            "key": "external_wall_length",
+            "scope_id": "GROUND FLOOR",
+            "value": 56,
+            "unit": "m",
+            "evidence": "Envelope 16.00 x 12.00; perimeter 2*(16.00+12.00)=56.00 m (wall centrelines)."
+          },
+          {
+            "key": "door_count",
+            "scope_id": "GROUND FLOOR",
+            "value": 11,
+            "unit": "nr",
+            "evidence": "Door tags GD01–GD11 visible (includes GD02 garage door)."
+          },
+          {
+            "key": "window_count",
+            "scope_id": "GROUND FLOOR",
+            "value": 6,
+            "unit": "nr",
+            "evidence": "Window tags GW01–GW06 visible on perimeter."
+          },
+          {
+            "key": "toilet_count",
+            "scope_id": "GROUND FLOOR",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "G03 shows fixture label “WC”."
+          },
+          {
+            "key": "basin_count",
+            "scope_id": "GROUND FLOOR",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "G03 shows fixture label “B” (basin)."
+          },
+          {
+            "key": "shower_count",
+            "scope_id": "GROUND FLOOR",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "G03 shows fixture label “SH” (shower)."
+          },
+          {
+            "key": "kitchen_cabinet_length",
+            "scope_id": "GROUND FLOOR",
+            "value": 5,
+            "unit": "m",
+            "evidence": "Label “L CABINET 3+2 m” in G04."
+          },
+          {
+            "key": "floor_area",
+            "value": 192,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "ceiling_area",
+            "value": 192,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "wood_floor_area",
+            "value": 56,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "ceramic_floor_area",
+            "value": 108,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "epoxy_floor_area",
+            "value": 28,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "terrace_floor_area",
+            "value": 0,
+            "unit": "m2",
+            "scope_id": "GROUND FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 1; dimensioned tags: G01, G04, G05, G08, G09; label-only tags: G02, G03, G06, G07; Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          }
+        ]
+      },
+      "area_geometry": {
+        "coverage": "partial",
+        "basis": "wall_centerline_zones",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 12
+          },
+          {
+            "x": 0,
+            "y": 12
+          }
+        ],
+        "envelope_evidence": "Overall envelope 16.00 x 12.00; bottom chain 7.00 + 2.00 + 7.00; left chain 4.00 + 4.00 + 4.00 (all in metres, wall centrelines).",
+        "spaces": [
+          {
+            "tag": "G01 Garage",
+            "kind": "enclosed",
+            "finish": "epoxy",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "7.00 m bottom segment x 4.00 m left segment; label 28 m2 EPOXY."
+          },
+          {
+            "tag": "G04 Kitchen / Dining",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 12
+              },
+              {
+                "x": 0,
+                "y": 12
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Top-left cell 7.00 x 4.00; label 28 m2 TILE."
+          },
+          {
+            "tag": "G05 Hall",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 7,
+                "y": 12
+              }
+            ],
+            "reported_area": null,
+            "evidence": "Central band width 2.00 m (bottom chain) x 12.00 m depth (left chain)."
+          },
+          {
+            "tag": "G08 Study",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 16,
+                "y": 4
+              },
+              {
+                "x": 16,
+                "y": 8
+              },
+              {
+                "x": 9,
+                "y": 8
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Middle-right cell 7.00 x 4.00; label 28 m2 WOOD."
+          },
+          {
+            "tag": "G09 Living / TV",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 9,
+                "y": 8
+              },
+              {
+                "x": 16,
+                "y": 8
+              },
+              {
+                "x": 16,
+                "y": 12
+              },
+              {
+                "x": 9,
+                "y": 12
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Top-right cell 7.00 x 4.00; label 28 m2 WOOD."
+          }
+        ]
+      },
+      "wood_floor_area": 56,
+      "ceramic_floor_area": 108,
+      "epoxy_floor_area": 28,
+      "terrace_floor_area": 0,
+      "__areaGeometryValidated": true
+    },
+    {
+      "pageNumber": 2,
+      "rooms": 10,
+      "doors": 8,
+      "windows": 9,
+      "wall_length": 112,
+      "wall_area": 358.4,
+      "floor_area": 180,
+      "ceiling_area": 168,
+      "confidence": 80,
+      "notes": "Architectural floor plan A02 shows FIRST FLOOR with clear 16.00 x 12.00 centreline envelope and a 7.00 | 2.00 | 7.00 grid across and 4.00 + 4.00 + 4.00 vertically. Room areas are printed for all spaces except the Hall; Hall computed from the dimensioned 2.00 m x 12.00 m band. Floor areas follow the stated convention: measured to wall centrelines and do not deduct wall strips. Stair VOID (12 m2) excluded from floor and ceiling; open Terrace (12 m2) included in floor_area, excluded from ceiling_area. Window and door sizes are not given on this page (sizes on A03), so window_area and door_area are set to 0. Wall_length includes the full external perimeter (56 m) plus only the dimensioned grid partitions: two 12.00 m hall flanking walls and two 16.00 m horizontal walls (total internal 56 m). Undimensioned sub-partitions on the right block are not included. Wall_area is single-face area = wall_length x 3.20 m clear height. Counts taken from visible tags (FW01–FW09, FD01–FD08). This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.",
+      "detected_items": [
+        {
+          "name": "F01 Bedroom 2",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "WOOD - 7.00 x 4.00 = 28 m2 (reported 28 m2) | independently dimensioned polygon: Bedroom 2 within 7.00 m x 4.00 m bay (printed grid)."
+        },
+        {
+          "name": "F02 Bedroom 3",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "WOOD - 7.00 x 4.00 = 28 m2 (reported 28 m2) | independently dimensioned polygon: Bedroom 3 within 7.00 m x 4.00 m bay (printed grid)."
+        },
+        {
+          "name": "F03 Master Bedroom",
+          "quantity": 28,
+          "unit": "m2",
+          "description": "WOOD - 7.00 x 4.00 = 28 m2 (reported 28 m2) | independently dimensioned polygon: Master Bedroom within 7.00 m x 4.00 m bay (printed grid)."
+        },
+        {
+          "name": "F04 Hall",
+          "quantity": 24,
+          "unit": "m2",
+          "description": "TILE - 2.00 x 12.00 = 24 m2 (no printed room area) | independently dimensioned polygon: Hall is the 2.00 m x 12.00 m centreline band between left and right blocks (printed 7 | 2 | 7 grid)."
+        },
+        {
+          "name": "F05 Landing",
+          "quantity": 4,
+          "unit": "m2",
+          "description": "TILE - reported 4 m2"
+        },
+        {
+          "name": "F06 Stair VOID",
+          "quantity": 12,
+          "unit": "m2",
+          "description": "VOID - reported 12 m2 (excluded from floor/ceiling)"
+        },
+        {
+          "name": "F07 Terrace",
+          "quantity": 12,
+          "unit": "m2",
+          "description": "OUTDOOR - reported 12 m2 (included in floor_area; excluded from ceiling_area)"
+        },
+        {
+          "name": "F08 Bedroom 4 (L)",
+          "quantity": 22,
+          "unit": "m2",
+          "description": "WOOD - reported 22 m2"
+        },
+        {
+          "name": "F09 Bath",
+          "quantity": 6,
+          "unit": "m2",
+          "description": "TILE - reported 6 m2"
+        },
+        {
+          "name": "F10 Family Lounge",
+          "quantity": 16,
+          "unit": "m2",
+          "description": "WOOD - reported 16 m2"
+        },
+        {
+          "name": "F11 Ensuite",
+          "quantity": 12,
+          "unit": "m2",
+          "description": "TILE - reported 12 m2"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "floor_plan",
+        "scope_id": "FIRST FLOOR",
+        "drawing_id": "A02",
+        "revision": "R1",
+        "quantities": [
+          {
+            "key": "external_wall_length",
+            "scope_id": "FIRST FLOOR",
+            "value": 56,
+            "unit": "m",
+            "evidence": "Perimeter = 2 x (16.00 + 12.00) = 56.00 m (centreline)."
+          },
+          {
+            "key": "internal_wall_length",
+            "scope_id": "FIRST FLOOR",
+            "value": 56,
+            "unit": "m",
+            "evidence": "Dimensioned grid partitions only: 2 x 12.00 m (hall flanks) + 2 x 16.00 m (at 4 m and 8 m) = 56.00 m."
+          },
+          {
+            "key": "floor_area",
+            "value": 180,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "ceiling_area",
+            "value": 168,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "wood_floor_area",
+            "value": 122,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "ceramic_floor_area",
+            "value": 46,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "epoxy_floor_area",
+            "value": 0,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          },
+          {
+            "key": "terrace_floor_area",
+            "value": 12,
+            "unit": "m2",
+            "scope_id": "FIRST FLOOR",
+            "evidence": "Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F02, F03, F04; label-only tags: F05, F06, F07, F08, F09, F10, F11; Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.. Inventory closure checked; unmeasured room boundaries and AI materials require review."
+          }
+        ]
+      },
+      "area_geometry": {
+        "coverage": "partial",
+        "basis": "wall_centerline_zones",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 12
+          },
+          {
+            "x": 0,
+            "y": 12
+          }
+        ],
+        "envelope_evidence": "Envelope 16.00 x 12.00 and grid 7.00 | 2.00 | 7.00 across; 4.00 + 4.00 + 4.00 vertically.",
+        "spaces": [
+          {
+            "tag": "F01",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Bedroom 2 within 7.00 m x 4.00 m bay (printed grid)."
+          },
+          {
+            "tag": "F02",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 0,
+                "y": 8
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Bedroom 3 within 7.00 m x 4.00 m bay (printed grid)."
+          },
+          {
+            "tag": "F03",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 8
+              },
+              {
+                "x": 7,
+                "y": 12
+              },
+              {
+                "x": 0,
+                "y": 12
+              }
+            ],
+            "reported_area": 28,
+            "evidence": "Master Bedroom within 7.00 m x 4.00 m bay (printed grid)."
+          },
+          {
+            "tag": "F04",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 12
+              },
+              {
+                "x": 7,
+                "y": 12
+              }
+            ],
+            "reported_area": null,
+            "evidence": "Hall is the 2.00 m x 12.00 m centreline band between left and right blocks (printed 7 | 2 | 7 grid)."
+          }
+        ]
+      },
+      "wood_floor_area": 122,
+      "ceramic_floor_area": 46,
+      "epoxy_floor_area": 0,
+      "terrace_floor_area": 12,
+      "__areaGeometryValidated": true
+    },
+    {
+      "pageNumber": 3,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 92,
+      "notes": "Structural schedule with explicit totals and dimensions. Concrete volumes computed directly from printed sizes. Beam volume based on declared rule: bill only the 0.25 m downstand depth against a 0.25 m width (net of 0.20 m slab), so section = 0.25 x 0.25 = 0.0625 m2. Slab areas: 16 x 12 overall; first and roof slabs omit 3 x 4 void/terrace. Column count: 20 GF + 19 FF (E1 omitted over terrace), height 2.95 m clear. Formwork reported only where measurement basis is standard and unambiguous: beam sides+soffit (0.75 m2/m) and slab soffits; column four faces. No footing formwork assumed (often cast in excavations) — exclude until specified. Stair flight concrete is explicitly pending and not included. No rebar weights provided. All dimensions in metres; datum wall centrelines. Preliminary AI takeoff — review by a quantity surveyor is required.",
+      "detected_items": [
+        {
+          "name": "Foundation locations",
+          "quantity": 20,
+          "unit": "nr",
+          "description": "5 x 4 grid"
+        },
+        {
+          "name": "Excavation pit",
+          "quantity": 20,
+          "unit": "nr",
+          "description": "1.90 x 1.90 x 1.00 m each"
+        },
+        {
+          "name": "PCC blinding",
+          "quantity": 20,
+          "unit": "nr",
+          "description": "1.70 x 1.70 x 0.10 m each"
+        },
+        {
+          "name": "RC footing",
+          "quantity": 20,
+          "unit": "nr",
+          "description": "1.50 x 1.50 x 0.45 m each"
+        },
+        {
+          "name": "Pedestal",
+          "quantity": 20,
+          "unit": "nr",
+          "description": "0.45 x 0.45 x 0.60 m each"
+        },
+        {
+          "name": "Columns (storeys)",
+          "quantity": 39,
+          "unit": "nr",
+          "description": "0.30 x 0.30 m, 2.95 m clear; 20 GF + 19 FF (omit E1 at FF)"
+        },
+        {
+          "name": "First-floor beams length",
+          "quantity": 120,
+          "unit": "m",
+          "description": "Centreline total; beam overall 0.25 x 0.45 with 0.20 slab; bill only 0.25 downstand depth"
+        },
+        {
+          "name": "Roof beams length",
+          "quantity": 117,
+          "unit": "m",
+          "description": "Centreline total; omissions noted (E1-E2 4 m, last 3 m of A1-E1)"
+        },
+        {
+          "name": "Ground floor slab area",
+          "quantity": 192,
+          "unit": "m2",
+          "description": "16 x 12 @ 0.15 m thick"
+        },
+        {
+          "name": "First floor slab area",
+          "quantity": 180,
+          "unit": "m2",
+          "description": "16 x 12 minus 3 x 4 stair void @ 0.20 m thick"
+        },
+        {
+          "name": "Roof slab area",
+          "quantity": 180,
+          "unit": "m2",
+          "description": "16 x 12 minus 3 x 4 open terrace @ 0.20 m thick"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "quantity_schedule",
+        "scope_id": null,
+        "drawing_id": "S01",
+        "revision": "R1",
+        "quantities": [
+          {
+            "key": "excavation_volume",
+            "scope_id": "project",
+            "value": 72.2,
+            "unit": "m3",
+            "evidence": "20 x (1.90 x 1.90 x 1.00) = 72.20 m3"
+          },
+          {
+            "key": "pcc_volume",
+            "scope_id": "project",
+            "value": 5.78,
+            "unit": "m3",
+            "evidence": "20 x (1.70 x 1.70 x 0.10) = 5.78 m3"
+          },
+          {
+            "key": "foundation_volume",
+            "scope_id": "project",
+            "value": 20.25,
+            "unit": "m3",
+            "evidence": "20 x (1.50 x 1.50 x 0.45) = 20.25 m3 (RC footings only)"
+          },
+          {
+            "key": "pedestal_volume",
+            "scope_id": "project",
+            "value": 2.43,
+            "unit": "m3",
+            "evidence": "20 x (0.45 x 0.45 x 0.60) = 2.43 m3"
+          },
+          {
+            "key": "column_volume",
+            "scope_id": "project",
+            "value": 10.3545,
+            "unit": "m3",
+            "evidence": "0.30 x 0.30 x 2.95 x (20 + 19) = 10.3545 m3"
+          },
+          {
+            "key": "ground_slab_volume",
+            "scope_id": "ground floor",
+            "value": 28.8,
+            "unit": "m3",
+            "evidence": "0.15 x (16 x 12) = 28.8 m3"
+          },
+          {
+            "key": "first_slab_volume",
+            "scope_id": "first floor",
+            "value": 36,
+            "unit": "m3",
+            "evidence": "0.20 x (16 x 12 - 3 x 4) = 36.0 m3"
+          },
+          {
+            "key": "roof_slab_volume",
+            "scope_id": "roof",
+            "value": 36,
+            "unit": "m3",
+            "evidence": "0.20 x (16 x 12 - 3 x 4) = 36.0 m3"
+          },
+          {
+            "key": "beam_volume",
+            "scope_id": "first floor",
+            "value": 7.5,
+            "unit": "m3",
+            "evidence": "120 m x (0.25 x (0.45 - 0.20)) with 0.25 m width => 120 x 0.0625 = 7.5 m3"
+          },
+          {
+            "key": "beam_volume",
+            "scope_id": "roof",
+            "value": 7.3125,
+            "unit": "m3",
+            "evidence": "117 m x (0.25 x (0.45 - 0.20)) with 0.25 m width => 117 x 0.0625 = 7.3125 m3"
+          },
+          {
+            "key": "column_formwork_area",
+            "scope_id": "project",
+            "value": 138.06,
+            "unit": "m2",
+            "evidence": "Per storey: perimeter 1.20 m x 2.95 m = 3.54 m2; x 39 storeys = 138.06 m2"
+          },
+          {
+            "key": "beam_formwork_area",
+            "scope_id": "first floor",
+            "value": 90,
+            "unit": "m2",
+            "evidence": "Formwork per m = 2 x 0.25 m x 1 m (sides) + 0.25 x 1 (soffit) = 0.75 m2/m; 120 m x 0.75 = 90 m2"
+          },
+          {
+            "key": "beam_formwork_area",
+            "scope_id": "roof",
+            "value": 87.75,
+            "unit": "m2",
+            "evidence": "0.75 m2/m x 117 m = 87.75 m2"
+          },
+          {
+            "key": "slab_formwork_area",
+            "scope_id": "first floor",
+            "value": 180,
+            "unit": "m2",
+            "evidence": "Soffit area equals slab area: 16 x 12 - 3 x 4 = 180 m2"
+          },
+          {
+            "key": "slab_formwork_area",
+            "scope_id": "roof",
+            "value": 180,
+            "unit": "m2",
+            "evidence": "Soffit area equals slab area: 16 x 12 - 3 x 4 = 180 m2"
+          }
+        ]
+      },
+      "area_geometry": null
+    },
+    {
+      "pageNumber": 4,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 95,
+      "notes": "Page is an opening schedule (A03) listing Ground floor doors and windows with widths, heights and sill heights. Top-level rooms/doors/windows/floor/ceiling/wall summaries are zero because this is not a floor plan. Quantities below are schedule totals for scope “Ground floor” only. Door/window areas are computed as width x height from printed dimensions; no allowances for frames, trims or deductions are applied. Internal vs external doors inferred from Host wall code GI (internal) vs GE (external). Other floors, if any, are not included on this page. This is a preliminary AI takeoff; verify against plans A01–A02 and any continuation pages.",
+      "detected_items": [
+        {
+          "name": "GD01 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-S, 1.20 x 2.20 m, sill 0.00 m (area 2.64 m2)"
+        },
+        {
+          "name": "GD02 garage_door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-S, 3.00 x 2.40 m, sill 0.00 m (area 7.20 m2)"
+        },
+        {
+          "name": "GD03 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-N, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD04 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-1, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD05 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-2, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD06 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-8, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD07 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-3, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD08 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-1, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD09 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-1, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD10 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-2, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GD11 door",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GI-2, 0.90 x 2.10 m, sill 0.00 m (area 1.89 m2)"
+        },
+        {
+          "name": "GW01 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-W, 1.20 x 1.20 m, sill 1.40 m (area 1.44 m2)"
+        },
+        {
+          "name": "GW02 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-W, 1.80 x 1.50 m, sill 1.00 m (area 2.70 m2)"
+        },
+        {
+          "name": "GW03 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-E, 1.80 x 1.50 m, sill 1.00 m (area 2.70 m2)"
+        },
+        {
+          "name": "GW04 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-E, 2.40 x 1.50 m, sill 1.00 m (area 3.60 m2)"
+        },
+        {
+          "name": "GW05 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-N, 2.40 x 1.50 m, sill 1.00 m (area 3.60 m2)"
+        },
+        {
+          "name": "GW06 window",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Host GE-N, 1.80 x 1.50 m, sill 1.00 m (area 2.70 m2)"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "opening_schedule",
+        "scope_id": "Ground floor",
+        "drawing_id": "A03",
+        "revision": "R1",
+        "quantities": [
+          {
+            "key": "door_count",
+            "scope_id": "Ground floor",
+            "value": 11,
+            "unit": "nr",
+            "evidence": "GD01–GD11 on A03 ‘Ground floor’"
+          },
+          {
+            "key": "garage_door_count",
+            "scope_id": "Ground floor",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "GD02 Type=garage_door"
+          },
+          {
+            "key": "internal_door_count",
+            "scope_id": "Ground floor",
+            "value": 8,
+            "unit": "nr",
+            "evidence": "GD04–GD11 Host wall GI-*"
+          },
+          {
+            "key": "window_count",
+            "scope_id": "Ground floor",
+            "value": 6,
+            "unit": "nr",
+            "evidence": "GW01–GW06 on A03 ‘Ground floor’"
+          },
+          {
+            "key": "door_area",
+            "scope_id": "Ground floor",
+            "value": 26.85,
+            "unit": "m2",
+            "evidence": "GD01 1.20x2.20 + GD02 3.00x2.40 + 9×(0.90x2.10) = 26.85 m2"
+          },
+          {
+            "key": "window_area",
+            "scope_id": "Ground floor",
+            "value": 16.74,
+            "unit": "m2",
+            "evidence": "1.20x1.20 + 1.80x1.50 + 1.80x1.50 + 2.40x1.50 + 2.40x1.50 + 1.80x1.50 = 16.74 m2"
+          }
+        ]
+      },
+      "area_geometry": null
+    },
+    {
+      "pageNumber": 5,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 88,
+      "notes": "This page is an opening schedule labeled 'First floor'. Top-level room/door/window/floor/ceiling/wall quantities are set to zero because this is not an architectural floor plan. Quantities below are totals for the First floor as listed on this page. Door and window areas are computed as width × height from the schedule; sill heights are noted but do not affect area. Assumes units are meters as typically shown (e.g., 0.90, 2.10). Assumes the schedule on this page is complete for the First floor; if other pages continue the schedule, these totals may be partial. No geometry or scales are provided on this page.",
+      "detected_items": [
+        {
+          "name": "Doors 0.90×2.10 m",
+          "quantity": 8,
+          "unit": "nr",
+          "description": "First floor door instances FD01–FD08; Host walls FI-1, FI-2, FI-7, FI-9, FE-T2; sill 0.00 m"
+        },
+        {
+          "name": "Windows 1.80×1.50 m",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "First floor window instances FW01, FW02, FW05, FW07; sill 1.00 m"
+        },
+        {
+          "name": "Windows 2.40×1.50 m",
+          "quantity": 2,
+          "unit": "nr",
+          "description": "First floor window instances FW03, FW04; sill 1.00 m"
+        },
+        {
+          "name": "Windows 1.20×1.20 m",
+          "quantity": 3,
+          "unit": "nr",
+          "description": "First floor window instances FW06, FW08, FW09; sill 1.40 m"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "opening_schedule",
+        "scope_id": "First floor",
+        "drawing_id": null,
+        "revision": null,
+        "quantities": [
+          {
+            "key": "door_count",
+            "scope_id": "First floor",
+            "value": 8,
+            "unit": "nr",
+            "evidence": "FD01–FD08 listed under First floor schedule"
+          },
+          {
+            "key": "window_count",
+            "scope_id": "First floor",
+            "value": 9,
+            "unit": "nr",
+            "evidence": "FW01–FW09 listed under First floor schedule"
+          },
+          {
+            "key": "door_area",
+            "scope_id": "First floor",
+            "value": 15.12,
+            "unit": "m2",
+            "evidence": "8 × (0.90 × 2.10) = 15.12 m2 from schedule widths/heights"
+          },
+          {
+            "key": "window_area",
+            "scope_id": "First floor",
+            "value": 22.32,
+            "unit": "m2",
+            "evidence": "Sum of (1.80×1.50)×4 + (2.40×1.50)×2 + (1.20×1.20)×3 = 22.32 m2"
+          }
+        ]
+      },
+      "area_geometry": null
+    },
+    {
+      "pageNumber": 6,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 80,
+      "notes": "Page is a specification/measurement note, not a scaled plan. Therefore top-level rooms/doors/windows and floor/ceiling/wall summaries are set to 0 per reconciliation rules. Quantities below are only for explicitly stated scoped items on this page: wet-room windows/doors and kitchen casework/backsplash/hob-hood. Window areas for wet rooms are computed from stated sizes (1.20 x 1.20 each). No dimensions are provided for wet-room doors, so only a count is reported. No usable dimensions are provided for wall lengths/areas, plaster/paint, waterproofing extents, floor finish areas, ceiling areas or gypsum exclusions; these remain unquantified here. Measurement convention on this project is wall-centreline zones for rooms/slabs/paving; masonry by net face area minus openings; interior paint excludes wet wall tiles and kitchen backsplash. All extracted quantities are preliminary and must be reviewed by a quantity surveyor.",
+      "detected_items": [
+        {
+          "name": "Wet-room windows set (GW01, FW06, FW08, FW09)",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "Each 1.20 x 1.20 m; total window area 4 x 1.20 x 1.20 = 5.76 m2 (wet rooms only)."
+        },
+        {
+          "name": "Wet-room doors set (GD07, GD08, FD06, FD07)",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "Four wet-room doors; dimensions not stated on this page."
+        },
+        {
+          "name": "Kitchen base cabinets (L-shape)",
+          "quantity": 5,
+          "unit": "m",
+          "description": "3.00 + 2.00 = 5.00 linear metres; corner not double-counted."
+        },
+        {
+          "name": "Kitchen backsplash",
+          "quantity": 3,
+          "unit": "m2",
+          "description": "0.60 m high along 5.00 m run; 0.60 x 5.00 = 3.00 m2."
+        },
+        {
+          "name": "Kitchen hob/hood package",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Include one hob/hood set as specified."
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "specification",
+        "scope_id": null,
+        "drawing_id": null,
+        "revision": null,
+        "quantities": [
+          {
+            "key": "window_count",
+            "scope_id": "wet_rooms",
+            "value": 4,
+            "unit": "nr",
+            "evidence": "Four wet windows are 1.20 x 1.20 at sill 1.40 m: GW01, FW06, FW08, FW09."
+          },
+          {
+            "key": "window_area",
+            "scope_id": "wet_rooms",
+            "value": 5.76,
+            "unit": "m2",
+            "evidence": "4 x 1.20 x 1.20 = 5.76 m2 (wet-room windows only)."
+          },
+          {
+            "key": "door_count",
+            "scope_id": "wet_rooms",
+            "value": 4,
+            "unit": "nr",
+            "evidence": "Four wet-room doors are GD07, GD08, FD06, FD07."
+          },
+          {
+            "key": "kitchen_cabinet_length",
+            "scope_id": "kitchen",
+            "value": 5,
+            "unit": "m",
+            "evidence": "L base cabinet measured 3.00 + 2.00 = 5.00 linear metres; no double-counted corner."
+          },
+          {
+            "key": "backsplash_area",
+            "scope_id": "kitchen",
+            "value": 3,
+            "unit": "m2",
+            "evidence": "Backsplash 0.60 m high along 5.00 m: 0.60 x 5.00 = 3.00 m2."
+          },
+          {
+            "key": "kitchen_hob_hood_count",
+            "scope_id": "kitchen",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Include one hob/hood package."
+          }
+        ]
+      },
+      "area_geometry": null
+    },
+    {
+      "pageNumber": 7,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 95,
+      "notes": "This page is a declared services and external-works quantity schedule (not an architectural floor plan). Therefore, top-level room/door/window and area summaries are set to zero per rules. Quantities below are taken directly from the printed schedule and statements: two scopes are given (Ground, First). Sanitary fixtures are specified by room tags (G03, F09, F11, G04, G02) and are allocated to floors accordingly. External works (driveway, landscaping) and terrace railing are whole‑project items. No kitchen cabinet length or hob/hood count is stated here, so they are not quantified. AC unit tonnage, fixture models, or any furniture/appliance supplies are not part of this schedule. Review by a QS is required to reconcile these page totals with any other documents and confirm that only Ground and First floors exist for services.",
+      "detected_items": [
+        {
+          "name": "Light points - Ground",
+          "quantity": 28,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Light points - First",
+          "quantity": 32,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Socket points - Ground",
+          "quantity": 34,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Socket points - First",
+          "quantity": 36,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Distribution boards - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Distribution boards - First",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Split AC units - Ground",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Split AC units - First",
+          "quantity": 5,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Insulated AC pipes - Ground",
+          "quantity": 40,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Insulated AC pipes - First",
+          "quantity": 50,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Smoke detectors - Ground",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Smoke detectors - First",
+          "quantity": 4,
+          "unit": "nr",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Water supply pipes - Ground",
+          "quantity": 45,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Water supply pipes - First",
+          "quantity": 35,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Waste pipes - Ground",
+          "quantity": 35,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Waste pipes - First",
+          "quantity": 25,
+          "unit": "m",
+          "description": "Declared M01 services schedule"
+        },
+        {
+          "name": "Toilet pans - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "From note: one toilet in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Toilet pans - First",
+          "quantity": 2,
+          "unit": "nr",
+          "description": "From note: one toilet in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Basins - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "From note: one basin in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Basins - First",
+          "quantity": 2,
+          "unit": "nr",
+          "description": "From note: one basin in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Showers - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "From note: one shower in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Showers - First",
+          "quantity": 2,
+          "unit": "nr",
+          "description": "From note: one shower in each of G03 (G), F09 (F), F11 (F)"
+        },
+        {
+          "name": "Kitchen sink - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "From note: kitchen sink in G04"
+        },
+        {
+          "name": "Laundry sink - Ground",
+          "quantity": 1,
+          "unit": "nr",
+          "description": "From note: laundry sink in G02"
+        },
+        {
+          "name": "Driveway paving area - Project",
+          "quantity": 40,
+          "unit": "m2",
+          "description": "10 m x 4 m (external)"
+        },
+        {
+          "name": "Landscaping area - Project",
+          "quantity": 60,
+          "unit": "m2",
+          "description": "10 m x 6 m (external)"
+        },
+        {
+          "name": "Terrace railing length - Project",
+          "quantity": 7,
+          "unit": "m",
+          "description": "South edge 3 m + east edge 4 m; stated height 1.10 m (length reported here)"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "quantity_schedule",
+        "scope_id": null,
+        "drawing_id": null,
+        "revision": null,
+        "quantities": [
+          {
+            "key": "light_count",
+            "scope_id": "Ground",
+            "value": 28,
+            "unit": "nr",
+            "evidence": "Light points: Ground = 28 nr"
+          },
+          {
+            "key": "light_count",
+            "scope_id": "First",
+            "value": 32,
+            "unit": "nr",
+            "evidence": "Light points: First = 32 nr"
+          },
+          {
+            "key": "socket_count",
+            "scope_id": "Ground",
+            "value": 34,
+            "unit": "nr",
+            "evidence": "Socket points: Ground = 34 nr"
+          },
+          {
+            "key": "socket_count",
+            "scope_id": "First",
+            "value": 36,
+            "unit": "nr",
+            "evidence": "Socket points: First = 36 nr"
+          },
+          {
+            "key": "distribution_board_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Distribution boards: Ground = 1 nr"
+          },
+          {
+            "key": "distribution_board_count",
+            "scope_id": "First",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Distribution boards: First = 1 nr"
+          },
+          {
+            "key": "ac_count",
+            "scope_id": "Ground",
+            "value": 4,
+            "unit": "nr",
+            "evidence": "Split AC units: Ground = 4 nr"
+          },
+          {
+            "key": "ac_count",
+            "scope_id": "First",
+            "value": 5,
+            "unit": "nr",
+            "evidence": "Split AC units: First = 5 nr"
+          },
+          {
+            "key": "ac_pipe_length",
+            "scope_id": "Ground",
+            "value": 40,
+            "unit": "m",
+            "evidence": "Insulated AC pipes: Ground = 40 m"
+          },
+          {
+            "key": "ac_pipe_length",
+            "scope_id": "First",
+            "value": 50,
+            "unit": "m",
+            "evidence": "Insulated AC pipes: First = 50 m"
+          },
+          {
+            "key": "smoke_detector_count",
+            "scope_id": "Ground",
+            "value": 4,
+            "unit": "nr",
+            "evidence": "Smoke detectors: Ground = 4 nr"
+          },
+          {
+            "key": "smoke_detector_count",
+            "scope_id": "First",
+            "value": 4,
+            "unit": "nr",
+            "evidence": "Smoke detectors: First = 4 nr"
+          },
+          {
+            "key": "water_pipe_length",
+            "scope_id": "Ground",
+            "value": 45,
+            "unit": "m",
+            "evidence": "Water supply pipes: Ground = 45 m"
+          },
+          {
+            "key": "water_pipe_length",
+            "scope_id": "First",
+            "value": 35,
+            "unit": "m",
+            "evidence": "Water supply pipes: First = 35 m"
+          },
+          {
+            "key": "waste_pipe_length",
+            "scope_id": "Ground",
+            "value": 35,
+            "unit": "m",
+            "evidence": "Waste pipes: Ground = 35 m"
+          },
+          {
+            "key": "waste_pipe_length",
+            "scope_id": "First",
+            "value": 25,
+            "unit": "m",
+            "evidence": "Waste pipes: First = 25 m"
+          },
+          {
+            "key": "toilet_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one toilet in G03 (Ground)"
+          },
+          {
+            "key": "toilet_count",
+            "scope_id": "First",
+            "value": 2,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one toilet in F09 and one in F11 (First)"
+          },
+          {
+            "key": "basin_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one basin in G03 (Ground)"
+          },
+          {
+            "key": "basin_count",
+            "scope_id": "First",
+            "value": 2,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one basin in F09 and one in F11 (First)"
+          },
+          {
+            "key": "shower_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one shower in G03 (Ground)"
+          },
+          {
+            "key": "shower_count",
+            "scope_id": "First",
+            "value": 2,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: one shower in F09 and one in F11 (First)"
+          },
+          {
+            "key": "kitchen_sink_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: kitchen sink in G04 (Ground)"
+          },
+          {
+            "key": "laundry_sink_count",
+            "scope_id": "Ground",
+            "value": 1,
+            "unit": "nr",
+            "evidence": "Sanitary fixtures note: laundry sink in G02 (Ground)"
+          },
+          {
+            "key": "driveway_area",
+            "scope_id": "project",
+            "value": 40,
+            "unit": "m2",
+            "evidence": "External works: driveway paving 10 x 4 m = 40 m2"
+          },
+          {
+            "key": "landscape_area",
+            "scope_id": "project",
+            "value": 60,
+            "unit": "m2",
+            "evidence": "External works: landscaping 10 x 6 m = 60 m2"
+          },
+          {
+            "key": "terrace_railing_length",
+            "scope_id": "project",
+            "value": 7,
+            "unit": "m",
+            "evidence": "Terrace railing: south 3 m + east 4 m = 7 m; height 1.10 m noted"
+          }
+        ]
+      },
+      "area_geometry": null
+    },
+    {
+      "pageNumber": 8,
+      "rooms": 0,
+      "doors": 0,
+      "windows": 0,
+      "wall_length": 0,
+      "wall_area": 0,
+      "floor_area": 0,
+      "ceiling_area": 0,
+      "confidence": 90,
+      "notes": "This page is a declared bar schedule (not a floor plan), so rooms/doors/windows and architectural areas are zero by rule. Reinforcement weight computed per printed formula: unit mass = dia^2/162 kg/m; cut lengths already include hooks/laps; no waste added. Total rebar = 12,168.138 kg after summing all rows without intermediate rounding and rounding the grand total to 0.001 kg. Stair reinforcement is explicitly excluded by the note; only the listed foundations, pedestals, columns, beams and slab mats are included. Scope is treated as project-wide based on the schedule text (\"both slabs\" and \"only scheduled reinforcement\"); please confirm against the full drawing set. Minor uncertainty remains over scope completeness and any revisions on other pages.",
+      "detected_items": [
+        {
+          "name": "Foundation bottom",
+          "quantity": 597.333,
+          "unit": "kg",
+          "description": "Dia 12 mm; Count 480; Cut length 1.40 m; weight = 480 × 1.40 × (12^2/162) kg/m"
+        },
+        {
+          "name": "Foundation top",
+          "quantity": 414.815,
+          "unit": "kg",
+          "description": "Dia 10 mm; Count 480; Cut length 1.40 m; weight = 480 × 1.40 × (10^2/162) kg/m"
+        },
+        {
+          "name": "Pedestal vertical",
+          "quantity": 303.407,
+          "unit": "kg",
+          "description": "Dia 16 mm; Count 160; Cut length 1.20 m; weight = 160 × 1.20 × (16^2/162) kg/m"
+        },
+        {
+          "name": "Pedestal ties",
+          "quantity": 64.79,
+          "unit": "kg",
+          "description": "Dia 8 mm; Count 100; Cut length 1.64 m; weight = 100 × 1.64 × (8^2/162) kg/m"
+        },
+        {
+          "name": "Column vertical",
+          "quantity": 1824.237,
+          "unit": "kg",
+          "description": "Dia 16 mm; Count 312; Cut length 3.70 m; weight = 312 × 3.70 × (16^2/162) kg/m"
+        },
+        {
+          "name": "Column ties",
+          "quantity": 295.822,
+          "unit": "kg",
+          "description": "Dia 8 mm; Count 780; Cut length 0.96 m; weight = 780 × 0.96 × (8^2/162) kg/m"
+        },
+        {
+          "name": "Beam longitudinal incl. laps",
+          "quantity": 1649.778,
+          "unit": "kg",
+          "description": "Dia 16 mm; Aggregated cut length 1044.00 m; weight = 1044.00 × (16^2/162) kg/m"
+        },
+        {
+          "name": "Beam stirrups",
+          "quantity": 617.956,
+          "unit": "kg",
+          "description": "Dia 8 mm; Count 1185; Cut length 1.32 m; weight = 1185 × 1.32 × (8^2/162) kg/m"
+        },
+        {
+          "name": "Slab mats (both slabs)",
+          "quantity": 6400,
+          "unit": "kg",
+          "description": "Dia 12 mm; Aggregated cut length 7200.00 m; weight = 7200.00 × (12^2/162) kg/m"
+        }
+      ],
+      "window_area": 0,
+      "door_area": 0,
+      "page_evidence": {
+        "kind": "quantity_schedule",
+        "scope_id": "project",
+        "drawing_id": "S02",
+        "revision": "R1",
+        "quantities": [
+          {
+            "key": "rebar_kg",
+            "scope_id": "project",
+            "value": 12168.138,
+            "unit": "kg",
+            "evidence": "S02 Declared bar schedule. Unit mass = dia^2/162 kg/m; cut lengths include hooks/laps; no waste. Sum of rows: [Fb 12mm 480×1.40, Ft 10mm 480×1.40, Pv 16mm 160×1.20, Pt 8mm 100×1.64, Cv 16mm 312×3.70, Ct 8mm 780×0.96, Beam long. 16mm 1044.00 m, Beam stirrups 8mm 1185×1.32, Slab mats 12mm 7200.00 m] = 12,168.138 kg (rounded at total to 0.001 kg)."
+          }
+        ]
+      },
+      "area_geometry": null
+    }
+  ]
+}

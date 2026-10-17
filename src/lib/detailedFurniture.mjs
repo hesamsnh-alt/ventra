@@ -1,7 +1,9 @@
 import * as T from 'three';
+import {validAssetId} from './personalAssets.mjs';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
 export function detailedFurnitureKey(asset){
+ if(validAssetId(asset?.customModelId))return 'personal:'+asset.customModelId;
  if(asset?.type==='plant'){
   const key=asset.catalogId||asset.variant;
   if(['tree-potted','tree-potted-tall','potted-tree'].includes(key))return 'potted_plant_01';
@@ -13,8 +15,8 @@ export function detailedFurnitureKey(asset){
  if(asset?.type==='sofa'&&(!asset.variant||['classic','luxury'].includes(asset.variant)))return 'sofa_02';
  return null;
 }
-export function fitDetailedFurniture(model,width,depth,height){
- const oriented=new T.Group();oriented.add(model);oriented.rotation.set(Math.PI/2,Math.PI,0);oriented.updateMatrixWorld(true);
+export function fitDetailedFurniture(model,width,depth,height,personal=false){
+ const oriented=new T.Group();oriented.add(model);oriented.rotation.set(Math.PI/2,personal?0:Math.PI,0);oriented.updateMatrixWorld(true);
  const bounds=new T.Box3().setFromObject(oriented),size=bounds.getSize(new T.Vector3());
  if([size.x,size.y,size.z,width,depth,height].some(n=>!Number.isFinite(n)||n<=0))throw new Error('Invalid detailed furniture dimensions');
  const offset=new T.Group();offset.add(oriented);offset.position.set(-(bounds.min.x+bounds.max.x)/2,-(bounds.min.y+bounds.max.y)/2,-bounds.min.z);
@@ -27,13 +29,13 @@ function releaseModel(root,includeTextures=true){
  });
  for(const g of geometries)g.dispose();for(const m of materials)m.dispose();if(includeTextures)for(const t of textures)t.dispose();
 }
-export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFLoader()){
+export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFLoader(),resolvePersonalUrl=(...args)=>import('../services/personalAssetService.js').then(m=>m.getPersonalAssetUrl(...args))){
  const assets=new Map((sceneData?.assets||[]).filter(a=>a.id).map(a=>[a.id,a]));
  const cache=new Map(),instances=new Map(),failed=new Set();let disposed=false;
  function load(key){
-  if(!cache.has(key))cache.set(key,loader.loadAsync('/realistic-assets/'+key+'/model.gltf').then(gltf=>{
+  if(!cache.has(key))cache.set(key,Promise.resolve(key.startsWith('personal:')?resolvePersonalUrl(key.slice(9),sceneData?.projectId):'/realistic-assets/'+key+'/model.gltf').then(url=>loader.loadAsync(url)).then(gltf=>{
    if(disposed){releaseModel(gltf.scene);return null;}refresh();return gltf.scene;
-  }).catch(()=>{failed.add(key);return null;}));
+  }).catch(()=>{failed.add(key);if(key.startsWith('personal:')&&typeof window!=='undefined')window.dispatchEvent(new CustomEvent('ventra:personal-model-error',{detail:{projectId:sceneData?.projectId,assetId:key.slice(9)}}));return null;}));
   return cache.get(key);
  }
  function sync(source,mirrors){
@@ -58,13 +60,14 @@ export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFL
        pot.position.set((bounds.min.x+bounds.max.x)/2,height/2,(bounds.min.z+bounds.max.z)/2);container.add(pot);clone=container;
       }
       clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.userData.assetId=id;
-       const copy=m=>{const c=m.clone();if(asset.color&&(asset.type!=='plant'||/pot/i.test(c.name)))c.color.set(asset.color);ownMaterials.push(c);return c;};
+       const copy=m=>{const c=m.clone();if(asset.color&&!asset.preserveModelColors&&(asset.type!=='plant'||/pot/i.test(c.name)))c.color.set(asset.color);ownMaterials.push(c);return c;};
        o.material=Array.isArray(o.material)?o.material.map(copy):copy(o.material);
       }});
-      const root=fitDetailedFurniture(clone,Number(asset.width),Number(asset.depth),Number(asset.height));root.matrixAutoUpdate=false;
+      const root=fitDetailedFurniture(clone,Number(asset.width),Number(asset.depth),Number(asset.height),key.startsWith('personal:'));root.matrixAutoUpdate=false;
       const first=parts[0];first.updateMatrixWorld(true);
       const parent=new T.Matrix4().fromArray(first.parent.matrixWorld.elements);
-      const x=Number(asset.xMeters)-Number(sceneData.width)/2,y=Number(asset.yMeters)-Number(sceneData.depth)/2,z=Number(asset.zMeters)||0;
+      const origin=key.startsWith('personal:')&&sceneData.designDefaults?.viewOriginMeters||{x:Number(sceneData.width)/2,y:Number(sceneData.depth)/2};
+      const x=Number(asset.xMeters)-origin.x,y=Number(asset.yMeters)-origin.y,z=Number(asset.zMeters)||0;
       const base=parent.multiply(new T.Matrix4().makeTranslation(x,y,z)).multiply(new T.Matrix4().makeRotationZ((Number(asset.rotation)||0)*Math.PI/180)).multiply(new T.Matrix4().makeScale(root.scale.x,root.scale.y,root.scale.z));
       const inverse=new T.Matrix4().fromArray(first.matrixWorld.elements).invert();
       instances.set(id,{root,first,inverse,base,ownMaterials});scene.add(root);refresh();

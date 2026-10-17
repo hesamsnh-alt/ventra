@@ -5774,5 +5774,201 @@
   "Export & reports": {
     "fa": "خروجی و گزارش‌ها",
     "ar": "التصدير والتقارير"
+  },
+  "Quantity recorded / rate and specification pending": {
+    "fa": "مقدار ثبت شده / نرخ و مشخصات نیازمند تعیین",
+    "ar": "الكمية مسجلة / السعر والمواصفات بانتظار التحديد"
+  },
+  "PDF evidence - rate and specification pending": {
+    "fa": "مستندات PDF — نرخ و مشخصات نیازمند تعیین",
+    "ar": "أدلة PDF — السعر والمواصفات بانتظار التحديد"
+  },
+  "Concrete blinding — grade requires confirmation": {
+    "fa": "بتن مگر — رده بتن نیازمند تأیید",
+    "ar": "خرسانة النظافة — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Foundation concrete — grade requires confirmation": {
+    "fa": "بتن فونداسیون — رده بتن نیازمند تأیید",
+    "ar": "خرسانة الأساسات — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Pedestal concrete — grade requires confirmation": {
+    "fa": "بتن پدستال — رده بتن نیازمند تأیید",
+    "ar": "خرسانة رقاب الأعمدة — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Column concrete — grade requires confirmation": {
+    "fa": "بتن ستون — رده بتن نیازمند تأیید",
+    "ar": "خرسانة الأعمدة — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Beam concrete — grade requires confirmation": {
+    "fa": "بتن تیر — رده بتن نیازمند تأیید",
+    "ar": "خرسانة الكمرات — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Ground slab concrete — grade requires confirmation": {
+    "fa": "بتن دال همکف — رده بتن نیازمند تأیید",
+    "ar": "خرسانة بلاطة الطابق الأرضي — درجة الخرسانة تتطلب التأكيد"
+  },
+  "First floor slab concrete — grade requires confirmation": {
+    "fa": "بتن دال طبقه اول — رده بتن نیازمند تأیید",
+    "ar": "خرسانة بلاطة الطابق الأول — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Roof slab concrete — grade requires confirmation": {
+    "fa": "بتن دال بام — رده بتن نیازمند تأیید",
+    "ar": "خرسانة بلاطة السطح — درجة الخرسانة تتطلب التأكيد"
+  },
+  "Reinforcement — scheduled mass": {
+    "fa": "آرماتور — وزن جدول آرماتورها",
+    "ar": "حديد التسليح — الوزن حسب الجدول"
+  },
+  "Foundation formwork": {
+    "fa": "قالب‌بندی فونداسیون",
+    "ar": "شدات الأساسات"
+  },
+  "Column formwork": {
+    "fa": "قالب‌بندی ستون",
+    "ar": "شدات الأعمدة"
+  },
+  "Beam formwork": {
+    "fa": "قالب‌بندی تیر",
+    "ar": "شدات الكمرات"
+  },
+  "Slab formwork": {
+    "fa": "قالب‌بندی دال",
+    "ar": "شدات البلاطات"
+  },
+  "External blockwork — specification requires confirmation": {
+    "fa": "بلوک‌چینی خارجی — مشخصات نیازمند تأیید",
+    "ar": "مباني البلوك الخارجية — المواصفات تتطلب التأكيد"
+  },
+  "Internal blockwork — specification requires confirmation": {
+    "fa": "بلوک‌چینی داخلی — مشخصات نیازمند تأیید",
+    "ar": "مباني البلوك الداخلية — المواصفات تتطلب التأكيد"
+  },
+  "Wood floor finish": {
+    "fa": "کف‌پوش چوبی",
+    "ar": "تشطيب الأرضيات الخشبية"
+  },
+  "Ceramic floor finish": {
+    "fa": "کف‌پوش سرامیکی",
+    "ar": "تشطيب الأرضيات بالسيراميك"
+  },
+  "Epoxy floor finish": {
+    "fa": "کف‌پوش اپوکسی",
+    "ar": "تشطيب الأرضيات بالإيبوكسي"
+  },
+  "Terrace floor finish — specification requires confirmation": {
+    "fa": "کف‌پوش تراس — مشخصات نیازمند تأیید",
+    "ar": "تشطيب أرضية الشرفة — المواصفات تتطلب التأكيد"
+  },
+  "Wall paint": {
+    "fa": "رنگ‌آمیزی دیوار",
+    "ar": "دهان الجدران"
+  },
+  "Gypsum ceiling": {
+    "fa": "سقف گچی",
+    "ar": "سقف جبسي"
+  },
+  "Windows — measured opening area; specification requires confirmation": {
+    "fa": "پنجره‌ها — مساحت بازشو؛ مشخصات نیازمند تأیید",
+    "ar": "النوافذ — مساحة الفتحات؛ المواصفات تتطلب التأكيد"
+  },
+  "Door sets — material and type require confirmation": {
+    "fa": "مجموعه درها — جنس و نوع نیازمند تأیید",
+    "ar": "أطقم الأبواب — المادة والنوع يتطلبان التأكيد"
+  },
+  "Toilet pans": {
+    "fa": "کاسه توالت",
+    "ar": "مراحيض"
+  },
+  "Wash basins": {
+    "fa": "روشویی‌ها",
+    "ar": "أحواض غسل اليدين"
+  },
+  "Showers": {
+    "fa": "دوش‌ها",
+    "ar": "دشات"
+  },
+  "Water pipe — diameter and material require confirmation": {
+    "fa": "لوله آب — قطر و جنس نیازمند تأیید",
+    "ar": "أنابيب المياه — القطر والمادة يتطلبان التأكيد"
+  },
+  "Waste pipe — diameter and material require confirmation": {
+    "fa": "لوله فاضلاب — قطر و جنس نیازمند تأیید",
+    "ar": "أنابيب الصرف — القطر والمادة يتطلبان التأكيد"
+  },
+  "Lighting points — fixture types require confirmation": {
+    "fa": "نقاط روشنایی — نوع چراغ نیازمند تأیید",
+    "ar": "نقاط الإضاءة — أنواع وحدات الإنارة تتطلب التأكيد"
+  },
+  "Socket points": {
+    "fa": "نقاط پریز برق",
+    "ar": "نقاط مقابس الكهرباء"
+  },
+  "Distribution boards": {
+    "fa": "تابلوهای برق",
+    "ar": "لوحات التوزيع"
+  },
+  "Air conditioning units — capacities require confirmation": {
+    "fa": "دستگاه‌های تهویه — ظرفیت نیازمند تأیید",
+    "ar": "وحدات تكييف الهواء — السعات تتطلب التأكيد"
+  },
+  "Air conditioning pipe — specification requires confirmation": {
+    "fa": "لوله تهویه — مشخصات نیازمند تأیید",
+    "ar": "أنابيب التكييف — المواصفات تتطلب التأكيد"
+  },
+  "Smoke detectors": {
+    "fa": "دتکتورهای دود",
+    "ar": "كواشف الدخان"
+  },
+  "Kitchen cabinetry — specification requires confirmation": {
+    "fa": "کابینت آشپزخانه — مشخصات نیازمند تأیید",
+    "ar": "خزائن المطبخ — المواصفات تتطلب التأكيد"
+  },
+  "Terrace railing — specification requires confirmation": {
+    "fa": "نرده تراس — مشخصات نیازمند تأیید",
+    "ar": "درابزين الشرفة — المواصفات تتطلب التأكيد"
+  },
+  "Roof waterproofing": {
+    "fa": "عایق رطوبتی بام",
+    "ar": "عزل السطح ضد الماء"
+  },
+  "Terrace waterproofing": {
+    "fa": "عایق رطوبتی تراس",
+    "ar": "عزل الشرفة ضد الماء"
+  },
+  "Wet area floor waterproofing": {
+    "fa": "عایق رطوبتی کف فضای مرطوب",
+    "ar": "عزل أرضيات المناطق الرطبة ضد الماء"
+  },
+  "Wet area wall waterproofing": {
+    "fa": "عایق رطوبتی دیوار فضای مرطوب",
+    "ar": "عزل جدران المناطق الرطبة ضد الماء"
+  },
+  "Wet area wall tiles": {
+    "fa": "کاشی دیوار فضای مرطوب",
+    "ar": "بلاط جدران المناطق الرطبة"
+  },
+  "Ceiling paint": {
+    "fa": "رنگ‌آمیزی سقف",
+    "ar": "دهان الأسقف"
+  },
+  "Kitchen backsplash": {
+    "fa": "کاشی بین کابینت‌ها",
+    "ar": "كسوة الجدار خلف سطح عمل المطبخ"
+  },
+  "Driveway — paving specification requires confirmation": {
+    "fa": "مسیر خودرو — مشخصات روسازی نیازمند تأیید",
+    "ar": "ممر السيارات — مواصفات الرصف تتطلب التأكيد"
+  },
+  "Landscaping — planting specification requires confirmation": {
+    "fa": "فضای سبز — مشخصات کاشت نیازمند تأیید",
+    "ar": "تنسيق الحدائق — مواصفات الزراعة تتطلب التأكيد"
+  },
+  "Kitchen sinks": {
+    "fa": "سینک‌های آشپزخانه",
+    "ar": "أحواض المطابخ"
+  },
+  "Laundry sinks": {
+    "fa": "سینک‌های رخت‌شویی",
+    "ar": "أحواض الغسيل"
   }
 }

@@ -1,11 +1,19 @@
 "use client";
+import {previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
 import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
 import DwgFloorPanel from "./DwgFloorPanel";
 import ToolDrawer from "./ToolDrawer";
 import CloudSyncPanel from "./CloudSyncPanel";
 import {assertOpeningOnlyEdit} from '@/lib/manualOpenings.mjs';
+import {assertWallOnlyEdit} from '@/lib/manualWalls.mjs';
 import FurnitureEditorPanel from "./FurnitureEditorPanel";
+import WalkthroughPanel from './WalkthroughPanel';
+import {createWalkthrough} from '@/lib/walkthroughControls.mjs';
+import SurfaceMaterialPanel from './SurfaceMaterialPanel';
+import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit,surfaceMaterialList} from '@/lib/surfaceMaterials.mjs';
+import {raycastVisibleMeshes} from '@/lib/raycastMeshes.mjs';
+import {configureFloorDepth} from '@/lib/floorDepthLayers.mjs';
 import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
 import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
 import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
@@ -4525,7 +4533,7 @@ function clearSchematicOverlay(viewer) {
       sceneAfter.remove(previous);
       previous.traverse?.((object) => {
         try { object.geometry?.dispose?.(); } catch {}
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        const materials = surfaceMaterialList(object.material);
         for (const material of materials) {
           try { material?.map?.dispose?.(); } catch {}
           try { material?.dispose?.(); } catch {}
@@ -5355,7 +5363,8 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
   const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
   const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
-  const { assetType, w, d, h, rot, cx, cy } = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
+  const placement = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
+  const {w,d,h,rot,cx,cy}=placement;const assetType=asset.customModelId?'personal_model':placement.assetType;
   // Tiny, deterministic surface grain adds material depth without a network asset.
   // Textures belong to this asset and are released with its mesh materials.
   const surfaceTexture = (kind) => {
@@ -5463,6 +5472,8 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   };
 
   switch (assetType) {
+    case 'personal_model': {const m=new THREE.MeshBasicMaterial({color:0x9ca3af,wireframe:true});addBox(w,d,h,0,0,h/2,m);break;}
+
     case 'sofa': {
       addBox(w * 0.94, d * 0.82, 0.13, 0, 0.03 * d, 0.15, dark);
       addCushion(w * 0.88, d * 0.64, 0.19, 0, 0.08 * d, 0.30, accent);
@@ -6171,7 +6182,7 @@ function ventraStructuredSceneIsValid(scene) {
     Array.isArray(scene.rooms) &&
     scene.rooms.length > 0 &&
     Array.isArray(scene.walls) &&
-    scene.walls.length > 0
+    (scene.walls.length > 0 || !!scene.manualWallEditor)
   );
 }
 
@@ -6452,6 +6463,7 @@ function ventraBuildTracedRasterFloor({ THREE, polygon, holes = [], material, z 
 }
 
 function renderStructuredSchematicScene(viewer, scene) {
+  const surfaceMaterialCache=new Map();
   // Display the accepted scene verbatim: geometry repair belongs to analysis, never rendering.
   const THREE = getThree();
   if (!viewer || !scene || !THREE) {
@@ -6589,6 +6601,8 @@ function renderStructuredSchematicScene(viewer, scene) {
         ventraType: 'schematic_footprint_floor_v36',
         schematic: true,
       };
+      decorateSurfaceMesh(THREE,footprintResult.mesh,{kind:'floor-base',id:'footprint'},scene,surfaceMaterialCache);
+      configureFloorDepth(footprintResult.mesh,'base');
       add(footprintResult.mesh);
     }
 
@@ -6719,9 +6733,11 @@ function renderStructuredSchematicScene(viewer, scene) {
         schematic: true,
       };
 
+      decorateSurfaceMesh(THREE,result.mesh,{kind:'floor',id:String(room.id)},scene,surfaceMaterialCache);
+      configureFloorDepth(result.mesh,'finish');
       add(result.mesh);
 
-      if (!material.map) ventraAddVisibleFloorPattern({
+      if (!result.mesh.material.map) ventraAddVisibleFloorPattern({
         THREE,
         root:
           schematicRoot,
@@ -6787,7 +6803,7 @@ function renderStructuredSchematicScene(viewer, scene) {
     if (!Number.isFinite(wallLength) || wallLength < (preserveRasterTrace ? 0.001 : 0.05)) continue;
 
     const wallType = String(wall?.type || 'internal').toLowerCase();
-    const thickness = wallType === 'external' ? externalThickness : internalThickness;
+    const thickness = wall?.placementSource === 'manual_wall_editor' && Number(wall.thickness)>0 ? Number(wall.thickness) : wallType === 'external' ? externalThickness : internalThickness;
     const requestedWallHeight = Number(wall?.height);
 
     // Architectural wall geometry must use real wall height. Previous versions
@@ -6895,6 +6911,7 @@ function renderStructuredSchematicScene(viewer, scene) {
         wallKind: wallType,
         schematic: true,
       };
+      decorateSurfaceMesh(THREE,mesh,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);
       add(mesh);
       wallPieceCount += 1;
     }
@@ -6916,6 +6933,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           zBase: 0,
           material: wallType === 'external' ? externalWallMat : wallMat,
         });
+        if(sillWall){sillWall.userData={...sillWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,sillWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(sillWall);
 
         const headerWall = buildHeaderWallMesh({
@@ -6926,6 +6944,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           zBase: 0,
           material: wallType === 'external' ? externalWallMat : wallMat,
         });
+        if(headerWall){headerWall.userData={...headerWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,headerWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(headerWall);
 
         const windowAssembly = opening.cutOnly ? null : ventraCreateWindowVisual({
@@ -6947,6 +6966,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           zBase: 0,
           material: wallType === 'external' ? externalWallMat : wallMat,
         });
+        if(doorHeaderWall){doorHeaderWall.userData={...doorHeaderWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,doorHeaderWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(doorHeaderWall);
 
         const doorLeaf = opening.cutOnly||opening.variant==='passage' ? null : ventraCreateDoorLeafVisual({
@@ -7376,12 +7396,18 @@ function ventraBuildBalconyRailing({THREE,wall,start,end,height,palette={},postK
 
 function ventraCreateInteriorView(root){
   const materials=new Map(),objects=new Map(),wallMaterials=new Set();
-  root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))wallMaterials.add(object.material);});
-  root.traverse(object=>{if(!wallMaterials.has(object.material))return;objects.set(object,object.castShadow);const mat=object.material;if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});});
+  root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))for(const mat of surfaceMaterialList(object.material))if(mat)wallMaterials.add(mat);});
+  root.traverse(object=>{
+    const matches=surfaceMaterialList(object.material).filter(mat=>wallMaterials.has(mat));
+    if(!matches.length)return;
+    objects.set(object,object.castShadow);
+    for(const mat of matches)if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});
+  });
   return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.045,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
 }
 
-function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState) {
+function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState, projectId) {
+  sceneData={...sceneData,projectId};
   const THREE = getThree();
   if (!container || !sceneData || !canvasElement || !THREE?.WebGLRenderer || !THREE?.PerspectiveCamera) {
     throw new Error("Standalone schematic renderer is not available.");
@@ -7402,7 +7428,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   let renderer;
   try { renderer = createPhysicalPreview(rendererOptions); }
   catch { renderer = new THREE.WebGLRenderer(rendererOptions); }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width <= 600 ? 1.5 : 2));
+  renderer.setPixelRatio(previewPixelRatio(width,height,window.devicePixelRatio || 1,rendererOptions.mobile));
   renderer.setSize(width, height, false);
   renderer.setClearColor(background, 1);
   try {
@@ -7475,6 +7501,30 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
 
   const model = renderSchematicScene(adapter, sceneData);
+  const selectionGroup=new THREE.Object3D();selectionGroup.name='ventra-furniture-selection';threeScene.add(selectionGroup);
+  const clearSelection=()=>{for(const child of [...selectionGroup.children]){selectionGroup.remove(child);child.geometry?.dispose?.();child.material?.dispose?.();}};
+  const setSelectedAssetIds=ids=>{
+    clearSelection();threeScene.updateMatrixWorld(true);
+    for(const id of new Set(ids||[])){
+      const bounds=new THREE.Box3();let found=false;threeScene.traverse(mesh=>{if(mesh.geometry&&mesh.userData?.assetId===id){bounds.union(new THREE.Box3().setFromObject(mesh));found=true;}});if(!found)continue;
+      bounds.min.add(new THREE.Vector3(-.012,-.012,-.005));bounds.max.add(new THREE.Vector3(.012,.012,.012));
+      const a=bounds.min,b=bounds.max,points=[[a.x,a.y,a.z],[b.x,a.y,a.z],[b.x,b.y,a.z],[a.x,b.y,a.z],[a.x,a.y,b.z],[b.x,a.y,b.z],[b.x,b.y,b.z],[a.x,b.y,b.z]],g=new THREE.Geometry();
+      for(const [i,j] of [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]])g.vertices.push(new THREE.Vector3(...points[i]),new THREE.Vector3(...points[j]));
+      const line=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xffd900,depthTest:false,depthWrite:false}),THREE.LinePieces);line.userData.nonSelectable=true;line.renderOrder=100;selectionGroup.add(line);
+    }
+    render();
+  };
+  const wallPointsGroup=new THREE.Object3D();wallPointsGroup.name='ventra-wall-edit-points';threeScene.add(wallPointsGroup);
+  const clearWallPoints=()=>{for(const mesh of [...wallPointsGroup.children]){wallPointsGroup.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();}};
+  const setWallEditMode=enabled=>{
+    clearWallPoints();
+    if(enabled){const seen=new Set();for(const w of sceneData.walls||[])for(const p of [w.start,w.end]){
+      const key=`${p.x.toFixed(3)}:${p.y.toFixed(3)}`;if(seen.has(key))continue;seen.add(key);
+      const marker=new THREE.Mesh(new THREE.SphereGeometry(.14,12,8),new THREE.MeshBasicMaterial({color:0xffd900,depthTest:false,depthWrite:false}));
+      marker.position.set(p.x-originForWalls.x,p.y-originForWalls.y,.15);marker.renderOrder=110;marker.userData={wallEditPoint:{...p},nonSelectable:true};wallPointsGroup.add(marker);
+    }}render();
+  };
+  const originForWalls=sceneData.designDefaults?.viewOriginMeters||{x:sceneData.width/2,y:sceneData.depth/2};
   const setInteriorView=ventraCreateInteriorView(threeScene);
 
   const getBoundsInfo = () => {
@@ -7530,6 +7580,8 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     render();
   };
 
+  const surfaceResource=event=>{if(event.detail?.projectId===projectId)render();};
+  window.addEventListener('ventra:surface-resource',surfaceResource);
   setNamedView("iso");
   if(initialCameraState){
     camera.position.fromArray(initialCameraState.position);camera.up.fromArray(initialCameraState.up);
@@ -7538,6 +7590,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
 
   let furnitureTool=null, furniturePreview=null, furniturePreviewTransforms=[];
   const raycaster=new THREE.Raycaster();
+  const meshHits=()=>raycastVisibleMeshes(raycaster,threeScene,THREE);
   const origin=sceneData.designDefaults?.viewOriginMeters||{x:sceneData.width/2,y:sceneData.depth/2};
   const rayFor=e=>{
     const r=renderer.domElement.getBoundingClientRect();if(!r.width||!r.height)return false;
@@ -7546,6 +7599,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
   const pickPoint=e=>{
     if(!rayFor(e))return null;
+    if(wallPointsGroup.children.length){const hit=raycaster.intersectObjects(wallPointsGroup.children,true)[0];if(hit?.object.userData?.wallEditPoint)return {...hit.object.userData.wallEditPoint};}
     const p=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1),0),new THREE.Vector3());
     return p?{x:p.x+origin.x,y:p.y+origin.y}:null;
   };
@@ -7558,7 +7612,8 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
   const unbindFurniture=bindFurnitureInputs(renderer.domElement,{
     getTool:()=>furnitureTool,pickPoint,
-    pickAsset:e=>rayFor(e)?raycaster.intersectObjects(threeScene.children,true).find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
+    supportsPersonalModels:renderer.supportsPersonalModels===true,
+    pickAsset:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
     clearPreview:clearFurniturePreview,
     preview:(a,valid)=>{
       clearFurniturePreview();if(!a)return;
@@ -7587,7 +7642,11 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     }
   });
 
-  const stopMotion=()=>{};
+  let interiorRequested=false;
+  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onExit:()=>{
+    renderer.setWalkthroughActive?.(false);setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
+  }});
+  const stopMotion=()=>walker.stop();
   const unbindInputs=bindProjectCameraInputs(renderer.domElement,{
     orbit,pan,getMode:()=>controlMode,home:()=>setNamedView('iso'),
     zoom:factor=>{const offset=camera.position.clone().sub(target),fit=getBoundsInfo().distance;
@@ -7600,6 +7659,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     const nextHeight = Math.max(1, container.clientHeight || height);
     camera.aspect = nextWidth / nextHeight;
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(previewPixelRatio(nextWidth,nextHeight,window.devicePixelRatio || 1,rendererOptions.mobile));
     renderer.setSize(nextWidth, nextHeight, false);
     render();
   };
@@ -7610,36 +7670,46 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   return {
     model,
     render,
+    supportsPersonalModels:renderer.supportsPersonalModels===true,
+    startWalkthrough:()=>{clearFurniturePreview();walker.start();renderer.setWalkthroughActive?.(true);setInteriorView(false);render();},
+    stopWalkthrough:()=>walker.stop(),
+    setWalkAxis:(forward,right)=>walker.setAxis(forward,right),
+    turnWalk:(yaw,pitch)=>walker.turn(yaw,pitch),
+    setSelectedAssetIds,
+    setWallEditMode,
     ready:()=>renderer.readyResources?.(),
     captureCanvas:()=>{
       const size={width:renderer.domElement.width,height:renderer.domElement.height};
       const ratio=renderer.getPixelRatio?.()||1,logical={width:size.width/ratio,height:size.height/ratio};
-      const scale=2048/Math.max(size.width,size.height);
-      if(scale<=1){render();return renderer.domElement;}
+      const scale=Math.max(1,2048/Math.max(size.width,size.height)),selectedVisible=selectionGroup.visible,wallPointsVisible=wallPointsGroup.visible;selectionGroup.visible=false;wallPointsGroup.visible=false;
       try{
-        renderer.setPixelRatio(1);renderer.setSize(Math.round(size.width*scale),Math.round(size.height*scale),false);render();
-        const copy=document.createElement('canvas');copy.width=renderer.domElement.width;copy.height=renderer.domElement.height;
-        copy.getContext('2d').drawImage(renderer.domElement,0,0);return copy;
-      }finally{renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);render();}
+        if(scale>1){renderer.setPixelRatio(1);renderer.setSize(Math.round(size.width*scale),Math.round(size.height*scale),false);}render();
+        const copy=document.createElement('canvas');copy.width=renderer.domElement.width;copy.height=renderer.domElement.height;copy.getContext('2d').drawImage(renderer.domElement,0,0);return copy;
+      }finally{if(scale>1){renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);}selectionGroup.visible=selectedVisible;wallPointsGroup.visible=wallPointsVisible;render();}
     },
     getCameraState:()=>({position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray()}),
+    pickSurface:e=>rayFor(e)?pickSurfaceHit(meshHits()):null,
+    pickWall:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
     clearFurniturePreview,
-    setInteriorView: enabled => {setInteriorView(enabled);render();},
+    setInteriorView: enabled => {interiorRequested=enabled;setInteriorView(walker.isActive()?false:enabled);render();},
     fitView: () => {stopMotion();setNamedView("iso");},
     homeView: () => {stopMotion();setNamedView("iso");},
     setNamedView: view => {stopMotion();setNamedView(view);},
-    setControlMode: (mode) => { controlMode = mode === "pan" ? "pan" : "orbit"; },
+    setControlMode: (mode) => { stopMotion();controlMode = mode === "pan" ? "pan" : "orbit"; },
     orbitBy: (yaw,pitch=0) => {stopMotion();orbit(-yaw,pitch);},
-    zoomIn: () => zoomBy(1),
-    zoomOut: () => zoomBy(-1),
+    zoomIn: () => {stopMotion();zoomBy(1);},
+    zoomOut: () => {stopMotion();zoomBy(-1);},
     dispose: () => {
+      walker.dispose();
+      window.removeEventListener('ventra:surface-resource',surfaceResource);
+      clearSelection();clearWallPoints();
       unbindFurniture();
       unbindInputs();
       resizeObserver?.disconnect();
       threeScene.traverse?.((object) => {
         try { object.geometry?.dispose?.(); } catch {}
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        const materials = surfaceMaterialList(object.material);
         for (const material of materials) {
           try { material?.map?.dispose?.(); } catch {}
           try { material?.dispose?.(); } catch {}
@@ -8234,6 +8304,7 @@ export default function Project3DViewer({ projectId }) {
   const [furnitureRepairBusy, setFurnitureRepairBusy] = useState(false);
   const [promptUndoScene, setPromptUndoScene] = useState(null);
   const currentPromptSceneRef = useRef(null);
+  const [materialToolActive,setMaterialToolActive]=useState(false);
   const furnitureImageInput = useRef(null);
   const [schematicModel, setSchematicModel] = useState(null);
   const [active3DSource, setActive3DSource] = useState("aps");
@@ -8366,6 +8437,7 @@ export default function Project3DViewer({ projectId }) {
   const interiorModeFromEffect=useEffectEvent(()=>interiorView);
   useEffect(()=>{schematicRendererRef.current?.setInteriorView?.(interiorView);},[interiorView,status]);
   const [autoOrbit,setAutoOrbit] = useState(false);
+  const [walkActive,setWalkActive] = useState(false);
 
   const refreshSourceFromEffect=useEffectEvent(refreshProject3DSourceFromStorage);
   const takeoffFromEffect=useEffectEvent(getFreshProjectTakeoff);
@@ -8496,7 +8568,8 @@ export default function Project3DViewer({ projectId }) {
             containerRef.current,
             schematicScene,
             schematicCanvasRef.current,
-            furnitureCameraRef.current?.key===dwgInteriorCameraKey(projectId,schematicScene)?furnitureCameraRef.current.state:null
+            furnitureCameraRef.current?.key===dwgInteriorCameraKey(projectId,schematicScene)?furnitureCameraRef.current.state:null,
+            projectId
           );
           if (cancelled) {
             standalone.dispose?.();
@@ -8823,9 +8896,26 @@ export default function Project3DViewer({ projectId }) {
     finally{setDesignBusy(false);}
   }
 
+  async function commitSurfaceScene(nextScene,expectedScene){
+    if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current scene.');
+    assertSurfaceOnlyEdit(expectedScene,nextScene);
+    furnitureCameraRef.current={key:dwgInteriorCameraKey(projectId,expectedScene),state:schematicRendererRef.current?.getCameraState?.()};
+    setDesignBusy(true);
+    try{await persistSchematicScene(nextScene,{preserveBase:true});rebuildStandaloneScene(nextScene);}
+    finally{setDesignBusy(false);}
+  }
+
   async function commitOpeningScene(nextScene,expectedScene){
     if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current floor. / طبقه یا نقشه تغییر کرده؛ دوباره روی طبقه فعلی امتحان کن.');
     assertOpeningOnlyEdit(expectedScene,nextScene);
+    setDesignBusy(true);
+    try{await persistSchematicScene(nextScene,{preserveBase:false});schematicBaseSceneRef.current=nextScene;rebuildStandaloneScene(nextScene);}
+    finally{setDesignBusy(false);}
+  }
+
+  async function commitWallScene(nextScene,expectedScene){
+    if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The floor changed; retry. / طبقه تغییر کرده؛ دوباره امتحان کن.');
+    assertWallOnlyEdit(expectedScene,nextScene);
     setDesignBusy(true);
     try{await persistSchematicScene(nextScene,{preserveBase:false});schematicBaseSceneRef.current=nextScene;rebuildStandaloneScene(nextScene);}
     finally{setDesignBusy(false);}
@@ -9635,6 +9725,14 @@ export default function Project3DViewer({ projectId }) {
                 : "Reconstruct 3D"}
         </LocalizedElement>
 
+        {schematicScene && isInteriorSource(active3DSource) && (
+          <>
+            <LocalizedElement as="button" type="button" className={schematicPreset === 'modern' ? 'is-active' : ''} onClick={() => applySchematicPreset('modern')}>Modern</LocalizedElement>
+            <LocalizedElement as="button" type="button" className={schematicPreset === 'minimal' ? 'is-active' : ''} onClick={() => applySchematicPreset('minimal')}>Minimal</LocalizedElement>
+            <LocalizedElement as="button" type="button" className={schematicPreset === 'luxury' ? 'is-active' : ''} onClick={() => applySchematicPreset('luxury')}>Luxury</LocalizedElement>
+          </>
+        )}
+
         <ToolDrawer title="more" className="ventra-toolbar-drawer">
         <div className="ventra-drawer-actions">
 
@@ -9646,9 +9744,6 @@ export default function Project3DViewer({ projectId }) {
             <div className="ventra-drawer-actions">
             <LocalizedElement as="span" className="ventra-toolbar-label">JPG Presets</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'classic' ? 'is-active' : ''} onClick={restoreClassicSchematic}>Classic</LocalizedElement>
-            <LocalizedElement as="button" type="button" className={schematicPreset === 'modern' ? 'is-active' : ''} onClick={() => applySchematicPreset('modern')}>Modern</LocalizedElement>
-            <LocalizedElement as="button" type="button" className={schematicPreset === 'minimal' ? 'is-active' : ''} onClick={() => applySchematicPreset('minimal')}>Minimal</LocalizedElement>
-            <LocalizedElement as="button" type="button" className={schematicPreset === 'luxury' ? 'is-active' : ''} onClick={() => applySchematicPreset('luxury')}>Luxury</LocalizedElement>
             <LocalizedElement as="button" type="button" className={schematicPreset === 'facade' ? 'is-active' : ''} onClick={() => applySchematicPreset('facade')}>Facade</LocalizedElement>
             </div></ToolDrawer>
             <ToolDrawer title="navigation"><div className="ventra-drawer-actions">
@@ -9992,7 +10087,9 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
 
         <aside className="ventra-model-sidebar">
-          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <WalkthroughPanel projectId={projectId} scene={schematicScene} getViewport={()=>containerRef.current?.closest('.ventra-model-canvas-shell')} getRenderer={()=>schematicRendererRef.current} disabled={designBusy||furnitureRepairBusy||status!=='ready'} onActiveChange={value=>{setWalkActive(value);if(value)setAutoOrbit(false);}}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel projectId={projectId} key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} onRequestSolidWalls={()=>setInteriorView(false)} disabled={walkActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel projectId={projectId} key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={walkActive||materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
         <ToolDrawer title="inspector">
         <LocalizedElement as="div" className="ventra-model-inspector">
           {schematicScene && isInteriorSource(active3DSource) ? (

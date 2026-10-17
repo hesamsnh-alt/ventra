@@ -1,0 +1,1816 @@
+{
+  "floors": [
+    {
+      "scope_id": "GROUND FLOOR",
+      "walls_complete": true,
+      "wall_inventory_evidence": "Manual QA fixture transcribed from source vector centreline paths, source grid calibration and A03 hosts; not a production fallback",
+      "source_pages": [
+        1,
+        6
+      ],
+      "walls": [
+        {
+          "id": "GI-1",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-1 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-2",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-2 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-3",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-3 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-4",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-4 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-5",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-5 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-6",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-6 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-7",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 4,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-7 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GI-8",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 4,
+            "pages": [
+              1
+            ],
+            "evidence": "Calibrated source centreline GI-8 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GE-N",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 16,
+            "pages": [
+              1
+            ],
+            "evidence": "Source external/terrace-facing centreline GE-N"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GE-E",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              1
+            ],
+            "evidence": "Source external/terrace-facing centreline GE-E"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GE-S",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 16,
+            "pages": [
+              1
+            ],
+            "evidence": "Source external/terrace-facing centreline GE-S"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "GE-W",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              1
+            ],
+            "evidence": "Source external/terrace-facing centreline GE-W"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        }
+      ],
+      "openings": [
+        {
+          "id": "GD01",
+          "wall_id": "GE-S",
+          "kind": "door",
+          "width": {
+            "value": 1.2,
+            "pages": [
+              4
+            ],
+            "evidence": "GD01 scheduled width"
+          },
+          "height": {
+            "value": 2.2,
+            "pages": [
+              4
+            ],
+            "evidence": "GD01 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD01 scheduled sill"
+          }
+        },
+        {
+          "id": "GD02",
+          "wall_id": "GE-S",
+          "kind": "door",
+          "width": {
+            "value": 3.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD02 scheduled width"
+          },
+          "height": {
+            "value": 2.4,
+            "pages": [
+              4
+            ],
+            "evidence": "GD02 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD02 scheduled sill"
+          }
+        },
+        {
+          "id": "GD03",
+          "wall_id": "GE-N",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD03 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD03 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD03 scheduled sill"
+          }
+        },
+        {
+          "id": "GD04",
+          "wall_id": "GI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD04 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD04 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD04 scheduled sill"
+          }
+        },
+        {
+          "id": "GD05",
+          "wall_id": "GI-2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD05 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD05 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD05 scheduled sill"
+          }
+        },
+        {
+          "id": "GD06",
+          "wall_id": "GI-8",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD06 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD06 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD06 scheduled sill"
+          }
+        },
+        {
+          "id": "GD07",
+          "wall_id": "GI-3",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD07 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD07 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD07 scheduled sill"
+          }
+        },
+        {
+          "id": "GD08",
+          "wall_id": "GI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD08 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD08 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD08 scheduled sill"
+          }
+        },
+        {
+          "id": "GD09",
+          "wall_id": "GI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD09 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD09 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD09 scheduled sill"
+          }
+        },
+        {
+          "id": "GD10",
+          "wall_id": "GI-2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD10 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD10 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD10 scheduled sill"
+          }
+        },
+        {
+          "id": "GD11",
+          "wall_id": "GI-2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              4
+            ],
+            "evidence": "GD11 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              4
+            ],
+            "evidence": "GD11 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GD11 scheduled sill"
+          }
+        },
+        {
+          "id": "GW01",
+          "wall_id": "GE-W",
+          "kind": "window",
+          "width": {
+            "value": 1.2,
+            "pages": [
+              4
+            ],
+            "evidence": "GW01 scheduled width"
+          },
+          "height": {
+            "value": 1.2,
+            "pages": [
+              4
+            ],
+            "evidence": "GW01 scheduled height"
+          },
+          "sill": {
+            "value": 1.4,
+            "pages": [
+              4
+            ],
+            "evidence": "GW01 scheduled sill"
+          }
+        },
+        {
+          "id": "GW02",
+          "wall_id": "GE-W",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              4
+            ],
+            "evidence": "GW02 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              4
+            ],
+            "evidence": "GW02 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GW02 scheduled sill"
+          }
+        },
+        {
+          "id": "GW03",
+          "wall_id": "GE-E",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              4
+            ],
+            "evidence": "GW03 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              4
+            ],
+            "evidence": "GW03 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GW03 scheduled sill"
+          }
+        },
+        {
+          "id": "GW04",
+          "wall_id": "GE-E",
+          "kind": "window",
+          "width": {
+            "value": 2.4,
+            "pages": [
+              4
+            ],
+            "evidence": "GW04 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              4
+            ],
+            "evidence": "GW04 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GW04 scheduled sill"
+          }
+        },
+        {
+          "id": "GW05",
+          "wall_id": "GE-N",
+          "kind": "window",
+          "width": {
+            "value": 2.4,
+            "pages": [
+              4
+            ],
+            "evidence": "GW05 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              4
+            ],
+            "evidence": "GW05 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GW05 scheduled sill"
+          }
+        },
+        {
+          "id": "GW06",
+          "wall_id": "GE-N",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              4
+            ],
+            "evidence": "GW06 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              4
+            ],
+            "evidence": "GW06 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              4
+            ],
+            "evidence": "GW06 scheduled sill"
+          }
+        }
+      ],
+      "wet_rooms_complete": true,
+      "wet_rooms": [
+        {
+          "id": "G02",
+          "boundary_complete": true,
+          "boundary_lengths": [
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G02 calibrated boundary side 0"
+            },
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G02 calibrated boundary side 1"
+            },
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G02 calibrated boundary side 2"
+            },
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G02 calibrated boundary side 3"
+            }
+          ],
+          "opening_ids": [
+            "GD07",
+            "GW01"
+          ]
+        },
+        {
+          "id": "G03",
+          "boundary_complete": true,
+          "boundary_lengths": [
+            {
+              "value": 3,
+              "pages": [
+                1
+              ],
+              "evidence": "G03 calibrated boundary side 0"
+            },
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G03 calibrated boundary side 1"
+            },
+            {
+              "value": 3,
+              "pages": [
+                1
+              ],
+              "evidence": "G03 calibrated boundary side 2"
+            },
+            {
+              "value": 4,
+              "pages": [
+                1
+              ],
+              "evidence": "G03 calibrated boundary side 3"
+            }
+          ],
+          "opening_ids": [
+            "GD08"
+          ]
+        }
+      ],
+      "ceilings_complete": true,
+      "ceiling_spaces": [
+        {
+          "room_name": "G01 Garage",
+          "include_gypsum": false,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G02 Laundry",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G03 WC / Shower",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G04 Kitchen / Dining",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G05 Hall",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G06 Stairs",
+          "include_gypsum": false,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G07 Foyer",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G08 Study",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "G09 Living / TV",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        }
+      ]
+    },
+    {
+      "scope_id": "FIRST FLOOR",
+      "walls_complete": true,
+      "wall_inventory_evidence": "Manual QA fixture transcribed from source vector centreline paths, source grid calibration and A03 hosts; not a production fallback",
+      "source_pages": [
+        2,
+        6
+      ],
+      "walls": [
+        {
+          "id": "FI-1",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-1 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-2",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 8,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-2 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-3",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-3 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-4",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-4 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-5",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 7,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-5 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-6",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 4,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-6 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-7",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 2,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-7 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-8",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 3,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-8 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FI-9",
+          "classification": "internal",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 4,
+            "pages": [
+              2
+            ],
+            "evidence": "Calibrated source centreline FI-9 with scheduled opening gaps included"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-N",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 16,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-N"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-E",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 8,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-E"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-S",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 13,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-S"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-W",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 12,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-W"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-T1",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 4,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-T1"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        },
+        {
+          "id": "FE-T2",
+          "classification": "external",
+          "length_basis": "calibrated_geometry",
+          "length": {
+            "value": 3,
+            "pages": [
+              2
+            ],
+            "evidence": "Source external/terrace-facing centreline FE-T2"
+          },
+          "height": {
+            "value": 3.2,
+            "pages": [
+              6
+            ],
+            "evidence": "A04 source clear wall height"
+          }
+        }
+      ],
+      "openings": [
+        {
+          "id": "FD01",
+          "wall_id": "FI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD01 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD01 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD01 scheduled sill"
+          }
+        },
+        {
+          "id": "FD02",
+          "wall_id": "FI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD02 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD02 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD02 scheduled sill"
+          }
+        },
+        {
+          "id": "FD03",
+          "wall_id": "FI-1",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD03 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD03 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD03 scheduled sill"
+          }
+        },
+        {
+          "id": "FD04",
+          "wall_id": "FI-2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD04 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD04 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD04 scheduled sill"
+          }
+        },
+        {
+          "id": "FD05",
+          "wall_id": "FI-2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD05 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD05 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD05 scheduled sill"
+          }
+        },
+        {
+          "id": "FD06",
+          "wall_id": "FI-7",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD06 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD06 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD06 scheduled sill"
+          }
+        },
+        {
+          "id": "FD07",
+          "wall_id": "FI-9",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD07 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD07 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD07 scheduled sill"
+          }
+        },
+        {
+          "id": "FD08",
+          "wall_id": "FE-T2",
+          "kind": "door",
+          "width": {
+            "value": 0.9,
+            "pages": [
+              5
+            ],
+            "evidence": "FD08 scheduled width"
+          },
+          "height": {
+            "value": 2.1,
+            "pages": [
+              5
+            ],
+            "evidence": "FD08 scheduled height"
+          },
+          "sill": {
+            "value": 0.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FD08 scheduled sill"
+          }
+        },
+        {
+          "id": "FW01",
+          "wall_id": "FE-W",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              5
+            ],
+            "evidence": "FW01 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW01 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW01 scheduled sill"
+          }
+        },
+        {
+          "id": "FW02",
+          "wall_id": "FE-W",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              5
+            ],
+            "evidence": "FW02 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW02 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW02 scheduled sill"
+          }
+        },
+        {
+          "id": "FW03",
+          "wall_id": "FE-W",
+          "kind": "window",
+          "width": {
+            "value": 2.4,
+            "pages": [
+              5
+            ],
+            "evidence": "FW03 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW03 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW03 scheduled sill"
+          }
+        },
+        {
+          "id": "FW04",
+          "wall_id": "FE-N",
+          "kind": "window",
+          "width": {
+            "value": 2.4,
+            "pages": [
+              5
+            ],
+            "evidence": "FW04 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW04 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW04 scheduled sill"
+          }
+        },
+        {
+          "id": "FW05",
+          "wall_id": "FE-N",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              5
+            ],
+            "evidence": "FW05 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW05 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW05 scheduled sill"
+          }
+        },
+        {
+          "id": "FW06",
+          "wall_id": "FE-N",
+          "kind": "window",
+          "width": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW06 scheduled width"
+          },
+          "height": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW06 scheduled height"
+          },
+          "sill": {
+            "value": 1.4,
+            "pages": [
+              5
+            ],
+            "evidence": "FW06 scheduled sill"
+          }
+        },
+        {
+          "id": "FW07",
+          "wall_id": "FE-E",
+          "kind": "window",
+          "width": {
+            "value": 1.8,
+            "pages": [
+              5
+            ],
+            "evidence": "FW07 scheduled width"
+          },
+          "height": {
+            "value": 1.5,
+            "pages": [
+              5
+            ],
+            "evidence": "FW07 scheduled height"
+          },
+          "sill": {
+            "value": 1.0,
+            "pages": [
+              5
+            ],
+            "evidence": "FW07 scheduled sill"
+          }
+        },
+        {
+          "id": "FW08",
+          "wall_id": "FE-E",
+          "kind": "window",
+          "width": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW08 scheduled width"
+          },
+          "height": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW08 scheduled height"
+          },
+          "sill": {
+            "value": 1.4,
+            "pages": [
+              5
+            ],
+            "evidence": "FW08 scheduled sill"
+          }
+        },
+        {
+          "id": "FW09",
+          "wall_id": "FE-E",
+          "kind": "window",
+          "width": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW09 scheduled width"
+          },
+          "height": {
+            "value": 1.2,
+            "pages": [
+              5
+            ],
+            "evidence": "FW09 scheduled height"
+          },
+          "sill": {
+            "value": 1.4,
+            "pages": [
+              5
+            ],
+            "evidence": "FW09 scheduled sill"
+          }
+        }
+      ],
+      "wet_rooms_complete": true,
+      "wet_rooms": [
+        {
+          "id": "F09",
+          "boundary_complete": true,
+          "boundary_lengths": [
+            {
+              "value": 3,
+              "pages": [
+                2
+              ],
+              "evidence": "F09 calibrated boundary side 0"
+            },
+            {
+              "value": 2,
+              "pages": [
+                2
+              ],
+              "evidence": "F09 calibrated boundary side 1"
+            },
+            {
+              "value": 3,
+              "pages": [
+                2
+              ],
+              "evidence": "F09 calibrated boundary side 2"
+            },
+            {
+              "value": 2,
+              "pages": [
+                2
+              ],
+              "evidence": "F09 calibrated boundary side 3"
+            }
+          ],
+          "opening_ids": [
+            "FD06",
+            "FW08"
+          ]
+        },
+        {
+          "id": "F11",
+          "boundary_complete": true,
+          "boundary_lengths": [
+            {
+              "value": 3,
+              "pages": [
+                2
+              ],
+              "evidence": "F11 calibrated boundary side 0"
+            },
+            {
+              "value": 4,
+              "pages": [
+                2
+              ],
+              "evidence": "F11 calibrated boundary side 1"
+            },
+            {
+              "value": 3,
+              "pages": [
+                2
+              ],
+              "evidence": "F11 calibrated boundary side 2"
+            },
+            {
+              "value": 4,
+              "pages": [
+                2
+              ],
+              "evidence": "F11 calibrated boundary side 3"
+            }
+          ],
+          "opening_ids": [
+            "FD07",
+            "FW06",
+            "FW09"
+          ]
+        }
+      ],
+      "ceilings_complete": true,
+      "ceiling_spaces": [
+        {
+          "room_name": "F01 Bedroom 2",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F02 Bedroom 3",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F03 Master Bedroom",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F04 Hall",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F05 Landing",
+          "include_gypsum": false,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F08 Bedroom 4 (L)",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F09 Bath",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F10 Family Lounge",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        },
+        {
+          "room_name": "F11 Ensuite",
+          "include_gypsum": true,
+          "pages": [
+            6
+          ],
+          "evidence": "A04 gypsum excludes garage, GF stairs and FF landing"
+        }
+      ]
+    }
+  ],
+  "rules": {
+    "plaster_internal_faces": {
+      "value": 2,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 plaster both internal faces"
+    },
+    "plaster_external_faces": {
+      "value": 1,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 plaster inner external face"
+    },
+    "wet_tile_height": {
+      "value": 2.4,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 wet tile height"
+    },
+    "wet_waterproof_height": {
+      "value": 2,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 wet wall membrane height"
+    },
+    "backsplash_length": {
+      "value": 5,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 backsplash length"
+    },
+    "backsplash_height": {
+      "value": 0.6,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 backsplash height"
+    },
+    "paint_uses_plastered_faces": {
+      "value": true,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 interior plaster faces and interior paint scope"
+    },
+    "paint_excludes_wet_tiles": {
+      "value": true,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 paint excludes wet wall tiles"
+    },
+    "paint_excludes_backsplash": {
+      "value": true,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 paint excludes backsplash"
+    },
+    "paint_enclosed_ceilings": {
+      "value": true,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 paint all enclosed ceilings"
+    },
+    "gypsum_exclusions_confirmed": {
+      "value": true,
+      "pages": [
+        6
+      ],
+      "evidence": "A04 explicit gypsum exclusions"
+    }
+  },
+  "exclusions": [],
+  "notes": "Source facts fixture for arithmetic QA only. Runtime never loads this fixture."
+}

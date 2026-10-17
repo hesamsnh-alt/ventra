@@ -93,7 +93,7 @@ export async function analyzeDrawingPage({
           temporaryFileName
         ),
         purpose: "user_data",
-      });
+      }, {maxRetries:0});
 
     if (!uploadedFile?.id) {
       throw new Error(
@@ -159,7 +159,7 @@ export async function analyzeDrawingPage({
               takeoffSchema,
           },
         },
-      });
+      }, {maxRetries:0});
 
     if (!response) {
       throw new Error(
@@ -175,6 +175,7 @@ export async function analyzeDrawingPage({
           response?.id || null,
         status:
           response?.status || null,
+        usage: response?.usage || null,
       }
     );
 

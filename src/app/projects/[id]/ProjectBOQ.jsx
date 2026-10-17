@@ -1,4 +1,5 @@
 "use client";
+import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,subscribeDrawingWorkflow} from '@/lib/drawingWorkflowGate.mjs';
 import WorkspaceDisclosure from './WorkspaceDisclosure';
 import {useLanguage} from '@/app/components/i18n/LanguageProvider';
 import {translateText} from '@/lib/i18n/translate.mjs';
@@ -39,6 +40,8 @@ import { classifyEstimateItem } from "@/lib/estimateClassification.mjs";
 import { requireBoqReview, confirmBoqReview, invalidateBoqReview } from "@/lib/boqEvidence.mjs";
 import { calculateBoqBudget } from "@/lib/boqBudget.mjs";
 import { buildBoqExport } from "@/lib/boqExport.mjs";
+import {catalogPriceEntries,boqUnitFactor,applyBoqCatalogSelection,editPdfBoqItem} from '@/lib/boqPriceSelection.mjs';
+import {applyProjectRateCsv} from '@/lib/boqProjectRates.mjs';
 
 
 const SECTION_OPTIONS = [
@@ -195,6 +198,11 @@ export default function ProjectBOQ({
   const [loadingTakeoff, setLoadingTakeoff] = useState(true);
   const [loadedBoqProject, setLoadedBoqProject] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [drawingWorkflow,setDrawingWorkflow] = useState(()=>drawingWorkflowState(projectId));
+  useEffect(()=>{
+    setDrawingWorkflow(drawingWorkflowState(projectId));
+    return subscribeDrawingWorkflow(projectId,setDrawingWorkflow);
+  },[projectId]);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [vatPercentage, setVatPercentage] = useState(5);
@@ -205,6 +213,14 @@ export default function ProjectBOQ({
   const [descriptionEditor, setDescriptionEditor] = useState(null);
   const [priceLibraryItemId, setPriceLibraryItemId] = useState(null);
   const [priceSearch, setPriceSearch] = useState("");
+  const [priceLibraryEntries,setPriceLibraryEntries]=useState([]);
+  const [projectRateImport,setProjectRateImport]=useState(null);
+  const [applyingProjectRates,setApplyingProjectRates]=useState(false);
+  const projectRateInputRef=useRef(null),projectRateRequestRef=useRef(0),projectRateContextRef=useRef(null);
+  projectRateContextRef.current={projectId,takeoff,items,loadedBoqProject,loadingTakeoff,generating,vatPercentage,overheadPercentage,profitPercentage,discountPercentage,warnings,assumptions};
+  useEffect(()=>{setApplyingProjectRates(false);return ()=>{projectRateRequestRef.current++;};},[projectId,takeoff?.document_id,takeoff?.analyzed_at]);
+  const priceLibraryRequestRef=useRef(0);
+  useEffect(()=>{priceLibraryRequestRef.current++;setPriceLibraryEntries([]);setPriceLibraryItemId(null);},[projectId,takeoff?.document_id,takeoff?.analyzed_at,!!takeoff?.pdf_analysis]);
   const [measurementInfo, setMeasurementInfo] = useState(null);
   const [reviewEditor, setReviewEditor] = useState(null);
   const [readingDwg, setReadingDwg] = useState(false);
@@ -245,6 +261,13 @@ export default function ProjectBOQ({
 
   async function generateFromTakeoff(sourceTakeoff, { silent = false } = {}) {
     if (!sourceTakeoff || generating) return false;
+    const workflowToken = beginDrawingWorkflow(projectId,'boq');
+    if (!workflowToken) {
+      if (!silent) setErrorMessage(drawingWorkflowState(projectId).analysisFailed
+        ? "The latest drawing analysis failed. Complete a successful analysis before generating a new BOQ."
+        : "Drawing analysis or BOQ generation is still running. Wait for it to finish.");
+      return false;
+    }
 
     try {
       setGenerating(true);
@@ -300,20 +323,27 @@ export default function ProjectBOQ({
         }
       );
 
-      const generatedItems = normalizeItems(boq.items, sourceTakeoff);
+      let generatedItems = normalizeItems(boq.items, sourceTakeoff);
+      let nextProjectRateImport=null;
+      if(projectRateImport?.csvText&&projectRateImport.projectId===projectId&&projectRateImport.documentId&&projectRateImport.documentId===sourceTakeoff.document_id){
+        const imported=applyProjectRateCsv(generatedItems,sourceTakeoff,projectRateImport.csvText,{fileName:projectRateImport.fileName});
+        nextProjectRateImport={...imported.summary,projectId,documentId:sourceTakeoff.document_id,analyzedAt:sourceTakeoff.analyzed_at,csvText:projectRateImport.csvText,beforeItems:generatedItems};
+        generatedItems=normalizeItems(imported.items,sourceTakeoff);
+      }
       // Commit the complete result before a tab switch can unmount this panel.
       saveReadyBoq(window.localStorage, projectId, {
         projectName, currency: "AED", vatPercentage, overheadPercentage,
         profitPercentage, discountPercentage, items: generatedItems,
         warnings: Array.isArray(boq.warnings) ? boq.warnings : [],
         assumptions: Array.isArray(boq.assumptions) ? boq.assumptions : [],
-        takeoff: sourceTakeoff, updatedAt: new Date().toISOString(),
+        takeoff: sourceTakeoff, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
       }, { loadedProject: projectId, loading: false, generating: false });
       setTakeoff(sourceTakeoff);
       setItems(generatedItems);
+      setProjectRateImport(nextProjectRateImport);
       setWarnings(Array.isArray(boq.warnings) ? boq.warnings : []);
       setAssumptions(Array.isArray(boq.assumptions) ? boq.assumptions : []);
-      setMessage("BOQ generated successfully from the latest Quantity Takeoff.");
+      setMessage(nextProjectRateImport?`BOQ rebuilt; ${nextProjectRateImport.appliedRows} project CSV rates reapplied. Unmatched scopes remain unresolved.`:"BOQ generated successfully from the latest Quantity Takeoff.");
       return true;
     } catch (error) {
       console.error("Generate BOQ error:", error);
@@ -322,6 +352,7 @@ export default function ProjectBOQ({
       );
       return false;
     } finally {
+      finishDrawingWorkflow(projectId,workflowToken,true);
       setGenerating(false);
     }
   }
@@ -334,6 +365,7 @@ export default function ProjectBOQ({
     async function loadTakeoff() {
       setLoadedBoqProject(null);
       setItems([]);
+      setProjectRateImport(null);
       setTakeoff(null);
       setWarnings([]);
       setAssumptions([]);
@@ -365,6 +397,8 @@ export default function ProjectBOQ({
 
         if (storedBoq) {
           const parsedBoq = JSON.parse(storedBoq);
+          const savedRates=parsedBoq?.projectRateImport;
+          setProjectRateImport(savedRates?.projectId===projectId&&savedRates?.documentId&&savedRates.documentId===latestTakeoff?.document_id&&savedRates.analyzedAt===latestTakeoff?.analyzed_at&&typeof savedRates?.csvText==='string'&&savedRates.csvText.length<=4*1024*1024&&Array.isArray(savedRates.beforeItems)?savedRates:null);
           storedItems = normalizeItems(parsedBoq?.items || [], latestTakeoff);
           setItems(storedItems);
           setWarnings(
@@ -465,11 +499,64 @@ export default function ProjectBOQ({
         warnings,
         assumptions,
         takeoff,
+        projectRateImport,
         updatedAt: new Date().toISOString(),
-      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating });
-  }, [projectId, loadedBoqProject, loadingTakeoff, generating, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff]);
+      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||applyingProjectRates });
+  }, [projectId, loadedBoqProject, loadingTakeoff, generating, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, projectRateImport]);
+
+  function saveProjectRateDraft(nextItems,nextImport) {
+    const saved=saveReadyBoq(window.localStorage,projectId,{
+      projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,
+      items:nextItems,warnings,assumptions,takeoff,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
+    },{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
+    if(!saved)throw Error('BOQ is still loading or generating. Wait before applying project rates.');
+  }
+
+  async function importProjectRateCsv(event) {
+    const file=event.target.files?.[0];event.target.value='';if(!file)return;
+    if(!takeoff?.pdf_analysis||loadingTakeoff||generating||applyingProjectRates||loadedBoqProject!==projectId){setErrorMessage('Wait for the PDF BOQ to finish loading.');return;}
+    if(!takeoff.document_id){setErrorMessage('The PDF document reference is missing. Reopen its saved BOQ before importing rates.');return;}
+    if(file.size>4*1024*1024){setErrorMessage('Choose a project rate CSV smaller than 4 MB.');return;}
+    const token=beginDrawingWorkflow(projectId,'boq');if(!token){setErrorMessage('Wait for drawing analysis or BOQ generation to finish.');return;}
+    const request=++projectRateRequestRef.current,snapshot=projectRateContextRef.current;
+    const current=()=>request===projectRateRequestRef.current&&projectRateContextRef.current?.projectId===snapshot.projectId;
+    let succeeded=false;setApplyingProjectRates(true);setErrorMessage('');
+    try{
+      const text=await file.text();if(!current())return;
+      const latest=projectRateContextRef.current;
+      if(['takeoff','items','loadedBoqProject','vatPercentage','overheadPercentage','profitPercentage','discountPercentage','warnings','assumptions'].some(k=>latest[k]!==snapshot[k]))throw Error('BOQ or drawing changed while reading the CSV. Select the file again for the current BOQ.');
+      const imported=applyProjectRateCsv(items,takeoff,text,{fileName:file.name});
+      const nextItems=normalizeItems(imported.items,takeoff);
+      const nextImport={...imported.summary,projectId,documentId:takeoff.document_id,analyzedAt:takeoff.analyzed_at,csvText:text,beforeItems:items};
+      // Persist the entire draft and restore point before publishing UI state.
+      // A quota/disk failure leaves the current BOQ untouched.
+      saveProjectRateDraft(nextItems,nextImport);
+      setItems(nextItems);setProjectRateImport(nextImport);setPriceLibraryItemId(null);
+      setMessage(`${imported.summary.appliedRows} project CSV rates applied and saved; ${imported.summary.unboundCodes.length} CSV rows were not applied. No AI analysis was run.`);
+      succeeded=true;
+    }catch(error){if(current())setErrorMessage(error.message||'Project rate CSV could not be applied.');}
+    finally{finishDrawingWorkflow(projectId,token,succeeded);if(current())setApplyingProjectRates(false);}
+  }
+
+  function restoreBeforeProjectRates() {
+    if(!projectRateImport||projectRateImport.projectId!==projectId||projectRateImport.documentId!==takeoff?.document_id)return;
+    if(projectRateImport.analyzedAt!==takeoff?.analyzed_at){setErrorMessage('The PDF analysis has changed. Its earlier BOQ rows cannot be restored to this analysis.');return;}
+    const token=beginDrawingWorkflow(projectId,'boq');if(!token){setErrorMessage('Wait for drawing analysis or BOQ generation to finish.');return;}
+    let succeeded=false;
+    try{
+      const restored=normalizeItems(projectRateImport.beforeItems,takeoff);
+      saveProjectRateDraft(restored,null);setItems(restored);setProjectRateImport(null);setErrorMessage('');
+      setMessage('BOQ rows restored to the saved state before the latest CSV import.');succeeded=true;
+    }catch(error){setErrorMessage(error.message||'The saved BOQ could not be restored.');}
+    finally{finishDrawingWorkflow(projectId,token,succeeded);}
+  }
 
   function updateItem(id, field, value) {
+    if(takeoff?.pdf_analysis){
+      try{setItems(items.map(item=>item.id===id?editPdfBoqItem(item,field,value):item));setErrorMessage('');}
+      catch(error){setErrorMessage(error.message);}
+      return;
+    }
     setItems((currentItems) => {
       const updatedItems = currentItems.map((item) =>
         item.id === id
@@ -534,12 +621,31 @@ export default function ProjectBOQ({
     setDescriptionEditor(null);
   }
 
-  function openPriceLibrary(item) {
+  async function openPriceLibrary(item) {
+    const request=++priceLibraryRequestRef.current;
     setPriceLibraryItemId(item.id);
     setPriceSearch("");
+    if(!takeoff?.pdf_analysis){setPriceLibraryEntries(UAE_PRICE_LIBRARY);return;}
+    setPriceLibraryEntries([]);setErrorMessage('');setMessage('Loading existing price catalog…');
+    try{
+      const response=await commercialFetch('/api/boq/catalog',{method:'GET',cache:'no-store'});
+      const payload=await response.json();if(!response.ok||payload.success!==true)throw Error(payload.error||'Price catalog could not be loaded.');
+      const entries=catalogPriceEntries(payload.catalog);
+      if(request!==priceLibraryRequestRef.current)return;
+      setPriceLibraryEntries(entries);setMessage('Existing catalog loaded. Search by item code or description; up to 100 compatible matches are shown. Zero-rate entries require a project rate.');
+    }catch(error){if(request===priceLibraryRequestRef.current){setErrorMessage(error.message);setMessage('');}}
   }
 
   function applyLibraryRate(entry) {
+    if(takeoff?.pdf_analysis){
+      try{
+        const selected=items.find(item=>item.id===priceLibraryItemId);if(!selected)throw Error('BOQ item is no longer available.');
+        const updated=applyBoqCatalogSelection(selected,entry);
+        setItems(items.map(item=>item.id===selected.id?updated:item));setPriceLibraryItemId(null);setPriceSearch('');setErrorMessage('');
+        setMessage('Existing catalog rate applied with compatible units. Review the complete line before commercial inclusion.');
+      }catch(error){setErrorMessage(error.message);}
+      return;
+    }
     setItems((currentItems) => currentItems.map((item) =>
       item.id === priceLibraryItemId ? requireBoqReview({
         ...invalidateBoqReview(item), section: entry.section, description: entry.description,
@@ -616,6 +722,12 @@ export default function ProjectBOQ({
 
   async function handleGenerateBoq() {
     if (generating) return;
+    if (drawingWorkflowState(projectId).active || drawingWorkflowState(projectId).analysisFailed) {
+      setErrorMessage(drawingWorkflowState(projectId).analysisFailed
+        ? "The latest drawing analysis failed. Complete a successful analysis before generating a new BOQ."
+        : "Drawing analysis is still running. Wait for the completed analysis before generating BOQ.");
+      return;
+    }
 
     setMessage("");
     setErrorMessage("");
@@ -653,7 +765,7 @@ export default function ProjectBOQ({
           <LocalizedElement as="button"
             type="button"
             onClick={handleGenerateBoq}
-            disabled={generating || loadingTakeoff}
+            disabled={generating || loadingTakeoff || !!drawingWorkflow.active || drawingWorkflow.analysisFailed}
           >
             {generating ? (
               <LoaderCircle size={17} className="boq-spinner" />
@@ -798,7 +910,7 @@ export default function ProjectBOQ({
                     key={item.id}
                     title={
                       ratePending
-                        ? "Measured quantity verified. Commercial rate pending."
+                        ? (takeoff?.pdf_analysis?"Recorded project quantity. Specification and rate require review.":"Measured quantity verified. Commercial rate pending.")
                         : undefined
                     }
                   >
@@ -885,7 +997,7 @@ export default function ProjectBOQ({
                           onChange={(event) => {
                             updateItem(item.id, "rate", event.target.value);
                             if (
-                              ratePending &&
+                              !takeoff?.pdf_analysis && ratePending &&
                               Number(event.target.value) > 0
                             ) {
                               setItems((currentItems) =>
@@ -1028,15 +1140,26 @@ export default function ProjectBOQ({
           <LocalizedElement as="div" className="boq-modal boq-price-modal" role="dialog" aria-modal="true" aria-label="UAE Price Library" onMouseDown={(event) => event.stopPropagation()}>
             <LocalizedElement as="div" className="boq-modal-header"><LocalizedElement as="div"><LocalizedElement as="span">UAE 2026</LocalizedElement><LocalizedElement as="h3">Ventra Price Library</LocalizedElement></LocalizedElement><LocalizedElement as="button" type="button" onClick={() => setPriceLibraryItemId(null)}><X size={18}/></LocalizedElement></LocalizedElement>
             <LocalizedElement as="input" className="boq-library-search" autoFocus placeholder="Search item, section or unit..." value={priceSearch} onChange={(event) => setPriceSearch(event.target.value)} />
+            {takeoff?.pdf_analysis&&<>
+              <LocalizedElement as="button" type="button" className="boq-secondary" disabled={applyingProjectRates||generating||loadingTakeoff||!!drawingWorkflow.active||drawingWorkflow.analysisFailed} onClick={()=>projectRateInputRef.current?.click()}>{applyingProjectRates?'Applying CSV…':'Apply project rate CSV to this BOQ'}</LocalizedElement>
+              <input ref={projectRateInputRef} type="file" accept=".csv,text/csv" hidden onChange={importProjectRateCsv} />
+              <LocalizedElement as="p" className="boq-library-note">CSV columns: code, description_en, unit, rate_aed. Applies matching rates to this BOQ only. Unmatched rows stay unchanged. No AI analysis is used.</LocalizedElement>
+              {projectRateImport&&<>
+                <LocalizedElement as="p" className="boq-library-note">Project CSV: {projectRateImport.fileName}; {projectRateImport.appliedRows} rates applied. Not applied: {projectRateImport.unboundCodes?.join(', ')||'none'}. Other priced rows retained: {projectRateImport.otherPricedRowsRetained}.</LocalizedElement>
+                {!!projectRateImport.warnings?.length&&<LocalizedElement as="p" className="boq-library-note">{projectRateImport.warnings.join(' ')}</LocalizedElement>}
+                <LocalizedElement as="button" type="button" className="boq-secondary" disabled={applyingProjectRates||generating||loadingTakeoff||!!drawingWorkflow.active} onClick={restoreBeforeProjectRates}>Restore BOQ before latest CSV</LocalizedElement>
+                <LocalizedElement as="p" className="boq-library-note">Restore replaces current rows, including later edits, with the saved rows before the latest import.</LocalizedElement>
+              </>}
+            </>}
             <LocalizedElement as="div" className="boq-library-list">
-              {UAE_PRICE_LIBRARY.filter((entry) => `${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).map((entry) => (
-                <LocalizedElement as="button" type="button" key={entry.id} onClick={() => applyLibraryRate(entry)}>
+              {priceLibraryEntries.filter((entry) => (!takeoff?.pdf_analysis||boqUnitFactor(items.find(item=>item.id===priceLibraryItemId)?.unit,entry.unit)!==null)&&`${entry.itemCode||''} ${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).slice(0,100).map((entry) => (
+                <LocalizedElement as="button" type="button" key={entry.id} disabled={!!takeoff?.pdf_analysis&&entry.rateMissing} onClick={() => applyLibraryRate(entry)}>
                   <LocalizedElement as="span"><LocalizedElement as="strong"><OriginalText>{tr(entry.description)}</OriginalText></LocalizedElement><LocalizedElement as="small">{tr(entry.section)} · {tr(entry.unit)}</LocalizedElement></LocalizedElement>
-                  <LocalizedElement as="b">{formatCurrency(entry.rate)}</LocalizedElement>
+                  <LocalizedElement as="b">{entry.rateMissing?tr('Rate pending'):formatCurrency(entry.rate)}</LocalizedElement>
                 </LocalizedElement>
               ))}
             </LocalizedElement>
-            <LocalizedElement as="p" className="boq-library-note">Budget rates are editable and should be verified against supplier quotations before tender submission.</LocalizedElement>
+            <LocalizedElement as="p" className="boq-library-note">{takeoff?.pdf_analysis&&priceLibraryEntries.length===0?(errorMessage||'Loading existing price catalog…'):'Budget rates are editable and should be verified against supplier quotations before tender submission.'}</LocalizedElement>
           </LocalizedElement>
         </LocalizedElement>
       )}

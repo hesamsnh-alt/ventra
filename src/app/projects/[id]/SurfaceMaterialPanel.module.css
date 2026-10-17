@@ -1,0 +1,16 @@
+.panel{padding:14px;border:1px solid #ffffff24;border-radius:12px;background:#10151d;color:#eee;min-width:0;margin-bottom:12px}
+.panel summary{font-weight:700;cursor:pointer;color:#f5c851;font-size:15px}
+.panel p{font-size:12px;line-height:1.7;color:#c1c8d2;margin:10px 0}
+.groups,.actions{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.panel button{border:1px solid #ffffff29;background:#1b2430;color:#e9edf2;padding:7px 9px;border-radius:7px;cursor:pointer;font:inherit;font-size:12px}
+.panel button[aria-pressed=true]{border-color:#efbf42;box-shadow:0 0 0 1px #efbf42}
+.panel button:focus-visible{outline:2px solid #f6d679;outline-offset:3px}
+.panel button:disabled{opacity:.45;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.panel .swatch{padding:5px;display:flex;flex-direction:column;gap:5px;min-width:0;cursor:grab}
+.swatch canvas{width:100%;height:68px;object-fit:cover;border-radius:4px;pointer-events:none}
+.swatch span{font-size:12px;line-height:1.5;pointer-events:none}
+.feedback{min-height:34px;font-size:12px;line-height:1.6;color:#efcf7d;overflow-wrap:anywhere}
+.panel small{font-size:11px;color:#adb9c9;overflow-wrap:anywhere}
+
+.scale{display:grid;gap:8px;border-top:1px solid #465369;margin:12px 0;padding-top:10px}.scale label{display:grid;gap:5px;font-size:12px}.scale input{width:100%;min-height:34px;background:#0b1220;color:inherit;border:1px solid #536075;border-radius:6px;padding:6px;box-sizing:border-box}

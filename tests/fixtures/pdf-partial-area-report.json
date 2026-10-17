@@ -1,0 +1,184 @@
+{
+  "pageNumber": 2,
+  "rooms": 10,
+  "doors": 8,
+  "windows": 9,
+  "floor_area": 0,
+  "ceiling_area": 0,
+  "detected_items": [
+    {
+      "name": "F01 Bedroom 2",
+      "quantity": 28,
+      "unit": "m2",
+      "description": "WOOD | reported 28 m2"
+    },
+    {
+      "name": "F02 Bedroom 3",
+      "quantity": 28,
+      "unit": "m2",
+      "description": "WOOD | reported 28 m2"
+    },
+    {
+      "name": "F03 Master Bedroom",
+      "quantity": 28,
+      "unit": "m2",
+      "description": "WOOD | reported 28 m2"
+    },
+    {
+      "name": "F04 Hall",
+      "quantity": 24,
+      "unit": "m2",
+      "description": "TILE | inferred from 16x12 envelope (192) minus other tagged spaces incl. 12 m2 VOID = 24 m2"
+    },
+    {
+      "name": "F05 Landing",
+      "quantity": 4,
+      "unit": "m2",
+      "description": "TILE | reported 4 m2"
+    },
+    {
+      "name": "F06 Stair VOID",
+      "quantity": 12,
+      "unit": "m2",
+      "description": "VOID | reported 12 m2"
+    },
+    {
+      "name": "F07 Terrace",
+      "quantity": 12,
+      "unit": "m2",
+      "description": "OUTDOOR | reported 12 m2"
+    },
+    {
+      "name": "F08 Bedroom 4 (L)",
+      "quantity": 22,
+      "unit": "m2",
+      "description": "WOOD | reported 22 m2"
+    },
+    {
+      "name": "F09 Bath",
+      "quantity": 6,
+      "unit": "m2",
+      "description": "TILE | reported 6 m2"
+    },
+    {
+      "name": "F10 Family Lounge",
+      "quantity": 16,
+      "unit": "m2",
+      "description": "WOOD | reported 16 m2"
+    },
+    {
+      "name": "F11 Ensuite",
+      "quantity": 12,
+      "unit": "m2",
+      "description": "TILE | reported 12 m2"
+    }
+  ],
+  "page_evidence": {
+    "kind": "floor_plan",
+    "scope_id": "FIRST FLOOR",
+    "drawing_id": "A02",
+    "revision": "R1",
+    "quantities": [
+      {
+        "key": "rooms",
+        "scope_id": "FIRST FLOOR",
+        "value": 10,
+        "unit": "nr",
+        "evidence": "Tagged spaces excluding VOID: F01,F02,F03,F04,F05,F07,F08,F09,F10,F11 = 10"
+      },
+      {
+        "key": "door_count",
+        "scope_id": "FIRST FLOOR",
+        "value": 8,
+        "unit": "nr",
+        "evidence": "Doors FD01–FD08 shown with arcs"
+      },
+      {
+        "key": "window_count",
+        "scope_id": "FIRST FLOOR",
+        "value": 9,
+        "unit": "nr",
+        "evidence": "Windows FW01–FW09 shown (blue double lines)"
+      },
+      {
+        "key": "wall_length",
+        "scope_id": "FIRST FLOOR",
+        "value": 112,
+        "unit": "m",
+        "evidence": "Perimeter 2(16+12)=56; internal grids: 2x12 (x=7,9) + 2x16 (y=4,8) = 56; total 112 m"
+      },
+      {
+        "key": "wall_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 716.8,
+        "unit": "m2",
+        "evidence": "112 m wall length x 3.20 m height x 2 faces; openings not deducted"
+      },
+      {
+        "key": "terrace_floor_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 12,
+        "unit": "m2",
+        "evidence": "F07 Terrace tag 12 m2 OUTDOOR"
+      },
+      {
+        "key": "wood_floor_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 122,
+        "unit": "m2",
+        "evidence": "WOOD rooms: F01 28 + F02 28 + F03 28 + F08 22 + F10 16 = 122 m2 (centreline zones)"
+      },
+      {
+        "key": "toilet_count",
+        "scope_id": "FIRST FLOOR",
+        "value": 2,
+        "unit": "nr",
+        "evidence": "WC symbols in F11 Ensuite and F09 Bath"
+      },
+      {
+        "key": "basin_count",
+        "scope_id": "FIRST FLOOR",
+        "value": 2,
+        "unit": "nr",
+        "evidence": "B (basin) symbols in F11 and F09"
+      },
+      {
+        "key": "shower_count",
+        "scope_id": "FIRST FLOOR",
+        "value": 1,
+        "unit": "nr",
+        "evidence": "SH symbol in F11 Ensuite"
+      }
+    ]
+  },
+  "area_geometry": null,
+  "__withheldAreaClaims": {
+    "claims": [
+      {
+        "key": "floor_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 180,
+        "unit": "m2",
+        "evidence": "Envelope 16 x 12 = 192 m2; minus Stair VOID 12 = 180 m2 (centreline zones)"
+      },
+      {
+        "key": "ceiling_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 168,
+        "unit": "m2",
+        "evidence": "192 total - 12 TERRACE - 12 VOID = 168 m2"
+      },
+      {
+        "key": "ceramic_floor_area",
+        "scope_id": "FIRST FLOOR",
+        "value": 46,
+        "unit": "m2",
+        "evidence": "TILE rooms: F04 Hall 24 (inferred), F05 4, F09 6, F11 12 = 46 m2"
+      }
+    ],
+    "fields": {
+      "floor_area": 180,
+      "ceiling_area": 168
+    }
+  }
+}

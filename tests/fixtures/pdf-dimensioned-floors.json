@@ -1,0 +1,558 @@
+[
+  {
+    "basis": "wall_centerline_zones",
+    "envelope": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 16,
+        "y": 0
+      },
+      {
+        "x": 16,
+        "y": 12
+      },
+      {
+        "x": 0,
+        "y": 12
+      }
+    ],
+    "envelope_evidence": "Printed 16 m x 12 m outer envelope and dimensioned room boundaries; benchmark control reference, not generated quantity total.",
+    "spaces": [
+      {
+        "tag": "G01",
+        "kind": "enclosed",
+        "finish": "epoxy",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 7,
+            "y": 0
+          },
+          {
+            "x": 7,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G02",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 8
+          },
+          {
+            "x": 0,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G03",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 7,
+            "y": 4
+          },
+          {
+            "x": 7,
+            "y": 8
+          },
+          {
+            "x": 4,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G04",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 8
+          },
+          {
+            "x": 7,
+            "y": 8
+          },
+          {
+            "x": 7,
+            "y": 12
+          },
+          {
+            "x": 0,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G05",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 7,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 12
+          },
+          {
+            "x": 7,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G06",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 13,
+            "y": 0
+          },
+          {
+            "x": 13,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G07",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 13,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 4
+          },
+          {
+            "x": 13,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G08",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 4
+          },
+          {
+            "x": 16,
+            "y": 4
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 9,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "G09",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 12
+          },
+          {
+            "x": 9,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      }
+    ]
+  },
+  {
+    "basis": "wall_centerline_zones",
+    "envelope": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 16,
+        "y": 0
+      },
+      {
+        "x": 16,
+        "y": 12
+      },
+      {
+        "x": 0,
+        "y": 12
+      }
+    ],
+    "envelope_evidence": "Printed 16 m x 12 m outer envelope and dimensioned room boundaries; benchmark control reference, not generated quantity total.",
+    "spaces": [
+      {
+        "tag": "F01",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 7,
+            "y": 0
+          },
+          {
+            "x": 7,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F02",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 4
+          },
+          {
+            "x": 7,
+            "y": 4
+          },
+          {
+            "x": 7,
+            "y": 8
+          },
+          {
+            "x": 0,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F03",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 8
+          },
+          {
+            "x": 7,
+            "y": 8
+          },
+          {
+            "x": 7,
+            "y": 12
+          },
+          {
+            "x": 0,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F04",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 7,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 12
+          },
+          {
+            "x": 7,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F05",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F06",
+        "kind": "void",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 13,
+            "y": 0
+          },
+          {
+            "x": 13,
+            "y": 4
+          },
+          {
+            "x": 10,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F07",
+        "kind": "outdoor",
+        "finish": "outdoor",
+        "polygon": [
+          {
+            "x": 13,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 4
+          },
+          {
+            "x": 13,
+            "y": 4
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F08",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 4
+          },
+          {
+            "x": 16,
+            "y": 4
+          },
+          {
+            "x": 16,
+            "y": 6
+          },
+          {
+            "x": 13,
+            "y": 6
+          },
+          {
+            "x": 13,
+            "y": 8
+          },
+          {
+            "x": 9,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F09",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 13,
+            "y": 6
+          },
+          {
+            "x": 16,
+            "y": 6
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 13,
+            "y": 8
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F10",
+        "kind": "enclosed",
+        "finish": "wood",
+        "polygon": [
+          {
+            "x": 9,
+            "y": 8
+          },
+          {
+            "x": 13,
+            "y": 8
+          },
+          {
+            "x": 13,
+            "y": 12
+          },
+          {
+            "x": 9,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      },
+      {
+        "tag": "F11",
+        "kind": "enclosed",
+        "finish": "tile",
+        "polygon": [
+          {
+            "x": 13,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 12
+          },
+          {
+            "x": 13,
+            "y": 12
+          }
+        ],
+        "reported_area": null,
+        "evidence": "Printed grid and room boundary dimensions in the benchmark source drawing."
+      }
+    ]
+  }
+]

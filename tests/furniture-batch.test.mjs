@@ -1,0 +1,18 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {applyFurnitureBatch,copyFurnitureSnapshot,toggleFurnitureSelection,keyboardFurnitureAction,previewFurnitureBatch} from '../src/lib/furnitureBatch.mjs';
+const scene=()=>({width:12,depth:10,height:3.2,rooms:[{id:'r',type:'living',polygon:[{x:0,y:0},{x:12,y:0},{x:12,y:10},{x:0,y:10}]}],walls:[],openings:[],holes:[],footprint:[{x:0,y:0},{x:12,y:0},{x:12,y:10},{x:0,y:10}],palette:{wall:'#eee'},assets:[{id:'a',type:'plant',catalogId:'plant-calathea',variant:'calathea',color:'#335533',xMeters:2,yMeters:2,width:.5,depth:.5,height:.9,rotation:30,roomId:'r'},{id:'b',type:'chair',xMeters:3,yMeters:2,width:.5,depth:.5,height:.9,rotation:90,roomId:'r'}]});
+test('additive multi-selection toggles and single click replaces selection',()=>{assert.deepEqual(toggleFurnitureSelection(['a'],'b',true),['a','b']);assert.deepEqual(toggleFurnitureSelection(['a','b'],'a',true),['b']);assert.deepEqual(toggleFurnitureSelection(['a','b'],'b'),['b']);});
+test('batch Delete is atomic, reversible through scene history, and locks architecture',()=>{
+ const s=scene(),before=structuredClone(s),next=applyFurnitureBatch(s,{kind:'remove-many',assetIds:['a','b','a']});assert.equal(next.assets.length,0);assert.deepEqual(s,before);for(const key of ['rooms','walls','openings','footprint','palette'])assert.deepEqual(next[key],s[key]);assert.throws(()=>applyFurnitureBatch(s,{kind:'remove-many',assetIds:['a','missing']}));assert.deepEqual(s,before);
+});
+test('group copy retains relative placement, catalog, rotation, size and color with fresh identities',()=>{
+ const s=scene(),snapshot=copyFurnitureSnapshot(s,['a','b']),before=JSON.stringify(s),next=applyFurnitureBatch(s,{kind:'copy-many',snapshot,point:{x:7,y:6}});const added=next.assets.slice(2);assert.equal(added.length,2);assert.equal(added[1].xMeters-added[0].xMeters,1);assert.equal(added[0].catalogId,'plant-calathea');assert.equal(added[0].rotation,30);assert.equal(added[1].rotation,90);assert.equal(added[0].color,'#335533');assert.ok(added.every(a=>!['a','b'].includes(a.id)&&a.excludeFromTakeoff));assert.equal(JSON.stringify(s),before);
+ const again=applyFurnitureBatch(next,{kind:'copy-many',snapshot,point:{x:9,y:8}});assert.equal(new Set(again.assets.map(a=>a.id)).size,6);
+});
+test('blocked copy rejects the whole group and preview reports the failure',()=>{
+ const s=scene(),before=JSON.stringify(s),snapshot=copyFurnitureSnapshot(s,['a','b']);assert.throws(()=>applyFurnitureBatch(s,{kind:'copy-many',snapshot,point:{x:2.5,y:2}}),/Copy cannot/);assert.equal(previewFurnitureBatch(s,{kind:'copy-many',snapshot,point:{x:2.5,y:2}}).valid,false);assert.equal(JSON.stringify(s),before);
+ assert.equal(previewFurnitureBatch(s,{kind:'copy-many',snapshot,point:{x:7,y:6}}).valid,true);
+});
+test('Delete and copy shortcuts are scoped to the viewer and never intercept typing or repeats',()=>{
+ const e={key:'Delete',target:{closest:()=>null}};assert.equal(keyboardFurnitureAction(e,true,true,false),'remove');assert.equal(keyboardFurnitureAction(e,false,true,false),null);assert.equal(keyboardFurnitureAction({...e,repeat:true},true,true,false),null);assert.equal(keyboardFurnitureAction({...e,target:{closest:()=>({})}},true,true,false),null);
+ assert.equal(keyboardFurnitureAction({...e,key:'c',ctrlKey:true},true,true,false),'copy');assert.equal(keyboardFurnitureAction({...e,key:'ز',code:'KeyC',ctrlKey:true},true,true,false),'copy');assert.equal(keyboardFurnitureAction({...e,key:'v',metaKey:true},true,false,true),'paste');assert.equal(keyboardFurnitureAction({...e,key:'v',ctrlKey:true},true,false,false),null);
+});

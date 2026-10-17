@@ -13,12 +13,14 @@ import { filterOpenPlanPartitions } from "@/lib/openPlanPartitions.mjs";
 import { createHash } from "node:crypto";
 import { getOpenAIClient } from "@/services/openaiClient";
 import { prepareRasterImageEvidence, rasterEvidencePrompt } from "@/lib/rasterImageEvidence.mjs";
+import { createPreviewWireCodec, readCompletedPreview } from '@/lib/previewSceneWire.mjs';
 
-const VERSION = "room-design-defaults-v64-20261011";
+const VERSION = "preview-compact-response-v133-20261015";
 const MODEL = process.env.OPENAI_3D_PREVIEW_MODEL || "gpt-5.6-sol";
-const requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "medium";
-const REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "medium";
-const MAX_OUTPUT_TOKENS = Math.max(3500, Math.min(8000, Number(process.env.VENTRA_3D_PREVIEW_MAX_OUTPUT_TOKENS || 8000)));
+const requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "low";
+const REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "low";
+const requestedOutputTokens = Number(process.env.VENTRA_3D_PREVIEW_MAX_OUTPUT_TOKENS || 8000);
+const MAX_OUTPUT_TOKENS = Number.isFinite(requestedOutputTokens) ? Math.max(3500, Math.min(8000, requestedOutputTokens)) : 8000;
 const TIMEOUT_MS = Math.max(45000, Math.min(180000, Number(process.env.VENTRA_3D_PREVIEW_TIMEOUT_MS || 120000)));
 
 const pointSchema = {
@@ -2829,6 +2831,10 @@ function parseJson(text) {
   return null;
 }
 
+const sceneWire = createPreviewWireCodec(sceneSchema);
+const furnitureWire = createPreviewWireCodec({ type: 'object', additionalProperties: false,
+  required: ['furniture'], properties: { furniture: sceneSchema.properties.furniture } });
+
 async function prepareImage(imageUrl, signal) {
   if (!imageUrl) throw Object.assign(new Error("No floor-plan image URL was supplied."), { code: "PREVIEW_NO_IMAGE" });
   const response = await fetch(imageUrl, { cache: "no-store", signal });
@@ -2875,6 +2881,9 @@ async function runPreview(body) {
     model: MODEL,
     stage: "starting",
     accepted: false,
+    reasoningEffort: REASONING_EFFORT,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    wireFormat: 'lossless-short-keys-point-pairs-v1',
   };
 
   try {
@@ -3013,15 +3022,15 @@ Return only the strict schema.`;
         input: [{
           role: "user",
           content: [
-            { type: "input_text", text: `${prompt}\n\nSource image size: ${prepared.width}x${prepared.height}px (reference only).` },
+            { type: "input_text", text: `${prompt}\n\n${sceneWire.instructions}\n\nSource image size: ${prepared.width}x${prepared.height}px (reference only).` },
             { type: "input_image", image_url: prepared.imageUrl, detail: "high" },
           ],
         }],
         text: {
           verbosity: "low",
-          format: { type: "json_schema", name: "ventra_interactive_plan_scene_v2", strict: true, schema: sceneSchema },
+          format: { type: "json_schema", name: "ventra_compact_plan_scene_v133", strict: true, schema: sceneWire.schema },
         },
-      }, { signal: controller.signal });
+      }, { signal: controller.signal, maxRetries: 0 });
     } catch (error) {
       if (controller.signal.aborted) throw Object.assign(new Error("Interactive preview timed out."), { code: "PREVIEW_TIMEOUT" });
       throw error;
@@ -3034,15 +3043,9 @@ Return only the strict schema.`;
     diagnostics.usage = response?.usage || null;
     diagnostics.incompleteDetails = response?.incomplete_details || null;
 
-    const outputText = String(response?.output_text || "").trim();
-    if (!outputText) {
-      const reason = response?.incomplete_details?.reason || response?.status || "no_text";
-      throw Object.assign(new Error(`Preview model returned no scene JSON (${reason}).`), { code: "PREVIEW_EMPTY_OUTPUT" });
-    }
-
+    diagnostics.stage = "validating_response";
+    const raw = readCompletedPreview(response, sceneWire);
     diagnostics.stage = "normalizing_scene";
-    const raw = parseJson(outputText);
-    if (!raw) throw Object.assign(new Error("Preview scene JSON could not be parsed."), { code: "PREVIEW_JSON_PARSE_FAILED" });
     let scene = normalizeScene(raw, { width: prepared.width, height: prepared.height }, imageEvidence);
     // Separate visual attention to fixtures from the much larger wall/room task.
     // Only furniture is returned; all architecture remains fixed.
@@ -3056,12 +3059,13 @@ Return only the strict schema.`;
           model: MODEL, reasoning: { effort: REASONING_EFFORT }, max_output_tokens: MAX_OUTPUT_TOKENS,
           input: [{role:"user",content:[
             {type:"input_text",text:`Review ONLY furniture and fixtures in this original floor plan. Read Persian, Arabic and English labels. Return ALL visible objects, not a generic furnished design. The attached fixed scene supplies room IDs and metre/Y-up polygons; use these IDs. Return coordinates normalized to the FULL ORIGINAL IMAGE, Y down. backLeft/backRight are BACK-edge endpoints; frontCenter is the midpoint of the FRONT edge. For beds the back is the pillow/headboard edge: trace the whole bed and preserve its position and facing. Split every L/U sofa or counter into non-overlapping rectangles sharing groupId, one rectangle per leg. Do not drop the shorter leg or fill its empty corner. Trace each visible toilet, basin, shower and washing-machine symbol, including narrow laundry rooms labeled رخت‌شوی‌خانه, لباس‌شویی, laundry or غرفة غسيل. A square with a circle inside may be a washing machine or basin: use its room and other symbols to distinguish them. Do not infer a shower from WC alone. Do not add refrigerators, wardrobes or fixtures absent from the drawing. Confidence below .65 must remain uncertain. Do not modify walls, rooms, doors or windows. Fixed scene: ${JSON.stringify({width:scene.width,depth:scene.depth,sourceBounds:scene.geometryValidation.sourceProjection.sourceBounds,rooms:scene.rooms})}`},
+            {type:"input_text",text:furnitureWire.instructions},
             {type:"input_image",image_url:prepared.imageUrl,detail:"high"}
           ]}],
-          text:{format:{type:"json_schema",name:"source_furniture_coverage",strict:true,schema:{type:"object",additionalProperties:false,required:["furniture"],properties:{furniture:sceneSchema.properties.furniture}}}}
-        },{signal:furnitureController.signal});
-        if(reviewResponse.status!=="completed")throw new Error("Furniture review did not complete.");
-        const reviewed=parseJson(reviewResponse.output_text||"");
+          text:{format:{type:"json_schema",name:"compact_furniture_coverage_v133",strict:true,schema:furnitureWire.schema}}
+        },{signal:furnitureController.signal,maxRetries:0});
+        diagnostics.furnitureReview={responseId:reviewResponse.id,usage:reviewResponse.usage,status:reviewResponse.status,incompleteDetails:reviewResponse.incomplete_details||null};
+        const reviewed=readCompletedPreview(reviewResponse,furnitureWire);
         if(!Array.isArray(reviewed?.furniture))throw new Error("Furniture review returned invalid observations.");
         const reviewedScene=applySourceFurnitureReview(scene,reviewed.furniture);
         // A failed/empty pass must not silently erase the first pass.
@@ -3075,7 +3079,7 @@ Return only the strict schema.`;
         diagnostics.furnitureReview={responseId:reviewResponse.id,usage:reviewResponse.usage,status:"completed"};
       } catch(error) {
         scene={...scene,furnishingReview:{...scene.furnishingReview,requiresReview:true,coverageReview:{status:"failed",reason:error?.message||"Furniture review failed"}}};
-        diagnostics.furnitureReview={status:"failed",message:error?.message};
+        diagnostics.furnitureReview={...diagnostics.furnitureReview,status:"failed",code:error?.code||null,message:error?.message};
       } finally {clearTimeout(furnitureTimer);}
     } else {
       scene={...scene,furnishingReview:{...scene.furnishingReview,requiresReview:true,coverageReview:{status:"skipped",reason:"analysis_time_budget"}}};
@@ -3112,6 +3116,7 @@ Return only the strict schema.`;
       warning: "Visual 3D preview only. APS/engineering geometry remains authoritative for quantities and BOQ.",
     });
   } catch (error) {
+    diagnostics.failedStage = diagnostics.stage;
     diagnostics.stage = "failed";
     diagnostics.elapsedMs = Date.now() - startedAt;
     diagnostics.error = error?.message || String(error);

@@ -35,6 +35,13 @@ export async function extractPdfPage(pdf, pageIndex) {
   });
 }
 
+export async function extractPdfPagePacket(pdf, pageIndexes) {
+  const packet = await PDFDocument.create();
+  const copied = await packet.copyPages(pdf, pageIndexes);
+  for (const page of copied) packet.addPage(page);
+  return packet.save({useObjectStreams:true,addDefaultPage:false,updateFieldAppearances:false});
+}
+
 export async function splitPdf(fileBuffer, options = {}) {
   const { pdf, totalPages } = await loadPdf(fileBuffer, options);
   const pages = [];

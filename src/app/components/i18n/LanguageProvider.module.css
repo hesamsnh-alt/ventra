@@ -1,0 +1,55 @@
+.switcher {
+  position: fixed;
+  top: auto;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  inset-inline-start: 18px;
+  inset-inline-end: auto;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 36px);
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #475569;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 4px 16px #0005;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color-scheme: dark;
+}
+.switcher label {
+  display: inline;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+.switcher select {
+  display: block;
+  width: auto;
+  min-width: 0;
+  max-width: 140px;
+  height: auto;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: #111827;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.switcher select:focus-visible {
+  outline: 2px solid #ffcf00;
+  outline-offset: 2px;
+}
+@media print {
+  .switcher { display: none !important; }
+}

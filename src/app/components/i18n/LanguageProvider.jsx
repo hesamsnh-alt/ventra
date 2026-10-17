@@ -1,6 +1,7 @@
 'use client';
 import {createContext,useContext,useEffect,useState} from 'react';
 import {normalizeLanguage,languageDirection} from '@/lib/i18n/translate.mjs';
+import styles from './LanguageProvider.module.css';
 const LanguageContext=createContext({language:'en',setLanguage:()=>{}});
 export const useLanguage=()=>useContext(LanguageContext);
 const LABELS={en:'Language',fa:'زبان',ar:'اللغة'};
@@ -12,5 +13,5 @@ export default function LanguageProvider({children,initialLanguage="en"}){
   const sync=e=>{if(e.key==='ventra:language')setCurrent(normalizeLanguage(e.newValue));};window.addEventListener('storage',sync);return()=>window.removeEventListener('storage',sync);
  },[]);
  useEffect(()=>{document.documentElement.lang=language;document.documentElement.dir=languageDirection(language);},[language]);
- return <LanguageContext.Provider value={{language,setLanguage}}><div className="ventra-language-switch" aria-label={LABELS[language]}><label htmlFor="ventra-language">{LABELS[language]}</label><select id="ventra-language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option></select></div>{children}</LanguageContext.Provider>;
+ return <LanguageContext.Provider value={{language,setLanguage}}><div className={`ventra-language-switch ${styles.switcher}`} aria-label={LABELS[language]}><label htmlFor="ventra-language">{LABELS[language]}</label><select id="ventra-language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option></select></div>{children}</LanguageContext.Provider>;
 }

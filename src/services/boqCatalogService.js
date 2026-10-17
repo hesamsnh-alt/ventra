@@ -246,6 +246,10 @@ export async function loadBoqDatabaseCatalog() {
           Number(
             item.premium_rate
           ) || 0,
+        materialRate: Number(item.material_rate) || 0,
+        laborRate: Number(item.labor_rate) || 0,
+        equipmentRate: Number(item.equipment_rate) || 0,
+        transportRate: Number(item.transport_rate) || 0,
         quantityType:
           capability.quantityType,
         quantityStatus:

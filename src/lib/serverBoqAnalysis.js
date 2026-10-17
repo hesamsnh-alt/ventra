@@ -1,3 +1,6 @@
+import {planPdfCatalogRules, resolvePdfCatalogRate, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
+import {annotatePdfBoqCompletion} from '@/lib/pdfBoqCompletion.mjs';
+import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
 import { classifyEstimateItem } from '@/lib/estimateClassification.mjs';
 import {applyDwgScheduleToBoq} from "@/lib/dwgSchedule.mjs";
 import {getDrawingEvidence} from "@/lib/drawingEvidence.mjs";
@@ -74,7 +77,9 @@ function normalizeCode(value) {
 }
 
 function normalizeTakeoff(rawTakeoff) {
-  const takeoff = rawTakeoff || {};
+  const takeoff = rawTakeoff?.pdf_analysis && rawTakeoff?.page_results?.length
+    ? {...rawTakeoff,...mergePdfEvidence(rawTakeoff.page_results,rawTakeoff.failed_pages||[],rawTakeoff.total_pages)}
+    : rawTakeoff || {};
 
   const doors = toNumber(
     takeoff.doors ??
@@ -111,14 +116,14 @@ function normalizeTakeoff(rawTakeoff) {
   const estimatedDoorArea =
     measuredDoorArea > 0
       ? measuredDoorArea
-      : doors > 0
+      : !takeoff.pdf_analysis && doors > 0
         ? doors * 1.89
         : 0;
 
   const estimatedWindowArea =
     measuredWindowArea > 0
       ? measuredWindowArea
-      : windows > 0
+      : !takeoff.pdf_analysis && windows > 0
         ? windows * 1.44
         : 0;
 
@@ -129,6 +134,9 @@ function normalizeTakeoff(rawTakeoff) {
         estimatedWindowArea;
 
   return {
+    pdf_analysis:takeoff.pdf_analysis||(/pdf/i.test(takeoff.document_type||'')||/\.pdf$/i.test(takeoff.document_name||'')?{version:0,requiresReanalysis:true,quantity_evidence:{}}:null),
+    scheduled_quantities:takeoff.scheduled_quantities||{},
+    page_results:takeoff.pdf_analysis&&Array.isArray(takeoff.page_results)?takeoff.page_results:[],
     rooms: toNumber(
       takeoff.rooms ??
         takeoff.room_count ??
@@ -289,7 +297,7 @@ function normalizeTakeoff(rawTakeoff) {
     ),
 
     window_area: round(
-      estimatedWindowArea,
+      measuredWindowArea,
       2
     ),
 
@@ -408,8 +416,7 @@ function getGeometryValue(
     property === "window_area"
   ) {
     return (
-      takeoff.window_area ||
-      takeoff.windows
+      takeoff.window_area || 0
     );
   }
 
@@ -5385,6 +5392,20 @@ async function handleCommercialRequest(request) {
     const rawTakeoff =
       body?.takeoff || {};
 
+    // Reject interrupted extraction before catalog reads or row generation.
+    // A provisional quantity can be reviewed; an unprocessed drawing set is
+    // not a valid basis for replacing the project's BOQ with a smaller total.
+    if(rawTakeoff.pdf_analysis){
+      const total=Number(rawTakeoff.total_pages||rawTakeoff.pdf_analysis.total_pages||0);
+      const analyzed=Array.isArray(rawTakeoff.page_results)?new Set(rawTakeoff.page_results.map(p=>p.pageNumber)).size:Number(rawTakeoff.analyzed_pages||0);
+      const review=rawTakeoff.pdf_analysis.document_review_status?.status;
+      if(rawTakeoff.pdf_analysis.summaryOnly || rawTakeoff.failed_pages?.length || rawTakeoff.pdf_analysis.failed_pages?.length ||
+        total>0&&analyzed<total || ['failed','pending'].includes(review)){
+        return NextResponse.json({success:false,code:'PDF_ANALYSIS_INCOMPLETE',error:
+          `BOQ generation stopped: PDF page extraction or document review is incomplete (${analyzed}/${total||'?'} pages; review: ${review||'unavailable'}). The saved BOQ was not replaced. Recover complete source evidence before generating again.`},{status:409});
+      }
+    }
+
     const takeoff =
       normalizeTakeoff(
         rawTakeoff
@@ -5768,15 +5789,18 @@ console.log("=============================");
     const rules = rulesResult.data || [];
     const prices = pricesResult.data || [];
 
-    if (rules.length === 0 || prices.length === 0) {
-      const fallbackBoq = buildLocalBoq({
+    if (prices.length === 0 || (!takeoff.pdf_analysis && rules.length === 0)) {
+      const fallbackBoq = takeoff.pdf_analysis ? {items:[],warnings:[]} : buildLocalBoq({
         takeoff,
         projectName,
         vatPercentage,
       });
 
-      const fallbackDwg = applyDwgScheduleToBoq(fallbackBoq?.items || [], getDrawingEvidence(rawTakeoff) || {}, []);
-      const fallbackItems = fallbackDwg.items.map(requireBoqReview);
+      const fallbackDwg = takeoff.pdf_analysis ? {items:[],warnings:[]} : applyDwgScheduleToBoq(fallbackBoq?.items || [], getDrawingEvidence(rawTakeoff) || {}, []);
+      const fallbackPdf = retainUnboundPdfQuantities(fallbackDwg.items, takeoff);
+      const fallbackPdfCompletion=annotatePdfBoqCompletion(fallbackPdf.items.map(requireBoqReview),takeoff,prices,priceLevel);
+      const fallbackItems = fallbackPdfCompletion.items;
+      fallbackItems.forEach((item,index)=>{item.itemNumber=String(index+1).padStart(2,'0');});
       const fallbackSubtotal = fallbackItems.reduce((sum, item) => sum + (classifyEstimateItem(item) === 'pending' ? 0 : Number(item.amount) || 0), 0);
       const fallbackVat = fallbackSubtotal * Number(vatPercentage || 0) / 100;
 
@@ -5806,12 +5830,14 @@ console.log("=============================");
         boq: {
           ...fallbackBoq,
           items: fallbackItems,
+          pdfCompletion:fallbackPdfCompletion.summary,
           summary: {subtotal: fallbackSubtotal, vat: fallbackVat, grandTotal: fallbackSubtotal + fallbackVat},
           projectId,
           priceLevel,
           warnings: [
             `Ventra UAE BOQ database is not populated (rules: ${rules.length}, prices: ${prices.length}).`,
-            "Starter allowance rates are being used. Review/edit rates before quotation or contract use.",
+            takeoff.pdf_analysis ? "PDF quantities retained without rates. No allowance pricing was used." : "Starter allowance rates are being used. Review/edit rates before quotation or contract use.",
+            ...fallbackPdf.warnings,
             ...fallbackDwg.warnings,
             ...(Array.isArray(fallbackBoq.warnings)
               ? fallbackBoq.warnings
@@ -5847,7 +5873,7 @@ console.log("=============================");
         ])
       );
 
-    const warnings = [];
+    const warnings = [...(takeoff.pdf_analysis?.conflicts || [])];
     const items = [];
     const claimedMeasuredFamilies =
       new Set();
@@ -5884,9 +5910,13 @@ console.log("=============================");
       }
     );
 
+    const pdfCatalogPlan = takeoff.pdf_analysis ? planPdfCatalogRules(takeoff,rules,prices) : null;
+    if(pdfCatalogPlan)warnings.push(...pdfCatalogPlan.warnings);
+    const pdfConsumedCodes = new Set();
+
     for (
       const rule of
-      rulesResult.data || []
+      pdfCatalogPlan?.rules || rulesResult.data || []
     ) {
       const priceItem =
         pricesByCode.get(
@@ -5902,7 +5932,7 @@ console.log("=============================");
       }
 
       if (
-        shouldSuppressDatabaseAutoRule(
+        !takeoff.pdf_analysis && shouldSuppressDatabaseAutoRule(
           rule,
           priceItem,
           claimedMeasuredFamilies
@@ -5930,8 +5960,18 @@ console.log("=============================");
         );
 
       let quantityEstimate = null;
+      const pdfCode=normalizeCode(priceItem.item_code);
+      if(takeoff.pdf_analysis && pdfConsumedCodes.has(pdfCode))continue;
+      if(takeoff.pdf_analysis)pdfConsumedCodes.add(pdfCode);
+      const pdfQuantity=pdfCatalogPlan?.bindings.get(pdfCode)||null;
+      if(takeoff.pdf_analysis){
+        // No generic floor multipliers or one-item fallbacks for PDF evidence.
+        // Unsupported mappings remain pending, not invented measured scope.
+        quantity=pdfQuantity?.quantity??0;quantityEstimate=pdfQuantity;
+      }
 
       if (
+        !takeoff.pdf_analysis &&
         allowProvisionalDerivation &&
         quantity <= 0 &&
         String(
@@ -6086,7 +6126,7 @@ console.log("=============================");
       // Non-manual rules that unexpectedly resolve to zero are still skipped.
       if (
         isQuantityPending &&
-        !isManualRule
+        !isManualRule && !takeoff.pdf_analysis
       ) {
         continue;
       }
@@ -6098,11 +6138,13 @@ console.log("=============================");
         );
 
       const rateResolution =
-        resolveRate(
+        takeoff.pdf_analysis ? resolvePdfCatalogRate(priceItem,priceLevel) : resolveRate(
           priceItem,
           priceLevel,
           prices
         );
+      const pdfRatePending=Boolean(pdfQuantity&&rateResolution.missingRate);
+      if(pdfRatePending)warnings.push(`PDF catalog item ${pdfCode} has no own rate. Its measured quantity is retained without a peer or median rate.`);
 
       const unitRate =
         rateResolution.rate;
@@ -6262,7 +6304,7 @@ console.log("=============================");
             ? "Ventra Rule Library - Quantity Pending"
             : isEstimatedRule
               ? "Ventra Rule Library - Estimated Quantity"
-              : (
+              : pdfQuantity ? "PDF schedule - requires review" : (
                   priceItem.source_name ||
                   "Ventra UAE Base Rate"
                 ),
@@ -6270,6 +6312,8 @@ console.log("=============================");
         status:
           isQuantityPending
             ? "quantity_pending"
+            : pdfRatePending
+              ? "measured_rate_pending"
             : isEstimatedRule
               ? "provisional_estimate"
               : "measured",
@@ -6277,16 +6321,19 @@ console.log("=============================");
         verification:
           isQuantityPending
             ? "pending"
+            : pdfRatePending
+              ? "pending"
             : isEstimatedRule
               ? "provisional"
               : "verified",
 
         includeInCommercialTotal:
           !isQuantityPending &&
-          !isEstimatedRule,
+          !isEstimatedRule && !pdfRatePending,
 
         measuredFromApsStructure:
-          isMeasuredDerivedRule,
+          isMeasuredDerivedRule && !pdfQuantity,
+        pdfEvidence:pdfQuantity?{metricKey:pdfQuantity.metricKey,...(pdfQuantity.metricKeys?{metricKeys:pdfQuantity.metricKeys}:{}),pages:pdfQuantity.pages,basis:pdfQuantity.evidence}:null,
 
         confidence:
           isEstimatedRule
@@ -6302,7 +6349,7 @@ console.log("=============================");
               ),
 
         quantityBasis:
-          quantityEstimate
+          isQuantityPending ? "unavailable" : quantityEstimate
             ?.source ||
           (
             isEstimatedRule
@@ -6311,7 +6358,7 @@ console.log("=============================");
           ),
 
         quantitySource:
-          isMeasuredDerivedRule
+          pdfQuantity ? "pdf_schedule_evidence" : isMeasuredDerivedRule
             ? "aps_measured_structural_properties"
             : isEstimatedRule
               ? "derived_from_verified_project_metrics"
@@ -6321,8 +6368,9 @@ console.log("=============================");
 
         notes:
           [
-            rule.notes || "",
-            isEstimatedRule
+            pdfRatePending ? "The matched catalog item has no own rate. Quantity retained; no peer or median rate borrowed." : "",
+            pdfQuantity ? "Quantity transcribed from PDF evidence; scope, specification and rate require review." : rule.notes || "",
+            pdfQuantity ? `PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages ${pdfQuantity.pages.join(", ")}; ${pdfQuantity.evidence}` : isEstimatedRule
               ? `PROVISIONAL: ${quantityEstimate?.source || "derived allowance"}. Excluded from verified commercial subtotal until replaced by measured quantity.`
               : isMeasuredDerivedRule
                 ? `MEASURED FROM APS STRUCTURAL PROPERTIES: ${quantityEstimate?.source || "structural measurement"}.`
@@ -6356,7 +6404,7 @@ console.log("=============================");
         ?.volumeMeasured === true;
 
     if (
-      v36ColumnMeasured &&
+      !takeoff.pdf_analysis && v36ColumnMeasured &&
       v36ColumnVolume > 0
     ) {
       const v36Quantity =
@@ -6582,7 +6630,7 @@ console.log("=============================");
         .trim()
         .toLowerCase();
 
-    const allowBoqAi =
+    const allowBoqAi = !takeoff.pdf_analysis && (
       String(
         process.env.VENTRA_ENABLE_BOQ_AI ||
         ""
@@ -6597,7 +6645,7 @@ console.log("=============================");
         )
           .trim()
           .toLowerCase() !== "true"
-      );
+      ));
 
     console.log(
       "[VENTRA LOW COST v23] BOQ AI gate",
@@ -7185,7 +7233,7 @@ console.log("=============================");
       }
     }
 
-    const dwgResult = applyDwgScheduleToBoq(items, getDrawingEvidence(rawTakeoff) || {}, prices.map((price) => {
+    const dwgResult = takeoff.pdf_analysis ? {items:[...items],warnings:[]} : applyDwgScheduleToBoq(items, getDrawingEvidence(rawTakeoff) || {}, prices.map((price) => {
       const resolved = resolveRate(price, priceLevel, prices);
       return {...price, resolvedRate: resolved.missingRate ? 0 : resolved.rate, resolvedSource: resolved.source};
     }));
@@ -7193,8 +7241,17 @@ console.log("=============================");
     warnings.push(...dwgResult.warnings);
     if (getDrawingEvidence(rawTakeoff)?.extractionError) warnings.push(`DWG schedule extraction: ${getDrawingEvidence(rawTakeoff).extractionError}`);
 
+    const pdfCoverage = retainUnboundPdfQuantities(items, takeoff);
+    items.splice(0, items.length, ...pdfCoverage.items);
+    warnings.push(...pdfCoverage.warnings);
+
     // Apply after both deterministic and AI rules, before totals are calculated.
     items.forEach((item, index) => { items[index] = requireBoqReview(item); });
+    const pdfCompletion=annotatePdfBoqCompletion(items,takeoff,prices,priceLevel);
+    if(pdfCompletion.summary){
+      items.splice(0,items.length,...pdfCompletion.items);
+      warnings.push(`PDF BOQ: ${pdfCompletion.summary.unpricedMeasuredOperations} measured operations need specification/catalog-rate resolution. ${pdfCompletion.summary.catalogOptionsWithoutQuantity} zero-quantity catalog rows are options, not a count of missing project measurements. See each row's notes for required information.`);
+    }
     console.log("[VENTRA BOQ EVIDENCE v37]", { reviewRequiredItems: items.filter((item) => item.reviewRequired).length, automaticScheduleReconciliation: true });
     warnings.push("Catalog descriptions and budget rates require project-specific review. Measured quantities alone do not verify scope or specification. Accepted DWG schedule quantities and explicit material notes are reconciled separately; unreadable or conflicting evidence remains unresolved.");
 
@@ -7358,8 +7415,7 @@ console.log("=============================");
     const pendingItems =
       items.filter(
         (item) =>
-          item.status ===
-          "quantity_pending"
+          ["quantity_pending", "measured_rate_pending"].includes(item.status)
       ).length;
 
     const subtotal =
@@ -7510,6 +7566,8 @@ if (items.length === 0) {
           "Rates were loaded from the Ventra UAE price database.",
         ],
         warnings,
+        pdfCatalogAudit:pdfCatalogPlan?.catalogAudit||null,
+        pdfCompletion:pdfCompletion.summary,
         aiScope: {
           detectedRooms:
             semanticRooms.map((room) => ({

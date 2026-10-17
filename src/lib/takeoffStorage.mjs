@@ -1,24 +1,16 @@
 import {resolveDwgCalibration} from './dwgCalibration.mjs';
+import {createDrawingIndexedRecords} from './drawingIndexedRecords.mjs';
 // Full geometry lives in IndexedDB; localStorage carries a small compatibility
 // summary. Engineering and latest pointers share one stored CAD record.
-const cache=new Map();const writes=new Map();let opening;
+const cache=new Map();const writes=new Map();
 const rootKey=id=>`ventra:project-takeoff:${id}`,engKey=id=>`ventra:project-engineering-takeoff:${id}`;
 const isEngineering=t=>!!(t?.aps_urn||t?.apsUrn||t?.urn||t?.advanced_takeoff?.aps_urn||t?.raw_result?.aps_urn)&&!/image|raster/i.test(t?.source||'')&&!/^(jpg|jpeg|png|webp)$/i.test(t?.document_type||'');
 const local=()=>typeof window!=='undefined'?window.localStorage:null;
-function database(){
- if(!opening)opening=new Promise((resolve,reject)=>{if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB is unavailable; full drawing geometry could not be saved.'));return;}
- const request=indexedDB.open('ventra-drawing-data',1);request.onupgradeneeded=()=>request.result.createObjectStore('takeoffs');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);request.onblocked=()=>reject(new Error('Close older Ventra tabs to open drawing storage.'));}).catch(error=>{opening=null;throw error;});
- return opening;
-}
-export const indexedTakeoffRecords={
- async putMany(entries){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite'),store=tx.objectStore('takeoffs');for(const [key,value] of entries)store.put(value,key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error||new Error('Drawing storage transaction aborted.'));tx.onerror=()=>reject(tx.error);});},
- async put(key,value){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite');tx.objectStore('takeoffs').put(value,key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error||new Error('Drawing storage transaction aborted.'));tx.onerror=()=>reject(tx.error);});},
- async get(key){const db=await database();return new Promise((resolve,reject)=>{const request=db.transaction('takeoffs','readonly').objectStore('takeoffs').get(key);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error);});},
- async delete(key){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite');tx.objectStore('takeoffs').delete(key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});}
-};
+export const indexedTakeoffRecords=createDrawingIndexedRecords();
 export function compactTakeoff(takeoff,recordKey){
  const out={};for(const [k,v]of Object.entries(takeoff||{}))if(v===null||['number','boolean'].includes(typeof v)||typeof v==='string'&&!v.startsWith('data:')&&v.length<4000)out[k]=v;
  out.geometry={};for(const [k,v]of Object.entries(takeoff?.geometry||{}))if(typeof v==='number'||typeof v==='string'&&v.length<100)out.geometry[k]=v;
+ if(takeoff?.pdf_analysis)out.pdf_analysis={version:takeoff.pdf_analysis.version,summaryOnly:true,total_pages:takeoff.pdf_analysis.total_pages,quantity_evidence:{}};
  out.__ventraTakeoffRecord=recordKey;out.__geometryStoredInIndexedDB=true;return out;
 }
 function parse(storage,key){try{return JSON.parse(storage?.getItem(key)||'null');}catch{return null;}}

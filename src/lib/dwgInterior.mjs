@@ -93,6 +93,7 @@ export function rebuildDwgInterior(previous,input){
   const room=next.rooms.find(r=>!r.scopeOnly&&inside({x:a.xMeters,y:a.yMeters},r.polygon))||next.rooms.find(r=>r.scopeOnly);
   return room?{...a,roomId:room.id}:a;
  });
+ if(previous.manualWallEditor){next.walls=structuredClone(previous.walls);next.openings=structuredClone(previous.openings);next.manualWallEditor=structuredClone(previous.manualWallEditor);}
  if(previous.manualOpeningEditor&&JSON.stringify(previous.walls)===JSON.stringify(next.walls)){
   next.openings=structuredClone(previous.openings);next.manualOpeningEditor=structuredClone(previous.manualOpeningEditor);
  }

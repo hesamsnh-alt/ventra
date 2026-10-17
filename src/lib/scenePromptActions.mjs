@@ -27,26 +27,37 @@ export function preparePromptScene(scene){
  return next;
 }
 
-export function placementProblem(a,s,{manualDwgPlacement=false}={}){
+const onBoundary=(p,poly,tolerance=.002)=>poly.some((a,i)=>{
+ const b=poly[(i+1)%poly.length],dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));
+ return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy)<=tolerance;
+});
+const contained=(p,poly,manual)=>inside(p,poly)||(manual&&onBoundary(p,poly));
+
+export function placementProblem(a,s,{manualDwgPlacement=false,manualFurniturePlacement=false}={}){
  const relaxed=manualDwgPlacement&&s.source==='dwg-engineering-interior';
  const room=s.rooms.find(r=>r.id===a.roomId);
  if(!room?.polygon?.length)return 'unknown room';
  const ps=points(a);
- if(!ps.every(p=>inside(p,room.polygon))||crossing(a,room.polygon,s))return 'outside target room';
- if(s.footprint?.length&&(!ps.every(p=>inside(p,s.footprint))||crossing(a,s.footprint,s)))return 'outside building';
+ if(!ps.every(p=>contained(p,room.polygon,manualFurniturePlacement))||crossing(a,room.polygon,s))return 'outside target room';
+ if(s.footprint?.length&&(!ps.every(p=>contained(p,s.footprint,manualFurniturePlacement))||crossing(a,s.footprint,s)))return 'outside building';
  const corners=[ps[0],ps[2],ps[8],ps[6]];
  if((s.holes||[]).some(h=>ps.some(p=>inside(p,h.polygon))||(h.polygon||[]).some(p=>inside(p,corners))||crossing(a,h.polygon||[],s)))return 'inside shaft or void';
- if(!relaxed&&(s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,.03)))return 'intersects wall';
- if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,.03)))return 'overlaps furniture';
+ if(!relaxed&&(s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,manualFurniturePlacement?-.002:.03)))return 'intersects wall';
+ if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,manualFurniturePlacement?-.002:.03)))return 'overlaps furniture';
  if(!relaxed&&(s.openings||[]).some(o=>{
   if(o.type!=='door')return false;const w=s.walls?.find(w=>w.id===o.wallId);if(!w)return false;
   const x=w.start.x+(w.end.x-w.start.x)*o.offset,y=w.start.y+(w.end.y-w.start.y)*o.offset,r=Math.max(.8,Number(o.width)||.8);
-  return furnitureOverlaps(a,{xMeters:x,yMeters:y,width:r*2,depth:r*2,rotation:0},s,0);
+  // Manual interior design checks the doorway itself, not a square exclusion
+  // zone extending a full door width in every direction.
+  const portal=manualFurniturePlacement
+   ?{xMeters:x,yMeters:y,width:Number(o.width)||.8,depth:Math.max(.2,Number(w.thickness)||.12),rotation:Math.atan2(w.end.y-w.start.y,w.end.x-w.start.x)*180/Math.PI}
+   :{xMeters:x,yMeters:y,width:r*2,depth:r*2,rotation:0};
+  return furnitureOverlaps(a,portal,s,0);
  }))return 'blocks door clearance';
  return null;
 }
 
-export function applyPromptActions(input,plan,{manualDwgPlacement=false}={}){
+export function applyPromptActions(input,plan,{manualDwgPlacement=false,manualFurniturePlacement=false}={}){
  if(!plan||!Array.isArray(plan.actions)||plan.actions.length>40||!['apply','clarify','unsupported'].includes(plan.status))fail('Invalid edit plan.');
  if(plan.status!=='apply')fail(plan.message||'Please clarify your request.',plan.status==='clarify'?'SCENE_EDIT_CLARIFY':'SCENE_EDIT_UNSUPPORTED');
  if(!plan.actions.length)fail('No executable edit was returned; the model is unchanged.');
@@ -85,7 +96,7 @@ export function applyPromptActions(input,plan,{manualDwgPlacement=false}={}){
   changes.push(`${op.action}:${a.id}`);
  }
  // Validate the FINAL batch, permitting swaps/removals before repositioning.
- for(const id of spatial){const a=next.assets.find(a=>a.id===id);if(!a)continue;const problem=placementProblem(a,next,{manualDwgPlacement});if(problem)fail(`${id}: ${problem}. / جای‌گذاری پیشنهادی با هندسه یا وسایل تداخل دارد؛ مدل تغییر نکرد.`);}
+ for(const id of spatial){const a=next.assets.find(a=>a.id===id);if(!a)continue;const problem=placementProblem(a,next,{manualDwgPlacement,manualFurniturePlacement});if(problem)fail(`${id}: ${problem}. / جای‌گذاری پیشنهادی با هندسه یا وسایل تداخل دارد؛ مدل تغییر نکرد.`);}
  if(next.assets.length>300)fail('Too many furniture objects.');
  if(JSON.stringify(next)===before)fail('The requested state already exists; no change was made.','SCENE_EDIT_NO_CHANGE');
  next.updatedAt=new Date().toISOString();next.promptEdit={version:'ai-actions-v61',changes};

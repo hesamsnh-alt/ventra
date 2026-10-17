@@ -5,7 +5,7 @@ export function bindFurnitureInputs(canvas,{getTool,pickPoint,pickAsset,preview,
  const consume=e=>{e.preventDefault();e.stopImmediatePropagation?.();};
  on(canvas,'pointerdown',e=>{
   const tool=getTool();if(!tool||e.button!==0)return;
-  consume(e);const point=pickPoint(e);if(!point)return;
+  consume(e);canvas.focus?.({preventScroll:true});const point=pickPoint(e);if(!point)return;
   const data=tool.start?.(pickAsset(e),point,e);if(data===false)return;
   gesture={id:e.pointerId,x:e.clientX,y:e.clientY,tool,data,moved:false};
   try{canvas.setPointerCapture(e.pointerId);}catch{}

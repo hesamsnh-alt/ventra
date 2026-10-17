@@ -1,4 +1,6 @@
 "use client";
+import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '@/lib/drawingWorkflowGate.mjs';
+import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
@@ -13,6 +15,7 @@ import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
 import {runPreviewAnalysis,acknowledgePreviewJob} from '@/lib/previewJobClient.mjs';
+import {useLanguage} from '@/app/components/i18n/LanguageProvider';
 import RasterTraceReview from "./RasterTraceReview";
 import { getRasterReview, subscribeRasterReview, updateRasterReview } from "@/lib/rasterReviewSession.mjs";
 import { buildTakeoffFromAps } from "@/services/apsTakeoffBuilder";
@@ -1582,6 +1585,7 @@ export default function ProjectDrawingCenter({
   projectId,
   onOpenBoq,
 }) {
+  const {language}=useLanguage();
   const analysisRunIdRef = useRef('initial');
   const [analysisRunId,setAnalysisRunId]=useState('initial');
   const fileInputRef = useRef(null);
@@ -1610,6 +1614,7 @@ export default function ProjectDrawingCenter({
 
   const [analyzing, setAnalyzing] =
     useState(false);
+  const analysisInFlightRef = useRef(false);
     const [generatingBoq, setGeneratingBoq] = useState(false);
 
   const [dragging, setDragging] =
@@ -1963,7 +1968,9 @@ export default function ProjectDrawingCenter({
           }),
           cache: "no-store",
         },
-        { attempts: 2, label: "interactive-3d-preview" }
+        // A lost response may already have consumed a model request. Resume a
+        // known background job through runPreviewAnalysis, never replay this POST.
+        { attempts: 1, label: "interactive-3d-preview" }
       ), {
         key: `${projectId}:${document.id || document.file_name}`,
         fetcher: commercialFetch,
@@ -2206,6 +2213,7 @@ export default function ProjectDrawingCenter({
   }
 
   async function handleAnalyzeDrawing() {
+    if (analysisInFlightRef.current || analyzing || generatingBoq) return;
     if (documents.length === 0) {
       setErrorMessage(
         "Please upload a drawing first."
@@ -2314,6 +2322,10 @@ export default function ProjectDrawingCenter({
       return;
     }
 
+    const workflowToken = beginDrawingWorkflow(projectId, 'analysis');
+    if (!workflowToken) return;
+    let analysisSucceeded = false;
+    analysisInFlightRef.current = true;
     try {
       setAnalyzing(true);
       clearMessages();
@@ -2328,6 +2340,7 @@ export default function ProjectDrawingCenter({
         if (["jpg", "jpeg", "png", "webp"].includes(extension)) {
           const previewScene = await generateImageSchematic3D(selectedDocument, { quiet: true });
           if (previewScene) {
+            analysisSucceeded = true;
             // JPG/PNG interactive preview is intentionally isolated from the
             // expensive takeoff call. BOQ/takeoff remains available through
             // its own workflow; generating a 3D preview must not immediately
@@ -2337,10 +2350,33 @@ export default function ProjectDrawingCenter({
           }
         }
 
+        // Keep the last successful record in storage, but never expose it as
+        // the result of this pending/failed PDF analysis or use it for BOQ.
+        // The visible result is cleared during analysis. After a failed request,
+        // reload saved evidence to preserve guarded source-only continuation.
+        let savedPdf = takeoffResultRef.current;
+        if (extension === "pdf" && !savedPdf) {
+          const saved = await getLatestProjectTakeoff(projectId);
+          if (saved.error) throw saved.error;
+          savedPdf = saved.takeoff;
+        }
+        const samePdfRecord = !!savedPdf && (!!savedPdf.document_id && savedPdf.document_id === selectedDocument.id ||
+          !!savedPdf.document_name && savedPdf.document_name === selectedDocument.file_name);
+        const resumeSourceMeasurementsOnly = extension === 'pdf' && samePdfRecord &&
+          savedPdf.pdf_analysis?.document_review_status?.status === 'completed' && savedPdf.pdf_analysis?.measurement_completion?.status === 'incomplete';
+        const localPdfRecoveryOnly = resumeSourceMeasurementsOnly && ['failed','partial'].includes(savedPdf.pdf_analysis?.source_measurement_status?.status);
+        if (localPdfRecoveryOnly) setMessage('Recovering native PDF schedules from the saved analysis. Model calls are disabled; missing cache stops recovery.');
+        else if (resumeSourceMeasurementsOnly) setMessage('Continuing saved PDF analysis: only missing source measurements; no full page analysis if the saved cache is unavailable.');
+        if (extension === "pdf") {
+          takeoffResultRef.current = null;
+          setTakeoffResult(null);
+        }
         const { takeoff, error } =
           await analyzeProjectDrawing({
             projectId,
             document: selectedDocument,
+            resumeSourceMeasurementsOnly,
+            localPdfRecoveryOnly,
           });
           console.log("TAKEOFF FROM API", takeoff);
 
@@ -2366,7 +2402,7 @@ const floorArea =
 const roomCount =
   Number(takeoff?.rooms) || 0;
 
-const defaultWallHeight = 3;
+const defaultWallHeight = Number(takeoff.wall_height)||3.2;
 
 let finalWallLength =
   originalWallLength;
@@ -2374,6 +2410,7 @@ let finalWallLength =
 let wallLengthEstimated = false;
 
 if (
+  !takeoff.pdf_analysis &&
   finalWallLength <= 0 &&
   floorArea > 0
 ) {
@@ -2408,7 +2445,7 @@ finalWallLength =
 const finalWallArea =
   originalWallArea > 0
     ? originalWallArea
-    : finalWallLength *
+    : takeoff.pdf_analysis ? 0 : finalWallLength *
       defaultWallHeight;
 
 const finalTakeoff = {
@@ -2459,14 +2496,25 @@ console.log(
   }
 );
 
+takeoffResultRef.current = finalTakeoff;
 setTakeoffResult(
   finalTakeoff
 );
 await persistTakeoff(projectId,finalTakeoff);
+analysisSucceeded = true;
 
-setMessage(
-  "AI quantity takeoff completed successfully."
-);
+const measurementReview = finalTakeoff.pdf_analysis?.document_review_status;
+if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.status)) {
+  setMessage("PDF page extraction saved. Cross-page measurement review is incomplete.");
+  setErrorMessage(
+    `PDF measurement review ${measurementReview.status}: ${measurementReview.reason || "Additional source review is required."} Quantities remain provisional; the BOQ is incomplete.`
+  );
+} else if (extension === "pdf" && finalTakeoff.pdf_analysis?.measurement_completion?.status === 'incomplete') {
+  setMessage("PDF requests finished. Measured quantities are incomplete.");
+  setErrorMessage("Some source quantities are missing, excluded or withheld. Download the PDF report to review the gaps before using the BOQ.");
+} else {
+  setMessage("AI quantity takeoff completed successfully.");
+}
         return;
       }
 
@@ -2557,6 +2605,7 @@ setMessage(
       setMessage(
         "Autodesk translation completed. The model is ready for Viewer and geometry extraction."
       );
+      analysisSucceeded = true;
     } catch (error) {
       console.error(
         "[Drawing Center] Analysis failed:",
@@ -2568,6 +2617,8 @@ setMessage(
           "Could not process the drawing."
       );
     } finally {
+      analysisInFlightRef.current = false;
+      finishDrawingWorkflow(projectId,workflowToken,analysisSucceeded);
       setAnalyzing(false);
     }
   }
@@ -5024,12 +5075,16 @@ async function handleApsGeometryExtracted(analysis) {
 }
 
  async function handleGenerateBoq() {
+  if (analysisInFlightRef.current || analyzing || generatingBoq) return;
+  if (drawingWorkflowState(projectId).active || drawingWorkflowState(projectId).analysisFailed) return;
   if (!takeoffResult) {
     setErrorMessage(
       "Please analyze a drawing first."
     );
     return;
   }
+  const workflowToken = beginDrawingWorkflow(projectId, 'boq');
+  if (!workflowToken) return;
   try {
     setGeneratingBoq(true);
     clearMessages();
@@ -5145,6 +5200,7 @@ async function handleApsGeometryExtracted(analysis) {
           vatPercentage: 5,
 
           takeoff: {
+            ...(takeoffResult.pdf_analysis ? {...takeoffResult,raw_result:undefined} : {}),
             rooms:
               Number(
                 takeoffResult.rooms
@@ -5499,6 +5555,7 @@ async function handleApsGeometryExtracted(analysis) {
         "Could not generate the BOQ."
     );
   } finally {
+    finishDrawingWorkflow(projectId,workflowToken,true);
     setGeneratingBoq(false);
   }
 }
@@ -5527,6 +5584,7 @@ async function handleApsGeometryExtracted(analysis) {
     disabled:
       documents.length === 0 ||
       analyzing ||
+      generatingBoq ||
       uploading,
   },
  {
@@ -5537,7 +5595,7 @@ async function handleApsGeometryExtracted(analysis) {
     ? "Generating..."
     : "Generate BOQ",
   actionType: "boq",
-  disabled: generatingBoq,
+  disabled: generatingBoq || analyzing,
 },
   {
     icon: Brain,
@@ -5582,6 +5640,13 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
+      {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
+        <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
+        <p>{language==='fa'?'صفحات پلان از جدول‌ها و جزئیات جدا شده‌اند. مقادیر AI نیاز به بررسی دارند.':language==='ar'?'تم فصل المخططات عن الجداول والتفاصيل. تحتاج كميات AI إلى المراجعة.':'Floor plans are reconciled separately from schedules and details. AI quantities require review.'}</p>
+        {!!takeoffResult.pdf_analysis.withheld_area_metrics?.length&&<p role="alert">{language==='fa'?'بعضی مساحت‌ها به دلیل نبود هندسه مستقل یا مغایرت ابعاد، قیمت‌گذاری نمی‌شوند. گزارش را برای جزئیات بررسی کنید.':language==='ar'?'لا تُسعّر بعض المساحات لغياب هندسة مستقلة أو وجود تعارض في الأبعاد. راجع التقرير للتفاصيل.':'Some areas are withheld from pricing because independent geometry is missing or dimensions conflict. Check the report for details.'}</p>}
+        {(takeoffResult.pdf_analysis.area_validation||[]).map(a=><p key={a.page}>{language==='fa'?'صفحه':language==='ar'?'الصفحة':'Page'} {a.page}: {a.status==='partial_geometry_with_printed_labels'?(language==='fa'?'هندسه بخش‌های اندازه‌دار کنترل شد؛ مساحت سایر اتاق‌ها از برچسب نقشه است و نیازمند بازبینی است.':language==='ar'?'تم فحص الأجزاء ذات الأبعاد؛ مساحات الغرف الأخرى مأخوذة من تسميات المخطط وتحتاج إلى مراجعة.':'Dimensioned spaces checked; other room areas come from printed labels and require review.'):a.status==='dimension_geometry_checked'?(language==='fa'?'کنترل هندسی مساحت انجام شد؛ تشخیص ابعاد و مصالح AI همچنان نیازمند بررسی است.':language==='ar'?'تم فحص هندسة المساحة؛ لا تزال أبعاد ومواد AI بحاجة إلى مراجعة.':'Area geometry checked; AI dimensions and materials still require review.'):(language==='fa'?'هندسه مستقل برای تأیید کامل مساحت موجود نیست.':language==='ar'?'الهندسة المستقلة غير متاحة للتحقق الكامل من المساحة.':'Independent geometry is unavailable for complete area verification.')}</p>)}
+        <button type="button" disabled={analyzing} onClick={async()=>{if(analysisInFlightRef.current)return;try{const report=await latestPdfReportForExport({projectId,visible:takeoffResultRef.current,readLatest:getLatestProjectTakeoff,workflow:drawingWorkflowState});takeoffResultRef.current=report;setTakeoffResult(report);const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ventra-pdf-analysis-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setErrorMessage(error?.message||'Could not export the saved PDF report.');}}}>{language==='fa'?'دانلود گزارش تحلیل PDF':language==='ar'?'تنزيل تقرير PDF':'Download PDF analysis report'}</button>
+      </details>}
       {rasterReview && <RasterTraceReview {...rasterReview} />}
 
       {errorMessage && (

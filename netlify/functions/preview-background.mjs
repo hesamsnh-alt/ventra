@@ -136,8 +136,8 @@ function prepareObservedOpeningWalls(walls, rooms, observations, relationships =
 function canonicalRoomType(room) {
   const selected = room?.semanticType || room?.type;
   if (room?.roomUseSource === "user_confirmed" && ["bathroom", "bedroom", "kitchen", "kitchen_dining", "living", "dining", "balcony", "laundry", "storage", "office", "circulation", "room", "unknown"].includes(selected)) return selected === "unknown" ? "room" : selected;
-  const name = String(room?.name || "").normalize("NFKC").replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/ي/g, "\u06CC").replace(/ك/g, "\u06A9").toLowerCase();
-  const text = `${name} ${room?.type || ""} ${room?.semanticType || ""}`.toLowerCase();
+  const name2 = String(room?.name || "").normalize("NFKC").replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/ي/g, "\u06CC").replace(/ك/g, "\u06A9").toLowerCase();
+  const text = `${name2} ${room?.type || ""} ${room?.semanticType || ""}`.toLowerCase();
   if (/(balcony|terrace|patio|تراس|بالکن|ایوان|شرفة|شرفه|بلكونة|بلکونة)/.test(text)) return "balcony";
   if (/(laundry|washing room|رخت.?شوی|لباس.?شوی|غرفة\s*غسیل|غرفه\s*غسیل)/.test(text)) return "laundry";
   if (/(bath|toilet|\bwc\b|\bb\s*[/.-]\s*r\b|shower|washroom|powder|سرویس|حمام|توالت|دستشویی|دستشوئی|دورة\s*المیاه|مرحاض)/.test(text)) return "bathroom";
@@ -355,10 +355,10 @@ async function commercialRun(request, action, handler2) {
       reserved = action !== "boq" && !isOperator(context.owner, process.env);
       try {
         body.requestId = key2;
-        const headers = new Headers(request.headers);
-        headers.set("x-ventra-request-id", key2);
-        headers.delete("content-length");
-        const scoped = new Request(request.url, { method: "POST", headers, body: JSON.stringify(body), signal: request.signal });
+        const headers2 = new Headers(request.headers);
+        headers2.set("x-ventra-request-id", key2);
+        headers2.delete("content-length");
+        const scoped = new Request(request.url, { method: "POST", headers: headers2, body: JSON.stringify(body), signal: request.signal });
         let response;
         response = await handler2(scoped);
         if (!response.ok) await release();
@@ -407,14 +407,14 @@ var inside = (p, poly) => {
 var heights = { sofa: 0.82, bed: 0.82, armchair: 0.85, chair: 0.88, dining_table: 0.76, coffee_table: 0.42, rug: 0.018, kitchen_counter: 0.88, sink: 0.86, stove: 0.9, refrigerator: 1.82, wardrobe: 2.05, tv_unit: 0.58, toilet: 0.78, shower: 2.05, washing_machine: 0.88, desk: 0.76, nightstand: 0.5, cabinet: 1.4, plant: 0.9 };
 function tuckedChairPair(a, b) {
   const chair = a.type === "chair" ? a : b.type === "chair" ? b : null;
-  const table2 = a.type === "dining_table" ? a : b.type === "dining_table" ? b : null;
-  if (!chair || !table2 || chair.roomId !== table2.roomId) return false;
+  const table3 = a.type === "dining_table" ? a : b.type === "dining_table" ? b : null;
+  if (!chair || !table3 || chair.roomId !== table3.roomId) return false;
   const r = chair.rotation * Math.PI / 180, fx = -Math.sin(r), fy = Math.cos(r);
-  const tx = table2.xMeters - chair.xMeters, ty = table2.yMeters - chair.yMeters;
+  const tx = table3.xMeters - chair.xMeters, ty = table3.yMeters - chair.yMeters;
   if (tx * fx + ty * fy <= 0) return false;
   const cut = Math.min(0.18, chair.depth * 0.45);
   const rear = { ...chair, depth: chair.depth - cut, xMeters: chair.xMeters - fx * cut / 2, yMeters: chair.yMeters - fy * cut / 2 };
-  return !furnitureOverlaps(rear, table2, { width: 0, depth: 0 }, 0);
+  return !furnitureOverlaps(rear, table3, { width: 0, depth: 0 }, 0);
 }
 function compileSourceFurniture(observations, footprint, rooms, walls = []) {
   const assets = [], rejected = [];
@@ -654,10 +654,10 @@ function repairOverlappingWalls(walls = [], openings = [], { distanceTolerance =
 
 // src/lib/openPlanPartitions.mjs
 var key = (a, b) => [String(a), String(b)].sort().join("|");
-var inside2 = (p, polygon = []) => {
+var inside2 = (p, polygon2 = []) => {
   let hit = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i], b = polygon[j];
+  for (let i = 0, j = polygon2.length - 1; i < polygon2.length; j = i++) {
+    const a = polygon2[i], b = polygon2[j];
     if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
   }
   return hit;
@@ -894,12 +894,134 @@ ${JSON.stringify(evidence.guides)}
 Use the original image to classify wall strokes versus text/furniture. Match visible wall centerlines to these coordinates where relevant. Connect strokes only through visible wall junctions or real door/window gaps. The guide list may be incomplete and is never permission to infer a rectangle, extend a wall into white space, or fill a recess.`;
 }
 
+// src/lib/previewSceneWire.mjs
+var aliases = {
+  title: "t",
+  confidence: "c",
+  coordinateMode: "cm",
+  widthMeters: "w",
+  depthMeters: "d",
+  footprint: "fp",
+  rooms: "r",
+  relationships: "rel",
+  partitions: "p",
+  openings: "o",
+  furniture: "f",
+  id: "i",
+  name: "n",
+  type: "t",
+  labelVisible: "lv",
+  printedWidthMeters: "pw",
+  printedDepthMeters: "pd",
+  polygon: "pg",
+  groupId: "g",
+  roomId: "r",
+  backLeft: "bl",
+  backRight: "br",
+  frontCenter: "fc",
+  embeddedInCounter: "ec",
+  roomAId: "a",
+  roomBId: "b",
+  relation: "r",
+  direction: "d",
+  start: "s",
+  end: "e",
+  center: "p",
+  heightMeters: "h",
+  sillHeightMeters: "sh",
+  wallIdHint: "wh",
+  wallAxis: "ax",
+  hingeSide: "hs",
+  swingDirection: "sd"
+};
+var fail2 = (code, message) => Object.assign(new Error(message), { code });
+function createPreviewWireCodec(originalSchema) {
+  const legend = [];
+  function compile(node, path) {
+    if (node.type === "object") {
+      const keys = Object.keys(node.properties);
+      if (keys.length === 2 && keys.includes("x") && keys.includes("y") && node.properties.x.type === "number" && node.properties.y.type === "number") {
+        return {
+          schema: { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } },
+          decode: (value) => ({ x: value[0], y: value[1] })
+        };
+      }
+      const entries = keys.map((key2) => ({
+        key: key2,
+        alias: aliases[key2] || key2,
+        child: compile(node.properties[key2], `${path}.${key2}`)
+      }));
+      if (new Set(entries.map((e) => e.alias)).size !== entries.length) throw new Error(`Duplicate preview wire keys at ${path}.`);
+      legend.push(`${path}: ${entries.map((e) => `${e.alias}=${e.key}`).join(", ")}`);
+      return {
+        schema: {
+          ...node,
+          required: node.required.map((key2) => aliases[key2] || key2),
+          properties: Object.fromEntries(entries.map((e) => [e.alias, e.child.schema]))
+        },
+        decode: (value) => Object.fromEntries(entries.map((e) => [e.key, e.child.decode(value[e.alias])]))
+      };
+    }
+    if (node.type === "array") {
+      const child = compile(node.items, `${path}[]`);
+      return { schema: { ...node, items: child.schema }, decode: (value) => value.map(child.decode) };
+    }
+    return { schema: { ...node }, decode: (value) => value };
+  }
+  const compiled = compile(originalSchema, "scene");
+  return {
+    schema: compiled.schema,
+    instructions: `WIRE FORMAT (same source observations, shorter JSON): return short keys as listed below. Every point is [x,y], not an object; polygons/footprint remain arrays of points. All preceding geometry rules use the original field names; map them using this legend. Preserve ALL observed objects and coordinate precision; do not omit observations to save tokens. Use concise unique IDs and source room labels. No prose or Markdown.
+${legend.join("\n")}`,
+    decode(value) {
+      validate(value, compiled.schema, "scene");
+      return compiled.decode(value);
+    }
+  };
+}
+function validate(value, schema, path) {
+  const invalid = () => {
+    throw fail2("PREVIEW_SCHEMA_INVALID", `Preview returned invalid scene data at ${path}. No new scene was saved.`);
+  };
+  if (schema.type === "object") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
+    if (schema.required.some((key2) => !Object.hasOwn(value, key2)) || Object.keys(value).some((key2) => !Object.hasOwn(schema.properties, key2))) invalid();
+    for (const [key2, child] of Object.entries(schema.properties)) validate(value[key2], child, `${path}.${key2}`);
+  } else if (schema.type === "array") {
+    if (!Array.isArray(value) || value.length < (schema.minItems ?? 0) || value.length > (schema.maxItems ?? Infinity)) invalid();
+    value.forEach((item, i) => validate(item, schema.items, `${path}[${i}]`));
+  } else if (typeof value !== schema.type || schema.type === "number" && !Number.isFinite(value)) invalid();
+  if (schema.enum && !schema.enum.includes(value)) invalid();
+}
+function readCompletedPreview(response, codec) {
+  if (response?.status !== "completed") {
+    const reason = response?.incomplete_details?.reason;
+    throw fail2(
+      reason === "max_output_tokens" ? "PREVIEW_OUTPUT_LIMIT" : "PREVIEW_INCOMPLETE_OUTPUT",
+      reason === "max_output_tokens" ? "3D analysis reached its response limit before completing. No new scene was saved and no automatic retry was made." : "3D analysis did not complete. No new scene was saved and no automatic retry was made."
+    );
+  }
+  if (response.output?.some((item) => item.content?.some((part) => part.type === "refusal"))) {
+    throw fail2("PREVIEW_REFUSED", "The preview model declined this image. No new scene was saved.");
+  }
+  const text = String(response.output_text || "").trim();
+  if (!text) throw fail2("PREVIEW_EMPTY_OUTPUT", "The preview model returned no scene data. No new scene was saved.");
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw fail2("PREVIEW_JSON_PARSE_FAILED", "The preview model returned invalid JSON. No new scene was saved.");
+  }
+  return codec.decode(raw);
+}
+
 // src/lib/serverPreviewAnalysis.js
-var VERSION = "room-design-defaults-v64-20261011";
+var VERSION = "preview-compact-response-v133-20261015";
 var MODEL = process.env.OPENAI_3D_PREVIEW_MODEL || "gpt-5.6-sol";
-var requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "medium";
-var REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "medium";
-var MAX_OUTPUT_TOKENS = Math.max(3500, Math.min(8e3, Number(process.env.VENTRA_3D_PREVIEW_MAX_OUTPUT_TOKENS || 8e3)));
+var requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "low";
+var REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "low";
+var requestedOutputTokens = Number(process.env.VENTRA_3D_PREVIEW_MAX_OUTPUT_TOKENS || 8e3);
+var MAX_OUTPUT_TOKENS = Number.isFinite(requestedOutputTokens) ? Math.max(3500, Math.min(8e3, requestedOutputTokens)) : 8e3;
 var TIMEOUT_MS = Math.max(45e3, Math.min(18e4, Number(process.env.VENTRA_3D_PREVIEW_TIMEOUT_MS || 12e4)));
 var pointSchema = {
   type: "object",
@@ -1048,11 +1170,11 @@ function cleanPolygon(points = []) {
   if (out.length > 2 && dist(out[0], out[out.length - 1]) < 0.025) out.pop();
   return out;
 }
-function pointInPolygon(point2, polygon = []) {
+function pointInPolygon(point2, polygon2 = []) {
   let inside3 = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i];
-    const b = polygon[j];
+  for (let i = 0, j = polygon2.length - 1; i < polygon2.length; j = i++) {
+    const a = polygon2[i];
+    const b = polygon2[j];
     const hit = a.y > point2.y !== b.y > point2.y && point2.x < (b.x - a.x) * (point2.y - a.y) / (b.y - a.y || 1e-9) + a.x;
     if (hit) inside3 = !inside3;
   }
@@ -1068,15 +1190,15 @@ function projectToSegment(point2, a, b) {
   return { t, point: q, distance: dist(point2, q), length: Math.sqrt(len2) };
 }
 function normalizedPointBounds(points = []) {
-  const valid = (Array.isArray(points) ? points : []).filter(
+  const valid2 = (Array.isArray(points) ? points : []).filter(
     (p) => Number.isFinite(Number(p?.x)) && Number.isFinite(Number(p?.y))
   );
-  if (!valid.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  if (!valid2.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
   return {
-    minX: Math.min(...valid.map((p) => Number(p.x))),
-    minY: Math.min(...valid.map((p) => Number(p.y))),
-    maxX: Math.max(...valid.map((p) => Number(p.x))),
-    maxY: Math.max(...valid.map((p) => Number(p.y)))
+    minX: Math.min(...valid2.map((p) => Number(p.x))),
+    minY: Math.min(...valid2.map((p) => Number(p.y))),
+    maxX: Math.max(...valid2.map((p) => Number(p.x))),
+    maxY: Math.max(...valid2.map((p) => Number(p.y)))
   };
 }
 function roomNormalizedBounds(room) {
@@ -1258,13 +1380,13 @@ function pairKey(a, b) {
   return x < y ? `${x}|${y}` : `${y}|${x}`;
 }
 function normalizeRelationships(rawRelationships, roomIds) {
-  const valid = new Set(roomIds.map(String));
+  const valid2 = new Set(roomIds.map(String));
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const rel of Array.isArray(rawRelationships) ? rawRelationships : []) {
     const a = String(rel?.roomAId || "");
     const b = String(rel?.roomBId || "");
-    if (!a || !b || a === b || !valid.has(a) || !valid.has(b)) continue;
+    if (!a || !b || a === b || !valid2.has(a) || !valid2.has(b)) continue;
     const relation = ["wall", "open", "door", "separate"].includes(rel?.relation) ? rel.relation : "separate";
     const key2 = `${pairKey(a, b)}:${relation}`;
     if (seen.has(key2)) continue;
@@ -1757,13 +1879,13 @@ function floorFinishForRoom(room) {
   if (["living", "kitchen", "kitchen_dining", "dining", "office"].includes(type)) return "light_stone";
   return "neutral_floor";
 }
-function polygonSamplePoints(polygon = []) {
-  const pts = [...polygon];
-  for (let i = 0; i < polygon.length; i += 1) {
-    const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+function polygonSamplePoints(polygon2 = []) {
+  const pts = [...polygon2];
+  for (let i = 0; i < polygon2.length; i += 1) {
+    const a = polygon2[i], b = polygon2[(i + 1) % polygon2.length];
     pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
   }
-  const xs = polygon.map((p) => p.x), ys = polygon.map((p) => p.y);
+  const xs = polygon2.map((p) => p.x), ys = polygon2.map((p) => p.y);
   if (xs.length) pts.push({ x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 });
   return pts;
 }
@@ -1776,11 +1898,11 @@ function containRoomInFootprint(room, footprint) {
   const center = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
   if (!pointInPolygon(center, footprint)) return { room, adjusted: false };
   for (let scale = 0.98; scale >= 0.55; scale -= 0.02) {
-    const polygon = room.polygon.map((p) => ({
+    const polygon2 = room.polygon.map((p) => ({
       x: center.x + (p.x - center.x) * scale,
       y: center.y + (p.y - center.y) * scale
     }));
-    const candidate = { ...room, polygon };
+    const candidate = { ...room, polygon: polygon2 };
     if (roomInsideFootprint(candidate, footprint)) return { room: candidate, adjusted: true };
   }
   return { room, adjusted: false };
@@ -1936,7 +2058,7 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   }
   const rawRooms = Array.isArray(raw?.rooms) ? raw.rooms : [];
   const roomCandidates = rawRooms.map((room, index) => {
-    const polygon = cleanPolygon((room?.polygon || []).map((p) => sourcePoint(p, width, depth)));
+    const polygon2 = cleanPolygon((room?.polygon || []).map((p) => sourcePoint(p, width, depth)));
     const visible = room?.labelVisible !== false;
     const printedWidth = clamp(room?.printedWidthMeters, 0, 40, 0);
     const printedDepth = clamp(room?.printedDepthMeters, 0, 40, 0);
@@ -1947,7 +2069,7 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
       labelVisible: visible,
       printedWidthMeters: printedWidth,
       printedDepthMeters: printedDepth,
-      polygon
+      polygon: polygon2
     };
   }).filter((room) => room.polygon.length >= 3 && polygonArea(room.polygon) > 0.2);
   const roomIds = /* @__PURE__ */ new Set();
@@ -2224,6 +2346,13 @@ function parseJson(text) {
   if (first >= 0 && last > first) return JSON.parse(value.slice(first, last + 1));
   return null;
 }
+var sceneWire = createPreviewWireCodec(sceneSchema);
+var furnitureWire = createPreviewWireCodec({
+  type: "object",
+  additionalProperties: false,
+  required: ["furniture"],
+  properties: { furniture: sceneSchema.properties.furniture }
+});
 async function prepareImage(imageUrl, signal) {
   if (!imageUrl) throw Object.assign(new Error("No floor-plan image URL was supplied."), { code: "PREVIEW_NO_IMAGE" });
   const response = await fetch(imageUrl, { cache: "no-store", signal });
@@ -2263,7 +2392,10 @@ async function runPreview(body) {
     build: VERSION,
     model: MODEL,
     stage: "starting",
-    accepted: false
+    accepted: false,
+    reasoningEffort: REASONING_EFFORT,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    wireFormat: "lossless-short-keys-point-pairs-v1"
   };
   try {
     diagnostics.stage = "preparing_image";
@@ -2399,15 +2531,17 @@ Return only the strict schema.`;
           content: [
             { type: "input_text", text: `${prompt}
 
+${sceneWire.instructions}
+
 Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
             { type: "input_image", image_url: prepared.imageUrl, detail: "high" }
           ]
         }],
         text: {
           verbosity: "low",
-          format: { type: "json_schema", name: "ventra_interactive_plan_scene_v2", strict: true, schema: sceneSchema }
+          format: { type: "json_schema", name: "ventra_compact_plan_scene_v133", strict: true, schema: sceneWire.schema }
         }
-      }, { signal: controller.signal });
+      }, { signal: controller.signal, maxRetries: 0 });
     } catch (error) {
       if (controller.signal.aborted) throw Object.assign(new Error("Interactive preview timed out."), { code: "PREVIEW_TIMEOUT" });
       throw error;
@@ -2418,14 +2552,9 @@ Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
     diagnostics.status = response?.status || null;
     diagnostics.usage = response?.usage || null;
     diagnostics.incompleteDetails = response?.incomplete_details || null;
-    const outputText = String(response?.output_text || "").trim();
-    if (!outputText) {
-      const reason = response?.incomplete_details?.reason || response?.status || "no_text";
-      throw Object.assign(new Error(`Preview model returned no scene JSON (${reason}).`), { code: "PREVIEW_EMPTY_OUTPUT" });
-    }
+    diagnostics.stage = "validating_response";
+    const raw = readCompletedPreview(response, sceneWire);
     diagnostics.stage = "normalizing_scene";
-    const raw = parseJson(outputText);
-    if (!raw) throw Object.assign(new Error("Preview scene JSON could not be parsed."), { code: "PREVIEW_JSON_PARSE_FAILED" });
     let scene = normalizeScene(raw, { width: prepared.width, height: prepared.height }, imageEvidence);
     diagnostics.stage = "source_furniture_review";
     const remainingMs = Math.min(6e4, TIMEOUT_MS - (Date.now() - startedAt));
@@ -2439,12 +2568,13 @@ Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
           max_output_tokens: MAX_OUTPUT_TOKENS,
           input: [{ role: "user", content: [
             { type: "input_text", text: `Review ONLY furniture and fixtures in this original floor plan. Read Persian, Arabic and English labels. Return ALL visible objects, not a generic furnished design. The attached fixed scene supplies room IDs and metre/Y-up polygons; use these IDs. Return coordinates normalized to the FULL ORIGINAL IMAGE, Y down. backLeft/backRight are BACK-edge endpoints; frontCenter is the midpoint of the FRONT edge. For beds the back is the pillow/headboard edge: trace the whole bed and preserve its position and facing. Split every L/U sofa or counter into non-overlapping rectangles sharing groupId, one rectangle per leg. Do not drop the shorter leg or fill its empty corner. Trace each visible toilet, basin, shower and washing-machine symbol, including narrow laundry rooms labeled \u0631\u062E\u062A\u200C\u0634\u0648\u06CC\u200C\u062E\u0627\u0646\u0647, \u0644\u0628\u0627\u0633\u200C\u0634\u0648\u06CC\u06CC, laundry or \u063A\u0631\u0641\u0629 \u063A\u0633\u064A\u0644. A square with a circle inside may be a washing machine or basin: use its room and other symbols to distinguish them. Do not infer a shower from WC alone. Do not add refrigerators, wardrobes or fixtures absent from the drawing. Confidence below .65 must remain uncertain. Do not modify walls, rooms, doors or windows. Fixed scene: ${JSON.stringify({ width: scene.width, depth: scene.depth, sourceBounds: scene.geometryValidation.sourceProjection.sourceBounds, rooms: scene.rooms })}` },
+            { type: "input_text", text: furnitureWire.instructions },
             { type: "input_image", image_url: prepared.imageUrl, detail: "high" }
           ] }],
-          text: { format: { type: "json_schema", name: "source_furniture_coverage", strict: true, schema: { type: "object", additionalProperties: false, required: ["furniture"], properties: { furniture: sceneSchema.properties.furniture } } } }
-        }, { signal: furnitureController.signal });
-        if (reviewResponse.status !== "completed") throw new Error("Furniture review did not complete.");
-        const reviewed = parseJson(reviewResponse.output_text || "");
+          text: { format: { type: "json_schema", name: "compact_furniture_coverage_v133", strict: true, schema: furnitureWire.schema } }
+        }, { signal: furnitureController.signal, maxRetries: 0 });
+        diagnostics.furnitureReview = { responseId: reviewResponse.id, usage: reviewResponse.usage, status: reviewResponse.status, incompleteDetails: reviewResponse.incomplete_details || null };
+        const reviewed = readCompletedPreview(reviewResponse, furnitureWire);
         if (!Array.isArray(reviewed?.furniture)) throw new Error("Furniture review returned invalid observations.");
         const reviewedScene = applySourceFurnitureReview(scene, reviewed.furniture);
         if (!reviewedScene.assets.length && scene.assets.length) throw new Error("Furniture review found no validated objects.");
@@ -2457,7 +2587,7 @@ Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
         diagnostics.furnitureReview = { responseId: reviewResponse.id, usage: reviewResponse.usage, status: "completed" };
       } catch (error) {
         scene = { ...scene, furnishingReview: { ...scene.furnishingReview, requiresReview: true, coverageReview: { status: "failed", reason: error?.message || "Furniture review failed" } } };
-        diagnostics.furnitureReview = { status: "failed", message: error?.message };
+        diagnostics.furnitureReview = { ...diagnostics.furnitureReview, status: "failed", code: error?.code || null, message: error?.message };
       } finally {
         clearTimeout(furnitureTimer);
       }
@@ -2493,6 +2623,7 @@ Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
       warning: "Visual 3D preview only. APS/engineering geometry remains authoritative for quantities and BOQ."
     });
   } catch (error) {
+    diagnostics.failedStage = diagnostics.stage;
     diagnostics.stage = "failed";
     diagnostics.elapsedMs = Date.now() - startedAt;
     diagnostics.error = error?.message || String(error);
@@ -2608,6 +2739,2212 @@ async function executePreviewJob(input, run) {
   if (saved.error) throw saved.error;
 }
 
+// src/lib/pdfRoomInventory.mjs
+function recoverPdfRoomInventory(page) {
+  if (page.page_evidence?.kind !== "floor_plan") return { page, warnings: [] };
+  const rooms = /* @__PURE__ */ new Map(), warnings = [];
+  for (const item of page.detected_items || []) {
+    if (!["m2", "m\xB2"].includes(String(item.unit).toLowerCase()) || !Number.isFinite(item.quantity) || item.quantity <= 0) continue;
+    const tag = String(item.name || "").match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
+    if (!tag) continue;
+    if (rooms.has(tag)) {
+      warnings.push(`Duplicate room area tag ${tag} on page ${page.pageNumber}; inventory withheld.`);
+      return { page, warnings };
+    }
+    const name2 = String(item.name || ""), description = String(item.description || "");
+    const finish = /\bVOID\b/i.test(name2) || /^VOID\b/i.test(description) ? "void" : /\bterrace\b|\bbalcony\b/i.test(name2) || /^OUTDOOR\b/i.test(description) ? "outdoor" : /^WOOD\b|^parquet\b/i.test(description) ? "wood" : /^EPOXY\b/i.test(description) ? "epoxy" : /^TILE\b|^ceramic\b/i.test(description) ? "tile" : null;
+    rooms.set(tag, { ...item, tag, finish });
+  }
+  if (!rooms.size) return { page, warnings };
+  const list = [...rooms.values()], enclosed = list.filter((r) => !["void", "outdoor"].includes(r.finish)), outdoor = list.filter((r) => r.finish === "outdoor");
+  const inner = enclosed.reduce((s, r) => s + r.quantity, 0), outside = outdoor.reduce((s, r) => s + r.quantity, 0), walkable = inner + outside;
+  if (Math.abs(page.floor_area - walkable) > 0.01 && Math.abs(page.floor_area - inner) > 0.01) {
+    warnings.push(`Room area inventory on page ${page.pageNumber} does not reconcile to its floor summary; finish recovery withheld.`);
+    return { page, warnings };
+  }
+  const values = { floor_area: walkable }, scope = page.page_evidence.scope_id;
+  const materialKeys = { wood: "wood_floor_area", tile: "ceramic_floor_area", epoxy: "epoxy_floor_area", outdoor: "terrace_floor_area" };
+  for (const [finish, key2] of Object.entries(materialKeys)) {
+    const matching = list.filter((r) => r.finish === finish);
+    if (!matching.length) continue;
+    if ((page.page_evidence.quantities || []).some((q) => q.key === key2)) continue;
+    values[key2] = matching.reduce((s, r) => s + r.quantity, 0);
+  }
+  const quantities = (page.page_evidence.quantities || []).filter((q) => q.key !== "floor_area");
+  for (const [key2, value] of Object.entries(values)) quantities.push({
+    key: key2,
+    value,
+    unit: "m2",
+    scope_id: scope,
+    evidence: `Tagged room inventory on page ${page.pageNumber} reconciles to floor summary; ${key2}: ` + list.filter((r) => key2 === "floor_area" ? r.finish !== "void" : r.finish === Object.keys(materialKeys).find((k) => materialKeys[k] === key2)).map((r) => `${r.tag}=${r.quantity} m2 (${r.description})`).join(" + ") + `. AI room labels/materials require review.`
+  });
+  return { page: { ...page, floor_area: walkable, page_evidence: { ...page.page_evidence, quantities } }, warnings };
+}
+
+// src/lib/pdfNativeRoomInventory.mjs
+var tagOf = (value) => String(value || "").trim().match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
+var finishOf = (value) => {
+  const text = String(value || "").toUpperCase(), values = new Set([...text.matchAll(/(?:^|\||\/|M(?:2|²)\s+)\s*(WOOD|TILE|EPOXY|OUTDOOR|VOID)\b/g)].map((m) => m[1].toLowerCase()));
+  if (/\bVOID\s*$/.test(text)) values.add("void");
+  return values.size === 1 ? [...values][0] : null;
+};
+var printedArea = (value) => String(value || "").match(/(?:^|\s|\|)(\d+(?:\.\d+)?)\s*m(?:2|²)(?=\s|$|\|)/i);
+function recoverNativeRoomInventory(page, validatedSpaces) {
+  const original = page.detected_items || [], native = page.native_plan_text;
+  if (native?.status !== "readable" || !Array.isArray(native.spans) || native.spans.length > 3e3) return { items: original, recovered: [] };
+  const shapes = new Map(validatedSpaces.map((s) => [tagOf(s.tag), s])), captions = /* @__PURE__ */ new Map(), recovered = [];
+  for (const span of native.spans) {
+    const tag = tagOf(span.text);
+    if (!tag || !/^\S+\s+\S/.test(span.text)) continue;
+    const list = captions.get(tag) || [];
+    list.push(span);
+    captions.set(tag, list);
+  }
+  const items = [...original];
+  for (const [tag, rows] of captions) {
+    if (rows.length !== 1 || original.some((i) => tagOf(i.name) === tag && ["m2", "m\xB2"].includes(String(i.unit).toLowerCase()))) continue;
+    const caption = rows[0], shape2 = shapes.get(tag), inline = printedArea(caption.text);
+    const neighbours = native.spans.filter((s) => Math.abs(caption.angle || 0) < 1e-3 && s !== caption && Math.abs(s.angle || 0) < 1e-3 && s.y < caption.y && caption.y - s.y <= 2.5 * caption.height && Math.abs(s.x - caption.x) <= Math.max(20, 4 * caption.height) && printedArea(s.text) && finishOf(s.text));
+    if (!inline && neighbours.length > 1) continue;
+    const areaLine = inline ? caption : neighbours.length === 1 ? neighbours[0] : null;
+    const finish = finishOf(caption.text) || finishOf(areaLine?.text);
+    if (!finish) continue;
+    if (finishOf(caption.text) && finishOf(areaLine?.text) && finishOf(caption.text) !== finishOf(areaLine.text)) continue;
+    const match = areaLine && printedArea(areaLine.text), labelArea = match ? Number(match[1]) : null;
+    const quantity = labelArea ?? shape2?.quantity;
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 1e6) continue;
+    if (shape2 && (finish === "void" ? shape2.kind !== "void" : finish === "outdoor" ? shape2.kind !== "outdoor" : shape2.kind !== "enclosed") || shape2 && finish !== "void" && shape2.finish !== finish) continue;
+    const evidence = labelArea !== null ? `printed source label: ${caption.text}; ${areaLine.text}` : `independently dimensioned polygon for source label ${caption.text}; ${shape2.evidence}`;
+    const name2 = caption.text.trim().replace(/\s*\|.*$/, "").replace(/\s*\/\s*(?:WOOD|TILE|EPOXY|OUTDOOR|VOID)\s*$/i, "");
+    items.push({ name: name2, unit: "m2", quantity, description: `${finish.toUpperCase()} | ${evidence}` });
+    recovered.push({ tag, page: page.pageNumber, basis: labelArea !== null ? "native_printed_area" : "existing_validated_polygon", source_label: caption.text });
+  }
+  return { items, recovered };
+}
+
+// src/lib/pdfAreaGeometry.mjs
+var EPS3 = 1e-8;
+var cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+var signed = (p) => p.reduce((s, a, i) => {
+  const b = p[(i + 1) % p.length];
+  return s + a.x * b.y - b.x * a.y;
+}, 0) / 2;
+var area2 = (p) => Math.abs(signed(p));
+function on(a, b, p) {
+  return Math.abs(cross(a, b, p)) < EPS3 && p.x >= Math.min(a.x, b.x) - EPS3 && p.x <= Math.max(a.x, b.x) + EPS3 && p.y >= Math.min(a.y, b.y) - EPS3 && p.y <= Math.max(a.y, b.y) + EPS3;
+}
+function intersects(a, b, c, d) {
+  return cross(a, b, c) * cross(a, b, d) < -EPS3 && cross(c, d, a) * cross(c, d, b) < -EPS3 || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b);
+}
+function polygon(raw) {
+  if (!Array.isArray(raw) || raw.length < 3 || raw.length > 64) throw Error("Polygon requires 3\u201364 dimensioned vertices.");
+  let p = raw.map((v) => ({ x: v.x, y: v.y }));
+  if (p.some((v) => !Number.isFinite(v.x) || !Number.isFinite(v.y) || Math.abs(v.x) > 1e6 || Math.abs(v.y) > 1e6)) throw Error("Invalid polygon coordinates.");
+  if (p[0].x === p.at(-1).x && p[0].y === p.at(-1).y) p.pop();
+  for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) {
+    if (j === i + 1 || i === 0 && j === p.length - 1) continue;
+    if (intersects(p[i], p[(i + 1) % p.length], p[j], p[(j + 1) % p.length])) throw Error("Polygon crosses or touches itself.");
+  }
+  if (area2(p) < EPS3) throw Error("Polygon has no usable area.");
+  if (signed(p) < 0) p.reverse();
+  return p;
+}
+function triangulate(p) {
+  const points = [...p], triangles = [];
+  let guard = p.length * p.length;
+  while (points.length > 3 && guard--) {
+    let cut = false;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[(i + points.length - 1) % points.length], b = points[i], c = points[(i + 1) % points.length];
+      if (Math.abs(cross(a, b, c)) < EPS3) {
+        points.splice(i, 1);
+        cut = true;
+        break;
+      }
+      if (cross(a, b, c) < EPS3) continue;
+      if (points.some((v) => v !== a && v !== b && v !== c && cross(a, b, v) >= -EPS3 && cross(b, c, v) >= -EPS3 && cross(c, a, v) >= -EPS3)) continue;
+      triangles.push([a, b, c]);
+      points.splice(i, 1);
+      cut = true;
+      break;
+    }
+    if (!cut) throw Error("Polygon triangulation failed.");
+  }
+  if (points.length === 3) triangles.push(points);
+  else if (points.length > 3) throw Error("Polygon triangulation exceeded limit.");
+  return triangles;
+}
+function clip(subject, triangle) {
+  let out = subject;
+  for (let i = 0; i < 3 && out.length; i++) {
+    const a = triangle[i], b = triangle[(i + 1) % 3], input = out;
+    out = [];
+    for (let j = 0; j < input.length; j++) {
+      const p = input[j], q = input[(j + 1) % input.length], dp = cross(a, b, p), dq = cross(a, b, q), pin = dp >= -EPS3, qin = dq >= -EPS3;
+      if (pin) out.push(p);
+      if (pin !== qin) {
+        const t = dp / (dp - dq);
+        out.push({ x: p.x + t * (q.x - p.x), y: p.y + t * (q.y - p.y) });
+      }
+    }
+  }
+  return out.length >= 3 ? area2(out) : 0;
+}
+var bbox = (p) => ({ minX: Math.min(...p.map((v) => v.x)), maxX: Math.max(...p.map((v) => v.x)), minY: Math.min(...p.map((v) => v.y)), maxY: Math.max(...p.map((v) => v.y)) });
+function intersection(a, b) {
+  const x = bbox(a.p), y = bbox(b.p);
+  if (x.maxX <= y.minX + EPS3 || y.maxX <= x.minX + EPS3 || x.maxY <= y.minY + EPS3 || y.maxY <= x.minY + EPS3) return 0;
+  return a.t.reduce((s, u) => s + b.t.reduce((n, v) => n + clip(u, v), 0), 0);
+}
+var metricKeys = ["floor_area", "ceiling_area", "wood_floor_area", "ceramic_floor_area", "epoxy_floor_area", "terrace_floor_area"];
+var material = { wood: "wood_floor_area", tile: "ceramic_floor_area", epoxy: "epoxy_floor_area", outdoor: "terrace_floor_area" };
+var inferred = /\binferred\b|\bassumed\b|\bremainder\b|\bderived\b|استنباط|تخمین/i;
+var roomTag = (name2) => String(name2 || "").match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
+var labeledFinish = (r) => /\bVOID\b/i.test(r.name) || /^VOID\b/i.test(r.description) ? "void" : /^OUTDOOR\b/i.test(r.description) ? "outdoor" : /^WOOD\b|^parquet\b/i.test(r.description) ? "wood" : /^TILE\b|^ceramic\b/i.test(r.description) ? "tile" : /^EPOXY\b/i.test(r.description) ? "epoxy" : null;
+function partialInventory(page, geometry2, spaces, envelopeArea, tolerance) {
+  if (geometry2.basis !== "wall_centerline_zones") throw Error("Partial clear-area geometry cannot resolve missing wall footprints");
+  const inventory = /* @__PURE__ */ new Map(), polygons = /* @__PURE__ */ new Map(), corrections = [], labels = [], unresolved = [];
+  for (const r of spaces) {
+    const tag = roomTag(r.tag);
+    if (!tag || polygons.has(tag)) throw Error("Partial geometry requires unique printed room tags");
+    polygons.set(tag, r);
+  }
+  const nativeInventory = recoverNativeRoomInventory(page, spaces);
+  for (const item of nativeInventory.items) {
+    if (!["m2", "m\xB2"].includes(String(item.unit).toLowerCase())) continue;
+    const tag = roomTag(item.name);
+    if (!tag) continue;
+    if (inventory.has(tag)) throw Error(`Duplicate area inventory tag ${tag}`);
+    const finish = labeledFinish(item), shape2 = polygons.get(tag);
+    if (!finish || !Number.isFinite(item.quantity) || item.quantity <= 0) throw Error(`Missing printed room area/material for ${tag}`);
+    if (shape2) {
+      if (shape2.kind === "wall" || (finish === "void" ? shape2.kind !== "void" : finish === "outdoor" ? shape2.kind !== "outdoor" : shape2.kind !== "enclosed") || finish !== "void" && shape2.finish !== finish) throw Error(`Conflicting room identity/material for ${tag}`);
+      if (Math.abs(item.quantity - shape2.quantity) > 0.01) corrections.push({ tag, reported: item.quantity, computed: shape2.quantity, evidence: shape2.evidence });
+      inventory.set(tag, { ...item, quantity: shape2.quantity, finish, description: `${String(item.description).split("|")[0].trim()} | independently dimensioned polygon: ${shape2.evidence}` });
+    } else {
+      if (inferred.test(item.description || "")) unresolved.push(tag);
+      else if (!/\bprinted\b|\breported\b|برچسب|چاپ|مذكور|مطبوعة/i.test(item.description || "")) throw Error(`Room ${tag} lacks an explicit printed area basis`);
+      labels.push(tag);
+      inventory.set(tag, { ...item, finish });
+    }
+  }
+  for (const tag of polygons.keys()) if (!inventory.has(tag)) throw Error(`Dimensioned space ${tag} is absent from the tagged inventory`);
+  if (unresolved.length) throw Error(`Inferred rooms still lack dimensioned polygons: ${unresolved.join(", ")}`);
+  const list = [...inventory.values()], total = list.reduce((s, r) => s + r.quantity, 0);
+  if (!list.length || Math.abs(total - envelopeArea) > tolerance) throw Error("Mixed polygon/printed-area inventory does not reconcile to the dimensioned envelope");
+  const dimensions = { floor_area: list.filter((r) => r.finish !== "void").reduce((s, r) => s + r.quantity, 0), ceiling_area: list.filter((r) => !["void", "outdoor"].includes(r.finish)).reduce((s, r) => s + r.quantity, 0) };
+  for (const [finish, key2] of Object.entries(material)) dimensions[key2] = list.filter((r) => r.finish === finish).reduce((s, r) => s + r.quantity, 0);
+  const quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
+  const basis = `Partial dimensioned geometry plus printed room labels on page ${page.pageNumber}; dimensioned tags: ${[...polygons.keys()].join(", ")}; label-only tags: ${labels.join(", ")}; ${geometry2.envelope_evidence}. Inventory closure checked; unmeasured room boundaries and AI materials require review.`;
+  for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: page.page_evidence.scope_id, evidence: basis });
+  const updated = { ...page, ...dimensions, __areaGeometryValidated: true, page_evidence: { ...page.page_evidence, quantities }, detected_items: nativeInventory.items.map((r) => inventory.has(roomTag(r.name)) && ["m2", "m\xB2"].includes(String(r.unit).toLowerCase()) ? Object.fromEntries(Object.entries(inventory.get(roomTag(r.name))).filter(([k]) => k !== "finish")) : r) };
+  return { page: updated, audit: { page: page.pageNumber, status: "partial_geometry_with_printed_labels", basis: geometry2.basis, envelope_area: envelopeArea, covered_area: spaces.reduce((s, r) => s + r.quantity, 0), dimensioned_tags: [...polygons.keys()], label_only_tags: labels, corrections, native_inventory_recovery: nativeInventory.recovered, withheld_metrics: [] }, warnings: [`PDF page ${page.pageNumber}: partial area geometry; printed room labels retained provisionally, full room boundaries are not verified.`] };
+}
+function withheld(page, keys, reason) {
+  const original = page.__withheldAreaClaims || { claims: (page.page_evidence?.quantities || []).filter((q) => keys.includes(q.key)), fields: Object.fromEntries(keys.filter((k) => Number.isFinite(page[k])).map((k) => [k, page[k]])) };
+  const quantities = (page.page_evidence?.quantities || []).filter((q) => !keys.includes(q.key));
+  const next = { ...page, __withheldAreaClaims: original, page_evidence: { ...page.page_evidence, quantities } };
+  for (const key2 of keys) next[key2] = 0;
+  return { page: next, audit: { page: page.pageNumber, status: "withheld", reason, withheld_metrics: keys, original_area_evidence: original }, warnings: [`PDF page ${page.pageNumber}: ${reason}; ${keys.join(", ")} withheld.`] };
+}
+function auditPdfAreaGeometry(page) {
+  if (page.page_evidence?.kind !== "floor_plan") return { page, audit: null, warnings: [] };
+  const geometry2 = page.area_geometry;
+  if (!geometry2) {
+    const ambiguous = (page.detected_items || []).filter((r) => ["m2", "m\xB2"].includes(String(r.unit).toLowerCase()) && inferred.test(r.description || ""));
+    if (!ambiguous.length) return { page, audit: { page: page.pageNumber, status: "label_areas_only", reason: "Independent dimensioned polygons unavailable." }, warnings: [] };
+    const keys = /* @__PURE__ */ new Set(["floor_area", "ceiling_area"]);
+    for (const r of ambiguous) {
+      const desc = String(r.description || "");
+      if (/^WOOD\b/i.test(desc)) keys.add("wood_floor_area");
+      else if (/^TILE\b/i.test(desc)) keys.add("ceramic_floor_area");
+      else if (/^EPOXY\b/i.test(desc)) keys.add("epoxy_floor_area");
+      else if (/^OUTDOOR\b/i.test(desc)) keys.add("terrace_floor_area");
+      else for (const key2 of Object.values(material)) keys.add(key2);
+    }
+    return withheld(page, [...keys], "Inferred room areas lack independent dimensioned geometry");
+  }
+  try {
+    if (!["wall_centerline_zones", "clear_internal"].includes(geometry2.basis) || !geometry2.envelope_evidence?.trim()) throw Error("Independent area measurement basis or envelope evidence missing");
+    const envelope = polygon(geometry2.envelope), outer = { p: envelope, t: triangulate(envelope) }, envelopeArea = area2(envelope), tolerance = Math.max(0.01, envelopeArea * 1e-3);
+    if (!Array.isArray(geometry2.spaces) || !geometry2.spaces.length || geometry2.spaces.length > 200) throw Error("A complete tagged space inventory is required");
+    const seen = /* @__PURE__ */ new Set(), spaces = [];
+    for (const r of geometry2.spaces) {
+      if (!r.tag?.trim() || seen.has(r.tag.trim().toUpperCase()) || !r.evidence?.trim() || !["enclosed", "outdoor", "void", "wall"].includes(r.kind) || !["wood", "tile", "epoxy", "outdoor", "unknown"].includes(r.finish)) throw Error("Missing or duplicate room identity/material/geometry evidence");
+      seen.add(r.tag.trim().toUpperCase());
+      if (geometry2.coverage === "partial" && Array.isArray(r.polygon) && r.polygon.length === 0) {
+        const tag = roomTag(r.tag), items = (page.detected_items || []).filter((i) => roomTag(i.name) === tag && ["m2", "m\xB2"].includes(String(i.unit).toLowerCase()));
+        if (geometry2.basis !== "wall_centerline_zones" || !tag || items.length !== 1 || !Number.isFinite(r.reported_area) || r.reported_area <= 0 || Math.abs(items[0].quantity - r.reported_area) > 0.01 || !/\bprinted\b|\breported\b|\blabel\b/i.test(r.evidence) || inferred.test(items[0].description || "") || !/\bprinted\b|\breported\b|برچسب|چاپ/i.test(items[0].description || "")) throw Error(`Unmeasured space ${r.tag} lacks a consistent printed label`);
+        const finish = labeledFinish(items[0]);
+        if (!finish || (finish === "void" ? r.kind !== "void" : finish === "outdoor" ? r.kind !== "outdoor" : r.kind !== "enclosed") || finish !== "void" && r.finish !== finish) throw Error(`Conflicting printed-label identity/material for ${r.tag}`);
+        continue;
+      }
+      const p = polygon(r.polygon), shape2 = { p, t: triangulate(p) }, quantity = area2(p);
+      if (Math.abs(intersection(shape2, outer) - quantity) > tolerance) throw Error(`Space ${r.tag} lies outside the dimensioned envelope`);
+      for (const old of spaces) if (intersection(shape2, old.shape) > tolerance) throw Error(`Spaces ${old.tag} and ${r.tag} overlap`);
+      if (r.kind === "outdoor" && r.finish !== "outdoor" || r.kind === "enclosed" && r.finish === "outdoor") throw Error(`Space ${r.tag} has conflicting indoor/outdoor classification`);
+      spaces.push({ ...r, quantity, shape: shape2 });
+    }
+    const total = spaces.reduce((s, r) => s + r.quantity, 0);
+    if (geometry2.coverage === "partial") return partialInventory(page, geometry2, spaces, envelopeArea, tolerance);
+    if (geometry2.coverage != null && geometry2.coverage !== "complete") throw Error("Unknown area geometry coverage mode");
+    if (Math.abs(total - envelopeArea) > tolerance) throw Error("Space polygons do not cover the complete dimensioned envelope");
+    const usable = (r) => ["enclosed", "outdoor"].includes(r.kind);
+    const dimensions = { floor_area: spaces.filter(usable).reduce((s, r) => s + r.quantity, 0), ceiling_area: spaces.filter((r) => r.kind === "enclosed").reduce((s, r) => s + r.quantity, 0) };
+    for (const [finish, key2] of Object.entries(material)) dimensions[key2] = spaces.filter((r) => usable(r) && r.finish === finish).reduce((s, r) => s + r.quantity, 0);
+    const scope = page.page_evidence.scope_id, quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
+    for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: scope, evidence: `Area computed from dimensioned, non-overlapping space polygons (${geometry2.basis}) on page ${page.pageNumber}; ${geometry2.envelope_evidence}; AI dimension transcription and materials require review.` });
+    const corrections = [];
+    for (const r of spaces) if (Number.isFinite(r.reported_area) && Math.abs(r.reported_area - r.quantity) > 0.01) corrections.push({ tag: r.tag, reported: r.reported_area, computed: r.quantity, evidence: r.evidence });
+    const unknown = spaces.filter((r) => usable(r) && r.finish === "unknown").map((r) => r.tag);
+    const measuredRooms = spaces.filter((r) => r.kind !== "wall").map((r) => ({
+      name: r.tag,
+      unit: "m2",
+      quantity: r.quantity,
+      description: `${r.kind === "void" ? "VOID" : r.kind === "outdoor" ? "OUTDOOR" : r.finish.toUpperCase()} | source dimensioned space: ${r.evidence}`
+    }));
+    return {
+      page: {
+        ...page,
+        ...dimensions,
+        page_evidence: { ...page.page_evidence, quantities },
+        __areaGeometryValidated: true,
+        detected_items: [...(page.detected_items || []).filter((i) => !["m2", "m\xB2"].includes(String(i.unit).toLowerCase())), ...measuredRooms]
+      },
+      audit: { page: page.pageNumber, status: "dimension_geometry_checked", basis: geometry2.basis, envelope_area: envelopeArea, covered_area: total, corrections, unknown_finish_spaces: unknown, withheld_metrics: unknown.length ? Object.values(material) : [] },
+      warnings: unknown.length ? [`PDF page ${page.pageNumber}: unknown floor finishes; complete material totals withheld.`] : []
+    };
+  } catch (error) {
+    return withheld(page, metricKeys, error.message);
+  }
+}
+
+// src/lib/pdfNativeSchedules.mjs
+var clean = (s) => String(s || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+var headers = { id: /^(?:id|tag|mark|reference)$/, host: /^(?:host wall|wall|host)$/, kind: /^(?:type|opening type|description)$/, width: /^width(?:\s*\((?:mm|m)\))?$/, height: /^height(?:\s*\((?:mm|m)\))?$/, sill: /^sill(?:\s*height)?(?:\s*\((?:mm|m)\))?$/, quantity: /^(?:quantity|qty|count)$/ };
+var kindOf = (s) => /^(?:garage door|overhead door|roller shutter)$/.test(clean(s)) ? "garage_door" : /^(?:door|internal door|external door|entrance door|service door|main door)$/.test(clean(s)) ? "door" : /^(?:window|glazed window)$/.test(clean(s)) ? "window" : null;
+var dimension = (s) => /^\d+(?:\.\d+)?$/.test(s) ? Number(s) : null;
+function tableUnit(spans, head, inherited) {
+  const text = spans.filter((s) => s.y > head.y).map((s) => s.text).join(" ");
+  const source2 = [...text.matchAll(/(?:all\s+)?dimensions\s+(?:are\s+|in\s+)(millimet(?:er|re)s?|met(?:er|re)s?|mm|m)\b/gi)].map((m) => /^mm|^milli/i.test(m[1]) ? 1e-3 : 1);
+  const fromHeaders = ["width", "height"].map((k) => head.cols.find((c) => c.key === k)?.text.match(/\((mm|m)\)/i)?.[1]).filter(Boolean).map((u) => u.toLowerCase() === "mm" ? 1e-3 : 1);
+  const signature = head.cols.map((c) => `${c.key}:${Math.round(c.x - head.cols[0].x)}`).join("|");
+  const factors = [...source2, ...fromHeaders];
+  if (!factors.length && inherited?.signature === signature && inherited.allow_continuation) return { ...inherited };
+  if (!factors.length || new Set(factors).size !== 1) throw Error("Missing or conflicting schedule dimension units");
+  return { factor: factors[0], signature, allow_continuation: /all\s+dimensions\s+(?:are|in)\s+/i.test(text) };
+}
+function readNativeOpeningSchedule(page, normalizeScope, inherited) {
+  const native = page.native_text_evidence;
+  if (native?.version !== 1 || native.status !== "readable") return { status: "unavailable", rows: [] };
+  const spans = native.spans, scope = normalizeScope(page.page_evidence?.scope_id);
+  if (!scope || scope === "project") return { status: "pending", reason: "Schedule floor scope is unresolved", rows: [] };
+  try {
+    const heads = [];
+    for (const s of spans.filter((s2) => headers.id.test(clean(s2.text)))) {
+      const band = spans.filter((x) => Math.abs(x.y - s.y) < Math.min(2, s.height * 0.2));
+      const cols = [];
+      for (const x of band) {
+        const key2 = Object.keys(headers).find((k) => headers[k].test(clean(x.text)));
+        if (key2) cols.push({ ...x, key: key2 });
+      }
+      if (["id", "kind", "width", "height"].every((k) => cols.filter((c) => c.key === k).length === 1)) heads.push({ y: s.y, cols: cols.sort((a, b) => a.x - b.x) });
+    }
+    if (heads.length !== 1) throw Error("A single complete opening table is required per schedule page");
+    const head = heads[0], dimension_basis = tableUnit(spans, head, inherited), factor = dimension_basis.factor, rows = [], ids = /* @__PURE__ */ new Set();
+    const printed = spans.filter((s) => s.y > head.y && s.y - head.y < 100 && /^(?:ground|first|second|third|basement|roof|floor\s+\d+)(?:\s+floor)?$/i.test(s.text.trim())).map((s) => normalizeScope(s.text));
+    if (printed.length !== 1 || printed[0] !== scope) throw Error("Printed schedule floor does not match selected scope");
+    const below = spans.filter((s) => s.y < head.y - 3).sort((a, b) => b.y - a.y || a.x - b.x), bands = [];
+    for (const s of below) {
+      let b = bands.find((b2) => Math.abs(b2.y - s.y) < 2);
+      if (!b) {
+        b = { y: s.y, spans: [] };
+        bands.push(b);
+      }
+      b.spans.push(s);
+    }
+    for (const band of bands) {
+      const cells = {};
+      for (const s of band.spans) {
+        let nearest = head.cols.reduce((a, b) => Math.abs(s.x - a.x) <= Math.abs(s.x - b.x) ? a : b);
+        if (Math.abs(s.x - nearest.x) > 20) continue;
+        (cells[nearest.key] ??= []).push(s.text.trim());
+      }
+      if (!cells.kind && !cells.width && !cells.height) {
+        if (cells.id?.some((s) => /^[A-Za-z][A-Za-z0-9._/-]{1,39}$/.test(s))) throw Error("Tagged row without dimensions; partial schedule withheld");
+        continue;
+      }
+      const raw = Object.fromEntries(Object.entries(cells).map(([k, v]) => [k, v.join(" ")])), kind = kindOf(raw.kind);
+      if (head.cols.some((c) => c.key === "quantity") && raw.quantity !== "1") throw Error("Multi-instance or missing schedule row quantity requires explicit instance mapping");
+      if (!kind || !raw.id || !/^[\p{L}\p{N}][\p{L}\p{N}._/-]{0,39}$/u.test(raw.id)) throw Error("Unrecognized opening row; partial table withheld");
+      const width = dimension(raw.width), height = dimension(raw.height), sill = raw.sill === void 0 ? null : dimension(raw.sill);
+      if (!(width > 0) || !(height > 0) || width * factor > 50 || height * factor > 50 || sill !== null && (!(sill >= 0) || sill * factor > 50) || head.cols.some((c) => c.key === "sill") && sill === null) throw Error("Missing or invalid opening dimensions");
+      const id = raw.id.toLowerCase();
+      if (ids.has(id)) throw Error("Repeated opening tag in schedule");
+      ids.add(id);
+      rows.push({ id: raw.id, wall_id: raw.host || null, kind, width: width * factor, height: height * factor, sill: sill === null ? null : sill * factor, page: page.pageNumber, source_row: Object.values(raw).join(" | ") });
+    }
+    if (!rows.length || rows.length > 1e3) throw Error("Empty or excessive opening schedule");
+    dimension_basis.pages = [.../* @__PURE__ */ new Set([...inherited && dimension_basis.pages || [], page.pageNumber])];
+    for (const row of rows) row.dimension_pages = dimension_basis.pages;
+    return { status: "read", scope_id: scope, page: page.pageNumber, rows, dimension_basis };
+  } catch (e) {
+    return { status: "pending", reason: e.message, page: page.pageNumber, rows: [] };
+  }
+}
+function nativeOpeningEvidence(pages, normalizeScope) {
+  const schedules = [];
+  for (const p of pages.filter((p2) => p2.page_evidence?.kind === "opening_schedule").sort((a, b) => a.pageNumber - b.pageNumber)) {
+    const previous = schedules.at(-1), inherited = previous?.status === "read" && previous.page === p.pageNumber - 1 ? previous.dimension_basis : null;
+    schedules.push(readNativeOpeningSchedule(p, normalizeScope, inherited));
+  }
+  const floors = pages.filter((p) => p.page_evidence?.kind === "floor_plan").map((p) => normalizeScope(p.page_evidence.scope_id));
+  const warnings = [], claims = [], blocked = [];
+  if (!schedules.some((s) => s.status === "read")) return { claims, blocked, warnings, schedules };
+  if (new Set(floors).size !== floors.length || schedules.some((s) => s.status !== "read") || schedules.length !== floors.length || floors.some((f) => schedules.filter((s) => s.scope_id === f).length !== 1)) {
+    warnings.push("Native opening schedule coverage incomplete; partial native totals withheld");
+    return { claims, blocked, warnings, schedules };
+  }
+  for (const s of schedules) {
+    for (const [kind, key2] of [["door", "door_count"], ["window", "window_count"]]) {
+      const rows = s.rows.filter((r) => kind === "door" ? r.kind === "door" || r.kind === "garage_door" : r.kind === "window");
+      for (const [metric, value, unit2] of [[key2, rows.length, "nr"], [`${kind}_area`, rows.reduce((v, r) => v + r.width * r.height, 0), "m2"]]) claims.push({
+        key: metric,
+        value,
+        unit: unit2,
+        scope_id: s.scope_id,
+        pages: s.dimension_basis.pages,
+        native_calculated: true,
+        document_calculated: true,
+        evidence: `Native PDF opening table, complete source rows including garage doors: ${rows.map((r) => r.source_row).join("; ")}. Dimensions read from printed table and source units; specification requires review.`
+      });
+    }
+  }
+  return { claims, blocked, warnings, schedules };
+}
+
+// src/lib/pdfSourceMeasurements.mjs
+var PDF_SOURCE_MEASUREMENT_KEYS = ["internal_wall_length", "external_wall_length", "wall_length", "wall_area", "internal_block_area", "external_block_area", "plaster_area", "paint_area", "wet_wall_tile_area", "wet_wall_waterproofing_area", "ceiling_paint_area", "gypsum_ceiling_area"];
+var floorScope = (s) => String(s || "").trim().toLowerCase().replace(/[ _-]+/g, " ");
+var canon = (s) => ["ground floor", "ground", "gf", "floor 0"].includes(floorScope(s)) ? "floor:0" : ["first floor", "first", "ff", "floor 1"].includes(floorScope(s)) ? "floor:1" : floorScope(s);
+var name = (s) => String(s || "").trim().toLowerCase();
+var roomTag2 = (s) => String(s || "").match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toLowerCase();
+var unique = (rows, key2) => {
+  const ids = rows.map((r) => name(r[key2]));
+  if (ids.some((s) => !s) || new Set(ids).size !== ids.length) throw Error(`Missing or duplicated ${key2}`);
+};
+function calculatePdfSourceMeasurements(basis, pages, metricUnits, availablePages) {
+  const calculations = [], blocked = /* @__PURE__ */ new Set(), issues = [];
+  const source2 = (s, unit2) => {
+    if (!s || !Number.isFinite(s.value) || s.value < 0 || s.value > 1e6 || !s.evidence?.trim() || !s.pages?.length || s.pages.some((p) => !availablePages.has(p))) throw Error("Missing or unsourced source dimension");
+    return { value: s.value, unit: unit2, operation: "multiply", pages: s.pages, evidence: s.evidence, clip: null };
+  };
+  const rule = (r) => {
+    if (typeof r?.value !== "boolean" || !r.evidence?.trim() || !r.pages?.length || r.pages.some((p) => !availablePages.has(p))) throw Error("Missing source finish rule");
+    return r;
+  };
+  const term = (id, operation, factors) => ({ id, operation, factors });
+  const add = (key2, terms, evidence) => calculations.push({ key: key2, scope_id: "project", terms, evidence });
+  const tryGroup = (keys, work) => {
+    try {
+      work();
+    } catch (e) {
+      keys.forEach((k) => blocked.add(k));
+      issues.push(`${keys.join(", ")}: ${e.message}`);
+    }
+  };
+  const selected = pages.filter((p) => p.page_evidence?.kind === "floor_plan");
+  const native = nativeOpeningEvidence(pages, canon);
+  const floors = basis?.floors || [];
+  let matched = [];
+  tryGroup(PDF_SOURCE_MEASUREMENT_KEYS, () => {
+    if (!floors.length || floors.length > 30 || floors.length !== selected.length) throw Error("Source basis does not cover every selected floor");
+    unique(floors, "scope_id");
+    if (new Set(floors.map((f) => canon(f.scope_id))).size !== floors.length) throw Error("Repeated floor aliases");
+    matched = floors.map((f) => {
+      const found = selected.filter((p) => canon(p.page_evidence.scope_id) === canon(f.scope_id));
+      if (found.length !== 1) throw Error("Unresolved source floor identity");
+      return { f, page: found[0] };
+    });
+  });
+  if (!matched.length) return { calculations, blocked: [...blocked], issues };
+  const wallTerms = { internal: [], external: [] }, wallLengths = { internal: [], external: [] }, openingIndex = /* @__PURE__ */ new Map();
+  let plasterTerms = [], tileTerms = [];
+  tryGroup(["internal_wall_length", "external_wall_length", "wall_length", "wall_area", "internal_block_area", "external_block_area", "paint_area"], () => {
+    for (const { f } of matched) {
+      if (!f.walls_complete || !f.wall_inventory_evidence?.trim() || !f.source_pages?.length || f.source_pages.some((p) => !availablePages.has(p)) || !f.walls?.length || f.walls.length > 500 || !Array.isArray(f.openings) || f.openings.length > 1e3) throw Error("Incomplete wall/opening inventory");
+      unique(f.walls, "id");
+      unique(f.openings, "id");
+      const prefix = canon(f.scope_id), walls = new Map(f.walls.map((w) => [name(w.id), w]));
+      for (const w of f.walls) {
+        if (!["internal", "external"].includes(w.classification) || !["printed_dimensions", "calibrated_geometry"].includes(w.length_basis)) throw Error("Unresolved wall class or dimensional basis");
+        const length = source2(w.length, "m"), height = source2(w.height, "m");
+        if (length.value <= 0 || height.value <= 0) throw Error("Zero wall dimensions");
+        const id = `${prefix}:${w.id}`;
+        wallLengths[w.classification].push(term(`${id}:length`, "add", [length]));
+        wallTerms[w.classification].push(term(`${id}:gross`, "add", [length, height]));
+        let openingArea = 0;
+        for (const o of f.openings.filter((o2) => name(o2.wall_id) === name(w.id))) {
+          const width = source2(o.width, "m"), oh = source2(o.height, "m"), sill = source2(o.sill, "m");
+          if (!["door", "window"].includes(o.kind) || width.value <= 0 || oh.value <= 0 || width.value > length.value || oh.value + sill.value > height.value + 1e-6) throw Error("Opening dimensions exceed its host wall");
+          openingArea += width.value * oh.value;
+          wallTerms[w.classification].push(term(`${prefix}:${o.id}:opening`, "subtract", [width, oh]));
+          openingIndex.set(`${prefix}:${name(o.id)}`, o);
+        }
+        if (openingArea > length.value * height.value + 1e-6) throw Error("Opening areas exceed host face area");
+      }
+      if (f.openings.some((o) => !walls.has(name(o.wall_id)))) throw Error("Opening host wall is missing");
+      const nativeRows = native.claims.length ? native.schedules.find((s) => s.scope_id === prefix)?.rows : null;
+      if (nativeRows) {
+        if (nativeRows.length !== f.openings.length) throw Error("Opening inventory does not cover native source tags");
+        for (const row of nativeRows) {
+          const o = f.openings.find((o2) => name(o2.id) === name(row.id));
+          if (!o || o.kind !== (row.kind === "window" ? "window" : "door") || Math.abs(o.width.value - row.width) > 1e-6 || Math.abs(o.height.value - row.height) > 1e-6 || row.sill !== null && Math.abs(o.sill.value - row.sill) > 1e-6 || row.wall_id && name(o.wall_id) !== name(row.wall_id)) throw Error("Opening facts conflict with native schedule dimensions or host");
+        }
+      }
+      for (const kind of ["door", "window"]) {
+        const key2 = `${kind}_count`, candidates = (native.claims.length ? native.claims : pages.flatMap((p) => (p.page_evidence?.quantities || []).filter((q) => p.page_evidence.kind === "opening_schedule" || q.document_calculated))).filter((q) => q.key === key2 && canon(q.scope_id) === prefix && q.unit === "nr");
+        if (candidates.some((q) => q.value !== f.openings.filter((o) => o.kind === kind).length)) throw Error("Opening ledger does not reconcile to source schedule count");
+      }
+    }
+    for (const cls of ["internal", "external"]) {
+      if (!wallTerms[cls].length) throw Error("Both wall classes require complete source coverage");
+      add(`${cls}_wall_length`, wallLengths[cls], "Complete source wall centreline inventory, shared walls counted once");
+      add(`${cls}_block_area`, wallTerms[cls], "Net wall face area: source lengths \xD7 heights minus each hosted opening once");
+    }
+    add("wall_length", [...wallLengths.internal, ...wallLengths.external], "Complete internal and external wall inventory");
+    add("wall_area", [...wallTerms.internal, ...wallTerms.external], "Net single wall faces, by source classification");
+  });
+  tryGroup(["plaster_area", "paint_area"], () => {
+    if (blocked.has("internal_block_area") || blocked.has("external_block_area")) throw Error("Plaster needs complete net wall faces");
+    const faces = { internal: source2(basis.rules.plaster_internal_faces, "count"), external: source2(basis.rules.plaster_external_faces, "count") };
+    if (Object.values(faces).some((s) => !Number.isInteger(s.value) || s.value > 2)) throw Error("Invalid plaster face rule");
+    plasterTerms = ["internal", "external"].flatMap((cls) => wallTerms[cls].map((t) => ({ ...t, id: `plaster:${t.id}`, factors: [...t.factors, faces[cls]] })));
+    add("plaster_area", plasterTerms, "Source plaster face convention applied to net walls");
+  });
+  tryGroup(["wet_wall_tile_area", "wet_wall_waterproofing_area"], () => {
+    const tileHeight = source2(basis.rules.wet_tile_height, "m"), membraneHeight = source2(basis.rules.wet_waterproof_height, "m");
+    const wetTerms = (height) => matched.flatMap(({ f }) => {
+      if (!f.wet_rooms_complete || !Array.isArray(f.wet_rooms) || f.wet_rooms.length > 500) throw Error("Incomplete wet-room boundary inventory");
+      unique(f.wet_rooms, "id");
+      return f.wet_rooms.flatMap((r) => {
+        const prefix = canon(f.scope_id);
+        if (!r.boundary_complete || !Array.isArray(r.boundary_lengths) || r.boundary_lengths.length < 3 || r.boundary_lengths.length > 100) throw Error("Missing complete wet-room boundary");
+        const terms = r.boundary_lengths.map((side, i) => {
+          const length = source2(side, "m");
+          if (length.value <= 0) throw Error("Zero wet-room boundary side");
+          return term(`${prefix}:${r.id}:wet-side-${i}`, "add", [length, height]);
+        });
+        if (!Array.isArray(r.opening_ids) || new Set(r.opening_ids.map(name)).size !== r.opening_ids.length) throw Error("Repeated wet-room opening");
+        for (const id of r.opening_ids) {
+          const o = openingIndex.get(`${prefix}:${name(id)}`);
+          if (!o) throw Error("Wet-room opening is not in the source host ledger");
+          const width = source2(o.width, "m"), h = source2(o.height, "m"), sill = source2(o.sill, "m");
+          terms.push(term(`${prefix}:${r.id}:${id}:wet-opening`, "subtract", [width, {
+            value: null,
+            unit: "m",
+            operation: "multiply",
+            pages: [.../* @__PURE__ */ new Set([...h.pages, ...sill.pages, ...height.pages])],
+            evidence: `${h.evidence}; ${sill.evidence}; ${height.evidence}`,
+            clip: { opening_height_m: h.value, sill_m: sill.value, finish_height_m: height.value }
+          }]));
+        }
+        return terms;
+      });
+    });
+    tileTerms = wetTerms(tileHeight);
+    const membrane = wetTerms(membraneHeight);
+    if (!tileTerms.length) throw Error("Wet-room scope is not confirmed");
+    add("wet_wall_tile_area", tileTerms, "Wet-room perimeters \xD7 source tile height, openings clipped to that height");
+    add("wet_wall_waterproofing_area", membrane, "Wet-room perimeters \xD7 source membrane height, openings clipped to that height");
+  });
+  tryGroup(["paint_area"], () => {
+    if (!plasterTerms.length || blocked.has("plaster_area")) throw Error("Wall paint needs the complete net plaster basis");
+    if (!rule(basis.rules.paint_uses_plastered_faces).value) throw Error("Source paint face convention is not confirmed");
+    const paintTerms = [...plasterTerms];
+    if (rule(basis.rules.paint_excludes_wet_tiles).value) {
+      if (blocked.has("wet_wall_tile_area") || !tileTerms.length) throw Error("Wall paint exclusion needs a complete wet tile basis");
+      paintTerms.push(...tileTerms.map((t) => ({ ...t, id: `paint-exclude:${t.id}`, operation: t.operation === "add" ? "subtract" : "add" })));
+    }
+    if (rule(basis.rules.paint_excludes_backsplash).value) paintTerms.push(term("paint-exclude:backsplash", "subtract", [source2(basis.rules.backsplash_length, "m"), source2(basis.rules.backsplash_height, "m")]));
+    add("paint_area", paintTerms, "Explicit source paint face and exclusion convention");
+  });
+  tryGroup(["ceiling_paint_area"], () => {
+    const paint = rule(basis.rules.paint_enclosed_ceilings);
+    if (!paint.value) throw Error("Enclosed ceiling paint rule is not confirmed");
+    const terms = matched.map(({ page }) => {
+      const checked = auditPdfAreaGeometry(page);
+      if (!checked.page.__areaGeometryValidated || checked.audit?.withheld_metrics?.includes("ceiling_area") || !(checked.page.ceiling_area > 0)) throw Error("Audited enclosed ceiling area unavailable");
+      return term(`${canon(page.page_evidence.scope_id)}:enclosed-ceiling-paint`, "add", [source2({ value: checked.page.ceiling_area, pages: [.../* @__PURE__ */ new Set([page.pageNumber, ...page.document_area_source_pages || [], ...paint.pages])], evidence: `Audited enclosed ceiling area; ${paint.evidence}` }, "m2")]);
+    });
+    add("ceiling_paint_area", terms, "Explicit paint-all-enclosed rule applied independently of gypsum exclusions");
+  });
+  tryGroup(["gypsum_ceiling_area"], () => {
+    const gypsumRule = rule(basis.rules.gypsum_exclusions_confirmed);
+    if (!gypsumRule.value) throw Error("Source gypsum finish rule is not confirmed");
+    const gypsumTerms = [];
+    for (const { f, page } of matched) {
+      const checked = auditPdfAreaGeometry(page);
+      if (checked.audit?.withheld_metrics?.includes("ceiling_area") || !f.ceilings_complete || !Array.isArray(f.ceiling_spaces)) throw Error("Ceiling areas or finish coverage remain unresolved");
+      const indoor = (checked.page.detected_items || []).filter((i) => ["m2", "m\xB2"].includes(String(i.unit).toLowerCase()) && i.quantity > 0 && !/\bvoid\b|\bterrace\b|\bbalcony\b/i.test(i.name) && !/^VOID\b|^OUTDOOR\b/i.test(i.description));
+      unique(f.ceiling_spaces, "room_name");
+      if (!indoor.length || Math.abs(indoor.reduce((s, i) => s + i.quantity, 0) - checked.page.ceiling_area) > 0.01 || f.ceiling_spaces.length !== indoor.length) throw Error("Ceiling inventory does not reconcile to audited enclosed area");
+      const used = /* @__PURE__ */ new Set();
+      let measuredCeilingArea = 0;
+      for (const r of f.ceiling_spaces) {
+        const matching = indoor.filter((i) => name(i.name) === name(r.room_name) || roomTag2(i.name) && roomTag2(i.name) === roomTag2(r.room_name));
+        if (matching.length !== 1 || used.has(matching[0].name)) throw Error("Unknown or repeated ceiling room identity");
+        used.add(matching[0].name);
+        if (typeof r.include_gypsum !== "boolean" || !r.evidence?.trim() || !r.pages?.length || r.pages.some((p) => !availablePages.has(p))) throw Error("Missing source gypsum room classification");
+        const item = matching[0], nativeArea = r.native_area ? source2(r.native_area, "m2") : null;
+        measuredCeilingArea += nativeArea?.value ?? item.quantity;
+        const id = `${canon(f.scope_id)}:${item.name}:ceiling`, factor = {
+          value: nativeArea?.value ?? item.quantity,
+          unit: "m2",
+          operation: "multiply",
+          clip: null,
+          pages: [.../* @__PURE__ */ new Set([page.pageNumber, ...gypsumRule.pages, ...r.pages, ...nativeArea?.pages || []])],
+          evidence: `${nativeArea?.evidence || `Audited source room area: ${item.name}; ${item.description}`}; ${gypsumRule.evidence}; ${r.evidence}`
+        };
+        if (r.include_gypsum) gypsumTerms.push(term(id, "add", [factor]));
+      }
+      if (Math.abs(measuredCeilingArea - checked.page.ceiling_area) > 0.01) throw Error("Native room areas do not close the audited enclosed ceiling scope");
+    }
+    if (!gypsumTerms.length) throw Error("No confirmed gypsum scope");
+    add("gypsum_ceiling_area", gypsumTerms, "Audited room areas with source gypsum exclusions");
+  });
+  return { calculations: calculations.filter((c) => !blocked.has(c.key)), blocked: [...blocked], issues };
+}
+
+// src/lib/pdfNativeDocumentCalculations.mjs
+function nativePdfDocumentCalculations(pages, review, validate2) {
+  const calculations = [], issues = [], readable = pages.filter((p) => p.native_text_evidence?.status === "readable");
+  const texts = readable.map((p) => ({ page: p.pageNumber, text: [...p.native_text_evidence.spans].sort((a, b) => b.y - a.y || a.x - b.x).map((s) => s.text).join(" ") }));
+  const cabinets = [];
+  for (const p of texts.filter((p2) => pages.find((x) => x.pageNumber === p2.page)?.page_evidence?.kind === "specification")) {
+    const matches = [...p.text.matchAll(/\bbase cabinets?\s+measured\s+((?:\d+(?:\.\d+)?\s*\+\s*)+\d+(?:\.\d+)?)\s*=\s*(\d+(?:\.\d+)?)\s+linear met(?:re|er)s\b/gi)];
+    for (const m of matches) {
+      const lengths = m[1].split("+").map(Number);
+      if (lengths.length > 20 || lengths.some((v) => !Number.isFinite(v) || v <= 0) || Math.abs(lengths.reduce((a, b) => a + b, 0) - Number(m[2])) > 1e-6) {
+        issues.push("Printed cabinet equation is inconsistent");
+        continue;
+      }
+      cabinets.push({ key: "kitchen_cabinet_length", scope_id: "project", evidence: `Original PDF explicit cabinet measurement equation: ${m[0]}`, terms: lengths.map((v, i) => ({ id: `native-cabinet-leg:${i + 1}`, operation: "add", factors: [{ value: v, unit: "m", operation: "multiply", pages: [p.page], evidence: m[0], clip: null }] })) });
+    }
+  }
+  if (cabinets.length === 1) calculations.push(cabinets[0]);
+  else if (cabinets.length > 1) issues.push("Multiple cabinet statements require physical scope reconciliation");
+  const convention = texts.filter((p) => /slab soffit includes beam (?:undersides|soffits)/i.test(p.text) && /beam formwork contains ONLY two downstand sides/i.test(p.text));
+  if (convention.length === 1) {
+    const terms = [];
+    let valid2 = true;
+    for (const [key2, label] of [["first_slab_volume", "First"], ["roof_slab_volume", "Roof"]]) {
+      const candidates = (review.calculations || []).filter((c2) => c2.key === key2), thicknesses = texts.filter((p) => /All dimensions (?:in|are) metres/i.test(p.text)).flatMap((p) => [...p.text.matchAll(new RegExp(`\\b${label} slab:\\s*(\\d*\\.\\d+|\\d+)\\s*;\\s*omit\\s+(\\d+(?:\\.\\d+)?)\\s*x\\s*(\\d+(?:\\.\\d+)?)\\s+(?:stair void|terrace)\\b`, "gi"))].map((m) => ({ value: Number(m[1]), omit: [Number(m[2]), Number(m[3])].sort((a, b) => a - b), page: p.page, evidence: m[0] })));
+      if (candidates.length !== 1 || thicknesses.length !== 1 || !(thicknesses[0].value > 0)) {
+        valid2 = false;
+        break;
+      }
+      const c = candidates[0], t = thicknesses[0];
+      try {
+        validate2(c);
+      } catch {
+        valid2 = false;
+        break;
+      }
+      if (c.terms.length !== 2 || c.terms.filter((x) => x.operation === "add").length !== 1 || c.terms.filter((x) => x.operation === "subtract").length !== 1) {
+        valid2 = false;
+        break;
+      }
+      const envelopePairs = pages.filter((p) => p.page_evidence?.kind === "floor_plan" && c.terms.some((term) => term.factors.some((f) => f.pages.includes(p.pageNumber)))).flatMap((p) => (p.native_plan_text?.spans || []).flatMap((s) => [...s.text.matchAll(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)].map((m) => [Number(m[1]), Number(m[2])].sort((a, b) => a - b))));
+      const uniqueEnvelopes = [...new Map(envelopePairs.map((pair) => [pair.join(","), pair])).values()];
+      if (uniqueEnvelopes.length !== 1) {
+        valid2 = false;
+        break;
+      }
+      for (const term of c.terms) {
+        const eligible = term.factors.filter((f) => f.operation === "multiply" && !f.clip && ["m", "mm"].includes(f.unit) && /slab thickness/i.test(f.evidence) && Math.abs(f.value * (f.unit === "mm" ? 1e-3 : 1) - t.value) < 1e-7 && f.pages.includes(t.page));
+        if (eligible.length !== 1) {
+          valid2 = false;
+          break;
+        }
+        const remaining = term.factors.filter((f) => f !== eligible[0]), expected = term.operation === "add" ? uniqueEnvelopes[0] : t.omit;
+        const measured = remaining.map((f) => f.operation === "multiply" && !f.clip && ["m", "mm"].includes(f.unit) ? f.value * (f.unit === "mm" ? 1e-3 : 1) : NaN).sort((a, b) => a - b);
+        if (measured.length !== 2 || measured.some((n, i) => !Number.isFinite(n) || Math.abs(n - expected[i]) > 1e-6)) {
+          valid2 = false;
+          break;
+        }
+        terms.push({ ...term, id: `native-soffit:${key2}:${term.id}`, factors: remaining.map((f) => ({ ...f, pages: [.../* @__PURE__ */ new Set([...f.pages, t.page, convention[0].page])], evidence: `${f.evidence}; original source ${t.evidence}; envelope ${uniqueEnvelopes[0].join(" x ")} m` })) });
+      }
+    }
+    if (valid2 && terms.length) calculations.push({ key: "slab_formwork_area", scope_id: "project", terms, evidence: `Source suspended first/roof slab volume operands divided by their explicit source thickness; source page ${convention[0].page}: slab soffit includes beam undersides. Full original volume calculations and remaining area units validated; beam strips are not added again. Source operand transcription still requires review.` });
+    else issues.push("Slab soffit could not be derived from complete source thickness/volume operands");
+  }
+  return { calculations, issues };
+}
+
+// src/lib/pdfNativeWallGeometry.mjs
+var EPS4 = 1e-5;
+var near = (a, b) => Math.abs(a - b) < EPS4;
+var round = (n) => Math.round(n * 1e6) / 1e6;
+var dist2 = (p, a, b) => {
+  const dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+};
+var signed2 = (p) => p.reduce((s, a, i) => {
+  const b = p[(i + 1) % p.length];
+  return s + a.x * b.y - b.x * a.y;
+}, 0) / 2;
+function contains(poly, p) {
+  let yes = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) if (poly[i].y > p.y !== poly[j].y > p.y && p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x) yes = !yes;
+  return yes;
+}
+function facesOf(walls) {
+  const nodes = /* @__PURE__ */ new Map(), edges2 = [];
+  const node = (p) => {
+    const id = `${round(p.x)},${round(p.y)}`;
+    if (!nodes.has(id)) nodes.set(id, { ...p, id, to: [] });
+    return nodes.get(id);
+  };
+  for (const w of walls) {
+    const points = [w.a, w.b];
+    for (const other of walls) for (const p of [other.a, other.b]) if (dist2(p, w.a, w.b) < EPS4) points.push(p);
+    for (const other of walls) if (w.axis !== other.axis) {
+      const h = w.axis === "h" ? w : other, v = w.axis === "v" ? w : other, p = { x: v.a.x, y: h.a.y };
+      if (dist2(p, h.a, h.b) < EPS4 && dist2(p, v.a, v.b) < EPS4) points.push(p);
+    }
+    const sorted = [...new Map(points.map((p) => [`${round(p.x)},${round(p.y)}`, p])).values()].sort((a, b) => w.axis === "h" ? a.x - b.x : a.y - b.y);
+    for (let i = 1; i < sorted.length; i++) {
+      const a = node(sorted[i - 1]), b = node(sorted[i]);
+      if (!a.to.includes(b.id)) {
+        a.to.push(b.id);
+        b.to.push(a.id);
+        edges2.push([a.id, b.id], [b.id, a.id]);
+      }
+    }
+  }
+  for (const n of nodes.values()) n.to.sort((a, b) => Math.atan2(nodes.get(a).y - n.y, nodes.get(a).x - n.x) - Math.atan2(nodes.get(b).y - n.y, nodes.get(b).x - n.x));
+  const visited = /* @__PURE__ */ new Set(), faces = [];
+  for (const edge of edges2) {
+    let [a, b] = edge;
+    const start = a + "|" + b;
+    if (visited.has(start)) continue;
+    const polygon2 = [];
+    let closed = false;
+    for (let guard = 0; guard <= edges2.length; guard++) {
+      const id = a + "|" + b;
+      if (visited.has(id)) {
+        closed = id === start;
+        break;
+      }
+      visited.add(id);
+      polygon2.push(nodes.get(a));
+      const n = nodes.get(b), index = n.to.indexOf(a), next = n.to[(index + n.to.length - 1) % n.to.length];
+      a = b;
+      b = next;
+    }
+    if (closed && polygon2.length >= 3 && signed2(polygon2) > EPS4) faces.push({ polygon: polygon2.map(({ x, y }) => ({ x, y })), area: signed2(polygon2) });
+  }
+  return faces;
+}
+function measureNativeWallFloor(page, schedule) {
+  const audit = { page: page.pageNumber, status: "pending", method: "calibrated_centreline_graph", warnings: [] };
+  try {
+    const text = page.native_plan_text, graphics = page.native_graphics;
+    if (text?.status !== "readable" || graphics?.status !== "readable" || schedule?.status !== "read") throw Error("Readable plan text, vectors and complete opening table are required");
+    if (graphics.strokes.length > 5e3 || schedule.rows.length > 300) throw Error("Native wall graph size limit; independent extraction required");
+    const all = text.spans.map((s) => s.text).join(" "), envelopes = [...all.matchAll(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
+    const declared = [...all.matchAll(/all dimensions (?:in|are)\s*(millimet(?:re|er)s|centimet(?:re|er)s|met(?:re|er)s|mm|cm|m)\b/gi)].map((m) => /^milli|^mm$/i.test(m[1]) ? 1e-3 : /^centi|^cm$/i.test(m[1]) ? 0.01 : 1);
+    if (envelopes.length !== 1 || !declared.length || new Set(declared).size !== 1 || !/datum\s*:\s*wall cent(?:re|er)lines/i.test(all)) throw Error("Explicit metric envelope and wall-centreline datum are required");
+    const dimensionFactor = declared[0], ew = Number(envelopes[0][1]) * dimensionFactor, eh = Number(envelopes[0][2]) * dimensionFactor, ext = all.match(/External:\s*(\d+(?:\.\d+)?)\s*mm/i), int = all.match(/Internal:\s*(\d+(?:\.\d+)?)\s*mm/i);
+    if (!(ew > 0 && eh > 0) || !ext || !int || !(Number(ext[1]) > 0 && Number(int[1]) > 0) || Number(ext[1]) === Number(int[1])) throw Error("Two explicit distinct source wall thickness classes are required");
+    const styles = /* @__PURE__ */ new Map();
+    for (const s of graphics.strokes) {
+      if (s.dash?.length) continue;
+      const id = s.width.toFixed(5) + "|" + s.color.map((n) => n.toFixed(5)).join(",");
+      if (!styles.has(id)) styles.set(id, { width: s.width, color: s.color, paths: [] });
+      styles.get(id).paths.push(s);
+    }
+    if (styles.size > 50) throw Error("Excessive source line styles");
+    const pairs = [];
+    for (const outer2 of styles.values()) for (const inner2 of styles.values()) {
+      if (!(outer2.width > 0 && inner2.width > 0) || outer2.width === inner2.width || JSON.stringify(outer2.color) !== JSON.stringify(inner2.color) || Math.abs(outer2.width / inner2.width - Number(ext[1]) / Number(int[1])) > 0.01) continue;
+      if (outer2.paths.some((p) => p.curved) || inner2.paths.some((p) => p.curved)) continue;
+      const pts = outer2.paths.flatMap((s) => s.segments.flatMap((l) => [l.a, l.b]));
+      if (!pts.length) continue;
+      const x02 = Math.min(...pts.map((p) => p.x)), x1 = Math.max(...pts.map((p) => p.x)), y02 = Math.min(...pts.map((p) => p.y)), y1 = Math.max(...pts.map((p) => p.y)), sx = (x1 - x02) / ew, sy = (y1 - y02) / eh;
+      if (sx > 0 && Math.abs(sx - sy) / sx < 1e-3) pairs.push({ outer: outer2, inner: inner2, x0: x02, y0: y02, scale: (sx + sy) / 2 });
+    }
+    if (pairs.length !== 1) throw Error("Wall stroke classes or envelope calibration are ambiguous");
+    const { outer, inner, x0, y0, scale } = pairs[0], toMetres = (p) => ({ x: round((p.x - x0) / scale), y: round((p.y - y0) / scale) });
+    const numeric = text.spans.filter((s) => /^\d+(?:\.\d+)?$/.test(s.text));
+    const widthAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, ew) && Math.abs(s.angle || 0) < EPS4 && s.y < y0 && y0 - s.y < 6 * s.height && Math.abs(s.x - (x0 + ew * scale / 2)) < 2 * s.height);
+    const heightAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, eh) && Math.abs(Math.abs(s.angle || 0) - Math.PI / 2) < EPS4 && s.x < x0 && x0 - s.x < 6 * s.height && Math.abs(s.y - (y0 + eh * scale / 2)) < 2 * s.height);
+    if (widthAnchors.length !== 1 || heightAnchors.length !== 1) throw Error("Independent overall dimension anchors do not confirm the envelope scale");
+    const spans = text.spans.filter((s) => Math.abs(s.angle || 0) < EPS4).map((s) => ({ ...s, ...toMetres(s), height: s.height / scale }));
+    const groups = /* @__PURE__ */ new Map();
+    for (const [style, classification] of [[outer, "external"], [inner, "internal"]]) for (const path of style.paths) for (const segment of path.segments) {
+      let a = toMetres(segment.a), b = toMetres(segment.b);
+      if (Math.hypot(b.x - a.x, b.y - a.y) < EPS4) continue;
+      const axis = near(a.y, b.y) ? "h" : near(a.x, b.x) ? "v" : null;
+      if (!axis) throw Error("Only orthogonal centreline walls are supported");
+      if (axis === "h" ? a.x > b.x : a.y > b.y) [a, b] = [b, a];
+      const fixed = axis === "h" ? a.y : a.x, id = `${classification}:${axis}:${fixed}`;
+      if (!groups.has(id)) groups.set(id, { classification, axis, fixed, pieces: [] });
+      groups.get(id).pieces.push({ a: axis === "h" ? a.x : a.y, b: axis === "h" ? b.x : b.y });
+    }
+    const gaps = [];
+    for (const g of groups.values()) {
+      const sorted = g.pieces.sort((a, b) => a.a - b.a), merged = [];
+      for (const p of sorted) {
+        const last = merged.at(-1);
+        if (last && p.a <= last.b + EPS4) last.b = Math.max(last.b, p.b);
+        else merged.push({ ...p });
+      }
+      g.pieces = merged;
+      for (let i = 1; i < merged.length; i++) {
+        const a = merged[i - 1].b, b = merged[i].a;
+        gaps.push({ g, a, b, width: b - a });
+      }
+    }
+    const bindings = [];
+    for (const opening of schedule.rows) {
+      const labels = spans.filter((s) => s.text.trim().toLowerCase() === opening.id.toLowerCase());
+      if (labels.length !== 1) throw Error("Opening tag missing or repeated on the source plan: " + opening.id);
+      const label = labels[0], candidates = gaps.filter((g) => Math.abs(g.width - opening.width) < 1e-3 && Math.abs((g.g.axis === "h" ? label.y : label.x) - g.g.fixed) < 3.5 * label.height && (g.g.axis === "h" ? label.x : label.y) > g.a - label.height && (g.g.axis === "h" ? label.x : label.y) < g.b + label.height);
+      if (candidates.length !== 1 || bindings.some((b) => b.gap === candidates[0])) throw Error("Opening gap or tag location is ambiguous: " + opening.id);
+      bindings.push({ opening, gap: candidates[0] });
+    }
+    const walls = [];
+    for (const g of groups.values()) {
+      const pieces = [];
+      for (const piece of g.pieces) {
+        const last = pieces.at(-1), bridge = last && bindings.find((b) => b.gap.g === g && near(b.gap.a, last.b) && near(b.gap.b, piece.a));
+        if (bridge) last.b = piece.b;
+        else pieces.push({ ...piece });
+      }
+      const divided = [];
+      for (const p of pieces) {
+        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS4 && o.gap.b <= p.b + EPS4).sort((a, b) => a.gap.a - b.gap.a), cuts = [];
+        for (let i = 1; i < attached.length; i++) if (attached[i - 1].opening.wall_id && attached[i].opening.wall_id && attached[i - 1].opening.wall_id !== attached[i].opening.wall_id) {
+          const junctions = [...new Set([...groups.values()].filter((other) => other.axis !== g.axis && other.fixed > attached[i - 1].gap.b + EPS4 && other.fixed < attached[i].gap.a - EPS4 && other.pieces.some((piece) => g.fixed >= piece.a - EPS4 && g.fixed <= piece.b + EPS4)).map((other) => other.fixed))];
+          if (junctions.length !== 1) throw Error("Different source host IDs require one unambiguous intervening wall junction");
+          cuts.push(junctions[0]);
+        }
+        const bounds2 = [p.a, ...cuts, p.b];
+        for (let i = 1; i < bounds2.length; i++) divided.push({ a: bounds2[i - 1], b: bounds2[i] });
+      }
+      for (const p of divided) {
+        const a = g.axis === "h" ? { x: p.a, y: g.fixed } : { x: g.fixed, y: p.a }, b = g.axis === "h" ? { x: p.b, y: g.fixed } : { x: g.fixed, y: p.b };
+        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS4 && o.gap.b <= p.b + EPS4), hosts = [...new Set(attached.map((o) => o.opening.wall_id).filter(Boolean))];
+        if (hosts.length > 1) throw Error(`Physical wall ${g.axis}:${g.fixed}:${p.a}:${p.b} maps to conflicting source host IDs: ${hosts.join(", ")}`);
+        walls.push({ id: hosts[0] || `native:${g.axis}:${g.fixed}:${p.a}:${p.b}`, a, b, axis: g.axis, classification: g.classification, length: round(p.b - p.a), openings: attached.map((o) => o.opening.id) });
+      }
+    }
+    const discarded = [];
+    if (walls.length > 300) throw Error("Native wall graph exceeds bounded connectivity check");
+    for (const w of [...walls]) if (w.classification === "internal" && [w.a, w.b].every((p) => !walls.some((other) => other !== w && dist2(p, other.a, other.b) < EPS4))) {
+      const tv = spans.find((s) => /^TV$/i.test(s.text.trim()) && dist2(s, w.a, w.b) < 3 * s.height);
+      if (!tv) throw Error("Unclassified isolated wall-weight stroke");
+      discarded.push({ a: w.a, b: w.b, source_label: tv.text, reason: "Isolated annotated TV object; requires source review" });
+      walls.splice(walls.indexOf(w), 1);
+    }
+    for (const w of walls) for (const p of [w.a, w.b]) if (!walls.some((other) => other !== w && dist2(p, other.a, other.b) < EPS4)) throw Error("Unclosed wall endpoint; untagged gap or free-standing wall requires review");
+    const external = walls.filter((w) => w.classification === "external");
+    for (const w of external) for (const p of [w.a, w.b]) if (external.filter((other) => other !== w && dist2(p, other.a, other.b) < EPS4).length !== 1) throw Error("External centreline envelope is not a single closed boundary");
+    const faces = facesOf(walls);
+    if (!faces.length || faces.length > 200) throw Error("Closed wall faces unavailable");
+    const roomSpans = text.spans.map((s) => ({ ...s, ...toMetres(s) }));
+    for (const face of faces) {
+      face.tags = roomSpans.filter((s) => /^[A-Z]{1,4}[-_]?\d{1,4}(?=\s)/i.test(s.text.trim()) && contains(face.polygon, s)).map((s) => s.text.trim().match(/^[A-Z]{1,4}[-_]?\d{1,4}/i)[0]);
+      face.opening_ids = bindings.filter((o) => {
+        const g = o.gap, p = g.g.axis === "h" ? { x: (g.a + g.b) / 2, y: g.g.fixed } : { x: g.g.fixed, y: (g.a + g.b) / 2 };
+        return face.polygon.some((a, i) => dist2(p, a, face.polygon[(i + 1) % face.polygon.length]) < EPS4);
+      }).map((o) => o.opening.id);
+    }
+    for (const d of discarded) {
+      const enclosing = faces.filter((f) => f.tags.length === 1 && contains(f.polygon, d.a) && contains(f.polygon, d.b));
+      if (enclosing.length !== 1) throw Error("Isolated annotation is not inside one tagged source room");
+      d.room_tag = enclosing[0].tags[0];
+    }
+    Object.assign(audit, {
+      status: "provisional",
+      calibration: { width_m: ew, height_m: eh, points_per_m: scale, source_dimension_factor_to_m: dimensionFactor, origin: { x: x0, y: y0 } },
+      wall_styles: { external: outer.width, internal: inner.width },
+      discarded_annotations: discarded,
+      opening_bindings: bindings.map((o) => ({ id: o.opening.id, host: o.opening.wall_id, gap_width_m: o.gap.width })),
+      wall_count: walls.length,
+      requires_review: true
+    });
+    return { status: "provisional", walls, faces, audit };
+  } catch (e) {
+    audit.reason = e.message;
+    return { status: "pending", walls: [], faces: [], audit };
+  }
+}
+
+// src/lib/pdfNativeSourceBasis.mjs
+var source = (value, pages, evidence) => ({ value, pages, evidence });
+var empty = () => source(null, [], "Source rule unavailable");
+var roomTag3 = (s) => String(s || "").match(/^[A-Z]{1,4}[-_]?\d{1,4}/i)?.[0]?.toLowerCase();
+var words = (s) => String(s || "").toLowerCase().replace(/^[a-z]{1,4}[-_]?\d{1,4}\s*/, "").replace(/\bstairs?\s+landing\b/g, "landing").replace(/\bstairs\b/g, "stair").replace(/[^a-z0-9]+/g, " ").trim();
+function buildNativePdfSourceBasis(pages, normalizeScope) {
+  const floors = pages.filter((p) => p.page_evidence?.kind === "floor_plan"), native = nativeOpeningEvidence(pages, normalizeScope), sections = /* @__PURE__ */ new Map();
+  for (const p of pages.filter((p2) => p2.page_evidence?.kind === "specification" && p2.native_text_evidence?.status === "readable")) {
+    const text = [...p.native_text_evidence.spans].sort((a, b) => b.y - a.y || a.x - b.x).map((s) => s.text).join(" "), headers2 = [...text.matchAll(/\b([A-Z][A-Z ]{2,30}):\s*/g)];
+    for (let i = 0; i < headers2.length; i++) {
+      const key2 = headers2[i][1].trim(), value = text.slice(headers2[i].index + headers2[i][0].length, headers2[i + 1]?.index ?? text.length).trim();
+      if (!sections.has(key2)) sections.set(key2, []);
+      sections.get(key2).push({ text: value, page: p.pageNumber });
+    }
+  }
+  const get = (key2) => {
+    const rows = sections.get(key2) || [];
+    return rows.length && new Set(rows.map((r) => r.text)).size === 1 ? { text: rows[0].text, pages: rows.map((r) => r.page) } : null;
+  };
+  const dimension2 = (section, regex) => {
+    const s = get(section), match = s?.text.match(regex);
+    return match ? source(Number(match[1]) * ({ mm: 1e-3, cm: 0.01, m: 1 }[match[2]] || 1), s.pages, `${section}: ${match[0]}`) : empty();
+  };
+  const flag = (section, regex) => {
+    const s = get(section);
+    return s && regex.test(s.text) ? source(true, s.pages, `${section}: ${s.text}`) : empty();
+  };
+  const wallHeight = dimension2("WALLS", /clear height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i), plaster = get("PLASTER"), ceilings = get("CEILINGS"), wet = get("WET ROOMS"), kitchen = get("KITCHEN");
+  const rules = {
+    wall_height: wallHeight,
+    plaster_internal_faces: plaster && /both faces of internal walls/i.test(plaster.text) ? source(2, plaster.pages, plaster.text) : empty(),
+    plaster_external_faces: plaster && /inner face of external walls/i.test(plaster.text) ? source(1, plaster.pages, plaster.text) : empty(),
+    wet_tile_height: dimension2("WET ROOMS", /\btile height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i),
+    wet_waterproof_height: dimension2("WET ROOMS", /wall waterproofing\s+height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i),
+    backsplash_length: dimension2("KITCHEN", /Backsplash\s+is\s+\d+(?:\.\d+)?\s+high\s+along\s*(\d+(?:\.\d+)?)\s*m\b/i),
+    backsplash_height: kitchen && /Backsplash\s+is\s+(\d+(?:\.\d+)?)\s+high\s+along\s*\d+(?:\.\d+)?\s*m\b/i.test(kitchen.text) ? source(Number(kitchen.text.match(/Backsplash\s+is\s+(\d+(?:\.\d+)?)/i)[1]), kitchen.pages, kitchen.text) : empty(),
+    paint_uses_plastered_faces: plaster && /both faces of internal walls plus inner face of external walls/i.test(plaster.text) && /Interior paint excludes/i.test(plaster.text) ? source(true, plaster.pages, plaster.text) : empty(),
+    paint_excludes_wet_tiles: flag("PLASTER", /Interior paint excludes wet wall tiles/i),
+    paint_excludes_backsplash: flag("PLASTER", /Interior paint excludes[^.]*kitchen backsplash/i),
+    paint_enclosed_ceilings: flag("CEILINGS", /^paint all enclosed areas\./i),
+    gypsum_exclusions_confirmed: empty()
+  };
+  const ceilingExclusions = [];
+  let ceilingRuleKnown = false;
+  const exclusionText = ceilings?.text.match(/Gypsum ceiling excludes\s+([^.]+)\./i)?.[1];
+  if (exclusionText) {
+    ceilingRuleKnown = true;
+    for (const entry of exclusionText.split(/,|\s+and\s+/i)) {
+      const match = entry.trim().match(/^(GF|FF|ground(?: floor)?|first(?: floor)?|floor\s+\d+)\s+(.+)$/i);
+      if (!match) {
+        ceilingRuleKnown = false;
+        break;
+      }
+      const scope = normalizeScope(match[1]), matches = floors.filter((p) => normalizeScope(p.page_evidence.scope_id) === scope).flatMap((p) => (p.detected_items || []).filter((i) => ["m2", "m\xB2"].includes(i.unit) && words(i.name) === words(match[2])).map((i) => ({ scope, tag: roomTag3(i.name) })));
+      if (matches.length !== 1) {
+        ceilingRuleKnown = false;
+        break;
+      }
+      ceilingExclusions.push(matches[0]);
+    }
+  }
+  if (ceilingRuleKnown) rules.gypsum_exclusions_confirmed = source(true, ceilings.pages, ceilings.text);
+  const wetNames = wet?.text.split(/\.\s+/)[0].match(/\b[A-Z]{1,4}[-_]?\d{1,4}\b/g) || [], geometry2 = [], basis = { floors: [], rules, exclusions: [], notes: "Native calibrated graph and explicitly recognized source rules; provisional, source review required." };
+  for (const p of floors) {
+    const scope = normalizeScope(p.page_evidence.scope_id), schedule = native.claims.length ? native.schedules.find((s) => s.scope_id === scope) : null, measured = measureNativeWallFloor(p, schedule);
+    geometry2.push(measured.audit);
+    const f = {
+      scope_id: scope,
+      walls_complete: measured.status === "provisional",
+      wall_inventory_evidence: `Native source centreline graph; calibration, opening gaps and connectivity checked. ${JSON.stringify(measured.audit)}`,
+      source_pages: [p.pageNumber, ...schedule?.dimension_basis?.pages || []],
+      walls: [],
+      openings: [],
+      wet_rooms_complete: false,
+      wet_rooms: [],
+      ceilings_complete: ceilingRuleKnown,
+      ceiling_spaces: []
+    };
+    if (measured.status === "provisional") {
+      f.walls = measured.walls.map((w) => ({ id: w.id, classification: w.classification, length_basis: "calibrated_geometry", length: source(w.length, [p.pageNumber], `Original vector wall ${w.id}: ${JSON.stringify(w.a)} to ${JSON.stringify(w.b)}; calibrated using printed envelope`), height: wallHeight }));
+      f.openings = schedule.rows.map((o) => ({ id: o.id, wall_id: measured.walls.find((w) => w.openings.includes(o.id))?.id, kind: o.kind === "window" ? "window" : "door", width: source(o.width, o.dimension_pages, o.source_row), height: source(o.height, o.dimension_pages, o.source_row), sill: source(o.sill, o.dimension_pages, o.source_row) }));
+      const planTags = new Set(p.native_plan_text.spans.flatMap((s) => {
+        const m = s.text.match(/^[A-Z]{1,4}[-_]?\d{1,4}(?=\s)/i);
+        return m ? [m[0].toLowerCase()] : [];
+      })), wanted = wetNames.filter((tag) => planTags.has(tag.toLowerCase()));
+      f.wet_rooms_complete = !!wet && wetNames.length > 0;
+      for (const tag of wanted) {
+        const faces = measured.faces.filter((face2) => face2.tags.some((t) => t.toLowerCase() === tag.toLowerCase()));
+        if (faces.length !== 1 || faces[0].tags.length !== 1) {
+          f.wet_rooms_complete = false;
+          continue;
+        }
+        const face = faces[0];
+        f.wet_rooms.push({ id: tag, boundary_complete: true, boundary_lengths: face.polygon.map((a, i) => {
+          const b = face.polygon[(i + 1) % face.polygon.length];
+          return source(Math.hypot(b.x - a.x, b.y - a.y), [p.pageNumber, ...wet.pages], `Closed native wall face ${tag}, side ${i + 1}; ${wet.text}`);
+        }), opening_ids: face.opening_ids });
+      }
+    }
+    const indoors = (p.detected_items || []).filter((i) => ["m2", "m\xB2"].includes(i.unit) && i.quantity > 0 && !/\bvoid\b|\bterrace\b|\bbalcony\b/i.test(i.name) && !/^VOID\b|^OUTDOOR\b/i.test(i.description));
+    f.ceiling_spaces = indoors.map((i) => {
+      const matching = measured.faces.filter((face) => face.tags.length === 1 && face.tags[0].toLowerCase() === roomTag3(i.name));
+      return {
+        room_name: i.name,
+        include_gypsum: ceilingRuleKnown ? !ceilingExclusions.some((e) => e.scope === scope && e.tag === roomTag3(i.name)) : null,
+        pages: ceilings?.pages || [],
+        evidence: ceilings?.text || "Source ceiling rule unavailable",
+        ...matching.length === 1 ? { native_area: source(matching[0].area, [p.pageNumber], `Area of calibrated original closed wall face ${roomTag3(i.name)}; polygon ${JSON.stringify(matching[0].polygon)}`) } : {}
+      };
+    });
+    basis.floors.push(f);
+  }
+  const wetResolved = basis.floors.flatMap((f) => f.wet_rooms.map((r) => r.id.toLowerCase()));
+  if (wetNames.some((tag) => wetResolved.filter((t) => t === tag.toLowerCase()).length !== 1)) basis.floors.forEach((f) => f.wet_rooms_complete = false);
+  return { basis, source_pages: [.../* @__PURE__ */ new Set([...floors.flatMap((p) => [p.pageNumber, ...p.document_area_source_pages || []]), ...native.schedules.flatMap((s) => s.dimension_basis?.pages || []), ...[...sections.values()].flatMap((a) => a.map((r) => r.page))])], geometry: geometry2 };
+}
+
+// src/lib/pdfMeasurementCalculations.mjs
+var units = {
+  scalar: [1, 0, 0],
+  count: [1, 0, 0],
+  nr: [1, 0, 0],
+  m: [1, 1, 0],
+  mm: [1e-3, 1, 0],
+  m2: [1, 2, 0],
+  m3: [1, 3, 0],
+  kg: [1, 0, 1],
+  ton: [1e3, 0, 1],
+  kg_per_m: [1, -1, 1],
+  m_mm2_per_kg: [1e-6, 3, -1]
+};
+var nonempty = (s) => typeof s === "string" && s.trim().length > 0;
+var PDF_AREA_KEYS = ["floor_area", "ceiling_area", "wood_floor_area", "ceramic_floor_area", "epoxy_floor_area", "terrace_floor_area"];
+function assertPdfSoffitCoverage(calculation, notes = "") {
+  if (calculation?.key !== "slab_formwork_area") return;
+  const convention = `${calculation.evidence || ""} ${notes}`;
+  const includesBeams = /slab\s+soffit\s+(?:already\s+)?includes?\s+beam\s+(?:undersides?|soffits?)/i.test(convention) || /beam\s+(?:undersides?|soffits?)\s+(?:are\s+)?included\s+(?:within|in)\s+slab/i.test(convention);
+  const addsBeamSoffit = (calculation.terms || []).some((term) => term.operation === "add" && /beam[\s_-]*(?:soffit|underside)|(?:soffit|underside)[\s_-]*beam/i.test(`${term.id} ${(term.factors || []).map((f) => f.evidence).join(" ")}`));
+  if (includesBeams && addsBeamSoffit) throw Error("Slab soffit includes beam undersides but calculation adds them again; source coverage review required");
+}
+function reconcilePdfSoffitCoverage(calculation, notes, metricUnits, availablePages) {
+  try {
+    assertPdfSoffitCoverage(calculation, notes);
+    return { calculation, adjustment: null };
+  } catch (contradiction) {
+    const rulePages = [...new Set([...String(calculation.evidence || "").matchAll(/\bp(?:age)?\s*(\d+)\b/gi)].map((m) => Number(m[1])))];
+    if (!rulePages.length || rulePages.some((p) => !availablePages.has(p))) throw contradiction;
+    const baseGroups = /* @__PURE__ */ new Map(), beamTerms = [];
+    for (const term of calculation.terms || []) {
+      const id = String(term.id || "").toLowerCase();
+      const gross = id.match(/^(.+?)[_-]slab[_-]soffit[_-]gross$/);
+      const opening = id.match(/^(.+?)[_-]slab[_-](?:soffit[_-])?(?:void|terrace|opening)(?:[_-](?:omit|deduct))?$/);
+      const beam = id.match(/^(.+?)[_-]beam[_-](?:soffits?|undersides?)$/);
+      if (!Array.isArray(term.factors) || term.factors.length !== 2 || term.factors.some((f) => f.unit !== "m" || f.operation !== "multiply" || f.clip)) throw contradiction;
+      calculatePdfMeasurement({ ...calculation, terms: [{ ...term, operation: "add" }] }, metricUnits, availablePages);
+      if (gross && term.operation === "add" && term.factors.every((f) => /envelope|\bgross\b/i.test(f.evidence))) {
+        if (baseGroups.has(gross[1])) throw contradiction;
+        baseGroups.set(gross[1], { area: term.factors[0].value * term.factors[1].value, omitted: 0, beamArea: 0 });
+      } else if (opening && term.operation === "subtract") {
+      } else if (beam && term.operation === "add") beamTerms.push({ term, group: beam[1] });
+      else throw contradiction;
+    }
+    if (!baseGroups.size || !beamTerms.length) throw contradiction;
+    for (const term of calculation.terms) if (term.operation === "subtract") {
+      const group = term.id.toLowerCase().match(/^(.+?)[_-]slab[_-](?:soffit[_-])?(?:void|terrace|opening)(?:[_-](?:omit|deduct))?$/)?.[1];
+      if (!baseGroups.has(group)) throw contradiction;
+      baseGroups.get(group).omitted += term.factors[0].value * term.factors[1].value;
+    }
+    for (const { term, group } of beamTerms) {
+      if (!baseGroups.has(group)) throw contradiction;
+      baseGroups.get(group).beamArea += term.factors[0].value * term.factors[1].value;
+    }
+    if ([...baseGroups.values()].some((g) => g.area - g.omitted <= 0 || g.beamArea > g.area - g.omitted)) throw contradiction;
+    const removed = new Set(beamTerms.map((x) => x.term.id));
+    const adjusted = {
+      ...calculation,
+      terms: calculation.terms.filter((t) => !removed.has(t.id)),
+      evidence: `${calculation.evidence} Coverage reconciliation: full sourced envelope minus openings already includes beam undersides; omitted repeated strips ${[...removed].join(", ")}.`
+    };
+    calculatePdfMeasurement(calculation, metricUnits, availablePages);
+    calculatePdfMeasurement(adjusted, metricUnits, availablePages);
+    return { calculation: adjusted, adjustment: {
+      key: calculation.key,
+      scope_id: calculation.scope_id,
+      removed_terms: [...removed],
+      source_pages: rulePages,
+      reason: "Explicit included beam undersides duplicated within fully sourced gross soffit envelopes"
+    } };
+  }
+}
+function calculatePdfMeasurement(calculation, metricUnits, availablePages) {
+  const { key: key2, scope_id: scope, evidence, terms } = calculation || {};
+  const expected = units[metricUnits[key2]];
+  if (!expected || !nonempty(scope) || !nonempty(evidence)) throw Error("Missing metric, scope or measurement evidence");
+  if (PDF_AREA_KEYS.includes(key2)) throw Error("Floor and finish areas require audited space geometry");
+  if (!Array.isArray(terms) || !terms.length || terms.length > 500) throw Error("Missing or excessive calculation terms");
+  let value = 0;
+  const pages = /* @__PURE__ */ new Set(), termIds = /* @__PURE__ */ new Set(), basis = [];
+  for (const term of terms) {
+    if (!nonempty(term.id) || termIds.has(term.id)) throw Error("Missing or repeated physical term identity");
+    termIds.add(term.id);
+    if (!["add", "subtract"].includes(term.operation) || !Array.isArray(term.factors) || !term.factors.length || term.factors.length > 16) throw Error("Invalid measurement term");
+    let product = 1, length = 0, mass = 0;
+    const factors = [];
+    for (const input of term.factors) {
+      const unit2 = units[input.unit];
+      let operand = input.value;
+      if (input.clip) {
+        const { opening_height_m: h, sill_m: s, finish_height_m: f } = input.clip;
+        if (input.value !== null || input.unit !== "m" || ![h, s, f].every((n) => Number.isFinite(n) && n >= 0 && n <= 1e6)) throw Error("Invalid clipped opening heights");
+        operand = Math.max(0, Math.min(h, f - s));
+      }
+      if (!unit2 || !Number.isFinite(operand) || operand < 0 || operand > 1e12 || !["multiply", "divide"].includes(input.operation) || !nonempty(input.evidence) || !Array.isArray(input.pages) || !input.pages.length || input.pages.some((p) => !availablePages.has(p))) throw Error("Invalid or unsourced measurement operand");
+      if (["count", "nr"].includes(input.unit) && !Number.isInteger(operand)) throw Error("Fractional counted operand");
+      const divisor = input.operation === "divide";
+      if (divisor && operand === 0) throw Error("Zero measurement divisor");
+      product = divisor ? product / (operand * unit2[0]) : product * operand * unit2[0];
+      length += (divisor ? -1 : 1) * unit2[1];
+      mass += (divisor ? -1 : 1) * unit2[2];
+      input.pages.forEach((p) => pages.add(p));
+      factors.push(`${divisor ? "/" : "*"} ${operand} ${input.unit} [${input.evidence}${input.clip ? "; clip " + JSON.stringify(input.clip) : ""}]`);
+    }
+    if (length !== expected[1] || mass !== expected[2] || !Number.isFinite(product)) throw Error("Calculation dimensions do not match metric unit");
+    value += term.operation === "subtract" ? -product : product;
+    basis.push(`${term.operation} ${term.id}: ${factors.join(" ")}`);
+  }
+  if (!Number.isFinite(value) || value < -1e-8 || value > 1e12) throw Error("Invalid net measurement");
+  value = Math.max(0, value);
+  if (metricUnits[key2] === "nr" && !Number.isInteger(value)) throw Error("Fractional counted result");
+  return {
+    key: key2,
+    scope_id: scope,
+    value,
+    unit: metricUnits[key2],
+    pages: [...pages].sort((a, b) => a - b),
+    evidence: `${evidence}. Independently calculated: ${basis.join("; ")} = ${value} ${metricUnits[key2]}. Source transcription requires review.`
+  };
+}
+function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) => String(s).trim().toLowerCase()) {
+  const host = inputPages.find((p) => p.document_measurement_review);
+  if (!host) return { pages: inputPages, audit: null, warnings: [], blocked: [] };
+  const review = host.document_measurement_review;
+  const actualPages = new Set(inputPages.map((p) => p.pageNumber));
+  const sourcePages = host.document_review_status?.source_pages;
+  const available = new Set(sourcePages?.length ? sourcePages.filter((p) => actualPages.has(p)) : actualPages);
+  const revisionsByDrawing = /* @__PURE__ */ new Map();
+  for (const p of inputPages) {
+    const e = p.page_evidence;
+    const id = e?.drawing_id || (e?.kind === "floor_plan" ? normalizeScope(e.scope_id) : null);
+    if (!id) continue;
+    const revisions2 = revisionsByDrawing.get(id) || /* @__PURE__ */ new Set();
+    revisions2.add(e.revision);
+    revisionsByDrawing.set(id, revisions2);
+  }
+  if ([...revisionsByDrawing.values()].some((r) => r.size > 1)) return {
+    pages: inputPages,
+    blocked: [],
+    audit: { status: "withheld", reason: "Conflicting source revisions" },
+    warnings: ["PDF document review withheld: conflicting source revisions require selection."]
+  };
+  const pages = inputPages.map((p) => ({ ...p, page_evidence: p.page_evidence ? { ...p.page_evidence, quantities: [...p.page_evidence.quantities || []] } : void 0 }));
+  const warnings = [], accepted = [], rejected = [], revised = [], adjustments = [], blocked = /* @__PURE__ */ new Set(), identities = /* @__PURE__ */ new Set();
+  const revisions = review.floor_revisions || [];
+  const targetCounts = /* @__PURE__ */ new Map();
+  for (const r of revisions) targetCounts.set(r.pageNumber, (targetCounts.get(r.pageNumber) || 0) + 1);
+  for (const r of revisions) {
+    const p = pages.find((p2) => p2.pageNumber === r.pageNumber);
+    if (!p || p.page_evidence?.kind !== "floor_plan" || targetCounts.get(r.pageNumber) !== 1 || !r.area_geometry || !nonempty(r.evidence) || !Array.isArray(r.source_pages) || !r.source_pages.includes(r.pageNumber) || r.source_pages.some((n) => !available.has(n)) || !Array.isArray(r.detected_items) || !r.detected_items.length) {
+      warnings.push(`PDF document review: invalid floor revision on page ${r.pageNumber}`);
+      continue;
+    }
+    p.document_original_area_evidence = p.document_original_area_evidence || {
+      area_geometry: p.area_geometry,
+      detected_items: p.detected_items,
+      fields: Object.fromEntries(PDF_AREA_KEYS.map((k) => [k, p[k] || 0]))
+    };
+    p.area_geometry = r.area_geometry;
+    p.detected_items = r.detected_items;
+    p.document_area_source_pages = r.source_pages;
+    delete p.__areaGeometryValidated;
+    revised.push({ page: r.pageNumber, source_pages: r.source_pages, evidence: r.evidence });
+  }
+  for (const p of pages) if (p.page_evidence?.kind === "floor_plan" && p.native_plan_text?.status === "readable") {
+    const checked = auditPdfAreaGeometry(p);
+    if (checked.audit?.status !== "withheld") Object.assign(p, checked.page);
+  }
+  const nativeFresh = host.native_measurement_basis && pages.some((p) => p.native_graphics?.status === "readable") ? buildNativePdfSourceBasis(pages, normalizeScope) : null;
+  if (nativeFresh) {
+    const target2 = pages.find((p) => p.pageNumber === host.pageNumber);
+    target2.native_measurement_basis = nativeFresh.basis;
+    target2.native_source_status = { source_pages: nativeFresh.source_pages, geometry: nativeFresh.geometry };
+  }
+  const sourceAvailable = new Set((host.source_measurement_status?.source_pages || []).filter((p) => available.has(p)));
+  const sourceResult = review.measurement_basis ? calculatePdfSourceMeasurements(review.measurement_basis, pages, metricUnits, sourceAvailable) : null;
+  const nativeAvailable = new Set((nativeFresh?.source_pages || host.native_source_status?.source_pages || []).filter((p) => available.has(p)));
+  const nativeBasis = nativeFresh?.basis || host.native_measurement_basis;
+  const nativeResult = nativeBasis ? calculatePdfSourceMeasurements(nativeBasis, pages, metricUnits, nativeAvailable) : null;
+  const nativeDocument = nativePdfDocumentCalculations(pages, review, (c) => calculatePdfMeasurement(c, metricUnits, available));
+  const nativeKeys = /* @__PURE__ */ new Set([...nativeResult?.calculations.map((c) => c.key) || [], ...nativeDocument.calculations.map((c) => c.key)]);
+  const derivedKeys = /* @__PURE__ */ new Set([...sourceResult?.calculations.map((c) => c.key) || [], ...nativeKeys]);
+  const allCalculations = [...(review.calculations || []).filter((c) => !derivedKeys.has(c.key)), ...(sourceResult?.calculations || []).filter((c) => !nativeKeys.has(c.key)), ...nativeResult?.calculations || [], ...nativeDocument.calculations];
+  for (const key2 of sourceResult?.blocked || []) if (!nativeKeys.has(key2)) blocked.add(key2);
+  warnings.push(...(sourceResult?.issues || []).map((s) => `PDF source measurement withheld: ${s}`));
+  warnings.push(...(nativeResult?.issues || []).map((s) => `PDF native source measurement pending: ${s}`));
+  warnings.push(...nativeDocument.issues.map((s) => `PDF native document measurement pending: ${s}`));
+  for (const c of allCalculations) {
+    const id = `${c.key}|${normalizeScope(c.scope_id)}`;
+    try {
+      if (identities.has(id)) throw Error("Duplicate complete metric/scope calculation");
+      identities.add(id);
+      const reconciled = reconcilePdfSoffitCoverage(c, review.notes, metricUnits, available);
+      assertPdfSoffitCoverage(reconciled.calculation, review.notes);
+      const claim2 = calculatePdfMeasurement(reconciled.calculation, metricUnits, available);
+      if (reconciled.adjustment) {
+        claim2.pages = [.../* @__PURE__ */ new Set([...claim2.pages, ...reconciled.adjustment.source_pages])].sort((a, b) => a - b);
+        adjustments.push(reconciled.adjustment);
+      }
+      accepted.push(claim2);
+    } catch (error) {
+      rejected.push({ key: c.key, scope_id: c.scope_id, reason: error.message });
+      if (metricUnits[c.key] && !PDF_AREA_KEYS.includes(c.key)) blocked.add(c.key);
+      warnings.push(`PDF document calculation ${c.key} withheld: ${error.message}`);
+    }
+  }
+  for (const key2 of blocked) {
+    for (const p of pages) {
+      if (Object.hasOwn(p, key2)) p[key2] = 0;
+      p.page_evidence?.quantities.splice(
+        0,
+        p.page_evidence.quantities.length,
+        ...p.page_evidence.quantities.filter((q) => q.key !== key2)
+      );
+    }
+  }
+  const target = pages.find((p) => p.pageNumber === host.pageNumber);
+  for (const q of accepted.filter((q2) => !blocked.has(q2.key))) {
+    for (const p of pages) if (p.page_evidence) p.page_evidence.quantities = p.page_evidence.quantities.filter((old) => old.key !== q.key || normalizeScope(old.scope_id) !== normalizeScope(q.scope_id));
+    target.page_evidence.quantities = target.page_evidence.quantities.filter((old) => !(old.document_calculated && old.key === q.key && old.scope_id === q.scope_id));
+    target.page_evidence.quantities.push({ ...q, document_calculated: true });
+  }
+  return { pages, blocked: [...blocked], warnings, audit: {
+    status: "source_document_review",
+    floor_revisions: revised,
+    calculations: accepted.filter((q) => !blocked.has(q.key)),
+    rejected,
+    adjustments,
+    source_measurements: sourceResult ? { status: sourceResult.blocked.length ? "incomplete" : "calculated", issues: sourceResult.issues } : null,
+    native_source_measurements: nativeResult ? { status: nativeResult.blocked.length ? "partial" : "provisional", issues: nativeResult.issues, derived_keys: [...nativeKeys], geometry: host.native_source_status?.geometry || [], requires_review: true } : null,
+    exclusions: [.../* @__PURE__ */ new Set([...(review.exclusions || []).filter((s) => !derivedKeys.has(s)), ...review.measurement_basis?.exclusions || []])].filter(nonempty),
+    notes: [review.notes, review.measurement_basis?.notes].filter(nonempty).join("\n")
+  } };
+}
+
+// src/lib/pdfCatalogScope.mjs
+function pdfCatalogScope(description) {
+  const d = String(description || "").toLowerCase().replace(/[-‐‑–—]/g, " ").replace(/\s+/g, " ").trim();
+  if (/\b(?:disposal|haul|backfill|pool|tank|raft|pile|stairs?|staircase)\b/.test(d)) return null;
+  const match = (key2, unit2, extra = {}) => ({ key: key2, unit: unit2, ...extra });
+  if (/\bformwork\b/.test(d)) {
+    if (/\bslabs?\b/.test(d) && (!/\bbeams?\b/.test(d) || /\bsoffit\b/.test(d))) return match("slab_formwork_area", "m2");
+    if (/\bbeams?\b/.test(d) && !/\b(?:slabs?|soffits?|undersides?|bottoms?)\b/.test(d)) return match("beam_formwork_area", "m2");
+    if (/\bcolumns?\b/.test(d) && !/\b(?:beam|slab|footing|pedestal)\b/.test(d)) return match("column_formwork_area", "m2");
+    if (/\bfootings?\b/.test(d) && /\bpedestals?\b/.test(d) && !/\b(?:column|beam|slab)\b/.test(d)) return match("foundation_formwork_area", "m2");
+    return null;
+  }
+  if (/\b(?:rc|reinforced concrete)\b/.test(d) && !/\bc\s*\d|\bmpa\b|\bgrade\b|\b(?:precast|prestressed|post tensioned)\b/.test(d)) {
+    const members = [[/\bfootings?\b/, "foundation_volume"], [/\bpedestals?\b/, "pedestal_volume"], [/\bcolumns?\b/, "column_volume"], [/\bbeam downstands?\b/, "beam_volume"], [/\bground (?:floor )?slabs?\b/, "ground_slab_volume"], [/\bfirst (?:floor )?slabs?\b/, "first_slab_volume"], [/\broof slabs?\b/, "roof_slab_volume"]].filter(([re]) => re.test(d));
+    if (members.length === 1) {
+      const thickness = d.match(/\b(\d+(?:\.\d+)?)\s*mm\b/);
+      return match(members[0][1], "m3", thickness ? { sourceThicknessM: Number(thickness[1]) / 1e3 } : {});
+    }
+  }
+  if (/^excavat(?:e|ion|ing)\b/.test(d) && !/\b(?:rock|trench|strip)\b/.test(d)) return match("excavation_volume", "m3");
+  if (/^rebar\b/.test(d) && !/\b(?:footing|slab|beam|column|pedestal|mesh)\b/.test(d)) return match("rebar_kg", "kg");
+  if (/\bterrace\b/.test(d) && /\bceramic\b/.test(d) && !/\b(?:wall|walls|balcony)\b/.test(d)) return match("terrace_floor_area", "m2");
+  if (/^roof (?:waterproofing|membrane)$/.test(d)) return match("roof_waterproofing_area", "m2");
+  if (/^terrace (?:floor )?(?:waterproofing|membrane)$/.test(d)) return match("terrace_waterproofing_area", "m2");
+  if (/^wc pans?(?: complete)?$/.test(d)) return match("toilet_count", "nr");
+  if (/^(?:water supply|water) pipes?(?: complete)?$/.test(d)) return match("water_pipe_length", "m");
+  if (/^waste pipes?(?: complete)?$/.test(d)) return match("waste_pipe_length", "m");
+  if (/^split (?:ac|air conditioning) units?(?: complete)?$/.test(d)) return match("ac_count", "nr");
+  if (/^ac insulated pipe(?:work|s)?$/.test(d)) return match("ac_pipe_length", "m");
+  if (/^kitchen and laundry sink sets?(?: complete)?$/.test(d)) return match("kitchen_sink_count+laundry_sink_count", "nr", { keys: ["kitchen_sink_count", "laundry_sink_count"] });
+  if (/^kitchen sink sets?(?: complete)?$/.test(d)) return match("kitchen_sink_count", "nr");
+  if (/^laundry sink sets?(?: complete)?$/.test(d)) return match("laundry_sink_count", "nr");
+  if (/^kitchen (?:hob and hood|hob hood) package$/.test(d)) return match("kitchen_hob_hood_count", "nr");
+  if (/^(?:glass and metal )?terrace railing$/.test(d)) return match("terrace_railing_length", "m");
+  if (/^driveway paving$/.test(d)) return match("driveway_area", "m2");
+  if (/^soft landscaping$/.test(d)) return match("landscape_area", "m2");
+  return null;
+}
+function pdfCatalogThicknessMatches(metric, rows) {
+  if (metric.sourceThicknessM === void 0) return true;
+  const labels = { ground_slab_volume: "(?:gf|ground(?: floor)?)", first_slab_volume: "(?:ff|first(?: floor)?)", roof_slab_volume: "roof" };
+  const slab = labels[metric.key] ? new RegExp(`^${labels[metric.key]}\\s+slab:\\s*(\\d*\\.\\d+|\\d+)\\.?$`, "i") : null;
+  const values = rows.flatMap((r) => [...String(r.evidence || "").matchAll(/\*\s*(\d+(?:\.\d+)?)\s+(m|mm)\s*\[([^\]]*)\]/gi)].flatMap((m) => {
+    const raw = Number(m[1]), source2 = m[3].trim(), explicit = slab?.exec(source2);
+    if (!/\bthick(?:ness)?\b/i.test(source2) && !(explicit && Math.abs(Number(explicit[1]) - raw) < 1e-9)) return [];
+    return [raw * (m[2].toLowerCase() === "mm" ? 1e-3 : 1)];
+  }));
+  return values.length > 0 && values.every((v) => Math.abs(v - metric.sourceThicknessM) < 1e-9);
+}
+function pdfCatalogHeightMatches(metric, rows, description) {
+  if (!["wet_wall_tile_area", "wet_wall_waterproofing_area"].includes(metric.key)) return true;
+  const text = String(description || "").toLowerCase(), dimension2 = text.match(/\b(\d+(?:\.\d+)?)\s*(mm|m)\b/);
+  if (!dimension2) return true;
+  const height = Number(dimension2[1]) * (dimension2[2] === "mm" ? 1e-3 : 1), kind = metric.key === "wet_wall_tile_area" ? "tile" : "waterproofing";
+  const operands = rows.flatMap((r) => [...String(r.evidence || "").matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[WET ROOMS:\s*([^\]]*height[^\]]*)\]/gi)].filter((m) => m[2].toLowerCase().includes(kind)).map((m) => Number(m[1])));
+  return operands.length > 0 && operands.every((v) => Math.abs(v - height) < 1e-9);
+}
+
+// src/lib/pdfSourceSpecifications.mjs
+var concrete = [["pcc_volume", /\b(?:pcc|blinding)\b/], ["foundation_volume", /\b(?:foundations?|footings?)\b/], ["pedestal_volume", /\bpedestals?\b/], ["column_volume", /\bcolumns?\b/], ["beam_volume", /\bbeams?\b/], ["ground_slab_volume", /\b(?:ground|gf)(?: floor)? slabs?\b/], ["first_slab_volume", /\b(?:first|ff)(?: floor)? slabs?\b/], ["roof_slab_volume", /\broof slabs?\b/]];
+var normal = (s) => String(s || "").toLowerCase().replace(/[‐‑–—-]/g, " ").replace(/\s+/g, " ").trim();
+var unique2 = (xs) => [...new Set(xs)];
+function clauses(text) {
+  return String(text).split(/;|\n|\.(?=\s+[A-Z])/).map((s) => s.trim()).filter(Boolean);
+}
+function factsIn(text, page, scope = "project") {
+  const facts = [];
+  for (const quote of clauses(text)) {
+    if (quote.length > 2e3) continue;
+    const d = normal(quote), local = d.match(/\b(gf|ff|ground floor|first floor|floor\s*-?\d+)\b/);
+    const scopeId = local ? ["gf", "ground floor"].includes(local[1]) ? "floor:0" : ["ff", "first floor"].includes(local[1]) ? "floor:1" : local[1].replace(/floor\s*/, "floor:") : scope;
+    const add = (metric, property, values) => {
+      for (const value of unique2(values)) facts.push({ metric, property, value, page, scope_id: scopeId, quote, source: "native_pdf_text" });
+    };
+    if (/\b(?:not|unless|option|optional|alternative|except|excluding)\b/.test(d)) continue;
+    for (const [word, key2] of [["external", "external_block_area"], ["exterior", "external_block_area"], ["internal", "internal_block_area"], ["interior", "internal_block_area"]]) {
+      const material2 = "(?:autoclaved aerated concrete|hollow concrete|solid concrete|aac|concrete|clay|brick)";
+      const pattern = new RegExp(`\\b${word}\\s*(?:${material2}\\s+)?(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(?:${material2}\\s+)?(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`, "g");
+      add(key2, "thickness_mm", [...d.matchAll(pattern)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
+      const reversed = new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\s+(?:thick\\s+)?${word}\\s+(?:${material2}\\s+)?(?:walls?|partitions?|blockwork|masonry)\\b`, "g");
+      add(key2, "thickness_mm", [...d.matchAll(reversed)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
+    }
+    const grades = [...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map((m) => `C${m[1]}${m[2] ? "/" + m[2] : ""}`);
+    for (const [key2, re] of concrete) if (re.test(d)) add(key2, "concrete_grade", grades);
+    if (/\ball\s+(?:structural\s+)?concrete\b/.test(d) && !/\bexcept\b/.test(d)) for (const [key2] of concrete.filter(([k]) => k !== "pcc_volume")) add(key2, "concrete_grade", grades);
+    for (const [key2, re] of [["water_pipe_length", /\b(?:water supply|domestic water|water pipes?)\b/], ["waste_pipe_length", /\b(?:waste|drainage|soil)\s*(?:water\s*)?pipes?\b/]]) if (re.test(d)) {
+      const dn = [...d.matchAll(/(?:\b(?:dn|dia(?:meter)?|od)\s*[:=]?\s*|[ø⌀]\s*)(\d+(?:\.\d+)?)\s*(mm|cm|m)?\b/g)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2] || "mm"]);
+      const series = [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:\/|and|,)\s*(\d+(?:\.\d+)?)\s*mm\b/g)].flatMap((m) => [Number(m[1]), Number(m[2])]);
+      add(key2, "diameter_mm", series.length ? series : dn.length ? dn : [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*mm\b/g)].map((m) => Number(m[1])));
+      add(key2, "pipe_material", [...d.matchAll(/\b(ppr|cpvc|u?pvc|hdpe|copper|pex|steel|galvanized)\b/g)].map((m) => m[1].toUpperCase()));
+    }
+    if (/\b(?:ac|air conditioning|refrigerant)\b/.test(d) && /\b(?:pipes?|pipework|piping|line sets?)\b/.test(d)) {
+      add("ac_pipe_length", "pipe_material", [...d.matchAll(/\b(copper|steel|aluminium|aluminum|ppr|u?pvc|hdpe)\b/g)].map((m) => m[1].toUpperCase()));
+      const inches = [...d.matchAll(/\b(\d+)\s*\/\s*(\d+)\s*(?:["″]|inch(?:es)?\b|in\b)/g)].map((m) => Math.round(Number(m[1]) / Number(m[2]) * 25.4 * 1e6) / 1e6).filter((v) => Number.isFinite(v) && v > 0);
+      if (inches.length === 2) add("ac_pipe_length", "diameter_pair_mm", [inches.sort((a, b) => a - b).join("+")]);
+      if (inches.length && inches.length !== 2 || [...d.matchAll(/\b\d+\s*\/\s*\d+/g)].length !== inches.length) add("ac_pipe_length", "unparsed_pipe_detail", ["present"]);
+      const insulation = [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*mm\s+(?:thick\s+)?insulation\b|\binsulation\s*[:=]?\s*(\d+(?:\.\d+)?)\s*mm\b/g)].map((m) => Number(m[1] || m[2]));
+      add("ac_pipe_length", "insulation_mm", insulation);
+      const detail = d.replace(/\b\d+(?:\.\d+)?\s*mm\s+(?:thick\s+)?insulation\b|\binsulation\s*[:=]?\s*\d+(?:\.\d+)?\s*mm\b/g, "");
+      if (/\b(?:dn|diameter|dia|od)\b|\d\s*mm|[øØ]/.test(detail)) add("ac_pipe_length", "unparsed_pipe_detail", ["present"]);
+    }
+    if (/\b(?:ac|air conditioning|air conditioner|split)\b/.test(d)) add("ac_count", "capacity_tr", [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/g)].map((m) => Number(m[1])));
+    for (const [key2, re] of [["internal_block_area", /\b(?:internal|interior|partition)\b/], ["external_block_area", /\b(?:external|exterior)\b/]]) if (re.test(d) && /\b(?:blockwork|blocks?|masonry|walls?)\b/.test(d)) {
+      const material2 = /\b(?:aac|autoclaved)\b/.test(d) ? "aac" : /\b(?:clay|brick)\b/.test(d) ? "clay" : /\bconcrete\b/.test(d) ? "concrete" : null;
+      if (material2) add(key2, "block_material", [material2]);
+    }
+    if (/\b(?:wood(?:en)?|timber|parquet)\b/.test(d) && /\bfloor/.test(d)) {
+      const system = /\bengineered\b/.test(d) ? "engineered_wood" : /\bsolid\b/.test(d) ? "solid_wood" : /\blaminate\b/.test(d) ? "laminate" : null;
+      if (system) add("wood_floor_area", "floor_system", [system]);
+    }
+    for (const [key2, re] of [["terrace_floor_area", /\bterrace\b/], ["wet_wall_tile_area", /\bwet\s+(?:area\s+)?wall\b/], ["backsplash_area", /\bbacksplash\b/]]) if (re.test(d) && /\b(?:tile|tiling|ceramic|porcelain|marble|granite)\b/.test(d)) {
+      const material2 = ["porcelain", "marble", "granite", "ceramic"].find((s) => new RegExp("\\b" + s + "\\b").test(d));
+      if (material2) add(key2, "tile_material", [material2]);
+    }
+    for (const [key2, re] of [["roof_waterproofing_area", /\broof\b/], ["terrace_waterproofing_area", /\bterrace\b/], ["wet_floor_waterproofing_area", /\bwet\s+(?:area\s+)?floor\b/], ["wet_wall_waterproofing_area", /\bwet\s+(?:area\s+)?wall\b/]]) if (re.test(d) && /\b(?:waterproof|membrane)/.test(d)) {
+      const system = /\b(?:polyurethane|pu)\b/.test(d) ? "polyurethane" : /\bcementitious\b/.test(d) ? "cementitious" : /\b(?:torch|bitumen|bituminous)\b/.test(d) ? "torch_bitumen" : null;
+      if (system) add(key2, "waterproofing_system", [system]);
+    }
+    if (/\bkitchen\b/.test(d) && /\bcabinet/.test(d)) {
+      const material2 = /\balumini?um\b/.test(d) ? "aluminium" : /\bmdf\b/.test(d) ? "mdf" : /\bplywood\b/.test(d) ? "plywood" : null;
+      if (material2) add("kitchen_cabinet_length", "cabinet_material", [material2]);
+    }
+    if (/\b(?:ac|air conditioning|air conditioner)\b/.test(d)) {
+      const system = /\bvrf\b/.test(d) ? "vrf" : /\bducted\s+split\b/.test(d) ? "ducted_split" : /\bsplit\b/.test(d) ? "split" : null;
+      if (system) add("ac_count", "unit_system", [system]);
+    }
+  }
+  return facts.filter((f) => typeof f.value !== "number" || Number.isFinite(f.value) && f.value > 0 && f.value < 1e6);
+}
+function readPdfSourceSpecifications(takeoff) {
+  const pages = takeoff?.page_results || [], facts = [];
+  let native = false;
+  for (const p of pages) {
+    if (["boq", "estimate", "quotation", "cost_schedule"].includes(p.page_evidence?.kind)) continue;
+    const text = p.native_text_evidence?.status === "readable" ? p.native_text_evidence : p.native_plan_text?.status === "readable" ? p.native_plan_text : null;
+    if (!text) continue;
+    native = true;
+    if (!Number.isInteger(p.pageNumber) || p.pageNumber < 1 || !Array.isArray(text.spans) || text.spans.length > 1e4) continue;
+    const bands = [];
+    const spans = text.spans.filter((s) => typeof s.text === "string" && Number.isFinite(s.y) && Number.isFinite(s.x)).sort((a, b) => b.y - a.y || a.x - b.x);
+    for (const s of spans) {
+      let band = bands.at(-1);
+      if (!band || Math.abs(band.y - s.y) >= 1.5) {
+        band = { y: s.y, spans: [] };
+        bands.push(band);
+      }
+      band.spans.push(s);
+    }
+    const value = bands.map((b) => b.spans.sort((a, b2) => a.x - b2.x).map((s) => s.text).join(" ")).join("\n");
+    let scope = normal(p.page_evidence?.scope_id || "project").replace(/floor\s*[: ]\s*/, "floor:");
+    if (["gf", "ground floor"].includes(scope)) scope = "floor:0";
+    if (["ff", "first floor"].includes(scope)) scope = "floor:1";
+    if (value.length > 1e5) continue;
+    facts.push(...factsIn(value, p.pageNumber, scope));
+  }
+  if (!native && !pages.length) {
+    for (const f of takeoff?.pdf_analysis?.specification_facts || []) {
+      if (f?.source !== "native_pdf_text" || !Number.isInteger(f.page) || f.page < 1 || typeof f.scope_id !== "string" || typeof f.quote !== "string" || f.quote.length > 2e3) continue;
+      if (factsIn(f.quote, f.page, f.scope_id).some((r) => r.metric === f.metric && r.property === f.property && r.value === f.value && r.scope_id === f.scope_id)) facts.push({ ...f });
+    }
+  }
+  return [...new Map(facts.map((f) => [JSON.stringify([f.metric, f.property, f.value, f.page, f.scope_id, f.quote]), f])).values()];
+}
+function valueFor(facts, key2, property, takeoff) {
+  const rows = facts.filter((f) => f.metric === key2 && f.property === property), found = unique2(rows.map((f) => f.value));
+  if (found.length !== 1) return null;
+  if (rows.some((f) => f.scope_id === "project")) return found[0];
+  const intrinsic = { ground_slab_volume: "floor:0", first_slab_volume: "floor:1", roof_slab_volume: "roof" }[key2];
+  const scopes = intrinsic ? [intrinsic] : unique2((takeoff?.pdf_analysis?.selected_floor_pages || []).map((p) => p.scope));
+  return scopes.length && scopes.every((s) => rows.some((f) => f.scope_id === s)) ? found[0] : null;
+}
+function compatible(facts, key2, constraints, takeoff) {
+  return Object.entries(constraints).every(([p, v]) => valueFor(facts, key2, p, takeoff) === v);
+}
+function resolvedPdfSpecifications(takeoff, key2, facts = readPdfSourceSpecifications(takeoff)) {
+  return unique2(facts.filter((f) => f.metric === key2).map((f) => f.property)).flatMap((property) => {
+    const value = valueFor(facts, key2, property, takeoff);
+    return value === null ? [] : [{ property, value, pages: unique2(facts.filter((f) => f.metric === key2 && f.property === property).map((f) => f.page)) }];
+  });
+}
+function pdfSpecificationConflicts(facts) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const f of facts) {
+    const key2 = f.metric + "|" + f.property;
+    if (!groups.has(key2)) groups.set(key2, []);
+    groups.get(key2).push(f);
+  }
+  return [...groups.values()].filter((rows) => unique2(rows.map((f) => f.value)).length > 1).map((rows) => ({ metric: rows[0].metric, property: rows[0].property, values: unique2(rows.map((f) => f.value)), pages: unique2(rows.map((f) => f.page)), reason: "Mixed or conflicting specifications cannot price one aggregate quantity." }));
+}
+function sourceSpecificationMetric(description, unit2, takeoff, facts = readPdfSourceSpecifications(takeoff)) {
+  const d = normal(description), finish = (keys, expected, constraints = {}) => {
+    if (!keys.length || !["m2", "m3", "m", "nr", "nos", "no", "each", "ea"].includes(unit2) || !(unit2 === expected || expected === "nr" && ["nos", "no", "each", "ea"].includes(unit2))) return null;
+    return { key: keys.join("+"), ...keys.length > 1 ? { keys } : {}, factor: 1, specificationFacts: facts.filter((f) => keys.includes(f.metric) && Object.keys(constraints).includes(f.property)) };
+  };
+  if (/\b(?:blockwork|blocks?|masonry)\b/.test(d) && unit2 === "m2") {
+    const thickness = d.match(/\b(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/), constraints = thickness ? { thickness_mm: Number(thickness[1]) * { mm: 1, cm: 10, m: 1e3 }[thickness[2]] } : {};
+    const ext = /\b(?:external|exterior)\b/.test(d), int = /\b(?:internal|interior|partition)\b/.test(d);
+    if (ext && int || !thickness && !ext && !int || /\b(?:aac|autoclaved|gypsum|glass|clay|brick)\b/.test(d)) return null;
+    const keys = (ext ? ["external_block_area"] : int ? ["internal_block_area"] : ["external_block_area", "internal_block_area"]).filter((k) => compatible(facts, k, constraints, takeoff));
+    return keys.length === 1 ? finish(keys, "m2", constraints) : null;
+  }
+  const grades = [...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map((m) => `C${m[1]}${m[2] ? "/" + m[2] : ""}`);
+  if (grades.length && /\b(?:concrete|rc|blinding)\b/.test(d)) {
+    if (unique2(grades).length !== 1 || /\b(?:precast|prestressed|post tensioned|mesh)\b/.test(d)) return null;
+    if (/\b\d+(?:\.\d+)?\s*(?:mm|cm)\b|\d\s*[x×]\s*\d/.test(d)) return null;
+    const named = concrete.filter(([, re]) => re.test(d));
+    const keys = (named.length ? named.map(([k]) => k) : concrete.filter(([k]) => k !== "pcc_volume").map(([k]) => k)).filter((k) => takeoff?.pdf_analysis?.quantity_evidence?.[k]?.length && compatible(facts, k, { concrete_grade: grades[0] }, takeoff));
+    if (named.length && keys.length !== named.length) return null;
+    return finish(keys, "m3", { concrete_grade: grades[0] });
+  }
+  if (/\bpipes?\b/.test(d) && /\b(?:water|waste|drainage|soil)\b/.test(d)) {
+    const waste = /\b(?:waste|drainage|soil)\b/.test(d), water = /\bwater\b/.test(d) && !waste;
+    const key2 = waste ? "waste_pipe_length" : water ? "water_pipe_length" : null, diameter = d.match(/\b(?:dn\s*)?(\d+(?:\.\d+)?)\s*(mm|cm)?\b/), material2 = d.match(/\b(ppr|u?pvc|hdpe|copper)\b/);
+    if (!key2 || !diameter && !material2) return null;
+    const constraints = { ...diameter ? { diameter_mm: Number(diameter[1]) * (diameter[2] === "cm" ? 10 : 1) } : {}, ...material2 ? { pipe_material: material2[1].toUpperCase() } : {} };
+    return compatible(facts, key2, constraints, takeoff) ? finish([key2], "m", constraints) : null;
+  }
+  if (/\b(?:ac|air conditioning|air conditioner)\b/.test(d) && /\b(?:units?|split)\b/.test(d)) {
+    const capacity = d.match(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/);
+    if (!capacity) return null;
+    const constraints = { capacity_tr: Number(capacity[1]) };
+    return compatible(facts, "ac_count", constraints, takeoff) ? finish(["ac_count"], "nr", constraints) : null;
+  }
+  return null;
+}
+function hasSourceSpecificationScope(description) {
+  const d = normal(description);
+  return /\b(?:blockwork|blocks?|masonry)\b/.test(d) || /\bc\s*\d/.test(d) && /\b(?:concrete|rc|blinding)\b/.test(d) || /\bpipes?\b/.test(d) && /\b(?:ppr|u?pvc|hdpe|copper|dn)\b|\d\s*mm\b/.test(d) || /\b(?:ac|air conditioning|air conditioner)\b/.test(d) && /\d+(?:\.\d+)?\s*(?:tr|tons?|tonnes?)\b/.test(d);
+}
+
+// src/lib/pdfNativePageExtraction.mjs
+var number = (text) => /^\d+(?:\.\d+)?$/.test(String(text).trim()) ? Number(text) : NaN;
+var clean2 = (text) => String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
+var floor = (text) => /^(?:ground|first|second|third|basement|roof)(?: floor)?$|^floor \d+$/i.test(text.trim());
+var zero = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
+var claim = (key2, value, unit2, scope, page, evidence) => ({ key: key2, value, unit: unit2, scope_id: scope, pages: [page], evidence, native_calculated: true, document_calculated: true });
+function table2(spans, columns) {
+  const matches = [];
+  for (const anchor of spans) {
+    if (!columns[0].test(clean2(anchor.text))) continue;
+    const band = spans.filter((s) => Math.abs(s.y - anchor.y) < 1.5);
+    const cells = columns.map((pattern) => band.filter((s) => pattern.test(clean2(s.text))));
+    if (cells.every((c) => c.length === 1)) matches.push({ y: anchor.y, cols: cells.map((c) => c[0]) });
+  }
+  if (matches.length !== 1) throw Error("A single unambiguous table header is required");
+  const head = matches[0];
+  if (head.cols.some((c, i) => i && c.x - head.cols[i - 1].x < 25)) throw Error("Table columns overlap");
+  const rows = [];
+  for (const s of [...spans].filter((s2) => s2.y < head.y - 3).sort((a, b) => b.y - a.y || a.x - b.x)) {
+    let row = rows.find((r) => Math.abs(r.y - s.y) < 1.5);
+    if (!row) {
+      row = { y: s.y, cells: head.cols.map(() => []) };
+      rows.push(row);
+    }
+    let index = 0;
+    for (let i = 1; i < head.cols.length; i++) if (Math.abs(s.x - head.cols[i].x) < 15) index = i;
+    row.cells[index].push(s.text.trim());
+  }
+  return { head, rows: rows.filter((r) => r.cells.slice(1).some((c) => c.length)).map((r) => r.cells.map((c) => c.join(" "))) };
+}
+var services = /* @__PURE__ */ new Map([
+  ["light points", ["light_count", "nr"]],
+  ["lighting points", ["light_count", "nr"]],
+  ["socket points", ["socket_count", "nr"]],
+  ["distribution boards", ["distribution_board_count", "nr"]],
+  ["split ac units", ["ac_count", "nr"]],
+  ["insulated ac pipes", ["ac_pipe_length", "m"]],
+  ["smoke detectors", ["smoke_detector_count", "nr"]],
+  ["water supply pipes", ["water_pipe_length", "m"]],
+  ["waste pipes", ["waste_pipe_length", "m"]]
+]);
+function serviceClaims(native, page, normalizePdfScope2) {
+  const t = table2(native.spans, [/^item$/, /^(?:ground|ground floor|gf)$/, /^(?:first|first floor|ff)$/, /^unit$/]);
+  const scopes = t.head.cols.slice(1, 3).map((s) => normalizePdfScope2(/^(ground|first)$/i.test(s.text) ? s.text + " floor" : s.text));
+  if (new Set(scopes).size !== 2 || !t.rows.length || t.rows.length > 500) throw Error("Invalid service scope/table");
+  const seen = /* @__PURE__ */ new Set(), claims = [];
+  for (const row of t.rows) {
+    const mapping = services.get(clean2(row[0]));
+    if (!mapping || seen.has(mapping[0])) throw Error("Unknown or repeated service row");
+    seen.add(mapping[0]);
+    const [key2, unit2] = mapping;
+    if (clean2(row[3]) !== unit2) throw Error("Unsupported service unit");
+    for (let i = 0; i < 2; i++) {
+      const value = number(row[i + 1]);
+      if (!Number.isFinite(value) || value < 0 || value > 1e6 || unit2 === "nr" && !Number.isInteger(value)) throw Error("Invalid service quantity");
+      claims.push(claim(key2, value, unit2, scopes[i], page, `Native source table: ${row[0]}; ${t.head.cols[i + 1].text}: ${row[i + 1]} ${unit2}. Material, diameter and capacity are separate source requirements.`));
+    }
+  }
+  return claims;
+}
+function barClaims(native, page) {
+  const text = native.spans.map((s) => s.text).join(" ");
+  const formula = [...text.matchAll(/diameter\s*\(mm\)\s*\^\s*2\s*\/\s*(\d+(?:\.\d+)?)\s*kg\/m/gi)];
+  if (formula.length !== 1 || !(Number(formula[0][1]) > 0) || !/sum all rows/i.test(text) || !/(?:only scheduled\s+reinforcement|complete project reinforcement|all project reinforcement)/i.test(text)) throw Error("Complete reinforcement scope/formula required");
+  const t = table2(native.spans, [/^element$/, /^dia(?:meter)? mm$/, /^count$/, /^cut length m$/]);
+  if (!t.rows.length || t.rows.length > 500) throw Error("Empty/excessive reinforcement table");
+  const seen = /* @__PURE__ */ new Set(), terms = [];
+  for (const row of t.rows) {
+    const id = clean2(row[0]), [diameter, count, length] = row.slice(1).map(number);
+    if (!id || seen.has(id) || ![diameter, count, length].every((n) => Number.isFinite(n) && n > 0) || !Number.isInteger(count) || diameter > 100 || count > 1e6 || length > 1e6) throw Error("Invalid or repeated reinforcement row");
+    seen.add(id);
+    terms.push({ id, diameter, count, length, kg: count * length * diameter * diameter / Number(formula[0][1]) });
+  }
+  const value = terms.reduce((sum, t2) => sum + t2.kg, 0);
+  if (!Number.isFinite(value)) throw Error("Invalid reinforcement total");
+  return [claim("rebar_kg", value, "kg", "project", page, `Native complete bar table; ${formula[0][0]}; no intermediate rounding: ${terms.map((t2) => `${t2.id}: ${t2.count} \xD7 ${t2.length} m \xD7 ${t2.diameter} mm squared / ${formula[0][1]}`).join("; ")}. No unscheduled reinforcement or wastage added.`)];
+}
+function extractNativePdfPages(readings, normalizePdfScope2) {
+  const pages = [], audits = [];
+  let inherited = null;
+  for (const reading of [...readings].sort((a, b) => a.pageNumber - b.pageNumber)) {
+    const { pageNumber, native_text_evidence: native } = reading;
+    const audit = { page: pageNumber, text_status: native?.status || "unavailable", extracted: false };
+    audits.push(audit);
+    if (native?.status !== "readable" || !Array.isArray(native.spans) || native.spans.length > 3e3) {
+      inherited = null;
+      continue;
+    }
+    const spans = native.spans, text = spans.map((s) => s.text).join(" ");
+    let kind = null, scope = "project", quantities = [];
+    try {
+      const openingHeader = ["id", "type", "width", "height"].every((h) => spans.some((s) => clean2(s.text) === h));
+      if (openingHeader) {
+        const headings = spans.filter((s) => floor(s.text));
+        if (headings.length !== 1) throw Error("Opening floor heading unresolved");
+        kind = "opening_schedule";
+        scope = normalizePdfScope2(headings[0].text);
+        const result = readNativeOpeningSchedule({ pageNumber, page_evidence: { kind, scope_id: scope }, native_text_evidence: native }, normalizePdfScope2, inherited?.page === pageNumber - 1 ? inherited.basis : null);
+        if (result.status !== "read") throw Error(result.reason || "Opening table unavailable");
+        inherited = { page: pageNumber, basis: result.dimension_basis };
+      } else {
+        inherited = null;
+        if (/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text)) {
+          kind = "quantity_schedule";
+          quantities = serviceClaims(native, pageNumber, normalizePdfScope2);
+        } else if (/\b(?:declared bar schedule|reinforcement schedule)\b/i.test(text)) {
+          kind = "quantity_schedule";
+          quantities = barClaims(native, pageNumber);
+        } else if (/\b(?:measurement and finishes|construction specifications|finish specifications)\b/i.test(text) && ["WALLS:", "FLOORS:", "CEILINGS:"].filter((s) => text.includes(s)).length >= 2) {
+          kind = "specification";
+        } else throw Error("No fully supported local page contract");
+      }
+      const revisions = [...new Set([...text.matchAll(/\bR\d+\b/g)].map((m) => m[0]))];
+      if (revisions.length > 1) throw Error("Conflicting native source revisions");
+      pages.push({
+        ...zero,
+        pageNumber,
+        confidence: 0,
+        detected_items: [],
+        area_geometry: null,
+        page_evidence: { kind, scope_id: scope, drawing_id: null, revision: revisions[0] || null, quantities },
+        native_text_evidence: native,
+        native_extraction: { version: 1, method: "explicit_source_table_or_specification", parsed_keys: [...new Set(quantities.map((q) => q.key))], requires_source_review: true },
+        notes: "Locally extracted source evidence. Unparsed prose and cross-page relationships require source review; not a complete or approved takeoff."
+      });
+      Object.assign(audit, { extracted: true, kind, scope, parsed_keys: [...new Set(quantities.map((q) => q.key))] });
+    } catch (error) {
+      audit.reason = String(error.message).slice(0, 180);
+      inherited = null;
+    }
+  }
+  return { pages, audits };
+}
+
+// src/lib/pdfTakeoffEvidence.mjs
+var PDF_METRIC_UNITS = Object.freeze({ rooms: "nr", door_count: "nr", window_count: "nr", door_area: "m2", window_area: "m2", wall_length: "m", wall_area: "m2", floor_area: "m2", ceiling_area: "m2", roof_area: "m2", pcc_volume: "m3", foundation_volume: "m3", pedestal_volume: "m3", column_volume: "m3", beam_volume: "m3", ground_slab_volume: "m3", first_slab_volume: "m3", roof_slab_volume: "m3", rebar_kg: "kg", foundation_formwork_area: "m2", column_formwork_area: "m2", beam_formwork_area: "m2", slab_formwork_area: "m2", external_block_area: "m2", internal_block_area: "m2", wood_floor_area: "m2", ceramic_floor_area: "m2", epoxy_floor_area: "m2", terrace_floor_area: "m2", wet_floor_area: "m2", wet_wall_area: "m2", plaster_area: "m2", paint_area: "m2", gypsum_ceiling_area: "m2", excavation_volume: "m3", toilet_count: "nr", basin_count: "nr", shower_count: "nr", socket_count: "nr", light_count: "nr", distribution_board_count: "nr", ac_count: "nr", smoke_detector_count: "nr", water_pipe_length: "m", waste_pipe_length: "m", ac_pipe_length: "m", kitchen_cabinet_length: "m", terrace_railing_length: "m", roof_waterproofing_area: "m2", terrace_waterproofing_area: "m2", wet_floor_waterproofing_area: "m2", wet_wall_waterproofing_area: "m2", wet_wall_tile_area: "m2", ceiling_paint_area: "m2", backsplash_area: "m2", driveway_area: "m2", landscape_area: "m2", kitchen_sink_count: "nr", laundry_sink_count: "nr", internal_wall_length: "m", external_wall_length: "m", internal_door_count: "nr", service_door_count: "nr", entrance_door_count: "nr", garage_door_count: "nr", kitchen_hob_hood_count: "nr" });
+function normalizePdfScope(s) {
+  const v = String(s || "").toLowerCase().trim().replace(/[ _-]+/g, " ");
+  if (["gf", "ground", "ground floor", "floor 0", "\u0647\u0645\u06A9\u0641", "\u0627\u0644\u0637\u0627\u0628\u0642 \u0627\u0644\u0623\u0631\u0636\u064A"].includes(v)) return "floor:0";
+  if (["ff", "first", "first floor", "floor 1", "\u0637\u0628\u0642\u0647 \u0627\u0648\u0644", "\u0627\u0644\u0637\u0627\u0628\u0642 \u0627\u0644\u0623\u0648\u0644"].includes(v)) return "floor:1";
+  if (["project", "whole project", "all floors", "total"].includes(v)) return "project";
+  return v;
+}
+var valid = (n) => Number.isFinite(n) && n >= 0;
+function pdfExcludedMetricKeys(exclusions) {
+  const declared = /* @__PURE__ */ new Set();
+  for (const text of exclusions || []) for (const token of String(text).match(/[A-Za-z_][A-Za-z_0-9]*/g) || [])
+    if (Object.hasOwn(PDF_METRIC_UNITS, token)) declared.add(token);
+  return [...declared];
+}
+function mergePdfEvidence(pages, failed = [], total = pages.length) {
+  const warnings = [], selected = /* @__PURE__ */ new Map(), excluded = [], conflictedFloors = /* @__PURE__ */ new Set();
+  const documentReview = applyPdfDocumentReview(pages, PDF_METRIC_UNITS, normalizePdfScope);
+  pages = documentReview.pages;
+  warnings.push(...documentReview.warnings);
+  const reviewStatus = pages.find((p) => p.document_review_status)?.document_review_status;
+  if (reviewStatus && ["failed", "pending"].includes(reviewStatus.status)) warnings.push("PDF cross-page measurement review " + reviewStatus.status + ": " + reviewStatus.reason);
+  const areaValidation = [];
+  pages = pages.map((p) => {
+    const checked = auditPdfAreaGeometry(p);
+    if (checked.audit) areaValidation.push(checked.audit);
+    warnings.push(...checked.warnings);
+    if (checked.page.__areaGeometryValidated) return checked.page;
+    const recovered = recoverPdfRoomInventory(checked.page);
+    warnings.push(...recovered.warnings);
+    return recovered.page;
+  });
+  for (const p of pages) {
+    const e = p.page_evidence;
+    if (e?.kind !== "floor_plan") {
+      excluded.push({ page: p.pageNumber, reason: "not_an_architectural_floor_plan" });
+      continue;
+    }
+    const scope = normalizePdfScope(e.scope_id);
+    if (!scope || scope === "project") {
+      excluded.push({ page: p.pageNumber, reason: "unresolved_floor_scope" });
+      warnings.push("Floor scope missing on page " + p.pageNumber);
+      continue;
+    }
+    const existing = selected.get(scope);
+    if (!existing) {
+      selected.set(scope, p);
+      continue;
+    }
+    if (existing.page_evidence.revision !== e.revision) {
+      warnings.push("Conflicting floor revisions: " + scope);
+      conflictedFloors.add(scope);
+    }
+    if ((p.confidence || 0) > (existing.confidence || 0)) {
+      excluded.push({ page: existing.pageNumber, reason: "duplicate_floor_scope" });
+      selected.set(scope, p);
+    } else excluded.push({ page: p.pageNumber, reason: "duplicate_floor_scope" });
+  }
+  const floors = [...selected.entries()].filter(([scope]) => !conflictedFloors.has(scope)).map(([, p]) => p), fields = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
+  const native = nativeOpeningEvidence(pages.filter((p) => p.page_evidence?.kind !== "floor_plan" || floors.includes(p)), normalizePdfScope);
+  const nativeTables = extractNativePdfPages(pages.map((p) => ({ pageNumber: p.pageNumber, native_text_evidence: p.native_text_evidence })), normalizePdfScope);
+  const tableClaims = nativeTables.pages.flatMap((p) => p.page_evidence.quantities);
+  const nativeOpeningKeys = new Set(native.claims.map((q) => q.key));
+  const nativeWholeTableKeys = new Set(tableClaims.filter((q) => normalizePdfScope(q.scope_id) === "project").map((q) => q.key));
+  const nativeFloorTableKeys = new Set(tableClaims.filter((q) => normalizePdfScope(q.scope_id) !== "project").map((q) => q.key));
+  const nativeTableIdentities = new Set(tableClaims.map((q) => q.key + "|" + normalizePdfScope(q.scope_id)));
+  warnings.push(...native.warnings);
+  const nativeKeys = new Set([...native.claims, ...tableClaims].map((q) => q.key));
+  for (const p of floors) for (const k of Object.keys(fields)) {
+    if (valid(p[k])) fields[k] += p[k];
+  }
+  const claims = /* @__PURE__ */ new Map(), rejected = [];
+  const observations = pages.filter((p) => p.page_evidence?.kind !== "floor_plan" || floors.includes(p)).map((p) => {
+    const direct = p.page_evidence?.kind === "floor_plan" ? Object.entries({ rooms: "rooms", doors: "door_count", windows: "window_count", floor_area: "floor_area", ceiling_area: "ceiling_area", wall_length: "wall_length", wall_area: "wall_area", window_area: "window_area", door_area: "door_area" }).filter(([k]) => valid(p[k]) && p[k] > 0).map(([k, key2]) => ({ key: key2, value: p[k], unit: PDF_METRIC_UNITS[key2], scope_id: p.page_evidence.scope_id, evidence: `Architectural plan page ${p.pageNumber}: ${k} summary; AI extraction requires review.` })) : [];
+    return { ...p, claims: [...direct, ...p.page_evidence?.quantities || []] };
+  });
+  if (native.claims.length) observations.push({ pageNumber: native.schedules[0].page, page_evidence: { kind: "opening_schedule" }, claims: native.claims });
+  for (const p of nativeTables.pages) if (p.page_evidence.quantities.length) observations.push({ pageNumber: p.pageNumber, page_evidence: p.page_evidence, claims: p.page_evidence.quantities });
+  for (const p of observations) for (const q of p.claims) {
+    const scope = normalizePdfScope(q.scope_id), unit2 = PDF_METRIC_UNITS[q.key];
+    if (!q.native_calculated && (nativeOpeningKeys.has(q.key) || nativeWholeTableKeys.has(q.key) || nativeTableIdentities.has(q.key + "|" + scope) || nativeFloorTableKeys.has(q.key) && scope === "project")) continue;
+    if (!unit2 || q.unit !== unit2 || !scope || !valid(q.value) || unit2 === "nr" && !Number.isInteger(q.value) || !String(q.evidence || "").trim()) {
+      rejected.push({ page: p.pageNumber, key: q.key, reason: "invalid_or_unsupported_evidence" });
+      continue;
+    }
+    const id = q.key + "|" + scope, priority = q.document_calculated ? 3 : p.page_evidence.kind === "floor_plan" ? 1 : 2;
+    const sourcePages = q.document_calculated ? q.pages : PDF_AREA_KEYS.includes(q.key) && p.document_area_source_pages ? p.document_area_source_pages : [p.pageNumber];
+    const row = { ...q, scope_id: scope, pages: [...new Set(sourcePages)], priority };
+    const old = claims.get(id);
+    if (!old || priority > old.priority) claims.set(id, row);
+    else if (priority === old.priority) {
+      old.pages = [.../* @__PURE__ */ new Set([...old.pages, ...row.pages])];
+      if (Math.abs(old.value - row.value) > 1e-3) old.conflict = true;
+    }
+  }
+  const resolved = {}, evidence = {}, overlappingScopeClaims = [], nativeIncompleteKeys = /* @__PURE__ */ new Set();
+  const floorScopes = new Set(floors.map((p) => normalizePdfScope(p.page_evidence.scope_id)));
+  for (const key2 of Object.keys(PDF_METRIC_UNITS)) {
+    const values = [...claims.values()].filter((q) => q.key === key2), whole = values.find((q) => q.scope_id === "project");
+    const isFloorScope = (q) => floorScopes.has(q.scope_id) || /^floor:-?\d+$/.test(q.scope_id);
+    const floorTotals = values.filter(isFloorScope);
+    if (nativeFloorTableKeys.has(key2) && [...floorScopes].some((scope) => !floorTotals.some((q) => q.scope_id === scope))) {
+      warnings.push("Native table does not cover every selected floor for " + key2 + "; project total withheld");
+      resolved[key2] = 0;
+      nativeIncompleteKeys.add(key2);
+      continue;
+    }
+    const structural = /^(?:beam|column|foundation|pedestal|.*slab)_volume$|_formwork_area$/.test(key2);
+    const use = whole ? [whole] : floorTotals.length ? values.filter((q) => isFloorScope(q) || structural && q.scope_id === "roof") : values;
+    for (const q of values) if (!use.includes(q)) overlappingScopeClaims.push({ key: key2, scope: q.scope_id, pages: q.pages, value: q.value, reason: whole ? "project_total_precedes_subsets" : "qualified_subset_not_added_to_floor_totals" });
+    if (!use.length) continue;
+    if (use.some((q) => q.conflict)) {
+      warnings.push("Conflicting scheduled quantity: " + key2);
+      resolved[key2] = 0;
+      continue;
+    }
+    resolved[key2] = use.reduce((n, q) => n + q.value, 0);
+    evidence[key2] = use.map(({ priority, ...q }) => q);
+  }
+  const names = { door_count: "doors", window_count: "windows" };
+  for (const [key2, n] of Object.entries(resolved)) fields[names[key2] || key2] = n;
+  const blocked = /* @__PURE__ */ new Set([...areaValidation.flatMap((a) => a.withheld_metrics || []), ...documentReview.blocked, ...nativeIncompleteKeys]);
+  for (const key2 of nativeKeys) if (!nativeIncompleteKeys.has(key2)) blocked.delete(key2);
+  const omitted = pdfExcludedMetricKeys(documentReview.audit?.exclusions);
+  for (const key2 of omitted) if (PDF_SOURCE_MEASUREMENT_KEYS.includes(key2) && !evidence[key2]?.some((q) => q.document_calculated)) {
+    blocked.add(key2);
+    warnings.push("PDF explicitly unresolved source measurement: " + key2);
+  }
+  for (const key2 of blocked) {
+    fields[names[key2] || key2] = 0;
+    resolved[key2] = 0;
+    delete evidence[key2];
+  }
+  fields.window_area = resolved.window_area ?? fields.window_area;
+  fields.door_area = resolved.door_area ?? fields.door_area;
+  const report = { version: 108, measurement_review_version: 1, document_review_status: reviewStatus || null, document_measurement_review: documentReview.audit, total_pages: total, selected_floor_pages: floors.map((p) => ({ page: p.pageNumber, scope: normalizePdfScope(p.page_evidence.scope_id) })), excluded_pages: excluded, failed_pages: failed, conflicts: warnings, rejected_claims: rejected, quantity_evidence: evidence, area_validation: areaValidation, withheld_area_metrics: [...new Set(areaValidation.flatMap((a) => a.withheld_metrics || []))], withheld_measurement_metrics: [...blocked].filter((k) => !PDF_AREA_KEYS.includes(k)), overlapping_scope_claims: overlappingScopeClaims, unresolved_floor_scopes: [...conflictedFloors] };
+  report.source_measurement_status = pages.find((p) => p.source_measurement_status)?.source_measurement_status || null;
+  report.native_opening_schedules = native.schedules.map((s) => ({ page: s.page, status: s.status, scope_id: s.scope_id, rows: s.rows.length, reason: s.reason || null }));
+  report.local_pdf_recovery = pages.find((p) => p.local_pdf_recovery)?.local_pdf_recovery || null;
+  report.native_first_read = pages.find((p) => p.native_first_read)?.native_first_read || null;
+  report.specification_facts = readPdfSourceSpecifications({ page_results: pages });
+  report.specification_conflicts = pdfSpecificationConflicts(report.specification_facts);
+  for (const issue of report.specification_conflicts) warnings.push(`PDF specifications ${issue.metric}/${issue.property}: ${issue.values.join(", ")} on pages ${issue.pages.join(", ")}; source breakdown required before selecting a catalog variant.`);
+  const unmeasured = omitted.filter((k) => !evidence[k]?.length);
+  report.measurement_completion = {
+    status: failed.length || conflictedFloors.size || blocked.size || unmeasured.length || ["failed", "pending"].includes(reviewStatus?.status) || ["failed", "pending", "partial"].includes(report.source_measurement_status?.status) ? "incomplete" : "provisional",
+    unmeasured_metrics: [...new Set(unmeasured)],
+    withheld_metrics: [...blocked],
+    reason: "AI-extracted evidence requires source review; completed requests do not establish a complete or approved BOQ."
+  };
+  const nativeHeight = pages.find((p) => p.native_measurement_basis)?.native_measurement_basis?.rules?.wall_height;
+  const sourcedHeight = Number.isFinite(nativeHeight?.value) && nativeHeight.value > 0 && nativeHeight.evidence?.trim() && nativeHeight.pages?.length && nativeHeight.pages.every((n) => pages.some((p) => p.pageNumber === n));
+  return { ...fields, confidence: floors.length ? Math.round(floors.reduce((s, p) => s + (p.confidence || 0), 0) / floors.length * 10) / 10 : 0, wall_height: sourcedHeight ? nativeHeight.value : 3.2, wall_length_estimated: false, wall_area_estimated: false, wall_length_source: "pdf_scoped_floor_plan", wall_area_source: "pdf_scoped_floor_plan", wall_height_source: sourcedHeight ? "pdf_native_source_rule" : "project_default", total_pages: total, analyzed_pages: pages.length, failed_pages: failed, page_results: pages, detected_items: floors.flatMap((p) => (p.detected_items || []).map((i) => ({ ...i, pages: [p.pageNumber] }))), scheduled_quantities: resolved, pdf_analysis: report, notes: `PDF reconciled by page role and floor scope. ${floors.length} distinct floor plans selected. Schedules override matching scope instead of adding duplicates. AI extraction requires review. ${warnings.join("; ")}` };
+}
+function pdfRuleMetric(description, unit2, takeoff = null, specificationFacts = void 0) {
+  const d = String(description || "").toLowerCase().replace(/[-‐‑–—]/g, " ").replace(/\s+/g, " ").trim(), rawUnit = String(unit2 || "").toLowerCase().trim().replace("\xB2", "2").replace("\xB3", "3");
+  const u = { "sqm": "m2", "sq.m": "m2", "sq m": "m2", "cum": "m3", "cu.m": "m3", "cu m": "m3", "lm": "m", "lin.m": "m", "linear metre": "m", "linear meter": "m", "no.": "nr", "nos.": "nr", "each": "nr", "ea": "nr", "set": "nr" }[rawUnit] || rawUnit;
+  if (/disposal|cart\s*away|haul|backfill|downlight|luminaire|light fixture|\bled\b/.test(d)) return null;
+  if (hasSourceSpecificationScope(d)) return sourceSpecificationMetric(d, u, takeoff, specificationFacts);
+  if (/\bformwork\b/.test(d) && /\bbeams?\b/.test(d) && /\b(?:soffits?|undersides?|bottoms?)\b/.test(d) && !/\bslabs?\b/.test(d)) return null;
+  if (/\bformwork\b/.test(d)) {
+    const groups = [/\b(?:foundations?|footings?|pedestals?)\b/, /\bcolumns?\b/, /\bbeams?\b/, /\bslabs?\b/].filter((re) => re.test(d));
+    const slabBeamSoffit = groups.length === 2 && /\bslabs?\b/.test(d) && /\bbeams?\b/.test(d) && /\bsoffit\b/.test(d);
+    if (groups.length > 1 && !slabBeamSoffit) return null;
+  }
+  if (/\bplaster(?:ing)?\b/.test(d) && (!/\b(?:internal|interior)\b/.test(d) || /\b(?:external|exterior|facade|ceiling|render)\b/.test(d))) return null;
+  const specific = [
+    [/\b(?:ceiling\s+(?:emulsion\s+)?paint|paint(?:ing)?\s+(?:to\s+)?(?:internal\s+)?ceilings?)\b/, "ceiling_paint_area", "m2"],
+    [/\b(?:wet\s+(?:area|room)s?\s+wall\s+(?:tiles?|tiling)|wall\s+(?:tiles?|tiling)\s+(?:to|in)\s+wet\s+(?:area|room)s?)\b/, "wet_wall_tile_area", "m2"],
+    [/\bwet\s+(?:area|room)s?\s+wall\s+waterproofing\b/, "wet_wall_waterproofing_area", "m2"],
+    [/\bwet\s+(?:area|room)s?\s+floor\s+waterproofing\b/, "wet_floor_waterproofing_area", "m2"],
+    [/\bkitchen\s+backsplash\b/, "backsplash_area", "m2"],
+    [/\b(?:kitchen\s+base\s+cabinets?|base\s+kitchen\s+cabinets?)\b/, "kitchen_cabinet_length", "m"]
+  ];
+  if (/\b(?:wall|walls)\b/.test(d) && /\b(?:floor|floors|ceiling|ceilings)\b/.test(d)) return null;
+  for (const [pattern, key2, expected] of specific) if (pattern.test(d)) return u === expected ? { key: key2, factor: 1 } : null;
+  const operation = pdfCatalogScope(d);
+  if (operation) {
+    const { unit: expected, ...metric } = operation;
+    if (expected === "kg" && ["ton", "tonne", "t"].includes(u)) return { ...metric, factor: 1e-3 };
+    if (u === expected || expected === "nr" && ["nos", "no", "number", "nr"].includes(u)) return { ...metric, factor: 1 };
+    return null;
+  }
+  const rules = [[/blinding/, "pcc_volume", "m3"], [/\bexcavation\b/, "excavation_volume", "m3"], [/formwork.*found/, "foundation_formwork_area", "m2"], [/formwork.*column/, "column_formwork_area", "m2"], [/formwork.*beam/, "beam_formwork_area", "m2"], [/formwork.*slab/, "slab_formwork_area", "m2"], [/reinforcement|reinforcing steel/, "rebar_kg", "kg"], [/wood.*floor|parquet/, "wood_floor_area", "m2"], [/ceramic.*floor/, "ceramic_floor_area", "m2"], [/epoxy.*floor|garage.*epoxy/, "epoxy_floor_area", "m2"], [/plaster/, "plaster_area", "m2"], [/internal wall.*paint|wall emulsion/, "paint_area", "m2"], [/gypsum.*ceiling/, "gypsum_ceiling_area", "m2"], [/glazed window|aluminium.*window/, "window_area", "m2"], [/water closet|toilet pan/, "toilet_count", "nr"], [/wash\s*basin/, "basin_count", "nr"], [/shower/, "shower_count", "nr"], [/socket/, "socket_count", "nr"], [/lighting?\s+point|light\s+point/, "light_count", "nr"], [/distribution board/, "distribution_board_count", "nr"], [/smoke detector/, "smoke_detector_count", "nr"]];
+  for (const [pattern, key2, expected] of rules) if (pattern.test(d)) {
+    if (expected === "kg" && ["ton", "tonne", "t"].includes(u)) return { key: key2, factor: 1e-3 };
+    if (u === expected || expected === "nr" && ["nos", "no", "number", "point", "nr"].includes(u)) return { key: key2, factor: 1 };
+    return null;
+  }
+  return null;
+}
+function pdfScheduledRule(takeoff, description, unit2, specificationFacts = void 0) {
+  const metric = pdfRuleMetric(description, unit2, takeoff, specificationFacts);
+  if (!metric) return null;
+  const keys = metric.keys || [metric.key], rows = [];
+  let value = 0;
+  for (const key2 of keys) {
+    const claims = takeoff.pdf_analysis?.quantity_evidence?.[key2], quantity = takeoff.scheduled_quantities?.[key2];
+    if (!claims?.length || !valid(quantity) || claims.some((r) => r.key !== key2 || r.unit !== PDF_METRIC_UNITS[key2] || !valid(r.value) || r.unit === "nr" && !Number.isInteger(r.value) || !String(r.evidence || "").trim() || !Array.isArray(r.pages) || !r.pages.length)) return null;
+    if (Math.abs(claims.reduce((n, r) => n + r.value, 0) - quantity) > 1e-3) return null;
+    rows.push(...claims);
+    value += quantity;
+  }
+  if (!pdfCatalogThicknessMatches(metric, rows) || !pdfCatalogHeightMatches(metric, rows, description)) return null;
+  const specifications = metric.specificationFacts || [];
+  return { quantity: value * metric.factor, metricKey: metric.key, ...metric.keys ? { metricKeys: keys } : {}, source: "pdf_schedule_evidence", measured: true, pages: [.../* @__PURE__ */ new Set([...rows.flatMap((r) => r.pages), ...specifications.map((f) => f.page)])], evidence: [...rows.map((r) => r.evidence), ...specifications.map((f) => `Source specification p.${f.page}: ${f.quote}`)].join(" | ") };
+}
+
+// src/lib/boqCatalogRate.mjs
+function resolvePdfCatalogRate(item, priceLevel = "standard") {
+  const positive = (v) => Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0;
+  const components = ["material_rate", "labor_rate", "equipment_rate", "transport_rate"].map((k) => Number(item?.[k] || 0));
+  const rates = {
+    standard: positive(item?.standard_rate),
+    economy: positive(item?.economy_rate),
+    premium: positive(item?.premium_rate),
+    component: components.every((v) => Number.isFinite(v) && v >= 0) ? positive(components.reduce((a, b) => a + b, 0)) : 0
+  };
+  const level = String(priceLevel || "standard").toLowerCase();
+  const order = level === "economy" ? ["economy", "standard", "premium", "component"] : level === "premium" ? ["premium", "standard", "economy", "component"] : ["standard", "economy", "premium", "component"];
+  for (const key2 of order) if (rates[key2] > 0) return { rate: rates[key2], source: key2 === level ? `direct_${key2}_rate` : `fallback_${key2}_rate`, peerCount: 0, missingRate: false };
+  return { rate: 0, source: "rate_missing_on_catalog_item", peerCount: 0, missingRate: true };
+}
+
+// src/lib/boqEvidence.mjs
+function requireBoqReview(item = {}) {
+  if (item.review?.confirmed === true || item.source === "manual" || item.status === "manual") return item;
+  const quantityVerification = item.quantityVerification || (item.status === "measured" || item.status === "measured_rate_pending" || item.measuredFromApsStructure === true || item.verification === "verified" ? "measured" : item.status === "quantity_pending" ? "pending" : "estimated");
+  const next = { ...item, quantityVerification, specificationVerification: "unconfirmed", reviewRequired: true };
+  if (item.status === "measured" || item.verification === "verified") {
+    next.status = "provisional_estimate";
+    next.verification = "provisional";
+    next.includeInCommercialTotal = false;
+  }
+  const note = "REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description.";
+  next.notes = String(item.notes || "").includes(note) ? item.notes : [item.notes, note].filter(Boolean).join(" ");
+  return next;
+}
+
+// src/lib/boqPriceSelection.mjs
+function clearBoqGapNote(notes) {
+  return String(notes || "").replace(/\s*\[BOQ GAP\][\s\S]*?\[\/BOQ GAP\]/g, "").replace(/The matched catalog item has no own rate\. Quantity retained; no peer or median rate borrowed\./g, "").replace(/Quantity retained without assuming a catalog specification or rate\. Not included in tender or priced budget\./g, "").trim();
+}
+
+// src/lib/pdfDefaultSpecifications.mjs
+var allowed = {
+  water_pipe_length: ["pipe_material", "diameter_mm"],
+  waste_pipe_length: ["pipe_material", "diameter_mm"],
+  ac_pipe_length: ["pipe_material", "diameter_pair_mm", "insulation_mm"],
+  internal_block_area: ["thickness_mm", "block_material"],
+  external_block_area: ["thickness_mm", "block_material"],
+  wood_floor_area: ["floor_system"],
+  epoxy_floor_area: ["floor_system"],
+  terrace_floor_area: ["tile_material"],
+  wet_wall_tile_area: ["tile_material"],
+  backsplash_area: ["tile_material"],
+  ceiling_paint_area: ["paint_system"],
+  roof_waterproofing_area: ["waterproofing_system"],
+  terrace_waterproofing_area: ["waterproofing_system"],
+  wet_floor_waterproofing_area: ["waterproofing_system"],
+  wet_wall_waterproofing_area: ["waterproofing_system"],
+  door_count: ["door_system"],
+  internal_door_count: ["door_system"],
+  service_door_count: ["door_system"],
+  entrance_door_count: ["door_system"],
+  garage_door_count: ["door_system"],
+  ac_count: ["capacity_tr", "unit_system"],
+  kitchen_cabinet_length: ["cabinet_material"],
+  kitchen_hob_hood_count: ["appliance_package"],
+  kitchen_sink_count: ["fixture_system"],
+  laundry_sink_count: ["fixture_system"],
+  shower_count: ["fixture_system"],
+  terrace_railing_length: ["railing_system"],
+  driveway_area: ["paving_system"],
+  landscape_area: ["landscape_system"]
+};
+for (const key2 of ["pcc_volume", "foundation_volume", "pedestal_volume", "column_volume", "beam_volume", "ground_slab_volume", "first_slab_volume", "roof_slab_volume"]) allowed[key2] = ["concrete_grade"];
+var unit = (s) => ({ nos: "nr", no: "nr", each: "nr", ea: "nr", set: "nr", sqm: "m2", cum: "m3", lm: "m" })[String(s || "").toLowerCase()] || String(s || "").toLowerCase().replace("\xB2", "2").replace("\xB3", "3");
+function metadata(item) {
+  try {
+    return typeof item?.source_reference === "string" ? JSON.parse(item.source_reference) : item?.source_reference;
+  } catch {
+    return null;
+  }
+}
+function isPdfDefaultOnlyPrice(item) {
+  return metadata(item)?.fallback_only === true;
+}
+function policy(item) {
+  if (item?.is_active === false) return null;
+  const p = metadata(item), keys = Object.hasOwn(allowed, p?.metric) ? allowed[p.metric] : null;
+  if (p?.kind !== "pricing_default" || p.enabled !== true || !keys || unit(item.unit) !== PDF_METRIC_UNITS[p.metric] || item.currency && item.currency !== "AED" || typeof p.label !== "string" || !p.label.trim()) return null;
+  const spec = p.specification;
+  if (!spec || keys.some((k) => spec[k] === void 0) || Object.keys(spec).some((k) => !keys.includes(k))) return null;
+  if (Object.values(spec).some((v) => typeof v === "string" ? !v.trim() : typeof v !== "number" || !Number.isFinite(v) || v <= 0)) return null;
+  if (p.metric === "ac_pipe_length") {
+    const pair = String(spec.diameter_pair_mm).split("+").map(Number);
+    if (pair.length !== 2 || pair.some((v) => !Number.isFinite(v) || v <= 0) || !(Number(spec.insulation_mm) > 0)) return null;
+  }
+  if (typeof p.rate_basis !== "string" || !p.rate_basis.trim() || p.conditions !== void 0 && typeof p.conditions !== "string") return null;
+  if (p.source_required !== void 0 && (!Array.isArray(p.source_required) || p.source_required.some((k) => !keys.includes(k)))) return null;
+  return p;
+}
+function pricedRow(item, p, rateItem, resolution, known, extra = {}) {
+  const quantity = Number(item.quantity), assumed = Object.fromEntries(Object.entries(p.specification).filter(([property]) => !known.some((k) => k.property === property)));
+  const disclosure = `PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): ${p.label}; rate item ${rateItem.item_code}; ${p.rate_basis}.${p.conditions ? " " + p.conditions : ""}`;
+  return {
+    ...item,
+    description: `${p.label} [assumed specification \u2014 editable]`,
+    rate: resolution.rate,
+    referenceRate: resolution.rate,
+    amount: Math.round((quantity * resolution.rate + Number.EPSILON) * 100) / 100,
+    rateMissing: false,
+    rateSource: `Assumed specification; catalog ${rateItem.item_code}; ${resolution.source}`,
+    source: "PDF measured quantity + editable catalog specification assumption",
+    status: "provisional_estimate",
+    verification: "provisional",
+    specificationVerification: "assumed",
+    reviewRequired: true,
+    includeInCommercialTotal: false,
+    defaultSpecification: { status: "applied", metric: item.pdfEvidence.metricKey, assumed, sourceSpecifications: known, catalogItemCode: rateItem.item_code, catalogUnit: rateItem.unit, catalogRate: resolution.rate, rateBasis: p.rate_basis, policy: p, originalDescription: item.description, ...extra },
+    completion: { code: "assumed_specification_review_required", required_information: ["Confirm or edit the assumed specification and its budget rate."] },
+    notes: [clearBoqGapNote(item.notes), disclosure].filter(Boolean).join(" ")
+  };
+}
+function doorParts(item, takeoff, p, catalog, priceLevel) {
+  if (!p.opening_components) return null;
+  const native = nativeOpeningEvidence(takeoff.page_results || [], normalizePdfScope);
+  const rows = native.schedules.filter((s) => s.status === "read").flatMap((s) => s.rows.filter((r) => ["door", "garage_door"].includes(r.kind)));
+  const count = native.claims.filter((c) => c.key === "door_count").reduce((n, c) => n + c.value, 0);
+  if (!native.claims.length || native.schedules.some((s) => s.status !== "read") || count !== Number(item.quantity) || rows.length !== count) return null;
+  const grouped = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const list = grouped.get(row.kind) || [];
+    list.push(row);
+    grouped.set(row.kind, list);
+  }
+  const result = [];
+  for (const [kind, group] of grouped) {
+    const config2 = p.opening_components[kind], matches = catalog.filter((c) => c.item_code === config2?.item_code && c.is_active !== false);
+    if (!config2 || matches.length !== 1 || unit(matches[0].unit) !== "nr") return null;
+    const rateItem = matches[0], rate = resolvePdfCatalogRate(rateItem, priceLevel);
+    if (rate.missingRate) return null;
+    const pages = [...new Set(group.flatMap((r) => r.dimension_pages || [r.page]))];
+    const basis = `Source opening table ${kind}: ${group.map((r) => r.source_row).join("; ")}. Count allocated from complete source table, not a pricing assumption.`;
+    const child = {
+      ...item,
+      id: `${item.id || item.itemCode}:${kind}`,
+      itemCode: `${item.itemCode}-${kind.toUpperCase()}`,
+      quantity: group.length,
+      pdfEvidence: { ...item.pdfEvidence, pages, basis, sourceAllocation: { kind, count: group.length, parentQuantity: count, tags: group.map((r) => r.id) } }
+    };
+    const partPolicy = { ...p, label: config2.label, specification: { door_system: config2.door_system }, rate_basis: config2.rate_basis || p.rate_basis, conditions: config2.conditions || p.conditions };
+    const scaled = group.map((r) => Math.max(1, config2.reference_area_m2 > 0 ? r.width * r.height / config2.reference_area_m2 : 1));
+    if (new Set(scaled.map((v) => v.toFixed(6))).size > 1) {
+      for (let i = 0; i < group.length; i++) {
+        const single = { ...child, id: child.id + ":" + group[i].id, itemCode: child.itemCode + "-" + group[i].id, quantity: 1, pdfEvidence: { ...child.pdfEvidence, sourceAllocation: { kind, count: 1, parentQuantity: count, tags: [group[i].id] } } };
+        result.push(pricedRow(single, partPolicy, rateItem, { ...rate, rate: Math.round(rate.rate * scaled[i] * 100) / 100 }, [], { openingKind: kind, sizeFactor: scaled[i] }));
+      }
+    } else result.push(pricedRow(child, partPolicy, rateItem, { ...rate, rate: Math.round(rate.rate * scaled[0] * 100) / 100 }, [], { openingKind: kind, sizeFactor: scaled[0] }));
+  }
+  return result;
+}
+function applyPdfDefaultSpecifications(items, takeoff, catalog = [], priceLevel = "standard") {
+  if (!takeoff?.pdf_analysis) return items;
+  const facts = readPdfSourceSpecifications(takeoff), conflicts = pdfSpecificationConflicts(facts), byMetric = /* @__PURE__ */ new Map();
+  for (const rateItem of catalog) {
+    const p = policy(rateItem);
+    if (!p) continue;
+    const entries = byMetric.get(p.metric) || [];
+    entries.push({ p, rateItem });
+    byMetric.set(p.metric, entries);
+  }
+  return items.flatMap((item) => {
+    const key2 = item.pdfEvidence?.metricKey;
+    if (item.review?.confirmed || item.source === "manual" || item.defaultSpecification?.rateOverridden || item.defaultSpecification?.status && item.defaultSpecification.status !== "applied" || !(Number(item.quantity) > 0) || Number(item.rate) > 0 || unit(item.unit) !== PDF_METRIC_UNITS[key2]) return [item];
+    if (items.filter((i) => i.quantity > 0 && (i.pdfEvidence?.metricKeys || [i.pdfEvidence?.metricKey]).includes(key2)).length !== 1 || conflicts.some((f) => f.metric === key2)) return [item];
+    const source2 = facts.filter((f) => f.metric === key2), known = resolvedPdfSpecifications(takeoff, key2, facts);
+    const policies = (byMetric.get(key2) || []).filter(({ p: p2 }) => !source2.some((f) => !known.some((k) => k.property === f.property)) && !known.some((k) => p2.specification[k.property] !== k.value) && !(p2.source_required || []).some((prop) => !known.some((k) => k.property === prop)));
+    if (policies.length !== 1) return [item];
+    const { p, rateItem } = policies[0], rate = resolvePdfCatalogRate(rateItem, priceLevel);
+    if (rate.missingRate) return [item];
+    const claims = takeoff.pdf_analysis.quantity_evidence?.[key2], quantity = Number(item.quantity), expected = PDF_METRIC_UNITS[key2];
+    if (!claims?.length || claims.some((c) => c.key !== key2 || c.unit !== expected || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim() || !c.pages?.length) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) return [item];
+    if (expected === "nr" && !Number.isInteger(quantity)) return [item];
+    if (["water_pipe_length", "waste_pipe_length", "ac_pipe_length"].includes(key2) && !source2.length && claims.some((c) => /\b(?:dn|dia(?:meter)?)\s*[:=]?\s*\d+|\b(?:ppr|u?pvc|cpvc|hdpe|copper|steel|pex)\b|\d\s*mm|[øØ⌀]|\d\s*\/\s*\d/i.test(c.evidence))) return [item];
+    if (key2 === "door_count" && p.opening_components) {
+      const parts = doorParts(item, takeoff, p, catalog, priceLevel);
+      if (parts) return parts;
+      if (claims.some((c) => /garage[_ ]door|roller shutter|overhead door/i.test(c.evidence))) return [item];
+    }
+    return [pricedRow(item, p, rateItem, rate, known)];
+  });
+}
+
+// src/lib/pdfBoqCoverage.mjs
+function planPdfCatalogBindings(takeoff, candidates) {
+  const byMetric = /* @__PURE__ */ new Map(), byCode = /* @__PURE__ */ new Map();
+  const specificationFacts = readPdfSourceSpecifications(takeoff);
+  const signatures = /* @__PURE__ */ new Map(), conflictingCodes = /* @__PURE__ */ new Set();
+  for (const item of candidates || []) {
+    if (!item || item.is_active === false || isPdfDefaultOnlyPrice(item)) continue;
+    const code = String(item.item_code || item.itemCode || "").trim().toUpperCase();
+    if (!code) continue;
+    const signature = JSON.stringify([String(item.description || "").trim().toLowerCase(), String(item.unit || "").trim().toLowerCase()]);
+    if (signatures.has(code) && signatures.get(code) !== signature) conflictingCodes.add(code);
+    signatures.set(code, signature);
+    const evidence = pdfScheduledRule(takeoff, item.description, item.unit, specificationFacts);
+    if (!evidence || evidence.quantity <= 0) continue;
+    byCode.set(code, evidence);
+    for (const key2 of evidence.metricKeys || [evidence.metricKey]) {
+      const group = byMetric.get(key2) || /* @__PURE__ */ new Map();
+      group.set(code, evidence);
+      byMetric.set(key2, group);
+    }
+  }
+  const bindings = /* @__PURE__ */ new Map(), warnings = [];
+  for (const [metric, group] of byMetric) {
+    if (group.size !== 1 || conflictingCodes.has([...group.keys()][0])) {
+      warnings.push(`PDF quantity ${metric} has ${group.size === 1 ? "inconsistent definitions for catalog code" : "competing catalog items"} (${[...group.keys()].join(", ")}). Specification selection required; quantity was not repeated across them.`);
+    }
+  }
+  for (const [code, evidence] of byCode) if (!conflictingCodes.has(code) && (evidence.metricKeys || [evidence.metricKey]).every((k) => byMetric.get(k)?.size === 1)) bindings.set(code, evidence);
+  return { bindings, warnings };
+}
+function planPdfCatalogRules(takeoff, rules, candidates) {
+  const next = [...rules || []], codes = new Set(next.map((r) => String(r.item_code || "").trim().toUpperCase()));
+  const allActive = (candidates || []).filter((i) => i && i.is_active !== false);
+  const active = allActive.filter((i) => !isPdfDefaultOnlyPrice(i));
+  const configuredCodes = new Set(active.filter((i) => {
+    const code = String(i.item_code || i.itemCode || "").trim().toUpperCase();
+    const section = String(i.section_code || "").trim();
+    return codes.has(code) || Boolean(section && !/^unassigned$/i.test(section)) || Boolean(String(i.source_name || "").trim()) || !resolvePdfCatalogRate(i).missingRate;
+  }).map((i) => String(i.item_code || i.itemCode || "").trim().toUpperCase()));
+  const eligible = active.filter((i) => configuredCodes.has(String(i.item_code || i.itemCode || "").trim().toUpperCase()));
+  const plan = planPdfCatalogBindings(takeoff, eligible);
+  const ignored = active.length - eligible.length;
+  if (ignored) plan.warnings.push(`PDF catalog: ${ignored} unconfigured scope entries have no section, source, own catalog rate or active formula rule; they were not treated as competing commercial items. No catalog records were changed.`);
+  for (const item of eligible) {
+    const code = String(item?.item_code || "").trim().toUpperCase();
+    if (!plan.bindings.has(code) || codes.has(code)) continue;
+    next.push({
+      item_code: item.item_code,
+      section_code: item.section_code,
+      formula_type: "manual",
+      rule_name: "PDF evidence: existing catalog item",
+      notes: "Explicit PDF operation matched to a unique existing catalog item; review required."
+    });
+    codes.add(code);
+  }
+  return { ...plan, rules: next, catalogAudit: { activeEntries: allActive.length, defaultOnlyEntries: allActive.length - active.length, commercialCandidates: eligible.length, unconfiguredEntries: ignored } };
+}
+var operations = {
+  excavation_volume: ["02", "Site Works", "Excavation"],
+  pcc_volume: ["03", "Concrete Works", "Concrete blinding \u2014 grade requires confirmation"],
+  foundation_volume: ["03", "Concrete Works", "Foundation concrete \u2014 grade requires confirmation"],
+  pedestal_volume: ["03", "Concrete Works", "Pedestal concrete \u2014 grade requires confirmation"],
+  column_volume: ["03", "Concrete Works", "Column concrete \u2014 grade requires confirmation"],
+  beam_volume: ["03", "Concrete Works", "Beam concrete \u2014 grade requires confirmation"],
+  ground_slab_volume: ["03", "Concrete Works", "Ground slab concrete \u2014 grade requires confirmation"],
+  first_slab_volume: ["03", "Concrete Works", "First floor slab concrete \u2014 grade requires confirmation"],
+  roof_slab_volume: ["03", "Concrete Works", "Roof slab concrete \u2014 grade requires confirmation"],
+  rebar_kg: ["03", "Concrete Works", "Reinforcement \u2014 scheduled mass"],
+  foundation_formwork_area: ["03", "Concrete Works", "Foundation formwork"],
+  column_formwork_area: ["03", "Concrete Works", "Column formwork"],
+  beam_formwork_area: ["03", "Concrete Works", "Beam formwork"],
+  slab_formwork_area: ["03", "Concrete Works", "Slab formwork"],
+  external_block_area: ["04", "Masonry Works", "External blockwork \u2014 specification requires confirmation"],
+  internal_block_area: ["04", "Masonry Works", "Internal blockwork \u2014 specification requires confirmation"],
+  wood_floor_area: ["07", "Finishes", "Wood floor finish"],
+  ceramic_floor_area: ["07", "Finishes", "Ceramic floor finish"],
+  epoxy_floor_area: ["07", "Finishes", "Epoxy floor finish"],
+  terrace_floor_area: ["07", "Finishes", "Terrace floor finish \u2014 specification requires confirmation"],
+  plaster_area: ["07", "Finishes", "Plaster"],
+  paint_area: ["07", "Finishes", "Wall paint"],
+  gypsum_ceiling_area: ["07", "Finishes", "Gypsum ceiling"],
+  window_area: ["06", "Doors and Windows", "Windows \u2014 measured opening area; specification requires confirmation"],
+  door_count: ["06", "Doors and Windows", "Door sets \u2014 material and type require confirmation"],
+  internal_door_count: ["06", "Doors and Windows", "Internal door sets \u2014 material requires confirmation"],
+  service_door_count: ["06", "Doors and Windows", "External service door sets \u2014 specification requires confirmation"],
+  entrance_door_count: ["06", "Doors and Windows", "Entrance door sets \u2014 specification requires confirmation"],
+  garage_door_count: ["06", "Doors and Windows", "Garage door sets \u2014 specification requires confirmation"],
+  kitchen_hob_hood_count: ["07", "Finishes", "Kitchen hob and hood package \u2014 specification requires confirmation"],
+  toilet_count: ["08", "Plumbing", "Toilet pans"],
+  basin_count: ["08", "Plumbing", "Wash basins"],
+  shower_count: ["08", "Plumbing", "Showers"],
+  water_pipe_length: ["08", "Plumbing", "Water pipe \u2014 diameter and material require confirmation"],
+  waste_pipe_length: ["08", "Plumbing", "Waste pipe \u2014 diameter and material require confirmation"],
+  light_count: ["09", "Electrical", "Lighting points \u2014 fixture types require confirmation"],
+  socket_count: ["09", "Electrical", "Socket points"],
+  distribution_board_count: ["09", "Electrical", "Distribution boards"],
+  ac_count: ["10", "HVAC", "Air conditioning units \u2014 capacities require confirmation"],
+  ac_pipe_length: ["10", "HVAC", "Air conditioning pipe \u2014 specification requires confirmation"],
+  smoke_detector_count: ["11", "Fire Fighting", "Smoke detectors"],
+  kitchen_cabinet_length: ["07", "Finishes", "Kitchen cabinetry \u2014 specification requires confirmation"],
+  terrace_railing_length: ["12", "External Works", "Terrace railing \u2014 specification requires confirmation"],
+  roof_waterproofing_area: ["05", "Waterproofing", "Roof waterproofing"],
+  terrace_waterproofing_area: ["05", "Waterproofing", "Terrace waterproofing"],
+  wet_floor_waterproofing_area: ["05", "Waterproofing", "Wet area floor waterproofing"],
+  wet_wall_waterproofing_area: ["05", "Waterproofing", "Wet area wall waterproofing"],
+  wet_wall_tile_area: ["07", "Finishes", "Wet area wall tiles"],
+  ceiling_paint_area: ["07", "Finishes", "Ceiling paint"],
+  backsplash_area: ["07", "Finishes", "Kitchen backsplash"],
+  driveway_area: ["12", "External Works", "Driveway \u2014 paving specification requires confirmation"],
+  landscape_area: ["13", "Landscaping", "Landscaping \u2014 planting specification requires confirmation"],
+  kitchen_sink_count: ["08", "Plumbing", "Kitchen sinks"],
+  laundry_sink_count: ["08", "Plumbing", "Laundry sinks"]
+};
+function retainUnboundPdfQuantities(items, takeoff) {
+  if (!takeoff.pdf_analysis) return { items, warnings: [] };
+  const next = [...items], warnings = [];
+  const doorKeys = ["internal_door_count", "service_door_count", "entrance_door_count", "garage_door_count"];
+  const doorBreakdown = doorKeys.filter((k) => Number.isFinite(takeoff.scheduled_quantities?.[k]));
+  const completeDoors = doorBreakdown.length > 0 && Math.abs(doorBreakdown.reduce((n, k) => n + takeoff.scheduled_quantities[k], 0) - (takeoff.scheduled_quantities?.door_count ?? -1)) < 1e-3;
+  const bound = new Set(items.filter((i) => i.quantity > 0).flatMap((i) => i.pdfEvidence?.metricKeys || [i.pdfEvidence?.metricKey]).filter(Boolean));
+  for (const [key2, [sectionCode, section, description]] of Object.entries(operations)) {
+    if (key2 === "door_count" && completeDoors) continue;
+    if (doorKeys.includes(key2) && !completeDoors) continue;
+    const quantity = takeoff.scheduled_quantities?.[key2];
+    const claims = takeoff.pdf_analysis.quantity_evidence?.[key2];
+    if (bound.has(key2) || !Number.isFinite(quantity) || quantity <= 0 || !claims?.length) continue;
+    const unit2 = PDF_METRIC_UNITS[key2];
+    if (claims.some((c) => c.key !== key2 || c.unit !== unit2 || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim()) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) continue;
+    const pages = [...new Set(claims.flatMap((c) => c.pages || []))];
+    const basis = claims.map((c) => c.evidence).join(" | ");
+    const itemCode = `PDF-${key2.toUpperCase()}`;
+    if (next.some((i) => i.itemCode === itemCode)) continue;
+    next.push({
+      itemCode,
+      sectionCode,
+      section,
+      category: section,
+      subCategory: "",
+      description,
+      unit: unit2,
+      quantity,
+      materialRate: 0,
+      laborRate: 0,
+      equipmentRate: 0,
+      transportRate: 0,
+      rate: 0,
+      referenceRate: 0,
+      amount: 0,
+      rateMissing: true,
+      rateSource: "unavailable_specification_or_catalog_match",
+      status: "measured_rate_pending",
+      verification: "pending",
+      includeInCommercialTotal: false,
+      quantityVerification: "pdf_evidence_requires_review",
+      reviewRequired: true,
+      quantityBasis: "pdf_schedule_evidence",
+      quantitySource: "pdf_schedule_evidence",
+      source: "PDF evidence - rate and specification pending",
+      pdfEvidence: { metricKey: key2, pages, basis },
+      notes: `PDF EVIDENCE (AI; REVIEW REQUIRED): pages ${pages.join(", ")}; ${basis}. Quantity retained without assuming a catalog specification or rate. Not included in tender or priced budget.`
+    });
+    warnings.push(`PDF quantity ${key2} retained as an unpriced row; confirm specification and rate.`);
+  }
+  return { items: next, warnings };
+}
+
+// src/lib/pdfBoqCompletion.mjs
+var requirements = {
+  internal_block_area: ["Block thickness/material matching the drawing", "An own catalog or project rate for that specification"],
+  door_count: ["Door material/type breakdown including garage doors", "Applicable rate for each selected door type"],
+  internal_door_count: ["Door material and set specification"],
+  service_door_count: ["Service door classification and specification"],
+  entrance_door_count: ["Entrance door classification and specification"],
+  garage_door_count: ["Garage door system and specification"],
+  water_pipe_length: ["Pipe material and diameter breakdown"],
+  waste_pipe_length: ["Drainage material and diameter breakdown"],
+  ac_count: ["Unit type and capacity breakdown"],
+  ac_pipe_length: ["AC pipe material/diameter and insulation specification"],
+  wet_wall_tile_area: ["Wall tile material and installation specification"],
+  backsplash_area: ["Backsplash material and installation specification"],
+  roof_waterproofing_area: ["Roof waterproofing system, layers and installation specification"],
+  terrace_waterproofing_area: ["Terrace waterproofing system and installation specification"],
+  wet_floor_waterproofing_area: ["Wet floor waterproofing system and installation specification"],
+  wet_wall_waterproofing_area: ["Wet wall waterproofing system and installation specification"],
+  ceiling_paint_area: ["Applicable ceiling paint system and its own rate"],
+  epoxy_floor_area: ["Epoxy floor system and its own rate"],
+  wood_floor_area: ["Wood flooring system/material and its own rate"],
+  terrace_floor_area: ["Outdoor flooring material and installation specification"],
+  kitchen_cabinet_length: ["Base cabinet material/finish and linear-metre rate"],
+  kitchen_hob_hood_count: ["Hob/hood package specification and package rate"],
+  kitchen_sink_count: ["Kitchen sink and fittings specification"],
+  laundry_sink_count: ["Laundry sink and fittings specification"],
+  shower_count: ["Shower/fittings package specification"],
+  terrace_railing_length: ["Railing material/system and linear-metre rate"],
+  driveway_area: ["Driveway paving material and construction specification"],
+  landscape_area: ["Landscape planting/groundcover specification"]
+};
+function annotatePdfBoqCompletion(items, takeoff, catalog = [], priceLevel = "standard") {
+  if (!takeoff.pdf_analysis) return { items, summary: null, gaps: [] };
+  items = applyPdfDefaultSpecifications(items, takeoff, catalog, priceLevel);
+  const candidates = /* @__PURE__ */ new Map();
+  const specificationFacts = readPdfSourceSpecifications(takeoff);
+  const specificationConflicts = pdfSpecificationConflicts(specificationFacts);
+  for (const p of catalog) {
+    if (p?.is_active === false || isPdfDefaultOnlyPrice(p)) continue;
+    const m = pdfRuleMetric(p?.description, p?.unit, takeoff, specificationFacts);
+    if (!m) continue;
+    const rows = candidates.get(m.key) || [];
+    rows.push({ code: p.item_code || p.itemCode, unit: p.unit, rateAvailable: !resolvePdfCatalogRate(p).missingRate });
+    candidates.set(m.key, rows);
+  }
+  const summary = { pricedMeasuredOperations: 0, unpricedMeasuredOperations: 0, catalogOptionsWithoutQuantity: 0, assumedSpecificationOperations: 0, unmeasuredCatalogRowsAreNotMissingProjectScope: true, completePricedBudget: false };
+  const gaps = [];
+  const next = items.map((item) => {
+    const quantity = Number(item.quantity), rate = Number(item.rate);
+    const existingNotes = String(item.notes || "").replace(/\s*\[BOQ GAP\][\s\S]*?\[\/BOQ GAP\]/g, "").trim();
+    if (!(quantity > 0)) {
+      summary.catalogOptionsWithoutQuantity++;
+      const completion2 = { code: "catalog_option_without_quantity", required_information: ["Select this catalog option only if it belongs to the project and has its own measured quantity."] };
+      return { ...item, completion: completion2, notes: [existingNotes, "[BOQ GAP] Catalog option without a project quantity. This row is not evidence of an additional missing project scope. [/BOQ GAP]"].filter(Boolean).join(" ") };
+    }
+    if (rate > 0 && !item.rateMissing) {
+      summary.pricedMeasuredOperations++;
+      if (item.defaultSpecification?.status === "applied") summary.assumedSpecificationOperations++;
+      return item;
+    }
+    summary.unpricedMeasuredOperations++;
+    const key2 = item.pdfEvidence?.metricKey || String(item.itemCode || "").replace(/^PDF-/, "").toLowerCase();
+    const matching = candidates.get(key2) || [];
+    let required = /_volume$/.test(key2) && key2 !== "excavation_volume" ? ["Concrete grade/specification for this element", "Applicable own catalog or project rate"] : requirements[key2] || ["Applicable scope/material specification and matching own catalog or project rate"];
+    let code = matching.length && matching.every((p) => !p.rateAvailable) ? "catalog_rate_missing" : matching.length > 1 ? "catalog_selection_required" : "specification_or_catalog_match_required";
+    const known = resolvedPdfSpecifications(takeoff, key2, specificationFacts), conflicts = specificationConflicts.filter((f) => f.metric === key2);
+    if (conflicts.length) {
+      code = "source_specification_breakdown_required";
+      required = ["Provide disjoint measured quantities for the mixed/conflicting source specifications before selecting rates."];
+    } else if (known.length && !matching.length) {
+      code = "source_specification_without_catalog_match";
+      required = ["Select or provide an applicable rate matching the known source specification; the source quantity is retained."];
+    }
+    const completion = { code, metric: key2, required_information: required, candidate_codes: matching.map((p) => p.code), ...known.length ? { source_specifications: known } : {}, ...conflicts.length ? { specification_conflicts: conflicts } : {} };
+    gaps.push({ itemCode: item.itemCode, description: item.description, quantity, unit: item.unit, ...completion });
+    const sourceNote = known.length ? " Source: " + known.map((f) => `${f.property}=${f.value} (pages ${f.pages.join(", ")})`).join("; ") + "." : "";
+    const note = `[BOQ GAP] ${code}: ${required.join("; ")}.${matching.length ? " Catalog candidates: " + matching.map((p) => p.code).join(", ") + "." : ""}${sourceNote} [/BOQ GAP]`;
+    return { ...item, completion, notes: [existingNotes, note].filter(Boolean).join(" ") };
+  });
+  summary.knownMeasuredOperationsHaveRates = summary.pricedMeasuredOperations > 0 && summary.unpricedMeasuredOperations === 0;
+  return { items: next, summary, gaps };
+}
+
 // src/lib/estimateClassification.mjs
 function classifyEstimateItem(item = {}) {
   if (item.rateMissing === true || ["quantity_pending", "measured_rate_pending"].includes(item.status) || item.verification === "pending") return "pending";
@@ -2640,10 +4977,10 @@ function applyDwgScheduleToBoq(input = [], evidence = {}, catalog = []) {
   let items = input.map((i) => ({ ...i }));
   const warnings = [...evidence.issues || []];
   const countUnit = (u) => /^(nos?\.?|ea|each|pcs?|item|number)$/.test(norm(u));
-  function candidate(kind, material, unit) {
-    const f = family(material);
+  function candidate(kind, material2, unit2) {
+    const f = family(material2);
     if (!f) return null;
-    return catalog.find((c) => new RegExp(kind).test(norm(c.description)) && family(c.description) === f && (unit === "nos" ? countUnit(c.unit) : norm(c.unit).replace("\xB2", "2") === unit) && Number(c.resolvedRate) > 0 && !/repair|painting|ironmongery|sealant|cleaning/.test(norm(c.description))) || null;
+    return catalog.find((c) => new RegExp(kind).test(norm(c.description)) && family(c.description) === f && (unit2 === "nos" ? countUnit(c.unit) : norm(c.unit).replace("\xB2", "2") === unit2) && Number(c.resolvedRate) > 0 && !/repair|painting|ironmongery|sealant|cleaning/.test(norm(c.description))) || null;
   }
   for (const kind of ["door", "window"]) {
     const schedules = (evidence.tables || []).filter((t2) => t2.kind === kind && t2.accepted && t2.complete && t2.coversProject && qtyHeader(t2.quantityHeader) && Array.isArray(t2.rows) && t2.rows.length > 0 && t2.rows.every((r) => r.quantityAccepted && Number.isInteger(r.quantity) && r.quantity >= 0));
@@ -2767,31 +5104,16 @@ function getDrawingEvidence(takeoff = {}) {
   return takeoff.drawing_evidence || takeoff.advanced_takeoff?.drawing_evidence || takeoff.raw_result?.drawing_evidence || null;
 }
 
-// src/lib/boqEvidence.mjs
-function requireBoqReview(item = {}) {
-  if (item.review?.confirmed === true || item.source === "manual" || item.status === "manual") return item;
-  const quantityVerification = item.quantityVerification || (item.status === "measured" || item.status === "measured_rate_pending" || item.measuredFromApsStructure === true || item.verification === "verified" ? "measured" : item.status === "quantity_pending" ? "pending" : "estimated");
-  const next = { ...item, quantityVerification, specificationVerification: "unconfirmed", reviewRequired: true };
-  if (item.status === "measured" || item.verification === "verified") {
-    next.status = "provisional_estimate";
-    next.verification = "provisional";
-    next.includeInCommercialTotal = false;
-  }
-  const note = "REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description.";
-  next.notes = String(item.notes || "").includes(note) ? item.notes : [item.notes, note].filter(Boolean).join(" ");
-  return next;
-}
-
 // src/lib/serverBoqAnalysis.js
 import { NextResponse as NextResponse2 } from "next/server.js";
 import { createClient as createClient3 } from "@supabase/supabase-js";
 
 // src/services/localBoqBuilder.js
 function toNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
+  const number2 = Number(value);
+  return Number.isFinite(number2) ? number2 : 0;
 }
-function round(value, digits = 2) {
+function round2(value, digits = 2) {
   const factor = 10 ** digits;
   return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
 }
@@ -2824,38 +5146,38 @@ function collectTakeoffSources(input) {
   return sources;
 }
 function firstPositive(sources, keys) {
-  for (const source of sources) {
+  for (const source2 of sources) {
     for (const key2 of keys) {
-      const value = toNumber(source?.[key2]);
+      const value = toNumber(source2?.[key2]);
       if (value > 0) return value;
     }
   }
   return 0;
 }
 function firstValue(sources, keys, fallback = null) {
-  for (const source of sources) {
+  for (const source2 of sources) {
     for (const key2 of keys) {
-      const value = source?.[key2];
+      const value = source2?.[key2];
       if (value !== void 0 && value !== null && value !== "") return value;
     }
   }
   return fallback;
 }
 function countDetected(sources, keys) {
-  for (const source of sources) {
+  for (const source2 of sources) {
     for (const key2 of keys) {
-      const value = source?.[key2];
+      const value = source2?.[key2];
       if (Array.isArray(value) && value.length > 0) return value.length;
-      const number = toNumber(value);
-      if (number > 0) return number;
+      const number2 = toNumber(value);
+      if (number2 > 0) return number2;
     }
   }
   return 0;
 }
 function firstArray(sources, keys) {
-  for (const source of sources) {
+  for (const source2 of sources) {
     for (const key2 of keys) {
-      if (Array.isArray(source?.[key2]) && source[key2].length > 0) return source[key2];
+      if (Array.isArray(source2?.[key2]) && source2[key2].length > 0) return source2[key2];
     }
   }
   return [];
@@ -2877,10 +5199,10 @@ function getOpeningMetrics(sources, type) {
   return { count, area: explicitArea || derivedArea };
 }
 function getRoomDetails(sources) {
-  for (const source of sources) {
-    const rooms = source?.object_details?.rooms;
+  for (const source2 of sources) {
+    const rooms = source2?.object_details?.rooms;
     if (Array.isArray(rooms) && rooms.length > 0) return rooms;
-    if (Array.isArray(source?.rooms) && source.rooms.length > 0) return source.rooms;
+    if (Array.isArray(source2?.rooms) && source2.rooms.length > 0) return source2.rooms;
   }
   return [];
 }
@@ -2894,10 +5216,10 @@ function createItem({
   itemNumber,
   section,
   description,
-  unit,
+  unit: unit2,
   quantity,
   rate,
-  source,
+  source: source2,
   confidence,
   notes = ""
 }) {
@@ -2905,11 +5227,11 @@ function createItem({
     itemNumber,
     section,
     description,
-    unit,
-    quantity: round(quantity),
-    rate: round(rate),
-    amount: round(toNumber(quantity) * toNumber(rate)),
-    source,
+    unit: unit2,
+    quantity: round2(quantity),
+    rate: round2(rate),
+    amount: round2(toNumber(quantity) * toNumber(rate)),
+    source: source2,
     confidence: toNumber(confidence),
     notes
   };
@@ -2953,7 +5275,7 @@ function buildLocalBoq({
   const netWallArea = wallArea > 0 && totalOpeningArea > 0 ? Math.max(0, wallArea - totalOpeningArea) : wallArea;
   assumptions = [
     "Rates are editable starter budget rates in AED and must be reviewed before quotation or contract use.",
-    totalOpeningArea > 0 ? `Wall finishes use net wall area after deducting ${round(totalOpeningArea)} m\xB2 of measured openings.` : "Wall finishes use gross wall area because opening dimensions are unavailable."
+    totalOpeningArea > 0 ? `Wall finishes use net wall area after deducting ${round2(totalOpeningArea)} m\xB2 of measured openings.` : "Wall finishes use gross wall area because opening dimensions are unavailable."
   ];
   const slabVolume = firstPositive(sources, ["slab_volume", "slabVolume"]);
   const skirtingLength = Math.max(0, roomPerimeter || wallLength || 0);
@@ -3064,8 +5386,8 @@ function buildLocalBoq({
   if (items.length === 0) {
     warnings.push("No measurable floor, wall, opening, or slab quantities were found in the latest takeoff.");
   }
-  const subtotal = round(items.reduce((sum, item) => sum + item.amount, 0));
-  const vat = round(subtotal * (toNumber(vatPercentage) / 100));
+  const subtotal = round2(items.reduce((sum, item) => sum + item.amount, 0));
+  const vat = round2(subtotal * (toNumber(vatPercentage) / 100));
   return {
     projectName,
     currency: "AED",
@@ -3073,7 +5395,7 @@ function buildLocalBoq({
     items,
     warnings,
     assumptions,
-    summary: { subtotal, vat, grandTotal: round(subtotal + vat) },
+    summary: { subtotal, vat, grandTotal: round2(subtotal + vat) },
     generatedBy: "Ventra deterministic BOQ fallback",
     generatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
@@ -3085,7 +5407,7 @@ function normalizeText(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 function compactRoom(room) {
-  const bbox = room?.regionBBox && typeof room.regionBBox === "object" && Number.isFinite(
+  const bbox2 = room?.regionBBox && typeof room.regionBBox === "object" && Number.isFinite(
     Number(
       room.regionBBox.x
     )
@@ -3132,9 +5454,9 @@ function compactRoom(room) {
     y: directY,
     coordinateSystem: room?.centroid?.coordinateSystem || "viewer_sheet_normalized",
     source: room?.centroid?.source || "semantic_room"
-  } : bbox ? {
-    x: bbox.x + bbox.width / 2,
-    y: bbox.y + bbox.height / 2,
+  } : bbox2 ? {
+    x: bbox2.x + bbox2.width / 2,
+    y: bbox2.y + bbox2.height / 2,
     coordinateSystem: "viewer_sheet_normalized",
     source: "region_bbox_center"
   } : null;
@@ -3155,7 +5477,7 @@ function compactRoom(room) {
       room?.confidence
     ) || 0,
     centroid,
-    regionBBox: bbox,
+    regionBBox: bbox2,
     planId: room?.planId || null,
     planTitle: room?.planTitle || null,
     spatialSource: room?.source || null,
@@ -3371,24 +5693,24 @@ function hydrateSemanticRoomQuantities(rooms, takeoff) {
   let assigned = 0;
   const hydrated = list.map(
     (room, index) => {
-      let area2;
+      let area3;
       if (index === list.length - 1) {
-        area2 = floorArea - assigned;
+        area3 = floorArea - assigned;
       } else {
-        area2 = floorArea * (counts[index] / totalCells);
-        assigned += area2;
+        area3 = floorArea * (counts[index] / totalCells);
+        assigned += area3;
       }
-      area2 = Math.max(
+      area3 = Math.max(
         0,
-        area2
+        area3
       );
       return {
         ...room,
         area: Number(
-          area2.toFixed(2)
+          area3.toFixed(2)
         ),
         perimeter: Number(
-          (4 * Math.sqrt(area2)).toFixed(2)
+          (4 * Math.sqrt(area3)).toFixed(2)
         ),
         areaEstimated: true,
         perimeterEstimated: true,
@@ -3461,8 +5783,8 @@ async function inferConstructionScopes({
 function shortlistPriceCatalog(prices, searchTerms, limit = 500) {
   const terms = uniqueStrings(searchTerms).flatMap((value) => {
     const normalized = normalizeText(value);
-    const words = normalized.split(/[^a-z0-9]+/i).filter((word) => word.length >= 4);
-    return [normalized, ...words];
+    const words2 = normalized.split(/[^a-z0-9]+/i).filter((word) => word.length >= 4);
+    return [normalized, ...words2];
   }).filter((term) => term.length >= 3);
   if (!terms.length) {
     return [];
@@ -3683,10 +6005,10 @@ function createServerSupabase() {
   });
 }
 function toNumber2(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
+  const number2 = Number(value);
+  return Number.isFinite(number2) ? number2 : 0;
 }
-function round2(value, precision = 2) {
+function round3(value, precision = 2) {
   const factor = 10 ** precision;
   return Math.round(
     (toNumber2(value) + Number.EPSILON) * factor
@@ -3696,7 +6018,7 @@ function normalizeCode(value) {
   return String(value ?? "").trim().toUpperCase();
 }
 function normalizeTakeoff(rawTakeoff) {
-  const takeoff = rawTakeoff || {};
+  const takeoff = rawTakeoff?.pdf_analysis && rawTakeoff?.page_results?.length ? { ...rawTakeoff, ...mergePdfEvidence(rawTakeoff.page_results, rawTakeoff.failed_pages || [], rawTakeoff.total_pages) } : rawTakeoff || {};
   const doors = toNumber2(
     takeoff.doors ?? takeoff.door_count ?? takeoff.doorCount
   );
@@ -3712,10 +6034,13 @@ function normalizeTakeoff(rawTakeoff) {
   const measuredOpeningArea = toNumber2(
     takeoff.opening_area ?? takeoff.openingArea
   );
-  const estimatedDoorArea = measuredDoorArea > 0 ? measuredDoorArea : doors > 0 ? doors * 1.89 : 0;
-  const estimatedWindowArea = measuredWindowArea > 0 ? measuredWindowArea : windows > 0 ? windows * 1.44 : 0;
+  const estimatedDoorArea = measuredDoorArea > 0 ? measuredDoorArea : !takeoff.pdf_analysis && doors > 0 ? doors * 1.89 : 0;
+  const estimatedWindowArea = measuredWindowArea > 0 ? measuredWindowArea : !takeoff.pdf_analysis && windows > 0 ? windows * 1.44 : 0;
   const resolvedOpeningArea = measuredOpeningArea > 0 ? measuredOpeningArea : estimatedDoorArea + estimatedWindowArea;
   return {
+    pdf_analysis: takeoff.pdf_analysis || (/pdf/i.test(takeoff.document_type || "") || /\.pdf$/i.test(takeoff.document_name || "") ? { version: 0, requiresReanalysis: true, quantity_evidence: {} } : null),
+    scheduled_quantities: takeoff.scheduled_quantities || {},
+    page_results: takeoff.pdf_analysis && Array.isArray(takeoff.page_results) ? takeoff.page_results : [],
     rooms: toNumber2(
       takeoff.rooms ?? takeoff.room_count ?? takeoff.roomCount
     ),
@@ -3808,16 +6133,16 @@ function normalizeTakeoff(rawTakeoff) {
     duct_length: toNumber2(
       takeoff.duct_length ?? takeoff.ductLength
     ),
-    opening_area: round2(
+    opening_area: round3(
       resolvedOpeningArea,
       2
     ),
-    door_area: round2(
+    door_area: round3(
       estimatedDoorArea,
       2
     ),
-    window_area: round2(
-      estimatedWindowArea,
+    window_area: round3(
+      measuredWindowArea,
       2
     ),
     opening_area_estimated: measuredOpeningArea <= 0 && (measuredDoorArea <= 0 || measuredWindowArea <= 0) && resolvedOpeningArea > 0,
@@ -3868,7 +6193,7 @@ function getGeometryValue(rule, takeoff) {
     return takeoff.windows;
   }
   if (property === "window_area") {
-    return takeoff.window_area || takeoff.windows;
+    return takeoff.window_area || 0;
   }
   if (property === "door_area") {
     return takeoff.door_area || takeoff.doors;
@@ -3978,7 +6303,7 @@ function calculateQuantity(rule, takeoff) {
         source: "takeoff_electrical_subtype_count"
       }
     );
-    return round2(
+    return round3(
       measuredQuantity,
       Number.isInteger(
         rule.rounding_precision
@@ -4033,7 +6358,7 @@ function calculateQuantity(rule, takeoff) {
   if (quantity > 0 && quantity < minimumQuantity) {
     quantity = minimumQuantity;
   }
-  return round2(
+  return round3(
     quantity,
     Number.isInteger(
       rule.rounding_precision
@@ -4086,11 +6411,11 @@ function chooseDirectRate(priceItem, priceLevel) {
     ["premium", rates.premium],
     ["component", rates.component]
   ];
-  for (const [source, value] of preferredOrder) {
+  for (const [source2, value] of preferredOrder) {
     if (Number(value) > 0) {
       return {
         rate: Number(value),
-        source: source === level ? `direct_${source}_rate` : `fallback_${source}_rate`
+        source: source2 === level ? `direct_${source2}_rate` : `fallback_${source2}_rate`
       };
     }
   }
@@ -4135,7 +6460,7 @@ function resolveRate(priceItem, priceLevel, allPriceItems) {
       missingRate: false
     };
   }
-  const unit = normalizeRateUnit(
+  const unit2 = normalizeRateUnit(
     priceItem?.unit
   );
   const category = String(
@@ -4155,7 +6480,7 @@ function resolveRate(priceItem, priceLevel, allPriceItems) {
   ) ? allPriceItems : []).filter(
     (item) => item && item !== priceItem && normalizeRateUnit(
       item.unit
-    ) === unit
+    ) === unit2
   ).map((item) => {
     let score = 0;
     const itemCategory = String(
@@ -4237,7 +6562,7 @@ function resolveRate(priceItem, priceLevel, allPriceItems) {
   ) ? allPriceItems : []).filter(
     (item) => item && item !== priceItem && normalizeRateUnit(
       item.unit
-    ) === unit
+    ) === unit2
   ).map((item) => ({
     rate: chooseDirectRate(
       item,
@@ -4492,14 +6817,14 @@ function getSafeQuantityBasis(match, priceItem) {
   const description = String(
     priceItem?.description || ""
   ).toLowerCase();
-  const unit = String(
+  const unit2 = String(
     priceItem?.unit || ""
   ).trim().toLowerCase().replace(/²/g, "2").replace(/\s+/g, "");
   const isAreaUnit = [
     "m2",
     "sqm",
     "sq.m"
-  ].includes(unit);
+  ].includes(unit2);
   const isWetRoom = [
     "bathroom",
     "toilet",
@@ -4525,7 +6850,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   const description = String(
     priceItem?.description || ""
   ).toLowerCase();
-  const unit = String(
+  const unit2 = String(
     priceItem?.unit || ""
   ).trim().toLowerCase().replace(/²/g, "2").replace(/\s+/g, "");
   const floorArea = Number(
@@ -4559,7 +6884,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
     takeoff?.classifications?.room_types?.laundry
   ) || 0);
   if (geometry2 === "preliminaries" && ["item", "ls", "l.s", "sum"].includes(
-    unit
+    unit2
   )) {
     return {
       quantity: 1,
@@ -4571,7 +6896,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
     if (/(excavat|soil removal|cut)/.test(
       description
     ) && ["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.6,
@@ -4582,7 +6907,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
     if (/(backfill|fill)/.test(
       description
     ) && ["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.3,
@@ -4593,7 +6918,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "foundation") {
     if (["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.22,
@@ -4602,7 +6927,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
     if (["m2", "sqm", "sq.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.85,
@@ -4613,7 +6938,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "column") {
     if (["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && columns > 0) {
       return {
         quantity: columns * 0.32,
@@ -4622,7 +6947,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
     if (["m2", "sqm", "sq.m"].includes(
-      unit
+      unit2
     ) && columns > 0) {
       return {
         quantity: columns * 3.6,
@@ -4633,7 +6958,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "beam") {
     if (["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && wallLength > 0) {
       return {
         quantity: wallLength * 0.045,
@@ -4642,7 +6967,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
     if (["m2", "sqm", "sq.m"].includes(
-      unit
+      unit2
     ) && wallLength > 0) {
       return {
         quantity: wallLength * 0.55,
@@ -4653,7 +6978,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "slab") {
     if (["m3", "cum", "cu.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.16,
@@ -4662,7 +6987,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
     if (["m2", "sqm", "sq.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea,
@@ -4673,7 +6998,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "plumbing") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "set"].includes(
-      unit
+      unit2
     )) {
       if (/(wc|toilet|water closet)/.test(
         description
@@ -4722,7 +7047,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       }
     }
     if (["m", "lm", "linear.m", "lin.m"].includes(
-      unit
+      unit2
     ) && wetRooms > 0) {
       return {
         quantity: wetRooms * 8,
@@ -4733,7 +7058,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "electrical") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "point"].includes(
-      unit
+      unit2
     ) && electricalItems > 0) {
       if (/(lighting point|light point|downlight|led)/.test(
         description
@@ -4781,7 +7106,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "hvac") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "set"].includes(
-      unit
+      unit2
     ) && roomCount > 0) {
       if (/(split|ac unit|air conditioning unit|indoor unit|fan coil)/.test(
         description
@@ -4799,7 +7124,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       }
     }
     if (["m", "lm", "linear.m", "lin.m"].includes(
-      unit
+      unit2
     ) && roomCount > 0) {
       return {
         quantity: roomCount * 3.5,
@@ -4810,7 +7135,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "fire") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit"].includes(
-      unit
+      unit2
     )) {
       if (/(smoke detector|heat detector|detector)/.test(
         description
@@ -4842,7 +7167,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "external") {
     if (["m2", "sqm", "sq.m"].includes(
-      unit
+      unit2
     ) && floorArea > 0) {
       return {
         quantity: floorArea * 0.35,
@@ -4851,7 +7176,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
     if (["m", "lm", "linear.m", "lin.m"].includes(
-      unit
+      unit2
     ) && wallLength > 0) {
       return {
         quantity: wallLength * 0.4,
@@ -4862,7 +7187,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   }
   if (geometry2 === "handover" || geometry2 === "commissioning") {
     if (["item", "ls", "l.s", "sum"].includes(
-      unit
+      unit2
     )) {
       return {
         quantity: 1,
@@ -4887,7 +7212,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
   const description = String(
     priceItem?.description || ""
   ).toLowerCase();
-  const unit = String(
+  const unit2 = String(
     priceItem?.unit || ""
   ).trim().toLowerCase().replace(/²/g, "2").replace(/³/g, "3").replace(/\s+/g, "");
   const floorArea = Number(takeoff?.floor_area) || 0;
@@ -4932,24 +7257,24 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
     "ls",
     "l.s",
     "sum"
-  ].includes(unit);
+  ].includes(unit2);
   const isAreaUnit = [
     "m2",
     "sqm",
     "sq.m"
-  ].includes(unit);
+  ].includes(unit2);
   const isLengthUnit = [
     "m",
     "lm",
     "lin.m",
     "linear.m",
     "linearm"
-  ].includes(unit);
+  ].includes(unit2);
   const isVolumeUnit = [
     "m3",
     "cum",
     "cu.m"
-  ].includes(unit);
+  ].includes(unit2);
   const saysConcrete = /\b(concrete|r\.?c\.?c\.?|reinforced\s+concrete)\b/i.test(
     description
   );
@@ -5362,7 +7687,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
   };
 }
 function normalizeSpatialPoints(items) {
-  const valid = (Array.isArray(items) ? items : []).filter(
+  const valid2 = (Array.isArray(items) ? items : []).filter(
     (item) => {
       const x = item?.centroid?.x;
       const y = item?.centroid?.y;
@@ -5373,13 +7698,13 @@ function normalizeSpatialPoints(items) {
       );
     }
   );
-  if (!valid.length) {
+  if (!valid2.length) {
     return [];
   }
-  const xs = valid.map(
+  const xs = valid2.map(
     (item) => Number(item.centroid.x)
   );
-  const ys = valid.map(
+  const ys = valid2.map(
     (item) => Number(item.centroid.y)
   );
   const minX = Math.min(...xs);
@@ -5394,7 +7719,7 @@ function normalizeSpatialPoints(items) {
     maxY - minY,
     1e-9
   );
-  return valid.map(
+  return valid2.map(
     (item) => ({
       item,
       x: (Number(item.centroid.x) - minX) / width,
@@ -6699,6 +9024,14 @@ async function handleCommercialRequest2(request) {
       )
     );
     const rawTakeoff = body?.takeoff || {};
+    if (rawTakeoff.pdf_analysis) {
+      const total = Number(rawTakeoff.total_pages || rawTakeoff.pdf_analysis.total_pages || 0);
+      const analyzed = Array.isArray(rawTakeoff.page_results) ? new Set(rawTakeoff.page_results.map((p) => p.pageNumber)).size : Number(rawTakeoff.analyzed_pages || 0);
+      const review = rawTakeoff.pdf_analysis.document_review_status?.status;
+      if (rawTakeoff.pdf_analysis.summaryOnly || rawTakeoff.failed_pages?.length || rawTakeoff.pdf_analysis.failed_pages?.length || total > 0 && analyzed < total || ["failed", "pending"].includes(review)) {
+        return NextResponse2.json({ success: false, code: "PDF_ANALYSIS_INCOMPLETE", error: `BOQ generation stopped: PDF page extraction or document review is incomplete (${analyzed}/${total || "?"} pages; review: ${review || "unavailable"}). The saved BOQ was not replaced. Recover complete source evidence before generating again.` }, { status: 409 });
+      }
+    }
     const takeoff = normalizeTakeoff(
       rawTakeoff
     );
@@ -6740,8 +9073,8 @@ async function handleCommercialRequest2(request) {
         ).size,
         centroidSources: validElectricalForSpatial.reduce(
           (result, item) => {
-            const source = item?.centroid?.source || "unknown";
-            result[source] = (result[source] || 0) + 1;
+            const source2 = item?.centroid?.source || "unknown";
+            result[source2] = (result[source2] || 0) + 1;
             return result;
           },
           {}
@@ -6915,14 +9248,19 @@ async function handleCommercialRequest2(request) {
     }
     const rules = rulesResult.data || [];
     const prices = pricesResult.data || [];
-    if (rules.length === 0 || prices.length === 0) {
-      const fallbackBoq = buildLocalBoq({
+    if (prices.length === 0 || !takeoff.pdf_analysis && rules.length === 0) {
+      const fallbackBoq = takeoff.pdf_analysis ? { items: [], warnings: [] } : buildLocalBoq({
         takeoff,
         projectName,
         vatPercentage
       });
-      const fallbackDwg = applyDwgScheduleToBoq(fallbackBoq?.items || [], getDrawingEvidence(rawTakeoff) || {}, []);
-      const fallbackItems = fallbackDwg.items.map(requireBoqReview);
+      const fallbackDwg = takeoff.pdf_analysis ? { items: [], warnings: [] } : applyDwgScheduleToBoq(fallbackBoq?.items || [], getDrawingEvidence(rawTakeoff) || {}, []);
+      const fallbackPdf = retainUnboundPdfQuantities(fallbackDwg.items, takeoff);
+      const fallbackPdfCompletion = annotatePdfBoqCompletion(fallbackPdf.items.map(requireBoqReview), takeoff, prices, priceLevel);
+      const fallbackItems = fallbackPdfCompletion.items;
+      fallbackItems.forEach((item, index) => {
+        item.itemNumber = String(index + 1).padStart(2, "0");
+      });
       const fallbackSubtotal = fallbackItems.reduce((sum, item) => sum + (classifyEstimateItem(item) === "pending" ? 0 : Number(item.amount) || 0), 0);
       const fallbackVat = fallbackSubtotal * Number(vatPercentage || 0) / 100;
       if (fallbackItems.length === 0) {
@@ -6949,12 +9287,14 @@ async function handleCommercialRequest2(request) {
         boq: {
           ...fallbackBoq,
           items: fallbackItems,
+          pdfCompletion: fallbackPdfCompletion.summary,
           summary: { subtotal: fallbackSubtotal, vat: fallbackVat, grandTotal: fallbackSubtotal + fallbackVat },
           projectId,
           priceLevel,
           warnings: [
             `Ventra UAE BOQ database is not populated (rules: ${rules.length}, prices: ${prices.length}).`,
-            "Starter allowance rates are being used. Review/edit rates before quotation or contract use.",
+            takeoff.pdf_analysis ? "PDF quantities retained without rates. No allowance pricing was used." : "Starter allowance rates are being used. Review/edit rates before quotation or contract use.",
+            ...fallbackPdf.warnings,
             ...fallbackDwg.warnings,
             ...Array.isArray(fallbackBoq.warnings) ? fallbackBoq.warnings : []
           ],
@@ -6979,7 +9319,7 @@ async function handleCommercialRequest2(request) {
         section
       ])
     );
-    const warnings = [];
+    const warnings = [...takeoff.pdf_analysis?.conflicts || []];
     const items = [];
     const claimedMeasuredFamilies = /* @__PURE__ */ new Set();
     const ventraBoqMode = String(
@@ -6996,7 +9336,10 @@ async function handleCommercialRequest2(request) {
         policy: allowEstimatedQuantities ? "development_estimates_enabled" : allowProvisionalDerivation ? "measured_plus_provisional_derived_scope" : "measured_only"
       }
     );
-    for (const rule of rulesResult.data || []) {
+    const pdfCatalogPlan = takeoff.pdf_analysis ? planPdfCatalogRules(takeoff, rules, prices) : null;
+    if (pdfCatalogPlan) warnings.push(...pdfCatalogPlan.warnings);
+    const pdfConsumedCodes = /* @__PURE__ */ new Set();
+    for (const rule of pdfCatalogPlan?.rules || rulesResult.data || []) {
       const priceItem = pricesByCode.get(
         normalizeCode(rule.item_code)
       );
@@ -7006,7 +9349,7 @@ async function handleCommercialRequest2(request) {
         );
         continue;
       }
-      if (shouldSuppressDatabaseAutoRule(
+      if (!takeoff.pdf_analysis && shouldSuppressDatabaseAutoRule(
         rule,
         priceItem,
         claimedMeasuredFamilies
@@ -7026,7 +9369,15 @@ async function handleCommercialRequest2(request) {
         takeoff
       );
       let quantityEstimate = null;
-      if (allowProvisionalDerivation && quantity <= 0 && String(
+      const pdfCode = normalizeCode(priceItem.item_code);
+      if (takeoff.pdf_analysis && pdfConsumedCodes.has(pdfCode)) continue;
+      if (takeoff.pdf_analysis) pdfConsumedCodes.add(pdfCode);
+      const pdfQuantity = pdfCatalogPlan?.bindings.get(pdfCode) || null;
+      if (takeoff.pdf_analysis) {
+        quantity = pdfQuantity?.quantity ?? 0;
+        quantityEstimate = pdfQuantity;
+      }
+      if (!takeoff.pdf_analysis && allowProvisionalDerivation && quantity <= 0 && String(
         rule.formula_type || ""
       ).toLowerCase() === "manual") {
         quantityEstimate = estimateRemainingPendingQuantity(
@@ -7060,7 +9411,7 @@ async function handleCommercialRequest2(request) {
         if (Number(
           quantityEstimate.quantity
         ) > 0) {
-          quantity = round2(
+          quantity = round3(
             Number(
               quantityEstimate.quantity
             ),
@@ -7111,17 +9462,19 @@ async function handleCommercialRequest2(request) {
       const isEstimatedRule = Number(
         quantityEstimate?.quantity
       ) > 0 && !isMeasuredDerivedRule;
-      if (isQuantityPending && !isManualRule) {
+      if (isQuantityPending && !isManualRule && !takeoff.pdf_analysis) {
         continue;
       }
       const section = sectionsByCode.get(
         rule.section_code || priceItem.section_code
       );
-      const rateResolution = resolveRate(
+      const rateResolution = takeoff.pdf_analysis ? resolvePdfCatalogRate(priceItem, priceLevel) : resolveRate(
         priceItem,
         priceLevel,
         prices
       );
+      const pdfRatePending = Boolean(pdfQuantity && rateResolution.missingRate);
+      if (pdfRatePending) warnings.push(`PDF catalog item ${pdfCode} has no own rate. Its measured quantity is retained without a peer or median rate.`);
       const unitRate = rateResolution.rate;
       if (rateResolution.source !== `direct_${String(
         priceLevel || "standard"
@@ -7156,7 +9509,7 @@ async function handleCommercialRequest2(request) {
           }
         );
       }
-      const amount = isQuantityPending ? 0 : round2(
+      const amount = isQuantityPending ? 0 : round3(
         quantity * unitRate,
         2
       );
@@ -7192,11 +9545,11 @@ async function handleCommercialRequest2(request) {
         transportRate: toNumber2(
           priceItem.transport_rate
         ),
-        rate: round2(
+        rate: round3(
           commercialRate,
           2
         ),
-        referenceRate: round2(
+        referenceRate: round3(
           unitRate,
           2
         ),
@@ -7204,11 +9557,12 @@ async function handleCommercialRequest2(request) {
         rateMissing: rateResolution.missingRate,
         amount,
         priceLevel,
-        source: isQuantityPending ? "Ventra Rule Library - Quantity Pending" : isEstimatedRule ? "Ventra Rule Library - Estimated Quantity" : priceItem.source_name || "Ventra UAE Base Rate",
-        status: isQuantityPending ? "quantity_pending" : isEstimatedRule ? "provisional_estimate" : "measured",
-        verification: isQuantityPending ? "pending" : isEstimatedRule ? "provisional" : "verified",
-        includeInCommercialTotal: !isQuantityPending && !isEstimatedRule,
-        measuredFromApsStructure: isMeasuredDerivedRule,
+        source: isQuantityPending ? "Ventra Rule Library - Quantity Pending" : isEstimatedRule ? "Ventra Rule Library - Estimated Quantity" : pdfQuantity ? "PDF schedule - requires review" : priceItem.source_name || "Ventra UAE Base Rate",
+        status: isQuantityPending ? "quantity_pending" : pdfRatePending ? "measured_rate_pending" : isEstimatedRule ? "provisional_estimate" : "measured",
+        verification: isQuantityPending ? "pending" : pdfRatePending ? "pending" : isEstimatedRule ? "provisional" : "verified",
+        includeInCommercialTotal: !isQuantityPending && !isEstimatedRule && !pdfRatePending,
+        measuredFromApsStructure: isMeasuredDerivedRule && !pdfQuantity,
+        pdfEvidence: pdfQuantity ? { metricKey: pdfQuantity.metricKey, ...pdfQuantity.metricKeys ? { metricKeys: pdfQuantity.metricKeys } : {}, pages: pdfQuantity.pages, basis: pdfQuantity.evidence } : null,
         confidence: isEstimatedRule ? Math.min(
           toNumber2(
             quantityEstimate?.confidence
@@ -7217,11 +9571,12 @@ async function handleCommercialRequest2(request) {
         ) : toNumber2(
           priceItem.confidence_score
         ),
-        quantityBasis: quantityEstimate?.source || (isEstimatedRule ? "derived_allowance" : "measured_takeoff"),
-        quantitySource: isMeasuredDerivedRule ? "aps_measured_structural_properties" : isEstimatedRule ? "derived_from_verified_project_metrics" : isQuantityPending ? "unavailable" : "measured",
+        quantityBasis: isQuantityPending ? "unavailable" : quantityEstimate?.source || (isEstimatedRule ? "derived_allowance" : "measured_takeoff"),
+        quantitySource: pdfQuantity ? "pdf_schedule_evidence" : isMeasuredDerivedRule ? "aps_measured_structural_properties" : isEstimatedRule ? "derived_from_verified_project_metrics" : isQuantityPending ? "unavailable" : "measured",
         notes: [
-          rule.notes || "",
-          isEstimatedRule ? `PROVISIONAL: ${quantityEstimate?.source || "derived allowance"}. Excluded from verified commercial subtotal until replaced by measured quantity.` : isMeasuredDerivedRule ? `MEASURED FROM APS STRUCTURAL PROPERTIES: ${quantityEstimate?.source || "structural measurement"}.` : ""
+          pdfRatePending ? "The matched catalog item has no own rate. Quantity retained; no peer or median rate borrowed." : "",
+          pdfQuantity ? "Quantity transcribed from PDF evidence; scope, specification and rate require review." : rule.notes || "",
+          pdfQuantity ? `PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages ${pdfQuantity.pages.join(", ")}; ${pdfQuantity.evidence}` : isEstimatedRule ? `PROVISIONAL: ${quantityEstimate?.source || "derived allowance"}. Excluded from verified commercial subtotal until replaced by measured quantity.` : isMeasuredDerivedRule ? `MEASURED FROM APS STRUCTURAL PROPERTIES: ${quantityEstimate?.source || "structural measurement"}.` : ""
         ].filter(Boolean).join(" ")
       });
     }
@@ -7229,12 +9584,12 @@ async function handleCommercialRequest2(request) {
       takeoff?.column_volume
     ) || 0;
     const v36ColumnMeasured = takeoff?.structural_measurement_status?.columns?.volumeMeasured === true;
-    if (v36ColumnMeasured && v36ColumnVolume > 0) {
+    if (!takeoff.pdf_analysis && v36ColumnMeasured && v36ColumnVolume > 0) {
       const v36Quantity = Math.round(
         v36ColumnVolume * 100
       ) / 100;
       const v36ConcreteCandidates = (pricesResult.data || []).filter((candidate) => {
-        const unit = normalizeRateUnit(
+        const unit2 = normalizeRateUnit(
           candidate?.unit
         );
         const description = String(
@@ -7243,7 +9598,7 @@ async function handleCommercialRequest2(request) {
         const sectionCode = String(
           candidate?.section_code || ""
         ).trim();
-        return unit === "m3" && /concrete/.test(
+        return unit2 === "m3" && /concrete/.test(
           description
         ) && !/block|masonry|screed|precast|kerb|curb/.test(
           description
@@ -7343,11 +9698,11 @@ async function handleCommercialRequest2(request) {
     const ventraMode = String(
       process.env.NEXT_PUBLIC_VENTRA_MODE || process.env.VENTRA_MODE || "production"
     ).trim().toLowerCase();
-    const allowBoqAi = String(
+    const allowBoqAi = !takeoff.pdf_analysis && (String(
       process.env.VENTRA_ENABLE_BOQ_AI || ""
     ).trim().toLowerCase() === "true" || ventraMode === "production" && String(
       process.env.VENTRA_DISABLE_BOQ_AI || ""
-    ).trim().toLowerCase() !== "true";
+    ).trim().toLowerCase() !== "true");
     console.log(
       "[VENTRA LOW COST v23] BOQ AI gate",
       {
@@ -7471,7 +9826,7 @@ async function handleCommercialRequest2(request) {
             match,
             roomLocalMep
           ) : 0;
-          const quantity = round2(
+          const quantity = round3(
             roomLocalElectricalQuantity > 0 ? roomLocalElectricalQuantity : resolveAiQuantity({
               match: effectiveMatch,
               rooms: semanticRooms,
@@ -7531,7 +9886,7 @@ async function handleCommercialRequest2(request) {
               }
             );
           }
-          const amount = round2(
+          const amount = round3(
             quantity * unitRate,
             2
           );
@@ -7539,19 +9894,19 @@ async function handleCommercialRequest2(request) {
             const firstMeasuredRoomForCode = !measuredRoomLocalCodes.has(
               code
             );
-            existingItem.quantity = round2(
+            existingItem.quantity = round3(
               firstMeasuredRoomForCode ? quantity : (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.rate = round2(
+            existingItem.rate = round3(
               unitRate,
               2
             );
             existingItem.rateSource = rateResolution.source;
             existingItem.rateMissing = rateResolution.missingRate;
-            existingItem.amount = round2(
+            existingItem.amount = round3(
               existingItem.quantity * unitRate,
               2
             );
@@ -7562,13 +9917,13 @@ async function handleCommercialRequest2(request) {
               code
             );
           } else if (roomLocalElectricalQuantity > 0 && existingItem && existingItem.source === "Autodesk APS Room-local Measurement") {
-            existingItem.quantity = round2(
+            existingItem.quantity = round3(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.amount = round2(
+            existingItem.amount = round3(
               existingItem.quantity * unitRate,
               2
             );
@@ -7577,19 +9932,19 @@ async function handleCommercialRequest2(request) {
               code
             );
           } else if (existingItem && existingItem.status === "quantity_pending") {
-            existingItem.quantity = round2(
+            existingItem.quantity = round3(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.rate = round2(
+            existingItem.rate = round3(
               unitRate,
               2
             );
             existingItem.rateSource = rateResolution.source;
             existingItem.rateMissing = rateResolution.missingRate;
-            existingItem.amount = round2(
+            existingItem.amount = round3(
               existingItem.quantity * unitRate,
               2
             );
@@ -7621,7 +9976,7 @@ async function handleCommercialRequest2(request) {
               transportRate: toNumber2(
                 priceItem.transport_rate
               ),
-              rate: round2(
+              rate: round3(
                 unitRate,
                 2
               ),
@@ -7637,13 +9992,13 @@ async function handleCommercialRequest2(request) {
               notes: `AI scope: ${match.reason} Quantity basis: ${effectiveQuantityBasis}. Room type: ${match.room_type}.`
             });
           } else if (existingItem.source === "Ventra AI Scope Engine" || existingItem.status === "measured_estimated") {
-            existingItem.quantity = round2(
+            existingItem.quantity = round3(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.amount = round2(
+            existingItem.amount = round3(
               existingItem.quantity * unitRate,
               2
             );
@@ -7678,16 +10033,24 @@ async function handleCommercialRequest2(request) {
         );
       }
     }
-    const dwgResult = applyDwgScheduleToBoq(items, getDrawingEvidence(rawTakeoff) || {}, prices.map((price) => {
+    const dwgResult = takeoff.pdf_analysis ? { items: [...items], warnings: [] } : applyDwgScheduleToBoq(items, getDrawingEvidence(rawTakeoff) || {}, prices.map((price) => {
       const resolved = resolveRate(price, priceLevel, prices);
       return { ...price, resolvedRate: resolved.missingRate ? 0 : resolved.rate, resolvedSource: resolved.source };
     }));
     items.splice(0, items.length, ...dwgResult.items);
     warnings.push(...dwgResult.warnings);
     if (getDrawingEvidence(rawTakeoff)?.extractionError) warnings.push(`DWG schedule extraction: ${getDrawingEvidence(rawTakeoff).extractionError}`);
+    const pdfCoverage = retainUnboundPdfQuantities(items, takeoff);
+    items.splice(0, items.length, ...pdfCoverage.items);
+    warnings.push(...pdfCoverage.warnings);
     items.forEach((item, index) => {
       items[index] = requireBoqReview(item);
     });
+    const pdfCompletion = annotatePdfBoqCompletion(items, takeoff, prices, priceLevel);
+    if (pdfCompletion.summary) {
+      items.splice(0, items.length, ...pdfCompletion.items);
+      warnings.push(`PDF BOQ: ${pdfCompletion.summary.unpricedMeasuredOperations} measured operations need specification/catalog-rate resolution. ${pdfCompletion.summary.catalogOptionsWithoutQuantity} zero-quantity catalog rows are options, not a count of missing project measurements. See each row's notes for required information.`);
+    }
     console.log("[VENTRA BOQ EVIDENCE v37]", { reviewRequiredItems: items.filter((item) => item.reviewRequired).length, automaticScheduleReconciliation: true });
     warnings.push("Catalog descriptions and budget rates require project-specific review. Measured quantities alone do not verify scope or specification. Accepted DWG schedule quantities and explicit material notes are reconciled separately; unreadable or conflicting evidence remains unresolved.");
     console.log(
@@ -7770,7 +10133,7 @@ async function handleCommercialRequest2(request) {
         ).padStart(2, "0")}`;
       }
     );
-    const verifiedSubtotal = round2(
+    const verifiedSubtotal = round3(
       items.filter(
         (item) => item.includeInCommercialTotal === true
       ).reduce(
@@ -7779,7 +10142,7 @@ async function handleCommercialRequest2(request) {
       ),
       2
     );
-    const provisionalSubtotal = round2(
+    const provisionalSubtotal = round3(
       items.filter(
         (item) => item.status === "provisional_estimate"
       ).reduce(
@@ -7789,14 +10152,14 @@ async function handleCommercialRequest2(request) {
       2
     );
     const pendingItems = items.filter(
-      (item) => item.status === "quantity_pending"
+      (item) => ["quantity_pending", "measured_rate_pending"].includes(item.status)
     ).length;
     const subtotal = verifiedSubtotal;
-    const vatAmount = round2(
+    const vatAmount = round3(
       verifiedSubtotal * (vatPercentage / 100),
       2
     );
-    const grandTotal = round2(
+    const grandTotal = round3(
       verifiedSubtotal + vatAmount,
       2
     );
@@ -7883,6 +10246,8 @@ async function handleCommercialRequest2(request) {
           "Rates were loaded from the Ventra UAE price database."
         ],
         warnings,
+        pdfCatalogAudit: pdfCatalogPlan?.catalogAudit || null,
+        pdfCompletion: pdfCompletion.summary,
         aiScope: {
           detectedRooms: semanticRooms.map((room) => ({
             name: room.name,

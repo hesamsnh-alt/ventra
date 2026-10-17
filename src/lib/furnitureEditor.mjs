@@ -1,3 +1,4 @@
+import {personalFurnitureModel} from './personalAssets.mjs';
 import {applyPromptActions,placementProblem} from './scenePromptActions.mjs';
 export const FURNITURE_CATALOG=Object.freeze([
  ['sofa-modern','sofa','Sofa · Modern','مبل مدرن','أريكة حديثة',2.2,.9,.85,'modern','#b4a28f'],
@@ -38,6 +39,11 @@ export const FURNITURE_CATALOG=Object.freeze([
 ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};
+export function resolveFurnitureCatalog(edit){
+ const builtIn=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);if(builtIn)return builtIn;
+ if(edit.personalModel){const m=personalFurnitureModel(edit.personalModel);if(m.id===edit.catalogId)return m;}
+ return null;
+}
 export function furnitureRotationFromDrag(initialRotation,startX,event){
  if(!Number.isFinite(initialRotation)||!Number.isFinite(startX)||!Number.isFinite(event?.clientX))fail('Invalid rotation gesture.');
  let angle=initialRotation+(event.clientX-startX)*.5;
@@ -61,8 +67,34 @@ export function roomAtPoint(scene,point){
  const rooms=classified.length?classified:hits;
  return rooms.length===1?rooms[0]:scene.source==='dwg-engineering-interior'?hits.find(r=>r.scopeOnly)||null:null;
 }
+// Snap wall-adjacent furniture onto the visible wall face, never its centreline.
+export function snapFurnitureToWall(draft,scene){
+ if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table'].includes(draft.type))return draft;
+ let result=draft;
+ for(let pass=0;pass<2;pass++){
+  const candidates=[];
+  for(const wall of scene.walls||[]){
+   if(!wall.start||!wall.end||wall.type==='railing')continue;
+   const dx=wall.end.x-wall.start.x,dy=wall.end.y-wall.start.y,len=Math.hypot(dx,dy);if(len<.01)continue;
+   const ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+   const along=(result.xMeters-wall.start.x)*ux+(result.yMeters-wall.start.y)*uy;if(along<0||along>len)continue;
+   const distance=(result.xMeters-wall.start.x)*nx+(result.yMeters-wall.start.y)*ny;
+   const angle=(result.rotation||0)*Math.PI/180;
+   const extent=result.width/2*Math.abs(nx*Math.cos(angle)+ny*Math.sin(angle))+result.depth/2*Math.abs(-nx*Math.sin(angle)+ny*Math.cos(angle));
+   const face=extent+(Number(wall.thickness)||.12)/2;
+   const delta=(distance<0?-1:1)*face-distance;
+   // Up to 8 cm of empty gap or 18 cm of centreline/face confusion.
+   const gap=Math.abs(distance)-face;if(gap>.08||gap<-.18)continue;
+   const candidate={...result,xMeters:result.xMeters+nx*delta,yMeters:result.yMeters+ny*delta};
+   if(!placementProblem(candidate,scene,{manualFurniturePlacement:true}))candidates.push({candidate,shift:Math.abs(delta)});
+  }
+  candidates.sort((a,b)=>a.shift-b.shift);if(!candidates.length)break;
+  result=candidates[0].candidate;
+ }
+ return result;
+}
 export function furnitureDraft(scene,edit){
- const catalog=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId),original=scene.assets.find(a=>a.id===edit.assetId);
+ const catalog=resolveFurnitureCatalog(edit),original=scene.assets.find(a=>a.id===edit.assetId);
  if(edit.kind==='add'&&!catalog)fail('Unknown furniture model.');
  if(edit.kind!=='add'&&!original)fail('Select a furniture object.');
  if(edit.kind==='replace'&&!catalog)fail('Unknown furniture model.');
@@ -86,12 +118,12 @@ export function furnitureDraft(scene,edit){
   if(!ratios.every(n=>Number.isFinite(n)&&Math.abs(n-ratios[0])<.000001))fail('Resize must preserve furniture proportions.');
   if(Number.isFinite(scene.height)&&(Number(draft.zMeters)||0)+draft.height>scene.height)fail('Furniture would exceed the room height. / ارتفاع وسیله از سقف بیشتر می‌شود.');
  }
- return draft;
+ return snapFurnitureToWall(draft,scene);
 }
 export function previewFurnitureEdit(scene,edit){
  let candidate;
  try{
-  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true});
+  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true});
   // Sets need room for the chairs too; the full transaction is checked at commit.
   if(problem)return {candidate,valid:false,error:problem};
   applyFurnitureEdit(scene,edit);
@@ -105,7 +137,7 @@ export function applyFurnitureEdit(scene,edit){
  if(edit.kind==='remove')plan={action:'remove',assetId:edit.assetId};
  else if(edit.kind==='color')plan={action:'update',assetId:edit.assetId,color:edit.color};
  else{
-  candidate=furnitureDraft(scene,edit);model=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);
+  candidate=furnitureDraft(scene,edit);model=resolveFurnitureCatalog(edit);
   if(edit.kind==='replace'&&model.type!==original.type)fail('Choose a model of the same furniture type. / مدل هم‌نوع انتخاب کن.');
   plan={action:edit.kind==='add'?'add':'update',assetId:edit.kind==='add'?null:edit.assetId,type:candidate.type,roomId:candidate.roomId,xMeters:candidate.xMeters,yMeters:candidate.yMeters,width:candidate.width,depth:candidate.depth,height:candidate.height,rotation:candidate.rotation,color:candidate.color};
  }
@@ -114,11 +146,12 @@ export function applyFurnitureEdit(scene,edit){
   const a=candidate,t=a.rotation*Math.PI/180;
   for(const [x,y,rotation] of [[-a.width/2-.3,0,-90],[a.width/2+.3,0,90],[0,-a.depth/2-.32,0],[0,a.depth/2+.32,180]])actions.push({action:'add',type:'chair',roomId:a.roomId,xMeters:a.xMeters+x*Math.cos(t)-y*Math.sin(t),yMeters:a.yMeters+x*Math.sin(t)+y*Math.cos(t),width:.45,depth:.5,height:.9,rotation:rotation+a.rotation,color:model.color});
  }
- const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true}).scene;
+ const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
+  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
  }
+ if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);
  if(edit.kind==='resize')next.assets=next.assets.map(a=>a.id===original.id?{...a,renderingBaseDimensions:original.renderingBaseDimensions||{width:original.width,depth:original.depth,height:original.height}}:a);
  const editedIds=new Set(edit.kind==='add'?next.assets.slice(scene.assets.length).map(a=>a.id):[edit.assetId]);
  next.assets=next.assets.map(a=>editedIds.has(a.id)?{...a,...(edit.freePlacement===true&&scene.source==='dwg-engineering-interior'?{placementReview:'unverified_dwg_wall_clearance'}:{}),placementSource:'manual_furniture_editor',provenance:'proposed',excludeFromTakeoff:true,...(['move','replace'].includes(edit.kind)?{embeddedInCounter:false}:{})}:a);

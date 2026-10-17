@@ -1,3 +1,4 @@
+import * as walls from '../src/lib/manualWalls.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {FURNITURE_CATALOG,LOCKED_ARCHITECTURE,applyFurnitureEdit,previewFurnitureEdit,roomAtPoint,furnitureRotationFromDrag,furnitureSizeFromDrag} from '../src/lib/furnitureEditor.mjs';
 const scene=()=>({width:10,depth:8,height:3.2,palette:{wall:'#eee'},rooms:[{id:'r',name:'Living',type:'living',polygon:[{x:0,y:0},{x:10,y:0},{x:10,y:8},{x:0,y:8}]}],walls:[],openings:[],footprint:[{x:0,y:0},{x:10,y:0},{x:10,y:8},{x:0,y:8}],holes:[],assets:[],designDefaults:{version:'room-design-defaults-v64'}});
@@ -61,7 +62,7 @@ test('invalid placement respects walls, room bounds, holes and door access',()=>
  assert.throws(()=>applyFurnitureEdit(s,add('plant',-.1,2)),/point inside/);
  s.walls=[{id:'w',start:{x:5,y:0},end:{x:5,y:8},thickness:.12}];assert.throws(()=>applyFurnitureEdit(s,add()),/wall/);
  s.walls=[];s.holes=[{polygon:[{x:4,y:3},{x:6,y:3},{x:6,y:5},{x:4,y:5}]}];assert.throws(()=>applyFurnitureEdit(s,add()),/shaft/);
- s.holes=[];s.walls=[{id:'w',start:{x:0,y:0},end:{x:10,y:0}}];s.openings=[{type:'door',wallId:'w',offset:.5,width:1}];assert.throws(()=>applyFurnitureEdit(s,add('plant',5,.8)),/door/);
+ s.holes=[];s.walls=[{id:'w',start:{x:0,y:0},end:{x:10,y:0},thickness:.01}];s.openings=[{type:'door',wallId:'w',offset:.5,width:1}];assert.throws(()=>applyFurnitureEdit(s,add('plant',5,.25)),/door/);
  s.rooms.push({...s.rooms[0],id:'overlap'});assert.equal(roomAtPoint(s,{x:3,y:3}),null);
 });
 test('identifiers remain unique after removing an earlier asset and adding again',()=>{
@@ -81,7 +82,42 @@ test('actual furniture panel renders localized controls without executing saves'
  const {transform,loadBindings}=require('next/dist/build/swc');await loadBindings();
  const compiled=await transform(readFileSync('src/app/projects/[id]/FurnitureEditorPanel.jsx','utf8'),{filename:'FurnitureEditorPanel.jsx',jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'commonjs'}});
  const drawer=await loadComponent('src/app/projects/[id]/ToolDrawer.jsx');
- const openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='./ToolDrawer'?drawer:id.endsWith('.module.css')?{}:require(id)};
+ const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
  for(const [locale,title] of [['en','Furniture studio'],['fa','پنل مبلمان'],['ar','لوحة الأثاث']])assert.ok(renderToStaticMarkup(React.createElement(language.default,{initialLanguage:locale},React.createElement(sandbox.exports.default,{scene:scene(),getRenderer:()=>null,onCommit:()=>{throw new Error('Unexpected save');}}))).includes(title));
+});
+
+test('manual placement permits touching edges and nearby doorway space but blocks real collisions',async()=>{
+ const {placementProblem}=await import('../src/lib/scenePromptActions.mjs');
+ const s=scene();s.assets=[{id:'a',type:'chair',roomId:'r',xMeters:4,yMeters:4,width:1,depth:1,height:1,rotation:0}];
+ const candidate={id:'b',type:'chair',roomId:'r',xMeters:5,yMeters:4,width:1,depth:1,height:1,rotation:0};
+ assert.equal(placementProblem(candidate,s,{manualFurniturePlacement:true}),null);
+ assert.equal(placementProblem(candidate,s),'overlaps furniture');
+ assert.equal(placementProblem({...candidate,xMeters:4.9},s,{manualFurniturePlacement:true}),'overlaps furniture');
+ s.assets=[];s.walls=[{id:'w',start:{x:0,y:0},end:{x:10,y:0},thickness:.12}];s.openings=[{type:'door',wallId:'w',offset:.5,width:1}];
+ const near={...candidate,xMeters:5,yMeters:.8,width:.4,depth:.4};
+ assert.equal(placementProblem(near,s,{manualFurniturePlacement:true}),null);
+ assert.equal(placementProblem(near,s),'blocks door clearance');
+ assert.equal(placementProblem({...near,yMeters:.28},s,{manualFurniturePlacement:true}),'blocks door clearance');
+ const input=applyFurnitureEdit(scene(),add('plant',4,4));
+ const rotated=applyFurnitureEdit(input,{kind:'rotate',assetId:input.assets[0].id,rotation:45});assert.equal(rotated.assets[0].rotation,45);
+});
+test('cabinets snap to either wall face and remain flush after rotating without changing architecture',()=>{
+ const s=scene();s.walls=[{id:'right',start:{x:10,y:0},end:{x:10,y:8},thickness:.12}];
+ const input=structuredClone(s);
+ let next=applyFurnitureEdit(s,{...add('cabinet-storage',9.45,4)});
+ const a=next.assets[0];assert.ok(Math.abs(a.xMeters+a.width/2-9.94)<1e-9);
+ for(const k of LOCKED_ARCHITECTURE)assert.deepEqual(next[k],input[k]);assert.deepEqual(s,input);
+ // A pointer near the centreline is corrected to the face on the room side.
+ next=applyFurnitureEdit(next,{kind:'move',assetId:a.id,point:{x:9.8,y:4},rotation:90});
+ assert.ok(Math.abs(next.assets[0].xMeters+next.assets[0].depth/2-9.94)<1e-9);
+ const preview=previewFurnitureEdit(next,{kind:'move',assetId:a.id,point:{x:9.8,y:5},rotation:90});assert.equal(preview.valid,true);assert.ok(Math.abs(preview.candidate.xMeters+preview.candidate.depth/2-9.94)<1e-9);
+ // Moving well into the wall is rejected, not teleported across it.
+ assert.throws(()=>applyFurnitureEdit(next,{kind:'move',assetId:a.id,point:{x:10,y:4},rotation:0}),/outside|wall|point inside/);
+});
+test('manual objects may touch polygon edges while significant boundary escape remains blocked',async()=>{
+ const {placementProblem}=await import('../src/lib/scenePromptActions.mjs');const s=scene();
+ const a={id:'edge',roomId:'r',type:'chair',xMeters:9.5,yMeters:4,width:1,depth:1,height:1,rotation:0};
+ assert.equal(placementProblem(a,s,{manualFurniturePlacement:true}),null);
+ assert.equal(placementProblem({...a,xMeters:9.53},s,{manualFurniturePlacement:true}),'outside target room');
 });

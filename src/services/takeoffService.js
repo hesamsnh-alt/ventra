@@ -1,6 +1,8 @@
 import {persistTakeoff,readPersistedTakeoff,clearPersistedTakeoff} from '@/lib/takeoffStorage.mjs';
+import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
 import {rememberEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
 import {commercialFetch} from '@/lib/commercialFetch';
+import {submitDrawingAnalysis} from '@/lib/drawingAnalysisTransport.mjs';
 const TAKEOFF_STORAGE_PREFIX = "ventra:project-takeoff:";
 
 function getStorageKey(projectId) {
@@ -105,6 +107,9 @@ function countElectricalSubtypes(takeoff) {
 function hydrateTakeoff(takeoff) {
   if (!isUsableTakeoff(takeoff)) {
     return takeoff;
+  }
+  if(takeoff.pdf_analysis && takeoff.page_results?.length){
+    takeoff={...takeoff,...mergePdfEvidence(takeoff.page_results,takeoff.failed_pages||[],takeoff.total_pages)};
   }
 
   const electrical =
@@ -223,46 +228,7 @@ function readTakeoffLocally(projectId) {
   }
 }
 
-async function ventraFetchWithTransientRetry(url, options = {}, { attempts = 3, label = "request" } = {}) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await commercialFetch(url, options);
-    } catch (error) {
-      lastError = error;
-      const message = String(error?.message || error || "");
-      const transient =
-        error instanceof TypeError ||
-        /failed to fetch|network error|network request failed|load failed/i.test(message);
-
-      if (!transient || attempt >= attempts) throw error;
-
-      const delayMs = attempt === 1 ? 1200 : 2500;
-      console.warn("[VENTRA TAKEOFF NETWORK RETRY v54]", {
-        label,
-        attempt,
-        nextAttempt: attempt + 1,
-        delayMs,
-        message,
-      });
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-  throw lastError || new Error(`${label} failed.`);
-}
-
-async function parseJsonResponse(response) {
-  const text = await response.text();
-  if (!text) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(text || "The server returned an invalid response.");
-  }
-}
-
-export async function analyzeProjectDrawing({ projectId, document }) {
+export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false }) {
   try {
     if (!projectId) throw new Error("Project ID is required.");
     if (!document?.file_path || !document?.file_name) {
@@ -277,8 +243,7 @@ export async function analyzeProjectDrawing({ projectId, document }) {
     }
 
     const requestId = `takeoff-${projectId}-${document.id || document.file_name}-${Date.now()}`;
-    const response = await ventraFetchWithTransientRetry(
-      "/api/ai/analyze-drawing",
+    const {response, payload} = await submitDrawingAnalysis(
       {
         method: "POST",
         headers: {
@@ -293,18 +258,29 @@ export async function analyzeProjectDrawing({ projectId, document }) {
           fileType: document.file_type || "application/octet-stream",
           projectName: document.project_name || "",
           requestId,
+          ...(resumeSourceMeasurementsOnly ? {resumeSourceMeasurementsOnly:true} : {}),
+          ...(localPdfRecoveryOnly ? {localPdfRecoveryOnly:true} : {}),
         }),
         cache: "no-store",
       },
-      { attempts: 3, label: "drawing-analysis" }
+      commercialFetch
     );
 
-    const payload = await parseJsonResponse(response);
 
     if (!response.ok || payload?.success !== true || !payload?.result) {
       throw new Error(
         payload?.error || payload?.message || `Drawing analysis failed with HTTP ${response.status}.`
       );
+    }
+
+    const incoming = payload.result;
+    const reviewStatus = incoming.pdf_analysis?.document_review_status?.status;
+    const totalPages = Number(incoming.total_pages || incoming.pdf_analysis?.total_pages || 0);
+    const analyzedPages = Array.isArray(incoming.page_results) ? new Set(incoming.page_results.map(p=>p.pageNumber)).size : Number(incoming.analyzed_pages || 0);
+    if (incoming.pdf_analysis && (incoming.failed_pages?.length || incoming.pdf_analysis.failed_pages?.length ||
+      totalPages > 0 && analyzedPages < totalPages || ['failed','pending'].includes(reviewStatus))) {
+      throw Object.assign(new Error(`PDF analysis is incomplete (${analyzedPages}/${totalPages || '?'} pages; document review: ${reviewStatus || 'unavailable'}). The previous saved report was not replaced. ${incoming.pdf_analysis.document_review_status?.reason || 'Complete source evidence is required before generating a new BOQ.'}`),
+        {code:'PDF_ANALYSIS_INCOMPLETE'});
     }
 
     const takeoff = {

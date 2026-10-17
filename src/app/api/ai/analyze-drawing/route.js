@@ -32,6 +32,8 @@ async function handleCommercialRequest(request) {
     console.log("[Drawing Analysis] Started", {
       fileName,
       fileType,
+      resumeSourceMeasurementsOnly: body?.resumeSourceMeasurementsOnly === true,
+      localPdfRecoveryOnly: body?.localPdfRecoveryOnly === true,
       mode: fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")
         ? "large-pdf"
         : "single-drawing",
@@ -44,6 +46,8 @@ async function handleCommercialRequest(request) {
       pageNumber: body?.pageNumber ?? null,
       projectName: String(body?.projectName || ""),
       discipline: String(body?.discipline || ""),
+      resumeSourceMeasurementsOnly: body?.resumeSourceMeasurementsOnly === true,
+      localPdfRecoveryOnly: body?.localPdfRecoveryOnly === true,
     });
 
     return NextResponse.json({

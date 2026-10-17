@@ -14,6 +14,6 @@ export function createDetailedSurfaces(refresh,loader=new T.TextureLoader()){
  return {apply:(old,next)=>{
   if(old.userData?.ventraFloorFinish!=='warm_oak')return;
   start();if(!pack||disposed)return;
-  if(next.normalMap!==pack.normal){next.map=pack.color;next.normalMap=pack.normal;next.normalScale.set(.45,.45);next.roughnessMap=pack.roughness;next.roughness=.8;next.bumpMap=null;next.needsUpdate=true;}
+  if(next.normalMap!==pack.normal||next.map!==pack.color){next.map=pack.color;next.normalMap=pack.normal;next.normalScale.set(.45,.45);next.roughnessMap=pack.roughness;next.roughness=.8;next.bumpMap=null;next.needsUpdate=true;}
  },ready:async()=>{let timer;try{await Promise.race([pending||Promise.resolve(),new Promise(r=>{timer=setTimeout(r,15000);})]);}finally{clearTimeout(timer);}},dispose:()=>{disposed=true;if(pack)Object.values(pack).forEach(t=>t.dispose());pack=null;}};
 }
