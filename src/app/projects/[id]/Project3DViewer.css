@@ -388,3 +388,7 @@
   .ventra-overlay-drawer > summary { min-height: 44px; box-sizing: border-box; }
   .ventra-overlay-drawer .ventra-drawer-content { max-height: 140px; }
 }
+/* Orbit/pan buttons do not apply during a mobile walking session. */
+@media (max-width:1000px) and (any-pointer:coarse) {
+  .ventra-model-layout:has([data-ventra-walk-controls] > button[aria-pressed="true"]) .ventra-schematic-overlay-controls { display:none; }
+}

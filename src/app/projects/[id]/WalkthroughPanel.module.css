@@ -38,3 +38,11 @@
  .overlay .pad>div{flex-wrap:wrap;justify-content:center;}
  .overlay .pad button{padding:6px;min-width:44px;min-height:44px;font-size:12px;}
 }
+
+/* Touch gestures replace direction buttons only on compact touch devices. */
+.touchHint{display:none;}
+@media (max-width:1000px) and (any-pointer:coarse) {
+ .panel .pad{display:none;}
+ .panel .touchHint{display:block;font-size:12px;line-height:1.7;margin:8px 0 0;}
+ .overlay .touchHint{grid-column:1/-1;}
+}
