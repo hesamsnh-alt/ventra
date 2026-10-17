@@ -10067,6 +10067,12 @@ export default function Project3DViewer({ projectId }) {
                     aria-label="Ventra schematic 3D canvas"
                     style={{ width: "100%", height: "100%", display: "block" }}
                   />
+
+                </>
+              )}
+            </div>
+          )}
+          {schematicScene && isInteriorSource(active3DSource) && (
                   <LocalizedElement as="div" className="ventra-schematic-overlay-controls">
                     <LocalizedElement as="button" type="button" className={schematicNavMode === 'orbit' ? 'is-active' : ''} onClick={() => setSchematicNavMode('orbit')}>Orbit</LocalizedElement>
                     <LocalizedElement as="button" type="button" className={schematicNavMode === 'pan' ? 'is-active' : ''} onClick={() => setSchematicNavMode('pan')}>Pan</LocalizedElement>
@@ -10080,9 +10086,6 @@ export default function Project3DViewer({ projectId }) {
                     <LocalizedElement as="button" type="button" onClick={fitModel}>Fit</LocalizedElement>
                     </div></ToolDrawer>
                   </LocalizedElement>
-                </>
-              )}
-            </div>
           )}
         </LocalizedElement>
 
