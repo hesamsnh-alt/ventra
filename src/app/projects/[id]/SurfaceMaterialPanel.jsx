@@ -1,5 +1,6 @@
 'use client';
 import PersonalAssetLibrary from './PersonalAssetLibrary';
+import {surfaceSelectionReference} from '@/lib/surfaceSelectionLink.mjs';
 import {loadPersonalTexture} from '@/lib/personalTextureResources.mjs';
 import {personalMaterial} from '@/lib/personalAssets.mjs';
 import {linkPersonalAsset} from '@/services/personalAssetService';
@@ -84,6 +85,7 @@ export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCan
         <button type="button" disabled={disabled||busy||!lastTarget} onClick={()=>apply(lastTarget,null)}>{text('Original surface','متریال اولیه سطح','المادة الأصلية')}</button>
       </div>
       <div className={styles.feedback} role="status" aria-live="polite">{busy?text('Saving…','در حال ذخیره…','جارٍ الحفظ…'):hover?targetName(hover):message|| (paintMode?text('Click a floor or wall to apply.','برای اعمال، روی کف یا دیوار بزن.','اضغط على أرضية أو جدار للتطبيق.'):text('Drag a swatch to begin.','یک نمونه را روی سطح بکش.','اسحب عينة للبدء.'))}</div>
+      {lastTarget&&<button type="button" disabled={busy||disabled} onClick={()=>{try{localStorage.setItem(`ventra:selection-surface:${projectId}`,JSON.stringify(surfaceSelectionReference(projectId,scene,lastTarget,SURFACE_MATERIALS)));const url=new URL(window.location.href);url.searchParams.set('tab','selections');window.location.assign(url.href);}catch(e){setMessage(e.message);}}}>{text('Add surface to selections & budget','افزودن سطح به انتخاب‌ها و بودجه','إضافة السطح للاختيارات والميزانية')}</button>}
       {lastTarget&&<small>{text('Last surface','آخرین سطح','آخر سطح')}: {targetName(lastTarget)}</small>}
     </details>
   </section>;

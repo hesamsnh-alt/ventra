@@ -43,6 +43,7 @@ export async function analyzeLargePdf({
   concurrency = DEFAULT_CONCURRENCY,
   resumeSourceMeasurementsOnly = false,
   localPdfRecoveryOnly = false,
+  noAutomaticRetries = false,
 }) {
   const fileBytes = await downloadPdf(fileUrl);
   // Signed URL tokens rotate; actual file bytes, stable source identity, model
@@ -94,6 +95,7 @@ export async function analyzeLargePdf({
     concurrency,
     context: {
       sourceFileName: fileName,
+      noAutomaticRetries,
       projectName,
       discipline,
     },

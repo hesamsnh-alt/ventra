@@ -228,7 +228,7 @@ function readTakeoffLocally(projectId) {
   }
 }
 
-export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false }) {
+export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false, onProgress = null }) {
   try {
     if (!projectId) throw new Error("Project ID is required.");
     if (!document?.file_path || !document?.file_name) {
@@ -253,6 +253,7 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
         },
         body: JSON.stringify({
           projectId,
+          documentId: document.id,
           fileUrl: url,
           fileName: document.file_name,
           fileType: document.file_type || "application/octet-stream",
@@ -263,7 +264,8 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
         }),
         cache: "no-store",
       },
-      commercialFetch
+      commercialFetch,
+      {onProgress}
     );
 
 
@@ -273,6 +275,7 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
       );
     }
 
+    if(payload.documentId && payload.documentId!==document.id)throw Object.assign(new Error("Analysis belongs to a different drawing; saved result was not replaced."),{code:"DRAWING_SOURCE_MISMATCH"});
     const incoming = payload.result;
     const reviewStatus = incoming.pdf_analysis?.document_review_status?.status;
     const totalPages = Number(incoming.total_pages || incoming.pdf_analysis?.total_pages || 0);

@@ -37,6 +37,7 @@ import ProjectDocuments from "./ProjectDocuments";
 import ProjectBOQ from "./ProjectBOQ";
 import ProjectEstimate from "./ProjectEstimate";
 import ProjectQuotation from "./ProjectQuotation";
+import MaterialSelectionPanel from "./MaterialSelectionPanel";
 import ProjectDrawingCenter from "./ProjectDrawingCenter";
 import Project3DViewer from "./Project3DViewer";
 
@@ -53,6 +54,7 @@ const PROJECT_TABS = [
   { id: "boq", label: "BOQ" },
   { id: "estimate", label: "Estimate" },
   { id: "quotation", label: "Quotation" },
+  { id: "selections", label: "Selections & Budget" },
   { id: "reports", label: "Daily Reports" },
   { id: "documents", label: "Documents" },
   { id: "photos", label: "Site photos" },
@@ -530,6 +532,8 @@ export default function ProjectWorkspacePage() {
             projectId={project.id}
           />
         )}
+
+        {activeTab === "selections" && <MaterialSelectionPanel key={project.id} projectId={project.id}/>}
 
         {activeTab === "reports" && (
           <ProjectDailyReports

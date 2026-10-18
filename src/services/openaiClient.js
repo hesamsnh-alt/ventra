@@ -1,3 +1,4 @@
+import {drawingOpenAIOptions} from './drawingJobRuntime.mjs';
 import "server-only";
 import OpenAI from "openai";
 
@@ -5,7 +6,7 @@ let openaiClient = null;
 
 export function getOpenAIClient() {
   if (openaiClient) {
-    return openaiClient;
+    const options=drawingOpenAIOptions();return options?openaiClient.withOptions(options):openaiClient;
   }
 
   if (!process.env.OPENAI_API_KEY) {
@@ -18,7 +19,7 @@ export function getOpenAIClient() {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  return openaiClient;
+  const options=drawingOpenAIOptions();return options?openaiClient.withOptions(options):openaiClient;
 }
 
 export async function createResponse(payload) {

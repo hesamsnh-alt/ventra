@@ -3,6 +3,7 @@ import WorkspaceDisclosure from './WorkspaceDisclosure';
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 import CommercialSync from "./CommercialSync";
+import SelectionCommercialSummary from "./SelectionCommercialSummary";
 
 import { useEffect, useMemo, useState, useEffectEvent } from "react";
 import "./ProjectQuotation.css";
@@ -427,6 +428,7 @@ export default function ProjectQuotation({ projectId }) {
   return (
     <LocalizedElement as="section" className="quotation-panel">
       <CommercialSync projectId={projectId} />
+      <SelectionCommercialSummary key={projectId} projectId={projectId} />
       <DocumentBranding branding={branding} onChange={updateBranding} />
       <LocalizedElement as="div" className="quotation-header">
         <LocalizedElement as="div">

@@ -28,7 +28,7 @@ function baseline(){
 const slice=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b));
 let serial=0;
 function context(){
-  const state={projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,
+  const state={projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,boqSource:null,
     loadedBoqProject:null,loadingTakeoff:false,generating:false,applyingProjectRates:false,vatPercentage:5,overheadPercentage:0,profitPercentage:0,discountPercentage:0,
     warnings:[],assumptions:[],projectRateRequestRef:{current:0},projectRateContextRef:{current:null},error:'',message:'',writes:0,fetches:0,
     projectRateImportCalls:0,beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,applyProjectRateCsv,requireBoqReview,saveReadyBoq,
@@ -37,7 +37,7 @@ function context(){
   state.loadedBoqProject=state.projectId;
   const store=new Map();state.window={localStorage:{setItem(k,v){state.writes++;store.set(k,v);},getItem(k){return store.get(k)||null;}}};state.store=store;
   state.refresh=()=>state.projectRateContextRef.current={...Object.fromEntries(['projectId','takeoff','items','loadedBoqProject','loadingTakeoff','generating','vatPercentage','overheadPercentage','profitPercentage','discountPercentage','warnings','assumptions'].map(k=>[k,state[k]]))};
-  for(const [setter,key] of [['setItems','items'],['setProjectRateImport','projectRateImport'],['setApplyingProjectRates','applyingProjectRates'],['setErrorMessage','error'],['setMessage','message'],['setWarnings','warnings'],['setAssumptions','assumptions'],['setGenerating','generating'],['setTakeoff','takeoff']])state[setter]=v=>{state[key]=v;state.refresh();};
+  for(const [setter,key] of [['setItems','items'],['setProjectRateImport','projectRateImport'],['setApplyingProjectRates','applyingProjectRates'],['setErrorMessage','error'],['setMessage','message'],['setWarnings','warnings'],['setAssumptions','assumptions'],['setGenerating','generating'],['setTakeoff','takeoff'],['setBoqSource','boqSource']])state[setter]=v=>{state[key]=v;state.refresh();};
   state.setPriceLibraryItemId=()=>{};state.refresh();vm.createContext(state);
   vm.runInContext(slice('function normalizeSection(', '\nfunction escapeCsv(')+slice('  function saveProjectRateDraft(', '\n  function updateItem(')+
     slice('  async function generateFromTakeoff(', '\n  const generateBoqFromEffect=')+
@@ -76,7 +76,7 @@ test('actual Generate BOQ handler reapplies the project CSV for the same PDF, wi
   const s=context();await s.importCsv(s.event());await s.generate(s.takeoff);
   assert.equal(s.error,'');assert.equal(summary(s.items).sums.provisional.toFixed(2),'492535.51');assert.equal(s.projectRateImport.beforeItems.length,83);
   assert.equal(s.projectRateImport.appliedRows,48);assert.ok(s.message.includes('reapplied'));assert.equal(s.fetches,0);
-  const saved=JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`));assert.equal(saved.projectRateImport.documentId,takeoff.document_id);
+  const saved=JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`));assert.equal(saved.projectRateImport.documentId,takeoff.document_id);assert.equal(saved.boqSource.documentId,takeoff.document_id);assert.equal(saved.boqSource.recordedBy,151);
 });
 test('project CSV cannot silently overwrite manual/changed quantities or duplicated scope rows',()=>{
   for(const change of [rows=>{const row=rows.find(i=>i.pdfEvidence?.metricKey==='foundation_volume');row.quantity=21;row.quantityBasis='manual_quantity_override';},

@@ -743,12 +743,28 @@ function filterOpenPlanPartitions(partitions = [], rooms = [], relationships = [
 // src/lib/serverPreviewAnalysis.js
 import { createHash as createHash2 } from "node:crypto";
 
+// src/services/drawingJobRuntime.mjs
+import { AsyncLocalStorage } from "node:async_hooks";
+var scope = new AsyncLocalStorage();
+var currentDrawingJob = () => scope.getStore();
+function drawingOpenAIOptions() {
+  const ctx = currentDrawingJob();
+  if (!ctx) return null;
+  return { maxRetries: 0, timeout: 24e4, fetch: async (url, init = {}) => {
+    const remaining = ctx.deadline - Date.now();
+    if (remaining < 2e3) throw Object.assign(Error("Drawing worker time budget reached; saved evidence retained. No automatic restart."), { code: "DRAWING_WORKER_BUDGET", status: 503 });
+    const limit = AbortSignal.timeout(Math.min(24e4, remaining));
+    return fetch(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, limit]) : limit });
+  } };
+}
+
 // src/services/openaiClient.js
 import OpenAI from "openai";
 var openaiClient = null;
 function getOpenAIClient() {
   if (openaiClient) {
-    return openaiClient;
+    const options2 = drawingOpenAIOptions();
+    return options2 ? openaiClient.withOptions(options2) : openaiClient;
   }
   if (!process.env.OPENAI_API_KEY) {
     throw new Error(
@@ -758,7 +774,8 @@ function getOpenAIClient() {
   openaiClient = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
-  return openaiClient;
+  const options = drawingOpenAIOptions();
+  return options ? openaiClient.withOptions(options) : openaiClient;
 }
 async function createResponse(payload) {
   const openai = getOpenAIClient();
@@ -2762,7 +2779,7 @@ function recoverPdfRoomInventory(page) {
     warnings.push(`Room area inventory on page ${page.pageNumber} does not reconcile to its floor summary; finish recovery withheld.`);
     return { page, warnings };
   }
-  const values = { floor_area: walkable }, scope = page.page_evidence.scope_id;
+  const values = { floor_area: walkable }, scope2 = page.page_evidence.scope_id;
   const materialKeys = { wood: "wood_floor_area", tile: "ceramic_floor_area", epoxy: "epoxy_floor_area", outdoor: "terrace_floor_area" };
   for (const [finish, key2] of Object.entries(materialKeys)) {
     const matching = list.filter((r) => r.finish === finish);
@@ -2775,7 +2792,7 @@ function recoverPdfRoomInventory(page) {
     key: key2,
     value,
     unit: "m2",
-    scope_id: scope,
+    scope_id: scope2,
     evidence: `Tagged room inventory on page ${page.pageNumber} reconciles to floor summary; ${key2}: ` + list.filter((r) => key2 === "floor_area" ? r.finish !== "void" : r.finish === Object.keys(materialKeys).find((k) => materialKeys[k] === key2)).map((r) => `${r.tag}=${r.quantity} m2 (${r.description})`).join(" + ") + `. AI room labels/materials require review.`
   });
   return { page: { ...page, floor_area: walkable, page_evidence: { ...page.page_evidence, quantities } }, warnings };
@@ -2992,8 +3009,8 @@ function auditPdfAreaGeometry(page) {
     const usable = (r) => ["enclosed", "outdoor"].includes(r.kind);
     const dimensions = { floor_area: spaces.filter(usable).reduce((s, r) => s + r.quantity, 0), ceiling_area: spaces.filter((r) => r.kind === "enclosed").reduce((s, r) => s + r.quantity, 0) };
     for (const [finish, key2] of Object.entries(material)) dimensions[key2] = spaces.filter((r) => usable(r) && r.finish === finish).reduce((s, r) => s + r.quantity, 0);
-    const scope = page.page_evidence.scope_id, quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
-    for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: scope, evidence: `Area computed from dimensioned, non-overlapping space polygons (${geometry2.basis}) on page ${page.pageNumber}; ${geometry2.envelope_evidence}; AI dimension transcription and materials require review.` });
+    const scope2 = page.page_evidence.scope_id, quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
+    for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: scope2, evidence: `Area computed from dimensioned, non-overlapping space polygons (${geometry2.basis}) on page ${page.pageNumber}; ${geometry2.envelope_evidence}; AI dimension transcription and materials require review.` });
     const corrections = [];
     for (const r of spaces) if (Number.isFinite(r.reported_area) && Math.abs(r.reported_area - r.quantity) > 0.01) corrections.push({ tag: r.tag, reported: r.reported_area, computed: r.quantity, evidence: r.evidence });
     const unknown = spaces.filter((r) => usable(r) && r.finish === "unknown").map((r) => r.tag);
@@ -3037,8 +3054,8 @@ function tableUnit(spans, head, inherited) {
 function readNativeOpeningSchedule(page, normalizeScope, inherited) {
   const native = page.native_text_evidence;
   if (native?.version !== 1 || native.status !== "readable") return { status: "unavailable", rows: [] };
-  const spans = native.spans, scope = normalizeScope(page.page_evidence?.scope_id);
-  if (!scope || scope === "project") return { status: "pending", reason: "Schedule floor scope is unresolved", rows: [] };
+  const spans = native.spans, scope2 = normalizeScope(page.page_evidence?.scope_id);
+  if (!scope2 || scope2 === "project") return { status: "pending", reason: "Schedule floor scope is unresolved", rows: [] };
   try {
     const heads = [];
     for (const s of spans.filter((s2) => headers.id.test(clean(s2.text)))) {
@@ -3053,7 +3070,7 @@ function readNativeOpeningSchedule(page, normalizeScope, inherited) {
     if (heads.length !== 1) throw Error("A single complete opening table is required per schedule page");
     const head = heads[0], dimension_basis = tableUnit(spans, head, inherited), factor = dimension_basis.factor, rows = [], ids = /* @__PURE__ */ new Set();
     const printed = spans.filter((s) => s.y > head.y && s.y - head.y < 100 && /^(?:ground|first|second|third|basement|roof|floor\s+\d+)(?:\s+floor)?$/i.test(s.text.trim())).map((s) => normalizeScope(s.text));
-    if (printed.length !== 1 || printed[0] !== scope) throw Error("Printed schedule floor does not match selected scope");
+    if (printed.length !== 1 || printed[0] !== scope2) throw Error("Printed schedule floor does not match selected scope");
     const below = spans.filter((s) => s.y < head.y - 3).sort((a, b) => b.y - a.y || a.x - b.x), bands = [];
     for (const s of below) {
       let b = bands.find((b2) => Math.abs(b2.y - s.y) < 2);
@@ -3087,7 +3104,7 @@ function readNativeOpeningSchedule(page, normalizeScope, inherited) {
     if (!rows.length || rows.length > 1e3) throw Error("Empty or excessive opening schedule");
     dimension_basis.pages = [.../* @__PURE__ */ new Set([...inherited && dimension_basis.pages || [], page.pageNumber])];
     for (const row of rows) row.dimension_pages = dimension_basis.pages;
-    return { status: "read", scope_id: scope, page: page.pageNumber, rows, dimension_basis };
+    return { status: "read", scope_id: scope2, page: page.pageNumber, rows, dimension_basis };
   } catch (e) {
     return { status: "pending", reason: e.message, page: page.pageNumber, rows: [] };
   }
@@ -3636,7 +3653,7 @@ function buildNativePdfSourceBasis(pages, normalizeScope) {
         ceilingRuleKnown = false;
         break;
       }
-      const scope = normalizeScope(match[1]), matches = floors.filter((p) => normalizeScope(p.page_evidence.scope_id) === scope).flatMap((p) => (p.detected_items || []).filter((i) => ["m2", "m\xB2"].includes(i.unit) && words(i.name) === words(match[2])).map((i) => ({ scope, tag: roomTag3(i.name) })));
+      const scope2 = normalizeScope(match[1]), matches = floors.filter((p) => normalizeScope(p.page_evidence.scope_id) === scope2).flatMap((p) => (p.detected_items || []).filter((i) => ["m2", "m\xB2"].includes(i.unit) && words(i.name) === words(match[2])).map((i) => ({ scope: scope2, tag: roomTag3(i.name) })));
       if (matches.length !== 1) {
         ceilingRuleKnown = false;
         break;
@@ -3647,10 +3664,10 @@ function buildNativePdfSourceBasis(pages, normalizeScope) {
   if (ceilingRuleKnown) rules.gypsum_exclusions_confirmed = source(true, ceilings.pages, ceilings.text);
   const wetNames = wet?.text.split(/\.\s+/)[0].match(/\b[A-Z]{1,4}[-_]?\d{1,4}\b/g) || [], geometry2 = [], basis = { floors: [], rules, exclusions: [], notes: "Native calibrated graph and explicitly recognized source rules; provisional, source review required." };
   for (const p of floors) {
-    const scope = normalizeScope(p.page_evidence.scope_id), schedule = native.claims.length ? native.schedules.find((s) => s.scope_id === scope) : null, measured = measureNativeWallFloor(p, schedule);
+    const scope2 = normalizeScope(p.page_evidence.scope_id), schedule = native.claims.length ? native.schedules.find((s) => s.scope_id === scope2) : null, measured = measureNativeWallFloor(p, schedule);
     geometry2.push(measured.audit);
     const f = {
-      scope_id: scope,
+      scope_id: scope2,
       walls_complete: measured.status === "provisional",
       wall_inventory_evidence: `Native source centreline graph; calibration, opening gaps and connectivity checked. ${JSON.stringify(measured.audit)}`,
       source_pages: [p.pageNumber, ...schedule?.dimension_basis?.pages || []],
@@ -3687,7 +3704,7 @@ function buildNativePdfSourceBasis(pages, normalizeScope) {
       const matching = measured.faces.filter((face) => face.tags.length === 1 && face.tags[0].toLowerCase() === roomTag3(i.name));
       return {
         room_name: i.name,
-        include_gypsum: ceilingRuleKnown ? !ceilingExclusions.some((e) => e.scope === scope && e.tag === roomTag3(i.name)) : null,
+        include_gypsum: ceilingRuleKnown ? !ceilingExclusions.some((e) => e.scope === scope2 && e.tag === roomTag3(i.name)) : null,
         pages: ceilings?.pages || [],
         evidence: ceilings?.text || "Source ceiling rule unavailable",
         ...matching.length === 1 ? { native_area: source(matching[0].area, [p.pageNumber], `Area of calibrated original closed wall face ${roomTag3(i.name)}; polygon ${JSON.stringify(matching[0].polygon)}`) } : {}
@@ -3774,9 +3791,9 @@ function reconcilePdfSoffitCoverage(calculation, notes, metricUnits, availablePa
   }
 }
 function calculatePdfMeasurement(calculation, metricUnits, availablePages) {
-  const { key: key2, scope_id: scope, evidence, terms } = calculation || {};
+  const { key: key2, scope_id: scope2, evidence, terms } = calculation || {};
   const expected = units[metricUnits[key2]];
-  if (!expected || !nonempty(scope) || !nonempty(evidence)) throw Error("Missing metric, scope or measurement evidence");
+  if (!expected || !nonempty(scope2) || !nonempty(evidence)) throw Error("Missing metric, scope or measurement evidence");
   if (PDF_AREA_KEYS.includes(key2)) throw Error("Floor and finish areas require audited space geometry");
   if (!Array.isArray(terms) || !terms.length || terms.length > 500) throw Error("Missing or excessive calculation terms");
   let value = 0;
@@ -3814,7 +3831,7 @@ function calculatePdfMeasurement(calculation, metricUnits, availablePages) {
   if (metricUnits[key2] === "nr" && !Number.isInteger(value)) throw Error("Fractional counted result");
   return {
     key: key2,
-    scope_id: scope,
+    scope_id: scope2,
     value,
     unit: metricUnits[key2],
     pages: [...pages].sort((a, b) => a - b),
@@ -4001,12 +4018,12 @@ var unique2 = (xs) => [...new Set(xs)];
 function clauses(text) {
   return String(text).split(/;|\n|\.(?=\s+[A-Z])/).map((s) => s.trim()).filter(Boolean);
 }
-function factsIn(text, page, scope = "project") {
+function factsIn(text, page, scope2 = "project") {
   const facts = [];
   for (const quote of clauses(text)) {
     if (quote.length > 2e3) continue;
     const d = normal(quote), local = d.match(/\b(gf|ff|ground floor|first floor|floor\s*-?\d+)\b/);
-    const scopeId = local ? ["gf", "ground floor"].includes(local[1]) ? "floor:0" : ["ff", "first floor"].includes(local[1]) ? "floor:1" : local[1].replace(/floor\s*/, "floor:") : scope;
+    const scopeId = local ? ["gf", "ground floor"].includes(local[1]) ? "floor:0" : ["ff", "first floor"].includes(local[1]) ? "floor:1" : local[1].replace(/floor\s*/, "floor:") : scope2;
     const add = (metric, property, values) => {
       for (const value of unique2(values)) facts.push({ metric, property, value, page, scope_id: scopeId, quote, source: "native_pdf_text" });
     };
@@ -4085,11 +4102,11 @@ function readPdfSourceSpecifications(takeoff) {
       band.spans.push(s);
     }
     const value = bands.map((b) => b.spans.sort((a, b2) => a.x - b2.x).map((s) => s.text).join(" ")).join("\n");
-    let scope = normal(p.page_evidence?.scope_id || "project").replace(/floor\s*[: ]\s*/, "floor:");
-    if (["gf", "ground floor"].includes(scope)) scope = "floor:0";
-    if (["ff", "first floor"].includes(scope)) scope = "floor:1";
+    let scope2 = normal(p.page_evidence?.scope_id || "project").replace(/floor\s*[: ]\s*/, "floor:");
+    if (["gf", "ground floor"].includes(scope2)) scope2 = "floor:0";
+    if (["ff", "first floor"].includes(scope2)) scope2 = "floor:1";
     if (value.length > 1e5) continue;
-    facts.push(...factsIn(value, p.pageNumber, scope));
+    facts.push(...factsIn(value, p.pageNumber, scope2));
   }
   if (!native && !pages.length) {
     for (const f of takeoff?.pdf_analysis?.specification_facts || []) {
@@ -4171,7 +4188,7 @@ var number = (text) => /^\d+(?:\.\d+)?$/.test(String(text).trim()) ? Number(text
 var clean2 = (text) => String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
 var floor = (text) => /^(?:ground|first|second|third|basement|roof)(?: floor)?$|^floor \d+$/i.test(text.trim());
 var zero = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
-var claim = (key2, value, unit2, scope, page, evidence) => ({ key: key2, value, unit: unit2, scope_id: scope, pages: [page], evidence, native_calculated: true, document_calculated: true });
+var claim = (key2, value, unit2, scope2, page, evidence) => ({ key: key2, value, unit: unit2, scope_id: scope2, pages: [page], evidence, native_calculated: true, document_calculated: true });
 function table2(spans, columns) {
   const matches = [];
   for (const anchor of spans) {
@@ -4255,15 +4272,15 @@ function extractNativePdfPages(readings, normalizePdfScope2) {
       continue;
     }
     const spans = native.spans, text = spans.map((s) => s.text).join(" ");
-    let kind = null, scope = "project", quantities = [];
+    let kind = null, scope2 = "project", quantities = [];
     try {
       const openingHeader = ["id", "type", "width", "height"].every((h) => spans.some((s) => clean2(s.text) === h));
       if (openingHeader) {
         const headings = spans.filter((s) => floor(s.text));
         if (headings.length !== 1) throw Error("Opening floor heading unresolved");
         kind = "opening_schedule";
-        scope = normalizePdfScope2(headings[0].text);
-        const result = readNativeOpeningSchedule({ pageNumber, page_evidence: { kind, scope_id: scope }, native_text_evidence: native }, normalizePdfScope2, inherited?.page === pageNumber - 1 ? inherited.basis : null);
+        scope2 = normalizePdfScope2(headings[0].text);
+        const result = readNativeOpeningSchedule({ pageNumber, page_evidence: { kind, scope_id: scope2 }, native_text_evidence: native }, normalizePdfScope2, inherited?.page === pageNumber - 1 ? inherited.basis : null);
         if (result.status !== "read") throw Error(result.reason || "Opening table unavailable");
         inherited = { page: pageNumber, basis: result.dimension_basis };
       } else {
@@ -4286,12 +4303,12 @@ function extractNativePdfPages(readings, normalizePdfScope2) {
         confidence: 0,
         detected_items: [],
         area_geometry: null,
-        page_evidence: { kind, scope_id: scope, drawing_id: null, revision: revisions[0] || null, quantities },
+        page_evidence: { kind, scope_id: scope2, drawing_id: null, revision: revisions[0] || null, quantities },
         native_text_evidence: native,
         native_extraction: { version: 1, method: "explicit_source_table_or_specification", parsed_keys: [...new Set(quantities.map((q) => q.key))], requires_source_review: true },
         notes: "Locally extracted source evidence. Unparsed prose and cross-page relationships require source review; not a complete or approved takeoff."
       });
-      Object.assign(audit, { extracted: true, kind, scope, parsed_keys: [...new Set(quantities.map((q) => q.key))] });
+      Object.assign(audit, { extracted: true, kind, scope: scope2, parsed_keys: [...new Set(quantities.map((q) => q.key))] });
     } catch (error) {
       audit.reason = String(error.message).slice(0, 180);
       inherited = null;
@@ -4339,27 +4356,27 @@ function mergePdfEvidence(pages, failed = [], total = pages.length) {
       excluded.push({ page: p.pageNumber, reason: "not_an_architectural_floor_plan" });
       continue;
     }
-    const scope = normalizePdfScope(e.scope_id);
-    if (!scope || scope === "project") {
+    const scope2 = normalizePdfScope(e.scope_id);
+    if (!scope2 || scope2 === "project") {
       excluded.push({ page: p.pageNumber, reason: "unresolved_floor_scope" });
       warnings.push("Floor scope missing on page " + p.pageNumber);
       continue;
     }
-    const existing = selected.get(scope);
+    const existing = selected.get(scope2);
     if (!existing) {
-      selected.set(scope, p);
+      selected.set(scope2, p);
       continue;
     }
     if (existing.page_evidence.revision !== e.revision) {
-      warnings.push("Conflicting floor revisions: " + scope);
-      conflictedFloors.add(scope);
+      warnings.push("Conflicting floor revisions: " + scope2);
+      conflictedFloors.add(scope2);
     }
     if ((p.confidence || 0) > (existing.confidence || 0)) {
       excluded.push({ page: existing.pageNumber, reason: "duplicate_floor_scope" });
-      selected.set(scope, p);
+      selected.set(scope2, p);
     } else excluded.push({ page: p.pageNumber, reason: "duplicate_floor_scope" });
   }
-  const floors = [...selected.entries()].filter(([scope]) => !conflictedFloors.has(scope)).map(([, p]) => p), fields = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
+  const floors = [...selected.entries()].filter(([scope2]) => !conflictedFloors.has(scope2)).map(([, p]) => p), fields = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
   const native = nativeOpeningEvidence(pages.filter((p) => p.page_evidence?.kind !== "floor_plan" || floors.includes(p)), normalizePdfScope);
   const nativeTables = extractNativePdfPages(pages.map((p) => ({ pageNumber: p.pageNumber, native_text_evidence: p.native_text_evidence })), normalizePdfScope);
   const tableClaims = nativeTables.pages.flatMap((p) => p.page_evidence.quantities);
@@ -4380,15 +4397,15 @@ function mergePdfEvidence(pages, failed = [], total = pages.length) {
   if (native.claims.length) observations.push({ pageNumber: native.schedules[0].page, page_evidence: { kind: "opening_schedule" }, claims: native.claims });
   for (const p of nativeTables.pages) if (p.page_evidence.quantities.length) observations.push({ pageNumber: p.pageNumber, page_evidence: p.page_evidence, claims: p.page_evidence.quantities });
   for (const p of observations) for (const q of p.claims) {
-    const scope = normalizePdfScope(q.scope_id), unit2 = PDF_METRIC_UNITS[q.key];
-    if (!q.native_calculated && (nativeOpeningKeys.has(q.key) || nativeWholeTableKeys.has(q.key) || nativeTableIdentities.has(q.key + "|" + scope) || nativeFloorTableKeys.has(q.key) && scope === "project")) continue;
-    if (!unit2 || q.unit !== unit2 || !scope || !valid(q.value) || unit2 === "nr" && !Number.isInteger(q.value) || !String(q.evidence || "").trim()) {
+    const scope2 = normalizePdfScope(q.scope_id), unit2 = PDF_METRIC_UNITS[q.key];
+    if (!q.native_calculated && (nativeOpeningKeys.has(q.key) || nativeWholeTableKeys.has(q.key) || nativeTableIdentities.has(q.key + "|" + scope2) || nativeFloorTableKeys.has(q.key) && scope2 === "project")) continue;
+    if (!unit2 || q.unit !== unit2 || !scope2 || !valid(q.value) || unit2 === "nr" && !Number.isInteger(q.value) || !String(q.evidence || "").trim()) {
       rejected.push({ page: p.pageNumber, key: q.key, reason: "invalid_or_unsupported_evidence" });
       continue;
     }
-    const id = q.key + "|" + scope, priority = q.document_calculated ? 3 : p.page_evidence.kind === "floor_plan" ? 1 : 2;
+    const id = q.key + "|" + scope2, priority = q.document_calculated ? 3 : p.page_evidence.kind === "floor_plan" ? 1 : 2;
     const sourcePages = q.document_calculated ? q.pages : PDF_AREA_KEYS.includes(q.key) && p.document_area_source_pages ? p.document_area_source_pages : [p.pageNumber];
-    const row = { ...q, scope_id: scope, pages: [...new Set(sourcePages)], priority };
+    const row = { ...q, scope_id: scope2, pages: [...new Set(sourcePages)], priority };
     const old = claims.get(id);
     if (!old || priority > old.priority) claims.set(id, row);
     else if (priority === old.priority) {
@@ -4402,7 +4419,7 @@ function mergePdfEvidence(pages, failed = [], total = pages.length) {
     const values = [...claims.values()].filter((q) => q.key === key2), whole = values.find((q) => q.scope_id === "project");
     const isFloorScope = (q) => floorScopes.has(q.scope_id) || /^floor:-?\d+$/.test(q.scope_id);
     const floorTotals = values.filter(isFloorScope);
-    if (nativeFloorTableKeys.has(key2) && [...floorScopes].some((scope) => !floorTotals.some((q) => q.scope_id === scope))) {
+    if (nativeFloorTableKeys.has(key2) && [...floorScopes].some((scope2) => !floorTotals.some((q) => q.scope_id === scope2))) {
       warnings.push("Native table does not cover every selected floor for " + key2 + "; project total withheld");
       resolved[key2] = 0;
       nativeIncompleteKeys.add(key2);
@@ -9720,10 +9737,10 @@ async function handleCommercialRequest2(request) {
         });
         const scopeSearchTerms = [
           ...aiScopePlan.catalog_search_terms || [],
-          ...(aiScopePlan.scopes || []).flatMap((scope) => [
-            scope.work,
-            scope.trade,
-            `${scope.trade || ""} ${scope.work || ""}`.trim()
+          ...(aiScopePlan.scopes || []).flatMap((scope2) => [
+            scope2.work,
+            scope2.trade,
+            `${scope2.trade || ""} ${scope2.work || ""}`.trim()
           ])
         ];
         const catalogCandidates = shortlistPriceCatalog(

@@ -14,6 +14,7 @@ function isRetryable(error) {
 }
 
 export async function processPage(page, context = {}, { maxAttempts = 3 } = {}) {
+  if(context.noAutomaticRetries)maxAttempts=1;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

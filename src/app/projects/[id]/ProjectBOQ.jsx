@@ -191,6 +191,7 @@ export default function ProjectBOQ({
    }catch(e){setErrorMessage(e.message);}finally{setTranslatingBoq(false);}
   }
   const [takeoff, setTakeoff] = useState(null);
+  const [boqSource,setBoqSource]=useState(null);
   const [items, setItems] = useState([]);
   const [branding, updateBranding] = useDocumentBranding(projectId);
   const [warnings, setWarnings] = useState([]);
@@ -336,9 +337,10 @@ export default function ProjectBOQ({
         profitPercentage, discountPercentage, items: generatedItems,
         warnings: Array.isArray(boq.warnings) ? boq.warnings : [],
         assumptions: Array.isArray(boq.assumptions) ? boq.assumptions : [],
-        takeoff: sourceTakeoff, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
+        takeoff: sourceTakeoff, boqSource:{documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151}, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
       }, { loadedProject: projectId, loading: false, generating: false });
       setTakeoff(sourceTakeoff);
+      setBoqSource({documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151});
       setItems(generatedItems);
       setProjectRateImport(nextProjectRateImport);
       setWarnings(Array.isArray(boq.warnings) ? boq.warnings : []);
@@ -367,6 +369,7 @@ export default function ProjectBOQ({
       setItems([]);
       setProjectRateImport(null);
       setTakeoff(null);
+      setBoqSource(null);
       setWarnings([]);
       setAssumptions([]);
       if (!projectId) {
@@ -397,6 +400,7 @@ export default function ProjectBOQ({
 
         if (storedBoq) {
           const parsedBoq = JSON.parse(storedBoq);
+          setBoqSource(parsedBoq.boqSource||null);
           const savedRates=parsedBoq?.projectRateImport;
           setProjectRateImport(savedRates?.projectId===projectId&&savedRates?.documentId&&savedRates.documentId===latestTakeoff?.document_id&&savedRates.analyzedAt===latestTakeoff?.analyzed_at&&typeof savedRates?.csvText==='string'&&savedRates.csvText.length<=4*1024*1024&&Array.isArray(savedRates.beforeItems)?savedRates:null);
           storedItems = normalizeItems(parsedBoq?.items || [], latestTakeoff);
@@ -499,15 +503,16 @@ export default function ProjectBOQ({
         warnings,
         assumptions,
         takeoff,
+        boqSource,
         projectRateImport,
         updatedAt: new Date().toISOString(),
       }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||applyingProjectRates });
-  }, [projectId, loadedBoqProject, loadingTakeoff, generating, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, projectRateImport]);
+  }, [projectId, loadedBoqProject, loadingTakeoff, generating, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, boqSource, projectRateImport]);
 
   function saveProjectRateDraft(nextItems,nextImport) {
     const saved=saveReadyBoq(window.localStorage,projectId,{
       projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,
-      items:nextItems,warnings,assumptions,takeoff,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
+      items:nextItems,warnings,assumptions,takeoff,boqSource,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
     },{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
     if(!saved)throw Error('BOQ is still loading or generating. Wait before applying project rates.');
   }
@@ -759,6 +764,8 @@ export default function ProjectBOQ({
           <LocalizedElement as="span">QUANTITY TAKEOFF</LocalizedElement>
           <LocalizedElement as="h2">Bill of Quantities</LocalizedElement>
           <LocalizedElement as="p">Generate editable quantities and budget rates from the latest takeoff.</LocalizedElement>
+          {items.length>0 && <p style={{overflowWrap:'anywhere'}}>BOQ source / مرجع BOQ: {boqSource?.name || 'ثبت نشده؛ گزارش قدیمی را با فایل فعال تطبیق بده / Legacy reference not recorded'}</p>}
+          {drawingWorkflow.analysisFailed && <p role="alert">آخرین تحلیل موفق نشده است؛ ردیف‌های موجود ممکن است مربوط به گزارش قبلی باشند. / Latest analysis failed; existing BOQ rows may belong to an earlier report.</p>}
         </LocalizedElement>
 
         <LocalizedElement as="div" className="boq-header-actions">

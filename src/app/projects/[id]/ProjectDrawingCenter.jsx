@@ -2375,6 +2375,11 @@ export default function ProjectDrawingCenter({
           await analyzeProjectDrawing({
             projectId,
             document: selectedDocument,
+            onProgress:progress=>{
+              const labels={queued:['Queued','در صف','في الانتظار'],reading_source:['Reading drawing','خواندن نقشه','قراءة المخطط'],pages:['Reading pages','خواندن صفحات','قراءة الصفحات'],cross_page_review:['Checking pages together','تطبیق صفحات','مراجعة الصفحات'],source_measurements:['Checking measurements','بررسی اندازه‌ها','مراجعة القياسات'],finalizing:['Preparing report','تکمیل گزارش','إعداد التقرير']};
+              const i=language==='fa'?1:language==='ar'?2:0;
+              setMessage(`${(labels[progress.progress?.stage]||labels.queued)[i]} · ${progress.progress?.pagesCompleted || 0}/${progress.progress?.totalPages || '?'} · ${['Reopen analysis to recover saved work.','با بازکردن دوباره تحلیل، کار ذخیره‌شده بازیابی می‌شود.','افتح التحليل مجدداً لاستعادة العمل المحفوظ.'][i]}`);
+            },
             resumeSourceMeasurementsOnly,
             localPdfRecoveryOnly,
           });
