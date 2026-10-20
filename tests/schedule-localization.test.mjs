@@ -29,6 +29,7 @@ for(const lang of ['fa','ar']){
  });
  test(`${lang}: missing productivity produces a localized error without renaming the source item`,()=>{
   const rows=prepareBoq([{id:1,description:'Blockwork TEST-204',quantity:9,unit:'m2'}]);
+  rows[0].method='custom';rows[0].rate='';
   let message;try{generateSchedule(rows,{start:'2026-10-12',shiftHours:8,breakHours:1,efficiency:0.85,weekdays:[1,2,3,4,5],holidays:[]});}catch(e){message=e.message;}
   assert.ok(message);const result=localizeScheduleError(message,lang);assert.ok(result.includes(rows[0].name));assert.ok(!result.includes('hourly rate'));assert.ok(!result.includes('enter a number'));
  });

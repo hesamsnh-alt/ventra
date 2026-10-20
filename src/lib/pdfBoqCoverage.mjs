@@ -2,6 +2,8 @@ import {PDF_METRIC_UNITS, pdfScheduledRule} from './pdfTakeoffEvidence.mjs';
 import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
 import {readPdfSourceSpecifications} from './pdfSourceSpecifications.mjs';
 import {isPdfDefaultOnlyPrice} from './pdfDefaultSpecifications.mjs';
+import {nativePdfFinishLedger,nativeFinishReplacesMetric,nativePdfSourceOperationLedger} from './pdfNativeFinishLedger.mjs';
+import {operationRateContract} from './pdfOperationPricing.mjs';
 export {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
 
 // A quantity must not be repeated across competing catalog variants. There is
@@ -11,7 +13,7 @@ export function planPdfCatalogBindings(takeoff, candidates) {
   const specificationFacts=readPdfSourceSpecifications(takeoff);
   const signatures = new Map(), conflictingCodes = new Set();
   for (const item of candidates || []) {
-    if (!item || item.is_active === false || isPdfDefaultOnlyPrice(item)) continue;
+    if (!item || item.is_active === false || isPdfDefaultOnlyPrice(item) || operationRateContract(item)) continue;
     const code = String(item.item_code || item.itemCode || '').trim().toUpperCase();
     if (!code) continue;
     const signature=JSON.stringify([String(item.description||'').trim().toLowerCase(),String(item.unit||'').trim().toLowerCase()]);
@@ -137,6 +139,7 @@ export function retainUnboundPdfQuantities(items, takeoff) {
   const completeDoors=doorBreakdown.length>0&&Math.abs(doorBreakdown.reduce((n,k)=>n+takeoff.scheduled_quantities[k],0)-(takeoff.scheduled_quantities?.door_count ?? -1))<.001;
   const bound = new Set(items.filter(i => i.quantity > 0).flatMap(i => i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).filter(Boolean));
   for (const [key, [sectionCode, section, description]] of Object.entries(operations)) {
+    if(nativeFinishReplacesMetric(takeoff,key))continue;
     if(key==='door_count'&&completeDoors)continue;
     if(doorKeys.includes(key)&&!completeDoors)continue;
     const quantity = takeoff.scheduled_quantities?.[key];
@@ -161,6 +164,20 @@ export function retainUnboundPdfQuantities(items, takeoff) {
       pdfEvidence:{metricKey:key,pages,basis},
       notes:`PDF EVIDENCE (AI; REVIEW REQUIRED): pages ${pages.join(', ')}; ${basis}. Quantity retained without assuming a catalog specification or rate. Not included in tender or priced budget.`});
     warnings.push(`PDF quantity ${key} retained as an unpriced row; confirm specification and rate.`);
+  }
+  for(const finish of [...(nativePdfFinishLedger(takeoff)||[]),...nativePdfSourceOperationLedger(takeoff)]){
+    if(bound.has(finish.metricKey))continue;
+    const itemCode=`PDF-${finish.family.toUpperCase()}-${finish.sourceCode.toUpperCase()}`;
+    if(next.some(i=>i.itemCode===itemCode))continue;
+    const basis=finish.basis||`Original PDF ${finish.family} finish ${finish.sourceCode}: ${finish.sourceDescription}; rooms ${finish.rooms.join(', ')}. Area from checked clear room geometry; separate source finish codes, no merged generic rate.`;
+    const hvacPipe=finish.family==='pipe-insulation'||finish.family==='pipe'&&/fcu|chilled|\bchw/i.test(finish.sourceDescription);
+    const section=hvacPipe?['10','HVAC']:['pipe','fixture'].includes(finish.family)?['08','Plumbing']:finish.family.startsWith('electrical')?['09','Electrical']:['equipment','duct-sheet','duct-insulation'].includes(finish.family)?['10','HVAC']:['door-set','window-set'].includes(finish.family)?['06','Doors and Windows']:['07','Finishes'];
+    next.push({itemCode,sectionCode:section[0],section:section[1],category:section[1],subCategory:finish.family,description:`${finish.sourceCode} — ${finish.sourceDescription}`,unit:finish.unit,quantity:finish.quantity,
+      materialRate:0,laborRate:0,equipmentRate:0,transportRate:0,rate:0,referenceRate:0,amount:0,rateMissing:true,rateSource:'unavailable_specification_or_catalog_match',
+      status:'measured_rate_pending',verification:'pending',includeInCommercialTotal:false,quantityVerification:'pdf_evidence_requires_review',reviewRequired:true,
+      quantityBasis:'pdf_schedule_evidence',quantitySource:'pdf_schedule_evidence',source:'Native PDF source schedule — own rate required',
+      pdfEvidence:{metricKey:finish.metricKey,pages:finish.pages,basis,operation:{family:finish.family,sourceCode:finish.sourceCode,sourceDescription:finish.sourceDescription,...(finish.instances?{instances:finish.instances}:{})}},notes:`PDF SOURCE FINISH; REVIEW REQUIRED. ${basis} Select the applicable rate for this specific finish before pricing.`});
+    warnings.push(`PDF source finish ${finish.sourceCode} (${finish.family}) retained with measured quantity and no assumed generic rate.`);
   }
   return {items:next, warnings};
 }

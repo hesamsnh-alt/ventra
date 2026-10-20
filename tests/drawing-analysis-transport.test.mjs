@@ -58,12 +58,12 @@ test('actual client saves successful results once and preserves saved evidence o
       downloadProjectDocument:async()=>({url:'https://private.invalid/signed.pdf?token=never-log'}),
       commercialFetch:async(_,request)=>{
         if(request.method==='GET')return health();posts++;
-        assert.equal(JSON.parse(request.body).localPdfRecoveryOnly,true);
+        assert.equal(JSON.parse(request.body).localPdfRecoveryOnly,undefined);
         if(failed)throw new TypeError('Failed to fetch');
         return Response.json({success:true,result:{floor_area:81}});
       },saveTakeoffLocally:async(_,takeoff)=>{writes++;saved=takeoff;}};
     vm.createContext(context);vm.runInContext(fn+'\nthis.run=analyzeProjectDrawing;',context);
-    const result=await context.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf'},localPdfRecoveryOnly:true});
+    const result=await context.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf'}});
     assert.equal(posts,1);assert.equal(writes,failed?0:1);
     assert.equal(saved.floor_area,failed?17:81);
     if(failed){assert.equal(result.takeoff,null);assert.equal(result.error.code,'DRAWING_ANALYSIS_OUTCOME_UNKNOWN');assert.ok(!result.error.message.includes('never-log'));}

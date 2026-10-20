@@ -1,3 +1,4 @@
+import {reportDrawingProgress} from '@/services/drawingJobRuntime.mjs';
 import {commercialRun} from './serverCommercial';
 import {completeDrawingResult} from './drawingJobIdentity.mjs';
 import { NextResponse } from "next/server";
@@ -30,6 +31,7 @@ async function handleCommercialRequest(request) {
         : "single-drawing",
     });
 
+    await reportDrawingProgress({stage:'analyzing'});
     const result = await analyzeDrawing({
       fileUrl,
       fileName,
@@ -42,7 +44,17 @@ async function handleCommercialRequest(request) {
       noAutomaticRetries: body?.noAutomaticRetries === true,
     });
 
-    if(!completeDrawingResult(result))return NextResponse.json({success:false,error:'PDF analysis is incomplete; previous BOQ was not replaced. Saved evidence retained for review.',code:'DRAWING_JOB_INCOMPLETE',partialResult:result},{status:409});
+    if(!completeDrawingResult(result)){
+      const total=Number(result.total_pages||result.pdf_analysis?.total_pages||0);
+      const analyzed=Array.isArray(result.page_results)?new Set(result.page_results.map(p=>p.pageNumber)).size:Number(result.analyzed_pages||0);
+      const review=result.pdf_analysis?.document_review_status;
+      const sourceReview=result.pdf_analysis?.source_measurement_status;
+      const failures=result.failed_pages||result.pdf_analysis?.failed_pages||[];
+      const sourceReason=['failed','pending','partial'].includes(sourceReview?.status)?`Source detail review ${sourceReview.status}: ${(sourceReview.parts||[]).filter(p=>p.status!=='completed').map(p=>`${p.id}: ${p.reason||p.status}`).join('; ')}. ${sourceReview.reason||''}`:'';
+      const reason=String(review?.reason||sourceReason||failures.map(p=>p.error||p.reason||'Page extraction failed').join('; ')||'Source review did not complete.').slice(0,700);
+      return NextResponse.json({success:false,error:`PDF analysis is incomplete (${analyzed}/${total||'?'} pages; review: ${review?.status||'unavailable'}). ${reason} Previous BOQ was not replaced. Saved evidence retained for review.`,code:'DRAWING_JOB_INCOMPLETE',partialResult:result},{status:409});
+    }
+    await reportDrawingProgress({stage:'finalizing'});
     return NextResponse.json({
       success: true,
       result,

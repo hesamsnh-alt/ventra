@@ -8,7 +8,7 @@ export function subscribeDrawingWorkflow(projectId,callback) {
   return ()=>{group.delete(callback);if(!group.size)listeners.delete(projectId);};
 }
 export function beginDrawingWorkflow(projectId,operation) {
-  if(!projectId||!['analysis','boq'].includes(operation))return null;
+  if(!projectId||!['analysis','boq','preview'].includes(operation))return null;
   const previous=drawingWorkflowState(projectId);
   if(previous.active || operation==='boq'&&previous.analysisFailed)return null;
   const token={operation};

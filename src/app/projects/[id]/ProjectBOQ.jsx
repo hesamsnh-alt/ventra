@@ -1,4 +1,9 @@
 "use client";
+import BoqScopePanel from './BoqScopePanel';
+import {createScopeManualItem} from '@/lib/boqScopeManual.mjs';
+import {priceScopeDefaults,removeIncludedDefaultComponents} from '@/lib/boqScopeRates.mjs';
+import {applyBoqScope,normalizeBoqScope,boqItemTrade} from '@/lib/boqScope.mjs';
+import {readBoqScope,mergeScopeBase,captureDefaultEdits} from '@/lib/boqScopeStore.mjs';
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,subscribeDrawingWorkflow} from '@/lib/drawingWorkflowGate.mjs';
 import WorkspaceDisclosure from './WorkspaceDisclosure';
 import {useLanguage} from '@/app/components/i18n/LanguageProvider';
@@ -193,6 +198,53 @@ export default function ProjectBOQ({
   const [takeoff, setTakeoff] = useState(null);
   const [boqSource,setBoqSource]=useState(null);
   const [items, setItems] = useState([]);
+  const [scopeState,setScopeState]=useState(null);
+  const [scopeApplying,setScopeApplying]=useState(false);
+  const scopeContext=useRef({projectId,takeoff,items});scopeContext.current={projectId,takeoff,items};
+  async function priceAssumedRows(result){
+    if(!result.report||!result.items.some(i=>i.scopeDefault))return result;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+    try{const response=await fetch('/api/boq/catalog',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok||!data.success)throw Error('Catalog unavailable');
+      result.items=removeIncludedDefaultComponents(priceScopeDefaults(result.items,data.catalog));
+    }catch{result.report.catalogUnavailable=true;}finally{clearTimeout(timeout);}
+    result.report.assumedRows=result.items.filter(i=>i.scopeDefault).length;
+    result.report.unpricedAssumptions=result.items.filter(i=>i.scopeDefault&&!(Number(i.rate)>0)).length;
+    result.items=result.items.map((i,index)=>({...i,itemNumber:String(index+1).padStart(2,'0'),...(index===0?{scopeDisclosure:result.report}:{})}));return result;
+  }
+  async function applySavedScope(config,overrideBase=null){
+    if(loadingTakeoff||generating||scopeApplying||applyingProjectRates||drawingWorkflowState(projectId).active)throw Error('Wait until current work finishes before changing BOQ scope.');
+    if(boqSource?.documentId&&takeoff?.document_id&&boqSource.documentId!==takeoff.document_id)throw Error('The displayed BOQ belongs to another drawing. Generate BOQ for the selected drawing before applying its scope.');
+    const base=overrideBase||mergeScopeBase(scopeState?.baseItems||items,items,scopeState?.selectedIds||[]);
+    const defaultEdits=captureDefaultEdits(items,scopeState?.defaultEdits||{},scopeState?.defaultIds||[]);
+    const snapshot=scopeContext.current;
+    setScopeApplying(true);
+    let result;
+    try{result=await priceAssumedRows(applyBoqScope(base,takeoff||{},config,{defaultEdits}));}
+    finally{setScopeApplying(false);}
+    if(scopeContext.current.projectId!==snapshot.projectId||scopeContext.current.takeoff!==snapshot.takeoff||scopeContext.current.items!==snapshot.items||drawingWorkflowState(projectId).active)throw Error('Project or drawing changed. Apply scope to the current BOQ again.');
+    if(result.report){result.report.sourceDocumentId=takeoff?.document_id;result.report.sourceDocumentName=boqSource?.name||takeoff?.document_name;}
+    const nextScope={config:result.config,baseItems:base,report:result.report,selectedIds:result.items.filter(i=>!i.scopeDefault).map(i=>i.id),defaultIds:result.items.filter(i=>i.scopeDefault).map(i=>i.id),defaultEdits};
+    const nextWarnings=warnings.filter(w=>!String(w).startsWith('[BOQ SCOPE]'));
+    if(result.report)nextWarnings.push('[BOQ SCOPE] '+result.report.note+' '+result.report.gaps.map(g=>g.trade+': '+g.required).join('; '));
+    const saved=saveReadyBoq(window.localStorage,projectId,{projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,items:result.items,warnings:nextWarnings,assumptions,takeoff,boqSource,projectRateImport,boqScope:nextScope,updatedAt:new Date().toISOString()},{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
+    if(!saved)throw Error('Wait for the BOQ to load.');
+    setItems(result.items);setScopeState(nextScope);setWarnings(nextWarnings);
+    setMessage(language==='fa'?'محدوده با اطلاعات ذخیره‌شده اعمال شد؛ تحلیل AI اجرا نشد.':'Scope applied from saved evidence; no AI analysis was run.');
+  }
+  async function classifyScopeItem(id,trade){
+    const base=mergeScopeBase(scopeState?.baseItems||items,items,scopeState?.selectedIds||[]).map(i=>i.id===id?{...i,boqTrade:trade}:i);
+    await applySavedScope(scopeState?.config||{},base);
+  }
+  function addScopedManual(input){
+    if(loadingTakeoff||generating||scopeApplying||applyingProjectRates||drawingWorkflowState(projectId).active)throw Error('Wait for the current operation to finish.');
+    if(scopeState?.report&&!scopeState.report.activeTrades.includes(input.trade))throw Error('Enable this trade in the selected scope before adding it.');
+    const item=createScopeManualItem(input,crypto.randomUUID());
+    const nextItems=reindexItems([...items,item]);
+    const nextScope=scopeState?{...scopeState,baseItems:[...mergeScopeBase(scopeState.baseItems,items,scopeState.selectedIds),item],selectedIds:[...scopeState.selectedIds,item.id]}:null;
+    const saved=saveReadyBoq(window.localStorage,projectId,{projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,items:nextItems,warnings,assumptions,takeoff,boqSource,projectRateImport,boqScope:nextScope,updatedAt:new Date().toISOString()},{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
+    if(!saved)throw Error('Wait for the BOQ to load.');
+    setItems(nextItems);setScopeState(nextScope);setMessage(language==='fa'?'ردیف دستی ذخیره شد؛ برای ورود به مبلغ تأییدشده، بررسی ردیف را تکمیل کنید.':'Manual line saved. Review it before tender inclusion.');
+  }
   const [branding, updateBranding] = useDocumentBranding(projectId);
   const [warnings, setWarnings] = useState([]);
   const [assumptions, setAssumptions] = useState([]);
@@ -331,17 +383,25 @@ export default function ProjectBOQ({
         nextProjectRateImport={...imported.summary,projectId,documentId:sourceTakeoff.document_id,analyzedAt:sourceTakeoff.analyzed_at,csvText:projectRateImport.csvText,beforeItems:generatedItems};
         generatedItems=normalizeItems(imported.items,sourceTakeoff);
       }
+      const baseItems=generatedItems;
+      const selectedScope=readBoqScope(window.localStorage,projectId);
+      const scoped=await priceAssumedRows(applyBoqScope(baseItems,sourceTakeoff,selectedScope));
+      generatedItems=normalizeItems(scoped.items,sourceTakeoff);
+      if(scoped.report){scoped.report.sourceDocumentId=sourceTakeoff.document_id;scoped.report.sourceDocumentName=sourceTakeoff.document_name;}
+      const generatedScope=scoped.report?{config:scoped.config,baseItems,report:scoped.report,selectedIds:generatedItems.filter(i=>!i.scopeDefault).map(i=>i.id),defaultIds:generatedItems.filter(i=>i.scopeDefault).map(i=>i.id),defaultEdits:{}}:null;
+      if(scoped.report){boq.warnings=[...(boq.warnings||[]),'[BOQ SCOPE] '+scoped.report.note+' '+scoped.report.gaps.map(g=>g.trade+': '+g.required).join('; ')];}
       // Commit the complete result before a tab switch can unmount this panel.
       saveReadyBoq(window.localStorage, projectId, {
         projectName, currency: "AED", vatPercentage, overheadPercentage,
         profitPercentage, discountPercentage, items: generatedItems,
         warnings: Array.isArray(boq.warnings) ? boq.warnings : [],
         assumptions: Array.isArray(boq.assumptions) ? boq.assumptions : [],
-        takeoff: sourceTakeoff, boqSource:{documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151}, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
+        boqScope:generatedScope, takeoff: sourceTakeoff, boqSource:{documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151}, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
       }, { loadedProject: projectId, loading: false, generating: false });
       setTakeoff(sourceTakeoff);
       setBoqSource({documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151});
       setItems(generatedItems);
+      setScopeState(generatedScope);
       setProjectRateImport(nextProjectRateImport);
       setWarnings(Array.isArray(boq.warnings) ? boq.warnings : []);
       setAssumptions(Array.isArray(boq.assumptions) ? boq.assumptions : []);
@@ -370,6 +430,7 @@ export default function ProjectBOQ({
       setProjectRateImport(null);
       setTakeoff(null);
       setBoqSource(null);
+      setScopeState(null);
       setWarnings([]);
       setAssumptions([]);
       if (!projectId) {
@@ -401,6 +462,7 @@ export default function ProjectBOQ({
         if (storedBoq) {
           const parsedBoq = JSON.parse(storedBoq);
           setBoqSource(parsedBoq.boqSource||null);
+          setScopeState(parsedBoq.boqScope||null);
           const savedRates=parsedBoq?.projectRateImport;
           setProjectRateImport(savedRates?.projectId===projectId&&savedRates?.documentId&&savedRates.documentId===latestTakeoff?.document_id&&savedRates.analyzedAt===latestTakeoff?.analyzed_at&&typeof savedRates?.csvText==='string'&&savedRates.csvText.length<=4*1024*1024&&Array.isArray(savedRates.beforeItems)?savedRates:null);
           storedItems = normalizeItems(parsedBoq?.items || [], latestTakeoff);
@@ -505,14 +567,15 @@ export default function ProjectBOQ({
         takeoff,
         boqSource,
         projectRateImport,
+        boqScope:scopeState,
         updatedAt: new Date().toISOString(),
-      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||applyingProjectRates });
-  }, [projectId, loadedBoqProject, loadingTakeoff, generating, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, boqSource, projectRateImport]);
+      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||scopeApplying||applyingProjectRates });
+  }, [projectId, loadedBoqProject, loadingTakeoff, generating, scopeApplying, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, boqSource, projectRateImport, scopeState]);
 
   function saveProjectRateDraft(nextItems,nextImport) {
     const saved=saveReadyBoq(window.localStorage,projectId,{
       projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,
-      items:nextItems,warnings,assumptions,takeoff,boqSource,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
+      items:nextItems,warnings,assumptions,takeoff,boqSource,boqScope:scopeState,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
     },{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
     if(!saved)throw Error('BOQ is still loading or generating. Wait before applying project rates.');
   }
@@ -579,15 +642,17 @@ export default function ProjectBOQ({
     });
   }
 
-  function addItem() {
+  function addItem(trade=null) {
+    if(typeof trade!=='string')trade=null;
     setErrorMessage("");
     setMessage("");
     setItems((currentItems) => reindexItems([
       ...currentItems,
       {
         id: `${Date.now()}-manual`,
+        ...(trade?{boqTrade:trade,section:trade}:{}),
         itemNumber: String(currentItems.length + 1),
-        section: "General",
+        section: trade||"General",
         description: "New BOQ item",
         unit: "item",
         quantity: 1,
@@ -666,12 +731,12 @@ export default function ProjectBOQ({
   }
 
   function exportCsv() {
-    if (items.length === 0) {
+    if (items.length === 0 && !scopeState?.report) {
       setErrorMessage("Generate or add BOQ items before exporting.");
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations});
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report});
     const rows = [
       [branding.companyName, branding.address, branding.contact, branding.taxNumber],
       [projectName + " - Bill of Quantities"],
@@ -702,12 +767,12 @@ export default function ProjectBOQ({
   }
 
   function exportExcel() {
-    if (items.length === 0) {
+    if (items.length === 0 && !scopeState?.report) {
       setErrorMessage("Generate or add BOQ items before exporting.");
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations});
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report});
     const rows = exportDocument.rows.map(row => `<tr>${row.map(value => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("");
     const headers = exportDocument.headers.map(value => `<th>${escapeHtml(value)}</th>`).join("");
     const summary = exportDocument.summary.map(([label, amount]) => `<tr><td colspan="6">${escapeHtml(label)}</td><td>${escapeHtml(amount)}</td><td colspan="6"></td></tr>`).join("");
@@ -717,7 +782,7 @@ export default function ProjectBOQ({
   }
 
   function exportPdf() {
-    if (items.length === 0) {
+    if (items.length === 0 && !scopeState?.report) {
       setErrorMessage("Generate or add BOQ items before exporting.");
       return;
     }
@@ -759,6 +824,12 @@ export default function ProjectBOQ({
     <LocalizedElement as="section" className="boq-panel">
       <CommercialSync projectId={projectId} />
       <DocumentBranding branding={branding} onChange={updateBranding} />
+      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoff} report={scopeState?.report}
+        disabled={loadingTakeoff||generating||scopeApplying||applyingProjectRates||!!drawingWorkflow.active}
+        onApply={applySavedScope} onRestore={scopeState?.baseItems?()=>applySavedScope({...scopeState.config,enabled:false}):null}
+        onAddManual={addScopedManual} onClassify={classifyScopeItem}
+        unclassified={scopeState?.report?(scopeState.baseItems||[]).filter(i=>boqItemTrade(i)==='unclassified'&&Number(i.quantity)>0):[]}/>
+
       <LocalizedElement as="div" className="boq-header">
         <LocalizedElement as="div">
           <LocalizedElement as="span">QUANTITY TAKEOFF</LocalizedElement>
@@ -772,7 +843,7 @@ export default function ProjectBOQ({
           <LocalizedElement as="button"
             type="button"
             onClick={handleGenerateBoq}
-            disabled={generating || loadingTakeoff || !!drawingWorkflow.active || drawingWorkflow.analysisFailed}
+            disabled={generating || scopeApplying || loadingTakeoff || !!drawingWorkflow.active || drawingWorkflow.analysisFailed}
           >
             {generating ? (
               <LoaderCircle size={17} className="boq-spinner" />

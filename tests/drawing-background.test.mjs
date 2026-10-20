@@ -1,3 +1,5 @@
+import {createLocalDrawingRegistry} from '../src/lib/localDrawingRegistry.mjs';
+import {drawingCheckpointProgress,drawingProgressView} from '../src/lib/drawingProgress.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -21,15 +23,29 @@ function fixture(){
   return {select(){return this;},eq(k,v){filters.push([k,v]);return this;},insert(v){action='insert';value=v;return this;},update(v){action='update';value=v;return this;},maybeSingle:async()=>execute(),then(resolve,reject){return Promise.resolve(execute()).then(resolve,reject);}};
  }};
  const failure=(m,status)=>Object.assign(Error(m),{status});
- const ctx={structuredClone,Buffer,Date,URL,Request,Response,AbortSignal,JSON,Error,console:{warn(){}},process:{env:{URL:'https://deploy.invalid',NETLIFY:'true'}},randomBytes:()=>Buffer.from('a'.repeat(64),'hex'),drawingJobId,drawingJobHash,completeDrawingResult,withDrawingJob,
+ const ctx={createLocalDrawingRegistry,drawingCheckpointProgress,drawingProgressView,structuredClone,Buffer,Date,URL,Request,Response,AbortSignal,JSON,Error,console:{warn(){}},process:{env:{URL:'https://deploy.invalid',NETLIFY:'true'}},randomBytes:()=>Buffer.from('a'.repeat(64),'hex'),drawingJobId,drawingJobHash,completeDrawingResult,withDrawingJob,
   billingError:failure,commercialAdmin:()=>db,account:async req=>{if(!req.headers.get('authorization'))throw failure('Sign in',401);return {id:identity};},commercialContext:async()=>({db}),commercialError:e=>Response.json({success:false,error:e.message},{status:e.status||503}),validProjectId:v=>/^[a-f0-9-]{36}$/.test(v||''),fetch:async()=>{dispatches++;return new Response(null,{status:202});}};
- vm.createContext(ctx);vm.runInContext(readFileSync('src/lib/serverDrawingJobs.js','utf8').replace(/^import[^\n]*\n/gm,'').replace(/export /g,'')+'\nthis.api={startDrawingJob,readDrawingJob,executeDrawingJob};',ctx);
+ vm.createContext(ctx);vm.runInContext(readFileSync('src/lib/serverDrawingJobs.js','utf8').replace(/^import[^\n]*\n/gm,'').replace(/export /g,'')+'\nthis.api={startDrawingJob,readDrawingJob,executeDrawingJob,readLocalDrawingJob,runLocalDrawingJob};',ctx);
  const request=(body={},method='POST')=>new Request('https://app.invalid/api/ai/analyze-drawing'+(method==='GET'?'?'+new URLSearchParams({projectId:project,documentId:docid,...body}):''),{method,headers:{authorization:'Bearer user-session','content-type':'application/json'},...(method==='POST'?{body:JSON.stringify({projectId:project,documentId:docid,...body})}:{})});
  return {api:ctx.api,jobs,documents,request,db,get dispatches(){return dispatches;},set identity(x){identity=x;},set role(x){role=x;},set dispatch(fn){ctx.fetch=fn;}};
 }
 const worker=id=>({id,nonce:'a'.repeat(64),authorization:'Bearer user-session'});
 test('stable job identity ignores rotating signed URLs / browser request IDs and separates actors, documents and modes',()=>{
  const id=drawingJobId(actor,doc);assert.equal(id,drawingJobId(actor,doc,{fileUrl:'other',requestId:'random'}));assert.notEqual(id,drawingJobId(project,doc));assert.notEqual(id,drawingJobId(actor,{...doc,file_path:'new.pdf'}));assert.notEqual(id,drawingJobId(actor,doc,{localPdfRecoveryOnly:true}));
+});
+test('offline recovery versions do not change paid job identities or replay old paid work',()=>{
+ const legacy=mode=>{const h=drawingJobHash(JSON.stringify([151,actor,doc.project_id,doc.id,doc.file_path,doc.file_size,doc.created_at,'gpt-5',mode.resumeSourceMeasurementsOnly===true,mode.localPdfRecoveryOnly===true]));return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`;};
+ assert.equal(drawingJobId(actor,doc),legacy({}));assert.equal(drawingJobId(actor,doc,{resumeSourceMeasurementsOnly:true}),legacy({resumeSourceMeasurementsOnly:true}));
+ assert.notEqual(drawingJobId(actor,doc,{localPdfRecoveryOnly:true}),legacy({localPdfRecoveryOnly:true}));
+});
+test('a new offline job inherits the completed source continuation checkpoint without restarting the paid job',async()=>{
+ const f=fixture(),base=await(await f.api.startDrawingJob(f.request())).json();
+ f.jobs.get(base.jobId).status='failed';f.jobs.get(base.jobId).request_body.__checkpoint={key:'a'.repeat(64),record:{totalPages:13,pages:[{}],review:null}};
+ const resumed=await(await f.api.startDrawingJob(f.request({resumeSourceMeasurementsOnly:true}))).json();
+ f.jobs.get(resumed.jobId).status='completed';f.jobs.get(resumed.jobId).request_body.__checkpoint={key:'a'.repeat(64),record:{totalPages:13,pages:Array.from({length:13},(_,i)=>({pageNumber:i+1})),review:{status:'completed'},source_basis:{status:'completed'}}};
+ const offline=await(await f.api.startDrawingJob(f.request({resumeSourceMeasurementsOnly:true,localPdfRecoveryOnly:true}))).json();
+ assert.equal(f.jobs.get(offline.jobId).request_body.__checkpoint.record.pages.length,13);
+ assert.equal(f.jobs.get(offline.jobId).request_body.localPdfRecoveryOnly,true);assert.equal(f.jobs.get(base.jobId).status,'failed');
 });
 test('queue returns 202 without analysis; duplicate submission and two worker deliveries run exactly once',async()=>{
  const f=fixture(),a=await f.api.startDrawingJob(f.request()),body=await a.json();assert.equal(a.status,202);assert.equal(f.dispatches,1);assert.equal(f.jobs.size,1);
@@ -92,4 +108,18 @@ test('background page extraction never retries a failed paid page request',async
  let calls=0;const c={isPdfCreditBalanceError:()=>false,analyzeDrawingPage:async()=>{calls++;throw Object.assign(Error('Upstream gateway'),{status:502});},setTimeout};
  vm.createContext(c);vm.runInContext(readFileSync('src/services/pageWorker.js','utf8').replace(/^import[^\n]*\n/gm,'').replace(/export /g,'')+'\nthis.run=processPage;',c);
  const result=await c.run({pageNumber:1,bytes:[]},{noAutomaticRetries:true});assert.equal(result.success,false);assert.equal(calls,1);
+});
+
+test('local authenticated progress is visible during a long request and concurrent submissions cannot run twice',async()=>{
+ const f=fixture();let calls=0,release;const gate=new Promise(r=>release=r);
+ const run=async()=>{calls++;await currentDrawingJob().progress({stage:'pages',pagesCompleted:2,totalPages:6});await gate;return Response.json({success:true,result:{floor_area:24}});};
+ const first=f.api.runLocalDrawingJob(f.request(),run);
+ for(let i=0;i<20&&!calls;i++)await new Promise(r=>setImmediate(r));
+ const status=await f.api.readLocalDrawingJob(f.request({},'GET'));assert.equal(status.status,202);
+ const payload=await status.json();assert.equal(payload.progress.pagesCompleted,2);assert.equal(payload.progress.percent,20);
+ const duplicate=await f.api.runLocalDrawingJob(f.request({resumeSourceMeasurementsOnly:true}),run);assert.equal(duplicate.status,202);assert.equal(calls,1);
+ f.identity='44444444-4444-4444-8444-444444444444';f.role='viewer';
+ assert.equal((await f.api.readLocalDrawingJob(f.request({},'GET'))).status,403);
+ f.identity=actor;release();assert.equal((await first).status,200);
+ const completed=await f.api.readLocalDrawingJob(f.request({},'GET'));assert.equal(completed.status,200);assert.equal((await completed.json()).result.floor_area,24);
 });

@@ -12,7 +12,11 @@ function factsIn(text,page,scope='project'){
   const scopeId=local?['gf','ground floor'].includes(local[1])?'floor:0':['ff','first floor'].includes(local[1])?'floor:1':local[1].replace(/floor\s*/,'floor:'):scope;
   const add=(metric,property,values)=>{for(const value of unique(values))facts.push({metric,property,value,page,scope_id:scopeId,quote,source:'native_pdf_text'});};
   if(/\b(?:not|unless|option|optional|alternative|except|excluding)\b/.test(d))continue;
+  for(const m of d.matchAll(/\b(external|internal) wall\s+[a-z]+\d+\s*=\s*(\d+(?:\.\d+)?)\s*mm\s+(cmu|concrete|aac|clay|brick)\b/g)){
+   const key=m[1]+'_block_area';add(key,'thickness_mm',[Number(m[2])]);add(key,'block_material',[m[3]==='cmu'?'concrete':m[3]==='brick'?'clay':m[3]]);
+  }
   for(const [word,key] of [['external','external_block_area'],['exterior','external_block_area'],['internal','internal_block_area'],['interior','internal_block_area']]){
+   if(/\b(?:height|ffl)\b|\b(?:above|below)\b/.test(d))continue;
    const material='(?:autoclaved aerated concrete|hollow concrete|solid concrete|aac|concrete|clay|brick)';
    const pattern=new RegExp(`\\b${word}\\s*(?:${material}\\s+)?(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(?:${material}\\s+)?(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`,'g');
    add(key,'thickness_mm',[...d.matchAll(pattern)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]])));

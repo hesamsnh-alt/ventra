@@ -1,7 +1,9 @@
+import {bindPdfSourceRates} from './pdfSourceRateBook.mjs';
 import {pdfRuleMetric} from './pdfTakeoffEvidence.mjs';
 import {readPdfSourceSpecifications,resolvedPdfSpecifications,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
 import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
 import {applyPdfDefaultSpecifications,isPdfDefaultOnlyPrice} from './pdfDefaultSpecifications.mjs';
+import {bindPdfOperationRates} from './pdfOperationPricing.mjs';
 
 const requirements={
   internal_block_area:['Block thickness/material matching the drawing','An own catalog or project rate for that specification'],
@@ -20,7 +22,9 @@ const requirements={
 };
 export function annotatePdfBoqCompletion(items,takeoff,catalog=[],priceLevel='standard'){
   if(!takeoff.pdf_analysis)return {items,summary:null,gaps:[]};
+  items=bindPdfSourceRates(items,takeoff);
   items=applyPdfDefaultSpecifications(items,takeoff,catalog,priceLevel);
+  items=bindPdfOperationRates(items,catalog,priceLevel);
   const candidates=new Map();
   const specificationFacts=readPdfSourceSpecifications(takeoff);
   const specificationConflicts=pdfSpecificationConflicts(specificationFacts);
@@ -40,13 +44,15 @@ export function annotatePdfBoqCompletion(items,takeoff,catalog=[],priceLevel='st
       const completion={code:'catalog_option_without_quantity',required_information:['Select this catalog option only if it belongs to the project and has its own measured quantity.']};
       return {...item,completion,notes:[existingNotes,'[BOQ GAP] Catalog option without a project quantity. This row is not evidence of an additional missing project scope. [/BOQ GAP]'].filter(Boolean).join(' ')};
     }
-    if(rate>0&&!item.rateMissing){summary.pricedMeasuredOperations++;if(item.defaultSpecification?.status==='applied')summary.assumedSpecificationOperations++;return item;}
+    if(rate>0&&!item.rateMissing){summary.pricedMeasuredOperations++;if(item.defaultSpecification?.status==='applied'||Object.keys(item.operationPricing?.assumed_specification||{}).length)summary.assumedSpecificationOperations++;return item;}
     summary.unpricedMeasuredOperations++;
     const key=item.pdfEvidence?.metricKey||String(item.itemCode||'').replace(/^PDF-/,'').toLowerCase();
     const matching=candidates.get(key)||[];
     let required=/_volume$/.test(key)&&key!=='excavation_volume'?['Concrete grade/specification for this element','Applicable own catalog or project rate']:
       requirements[key]||['Applicable scope/material specification and matching own catalog or project rate'];
     let code=matching.length&&matching.every(p=>!p.rateAvailable)?'catalog_rate_missing':matching.length>1?'catalog_selection_required':'specification_or_catalog_match_required';
+    if(item.operationPricing?.status==='catalog_rate_missing'){code='catalog_rate_missing';required=item.operationPricing.required_information?.length?item.operationPricing.required_information:['Applicable installed supplier/project rate for this source operation'];}
+    if(item.operationPricing?.status==='ambiguous'){code='catalog_selection_required';required=['Resolve competing specification-matched operation catalog records: '+item.operationPricing.candidate_codes.join(', ')];}
     const known=resolvedPdfSpecifications(takeoff,key,specificationFacts),conflicts=specificationConflicts.filter(f=>f.metric===key);
     if(conflicts.length){code='source_specification_breakdown_required';required=['Provide disjoint measured quantities for the mixed/conflicting source specifications before selecting rates.'];}
     else if(known.length&&!matching.length){code='source_specification_without_catalog_match';required=['Select or provide an applicable rate matching the known source specification; the source quantity is retained.'];}

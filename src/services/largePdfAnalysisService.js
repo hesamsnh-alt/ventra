@@ -87,6 +87,7 @@ export async function analyzeLargePdf({
     });
   }
 
+  if(!addedNative.length&&pages.length)await writePdfAnalysisCache(cacheKey,{totalPages,pages:[...collected.values()],review:null});
   console.log('[PDF analysis cache] Reuse', {total_pages:totalPages,reused_pages:collected.size,pages_to_analyze:pages.length});
   let cacheWrite = Promise.resolve();
 
@@ -133,7 +134,9 @@ export async function analyzeLargePdf({
   // Local, bounded text extraction uses the already downloaded original PDF.
   // No SDK/API call; unsupported encodings remain on the existing evidence path.
   if(typeof extractNativePdfText==='function')for(let i=0;i<successfulPages.length;i++){
-    const p=successfulPages[i];if(['opening_schedule','specification','quantity_schedule','structural_plan'].includes(p.page_evidence?.kind)){
+    const p=successfulPages[i];{
+      // A page role supplied by a model is not a text-reading permission.
+      // MEP/detail pages classified as "other" still contain source schedules.
       successfulPages[i]={...p,native_text_evidence:nativeByPage.get(p.pageNumber)||extractNativePdfText(pdf,p.pageNumber-1,{allowRotated:['quantity_schedule','structural_plan'].includes(p.page_evidence.kind)})};
       collected.set(p.pageNumber,successfulPages[i]);
     }
@@ -164,8 +167,8 @@ export async function analyzeLargePdf({
       : await reviewPdfDocumentMeasurements({pdf,pages:successfulPages,
         audit:initial.pdf_analysis,extractPagePacket:extractPdfPagePacket,
         cachedGroups:!pages.length?cached?.review_groups||{}:{},
-        onGroupComplete:groups=>{
-          cacheWrite=cacheWrite.then(()=>writePdfAnalysisCache(cacheKey,{totalPages,pages:successfulPages,review:null,review_groups:groups,source_basis:!pages.length?cached?.source_basis:null}));
+        onGroupComplete:(groups,progress={})=>{
+          cacheWrite=cacheWrite.then(()=>writePdfAnalysisCache(cacheKey,{totalPages,pages:successfulPages,review:null,review_groups:groups,review_total:progress.total||cached?.review_total||null,source_basis:!pages.length?cached?.source_basis:null}));
           return cacheWrite;
         }});
   await cacheWrite;

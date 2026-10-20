@@ -77,11 +77,16 @@ function doorParts(item,takeoff,p,catalog,priceLevel){
 export function applyPdfDefaultSpecifications(items,takeoff,catalog=[],priceLevel='standard'){
  if(!takeoff?.pdf_analysis)return items;
  const facts=readPdfSourceSpecifications(takeoff),conflicts=pdfSpecificationConflicts(facts),byMetric=new Map();
+ const sourceText=(takeoff.page_results||[]).flatMap(p=>p.native_text_evidence?.status==='readable'?p.native_text_evidence.spans.map(s=>s.text):[]).join(' ');
+ const hydronicSource=/fan[- ]?coil|chilled[- ]water|\bCHW\d*\b/i.test(sourceText);
  for(const rateItem of catalog){const p=policy(rateItem);if(!p)continue;const entries=byMetric.get(p.metric)||[];entries.push({p,rateItem});byMetric.set(p.metric,entries);}
  return items.flatMap(item=>{
   const key=item.pdfEvidence?.metricKey;
   if(item.review?.confirmed||item.source==='manual'||item.defaultSpecification?.rateOverridden||item.defaultSpecification?.status&&item.defaultSpecification.status!=='applied'||!(Number(item.quantity)>0)||Number(item.rate)>0||unit(item.unit)!==PDF_METRIC_UNITS[key])return [item];
   if(items.filter(i=>i.quantity>0&&(i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).includes(key)).length!==1||conflicts.some(f=>f.metric===key))return [item];
+  // A hydronic source cannot inherit a refrigerant split-system allowance,
+  // even when an earlier model collapsed several systems into one metric.
+  if(hydronicSource&&['ac_count','ac_pipe_length'].includes(key))return [item];
   const source=facts.filter(f=>f.metric===key),known=resolvedPdfSpecifications(takeoff,key,facts);
   const policies=(byMetric.get(key)||[]).filter(({p})=>!source.some(f=>!known.some(k=>k.property===f.property))&&!known.some(k=>p.specification[k.property]!==k.value)&&!(p.source_required||[]).some(prop=>!known.some(k=>k.property===prop)));
   if(policies.length!==1)return [item];

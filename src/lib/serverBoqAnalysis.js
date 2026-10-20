@@ -7243,7 +7243,7 @@ console.log("=============================");
 
     const pdfCoverage = retainUnboundPdfQuantities(items, takeoff);
     items.splice(0, items.length, ...pdfCoverage.items);
-    warnings.push(...pdfCoverage.warnings);
+    // Final completion below reports remaining unpriced rows after source rates bind.
 
     // Apply after both deterministic and AI rules, before totals are calculated.
     items.forEach((item, index) => { items[index] = requireBoqReview(item); });
@@ -7563,7 +7563,7 @@ if (items.length === 0) {
         items,
         assumptions: [
           "Quantities were generated from detected drawing geometry.",
-          "Rates were loaded from the Ventra UAE price database.",
+          items.some(item=>item.sourceRate) ? "Applicable rates from the original PDF rate book were used; other rows retain their catalog rate or explicit missing-rate status. Source rates are provisional and editable." : "Rates were loaded from the Ventra UAE price database.",
         ],
         warnings,
         pdfCatalogAudit:pdfCatalogPlan?.catalogAudit||null,

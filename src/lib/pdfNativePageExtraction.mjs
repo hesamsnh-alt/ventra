@@ -39,7 +39,36 @@ const services = new Map([
   ['split ac units',['ac_count','nr']],['insulated ac pipes',['ac_pipe_length','m']],
   ['smoke detectors',['smoke_detector_count','nr']],['water supply pipes',['water_pipe_length','m']],
   ['waste pipes',['waste_pipe_length','m']],
+  ['wc sets',['toilet_count','nr']],['wash basins',['basin_count','nr']],
 ]);
+
+// Explicit room-by-room fixture schedules, without a room-count allowance.
+// Only a source that excludes all unshown plumbing establishes completeness.
+// No conversion from a photograph, symbol guess, or sanitary room area.
+function fixtureClaims(native,page) {
+  const text=native.spans.map(s=>s.text).join(' ');
+  if(!/\ball unshown plumbing is excluded\b/i.test(text))throw Error('Fixture schedule completeness unresolved');
+  const rows=native.spans.filter(s=>/^Each (?:of )?[A-Z][A-Z0-9_-]*(?:\s*(?:,|and)\s*[A-Z][A-Z0-9_-]*)*:\s*\d/i.test(s.text.trim()));
+  if(!rows.length||rows.length>200)throw Error('Explicit fixture room rows unavailable');
+  if(native.spans.some(s=>!rows.includes(s)&&/\d+\s+(?:WC sets?|wash basins?|sinks?|floor drains?|electric water heaters?)\b/i.test(s.text)))throw Error('Unparsed fixture quantity outside the explicit room schedule');
+  const inventory=new Map(),seen=new Set();
+  const fixtureKeys=new Map([['wc set','toilet_count'],['wc sets','toilet_count'],['wash basin','basin_count'],['wash basins','basin_count'],['sinks',null],['sink',null],['floor drain',null],['floor drains',null],['electric water heater',null],['electric water heaters',null]]);
+  for(const row of rows){
+    const m=row.text.trim().match(/^Each (?:of )?([^:]+):\s*(.+?)\.?$/i);
+    const rooms=m[1].split(/\s*(?:,|\band\b)\s*/).map(s=>s.trim().toUpperCase());
+    if(rooms.some(s=>!/[0-9]/.test(s)||!/^\w[\w-]*$/.test(s))||new Set(rooms).size!==rooms.length)throw Error('Invalid or repeated fixture room identity');
+    const entries=m[2].split(/\s*\+\s*/);
+    for(const entry of entries){
+      const cells=entry.match(/^(\d+)\s+(.+)$/);if(!cells||!fixtureKeys.has(clean(cells[2])))throw Error('Unsupported fixture row');
+      const key=fixtureKeys.get(clean(cells[2])),count=Number(cells[1]);if(!Number.isSafeInteger(count)||count>10000)throw Error('Fixture count outside supported range');
+      const identity=key||clean(cells[2]).replace(/s$/,'');
+      for(const room of rooms){const id=room+'|'+identity;if(seen.has(id))throw Error('Repeated physical fixture row');seen.add(id);}
+      if(key){const items=inventory.get(key)||[];items.push({count,rooms,evidence:row.text});inventory.set(key,items);}
+    }
+  }
+  return [...inventory].map(([key,items])=>claim(key,items.reduce((s,r)=>s+r.count*r.rooms.length,0),'nr','project',page,
+    `Native explicit fixture schedule; each listed room counted once: ${items.map(r=>r.evidence).join('; ')}. Source excludes all unshown plumbing. Unmapped fixture types remain separate and unmeasured.`));
+}
 
 function serviceClaims(native,page,normalizePdfScope) {
   const t=table(native.spans,[/^item$/, /^(?:ground|ground floor|gf)$/, /^(?:first|first floor|ff)$/, /^unit$/]);
@@ -97,12 +126,13 @@ export function extractNativePdfPages(readings,normalizePdfScope) {
         inherited={page:pageNumber,basis:result.dimension_basis};
       } else {
         inherited=null;
-        if(/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text)){kind='quantity_schedule';quantities=serviceClaims(native,pageNumber,normalizePdfScope);}
+        if(/\bplumbing\b/i.test(text)&&/\ball unshown plumbing is excluded\b/i.test(text)){kind='quantity_schedule';quantities=fixtureClaims(native,pageNumber);}
+        else if(/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text)){kind='quantity_schedule';quantities=serviceClaims(native,pageNumber,normalizePdfScope);}
         else if(/\b(?:declared bar schedule|reinforcement schedule)\b/i.test(text)){kind='quantity_schedule';quantities=barClaims(native,pageNumber);}
         else if(/\b(?:measurement and finishes|construction specifications|finish specifications)\b/i.test(text)&&['WALLS:','FLOORS:','CEILINGS:'].filter(s=>text.includes(s)).length>=2){kind='specification';}
         else throw Error('No fully supported local page contract');
       }
-      const revisions=[...new Set([...text.matchAll(/\bR\d+\b/g)].map(m=>m[0]))];
+      const revisions=[...new Set([...text.matchAll(/\bREV(?:ISION)?\s*[:.]?\s*(R?\d+|[A-Z])\b/gi)].map(m=>m[1].toUpperCase()))];
       if(revisions.length>1)throw Error('Conflicting native source revisions');
       pages.push({...zero,pageNumber,confidence:0,detected_items:[],area_geometry:null,
         page_evidence:{kind,scope_id:scope,drawing_id:null,revision:revisions[0]||null,quantities},native_text_evidence:native,

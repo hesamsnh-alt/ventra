@@ -50,18 +50,26 @@ function service(client){
  const sandbox={PDF_METRIC_UNITS,pdfAnalysisCacheKey,isPdfCreditBalanceError,structuredClone,Uint8Array,getOpenAIClient:()=>client,parseTakeoffResponse:r=>JSON.parse(r.output_text),File,console:{log(){},warn(){}},process:{env:{}}};
  vm.createContext(sandbox);vm.runInContext(schema+'\n'+source+'\nthis.run=reviewPdfDocumentMeasurements;this.passes=pdfMeasurementReviewPasses;this.schema=scopedPdfReviewSchema;this.base=buildPdfDocumentReviewPrompt;this.focus=buildFocusedPdfReviewPrompt;',sandbox);return sandbox;
 }
-test('focused reviews preserve completed v113 structure and impose budgets only on failed companion passes; incomplete API responses are not accepted or retried',async()=>{
+test('bounded reviews preserve completed v151 structure and checkpoint each disjoint operation batch; truncated responses are not accepted or retried',async()=>{
  const calls=[],client={files:{create:async()=>({id:'file'}),delete:async()=>{}},responses:{create:async(p,o)=>{
-  const id=p.text.format.name;calls.push(p);assert.equal(o.maxRetries,0);assert.equal(p.model,'gpt-5');assert.equal(p.reasoning.effort,'low');
-  if(id.endsWith('surfaces'))return {status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:JSON.stringify({calculations:[],exclusions:[],notes:''})};
+  const id=p.text.format.name;calls.push(p);assert.equal(o.maxRetries,0);assert.equal(p.model,'gpt-5');assert.equal(p.reasoning.effort,'minimal');
+  if(id.endsWith('surfaces_v152_1'))return {status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:JSON.stringify({calculations:[],exclusions:[],notes:''})};
   return {status:'completed',output_text:JSON.stringify({calculations:[],exclusions:[],notes:''})};
  }}};
  const s=service(client),pages=structuredClone(observed.page_results),audit=mergePdfEvidence(pages).pdf_analysis,pass=s.passes(audit).find(p=>p.id==='structure');
  const prompt=s.base(pages,audit)+`\nTHIS PASS IS STRUCTURE ONLY. Allowed operation keys: ${pass.keys.join(', ')}. Return calculations, exclusions and notes. Do not output floor_revisions or perform geometry extraction. Use the same original source evidence and measurement conventions. Omit unsupported quantities with a brief explanation; do not fill them with assumptions. Keep operand evidence concise; avoid repeating long narrative descriptions.`;
  const cachedGroups={structure:{contract:pdfAnalysisCacheKey(new Uint8Array(),{schema:s.schema(pass),prompt}),status:'completed',review:{floor_revisions:[],calculations:[],exclusions:[],notes:'Previously completed'}}};
  const r=await s.run({pdf:{},pages,audit,cachedGroups,extractPagePacket:async()=>new Uint8Array([1])});
- assert.equal(calls.length,2);assert.equal(r.groups.structure.status,'completed');assert.equal(r.groups.surfaces.status,'failed');assert.match(r.groups.surfaces.reason,/max_output_tokens/);assert.equal(r.groups.inventory.status,'completed');
- assert.equal(calls.find(p=>p.text.format.name.endsWith('surfaces')).max_output_tokens,12000);
- assert.equal(calls.find(p=>p.text.format.name.endsWith('inventory')).max_output_tokens,8000);
+ assert.ok(calls.length>2);assert.equal(r.groups.structure.status,'completed');assert.equal(r.groups.surfaces_v152_1.status,'failed');assert.match(r.groups.surfaces_v152_1.reason,/max_output_tokens/);
+ assert.ok(Object.entries(r.groups).filter(([id])=>id.startsWith('inventory_')).every(([,g])=>g.status==='completed'));
+ const assigned=[];
+ for(const p of calls){assert.equal(p.max_output_tokens,12000);const keys=p.text.format.schema.properties.calculations.items.properties.key.enum;assert.ok(keys.length<=6);assigned.push(...keys);}
+ assert.equal(new Set(assigned).size,assigned.length);
+ const expected=s.passes(audit).filter(p=>['surfaces','inventory'].includes(p.id)).flatMap(p=>Array.from(p.keys));
+ assert.deepEqual([...assigned].sort(),Array.from(expected).sort());
+ const initialCalls=calls.length;
+ const second=await s.run({pdf:{},pages,audit,cachedGroups:r.groups,extractPagePacket:async()=>new Uint8Array([1])});
+ assert.equal(calls.length,initialCalls+1);assert.equal(second.status,'failed');assert.ok(calls.at(-1).text.format.name.endsWith('surfaces_v152_1'));
+
  for (const p of calls) {const text=p.input[0].content[0].text;assert.ok(!text.includes('Re-read every floor'));assert.ok(!text.includes('area_validation'));assert.ok(text.length<prompt.length);}
 });

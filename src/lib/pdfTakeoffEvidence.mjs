@@ -6,6 +6,7 @@ import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
 import {pdfCatalogScope,pdfCatalogThicknessMatches,pdfCatalogHeightMatches} from './pdfCatalogScope.mjs';
 import {readPdfSourceSpecifications,sourceSpecificationMetric,hasSourceSpecificationScope,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
 import {extractNativePdfPages} from './pdfNativePageExtraction.mjs';
+import {nativeFinishReplacesMetric} from './pdfNativeFinishLedger.mjs';
 // PDF quantities require explicit page roles/scopes. No project-specific totals.
 export const PDF_METRIC_UNITS=Object.freeze({rooms:'nr',door_count:'nr',window_count:'nr',door_area:'m2',window_area:'m2',wall_length:'m',wall_area:'m2',floor_area:'m2',ceiling_area:'m2',roof_area:'m2',pcc_volume:'m3',foundation_volume:'m3',pedestal_volume:'m3',column_volume:'m3',beam_volume:'m3',ground_slab_volume:'m3',first_slab_volume:'m3',roof_slab_volume:'m3',rebar_kg:'kg',foundation_formwork_area:'m2',column_formwork_area:'m2',beam_formwork_area:'m2',slab_formwork_area:'m2',external_block_area:'m2',internal_block_area:'m2',wood_floor_area:'m2',ceramic_floor_area:'m2',epoxy_floor_area:'m2',terrace_floor_area:'m2',wet_floor_area:'m2',wet_wall_area:'m2',plaster_area:'m2',paint_area:'m2',gypsum_ceiling_area:'m2',excavation_volume:'m3',toilet_count:'nr',basin_count:'nr',shower_count:'nr',socket_count:'nr',light_count:'nr',distribution_board_count:'nr',ac_count:'nr',smoke_detector_count:'nr',water_pipe_length:'m',waste_pipe_length:'m',ac_pipe_length:'m',kitchen_cabinet_length:'m',terrace_railing_length:'m',roof_waterproofing_area:'m2',terrace_waterproofing_area:'m2',wet_floor_waterproofing_area:'m2',wet_wall_waterproofing_area:'m2',wet_wall_tile_area:'m2',ceiling_paint_area:'m2',backsplash_area:'m2',driveway_area:'m2',landscape_area:'m2',kitchen_sink_count:'nr',laundry_sink_count:'nr',internal_wall_length:'m',external_wall_length:'m',internal_door_count:'nr',service_door_count:'nr',entrance_door_count:'nr',garage_door_count:'nr',kitchen_hob_hood_count:'nr'});
 export function normalizePdfScope(s){const v=String(s||'').toLowerCase().trim().replace(/[ _-]+/g,' ');if(['gf','ground','ground floor','floor 0','همکف','الطابق الأرضي'].includes(v))return 'floor:0';if(['ff','first','first floor','floor 1','طبقه اول','الطابق الأول'].includes(v))return 'floor:1';if(['project','whole project','all floors','total'].includes(v))return 'project';return v;}
@@ -24,7 +25,7 @@ export function mergePdfEvidence(pages,failed=[],total=pages.length){
  const reviewStatus=pages.find(p=>p.document_review_status)?.document_review_status;
  if(reviewStatus&&['failed','pending'].includes(reviewStatus.status))warnings.push('PDF cross-page measurement review '+reviewStatus.status+': '+reviewStatus.reason);
  const areaValidation=[];
- pages=pages.map(p=>{const checked=auditPdfAreaGeometry(p);if(checked.audit)areaValidation.push(checked.audit);warnings.push(...checked.warnings);
+ pages=pages.map(p=>{const checked=auditPdfAreaGeometry(p,pages);if(checked.audit)areaValidation.push(checked.audit);warnings.push(...checked.warnings);
   if(checked.page.__areaGeometryValidated)return checked.page;
   const recovered=recoverPdfRoomInventory(checked.page);warnings.push(...recovered.warnings);return recovered.page;});
  for(const p of pages){const e=p.page_evidence;
@@ -164,6 +165,7 @@ export function pdfRuleMetric(description,unit,takeoff=null,specificationFacts=u
 }
 export function pdfScheduledRule(takeoff,description,unit,specificationFacts=undefined){
  const metric=pdfRuleMetric(description,unit,takeoff,specificationFacts);if(!metric)return null;
+ if(nativeFinishReplacesMetric(takeoff,metric.key))return null;
  const keys=metric.keys||[metric.key],rows=[];let value=0;
  for(const key of keys){
   const claims=takeoff.pdf_analysis?.quantity_evidence?.[key],quantity=takeoff.scheduled_quantities?.[key];

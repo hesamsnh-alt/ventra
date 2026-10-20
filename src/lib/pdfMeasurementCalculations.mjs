@@ -164,7 +164,7 @@ export function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope =
   // A review response can contain usable polygons but omit its room rows.
   // Recover only source-labelled rows before deriving ceilings/finish rules.
   for(const p of pages)if(p.page_evidence?.kind==='floor_plan'&&p.native_plan_text?.status==='readable'){
-    const checked=auditPdfAreaGeometry(p);
+    const checked=auditPdfAreaGeometry(p,pages);
     if(checked.audit?.status!=='withheld')Object.assign(p,checked.page);
   }
   const nativeFresh=host.native_measurement_basis&&pages.some(p=>p.native_graphics?.status==='readable')?
@@ -176,6 +176,9 @@ export function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope =
   const nativeBasis=nativeFresh?.basis||host.native_measurement_basis;
   const nativeResult=nativeBasis?calculatePdfSourceMeasurements(nativeBasis,pages,metricUnits,nativeAvailable):null;
   const nativeDocument=nativePdfDocumentCalculations(pages,review,c=>calculatePdfMeasurement(c,metricUnits,available));
+  // A complete new native floor ledger replaces stale project aggregates too.
+  // Otherwise the merger's project-total precedence can hide corrected floors.
+  for(const p of pages)if(p.page_evidence) p.page_evidence.quantities=p.page_evidence.quantities.filter(q=>!q.native_coordinated&&!nativeDocument.coordinated_complete_keys?.includes(q.key));
   const nativeKeys=new Set([...(nativeResult?.calculations.map(c=>c.key)||[]),...nativeDocument.calculations.map(c=>c.key)]);
   const derivedKeys=new Set([...(sourceResult?.calculations.map(c=>c.key)||[]),...nativeKeys]);
   const allCalculations=[...(review.calculations||[]).filter(c=>!derivedKeys.has(c.key)),...(sourceResult?.calculations||[]).filter(c=>!nativeKeys.has(c.key)),...(nativeResult?.calculations||[]),...nativeDocument.calculations];
@@ -194,6 +197,7 @@ export function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope =
       const reconciled = reconcilePdfSoffitCoverage(c, review.notes, metricUnits, available);
       assertPdfSoffitCoverage(reconciled.calculation, review.notes);
       const claim = calculatePdfMeasurement(reconciled.calculation, metricUnits, available);
+      if(nativeDocument.coordinated_identities?.some(([key,scope])=>key===claim.key&&normalizeScope(scope)===normalizeScope(claim.scope_id)))claim.native_coordinated=true;
       if(reconciled.adjustment){
         claim.pages=[...new Set([...claim.pages,...reconciled.adjustment.source_pages])].sort((a,b)=>a-b);
         adjustments.push(reconciled.adjustment);
@@ -222,6 +226,8 @@ export function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope =
     target.page_evidence.quantities.push({...q, document_calculated: true});
   }
   return {pages, blocked: [...blocked], warnings, audit: {status: 'source_document_review',
+    native_coordinated_measurements:nativeDocument.coordinated_details||[],
+    native_source_operations:nativeDocument.source_operations||[],
     floor_revisions: revised, calculations: accepted.filter(q=>!blocked.has(q.key)), rejected, adjustments,
     source_measurements:sourceResult?{status:sourceResult.blocked.length?'incomplete':'calculated',issues:sourceResult.issues}:null,
     native_source_measurements:nativeResult?{status:nativeResult.blocked.length?'partial':'provisional',issues:nativeResult.issues,derived_keys:[...nativeKeys],geometry:host.native_source_status?.geometry||[],requires_review:true}:null,

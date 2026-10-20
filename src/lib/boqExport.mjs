@@ -6,7 +6,7 @@ export const BOQ_EXPORT_HEADERS = ['Item No.', 'Section', 'Description', 'Unit',
 
 // Export the same commercial selection as the BOQ screen, while accounting
 // separately for every displayed row. Inclusion is not proof of scope completeness.
-export function buildBoqExport(items = [], commercial = {}, {language="en",translations={}} = {}) {
+export function buildBoqExport(items = [], commercial = {}, {language="en",translations={},scopeReport=null} = {}) {
   const tr=text=>localizeBoqText(text,language,translations);
   const sums = { verified: 0, provisional: 0, pending: 0 };
   const rows = items.map(item => {
@@ -40,6 +40,14 @@ export function buildBoqExport(items = [], commercial = {}, {language="en",trans
     [`VAT ${commercial.vatPercentage || 0}% - tender basis`, money(commercial.vat)],
     ['Tender price - verified / reviewed rows with selected markups', money(commercial.total)],
   ];
+  const scope=scopeReport||items.find(i=>i.scopeDisclosure)?.scopeDisclosure;
+  if(scope){
+    summary.push(['Selected BOQ scope',scope.activeTrades.join(', ')]);
+    summary.push(['Scope assumptions / editable quantities',String(scope.assumedRows)]);
+    summary.push(['Assumed rows still without a matching price — excluded from priced total',String(scope.unpricedAssumptions||0)]);
+    for(const gap of scope.gaps)summary.push(['NOT FULLY MEASURED / '+gap.trade,gap.required+' — '+gap.action]);
+    if(scope.specifications)summary.push(['Customer instructions / confirm against structured specification choices',scope.specifications]);
+  }
   return { headers: BOQ_EXPORT_HEADERS.map(tr), rows, summary:summary.map(([label,value])=>[tr(label),value]), sums,
-    note: tr('Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.') };
+    note: (scope?scope.note+' ':'')+tr('Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.') };
 }

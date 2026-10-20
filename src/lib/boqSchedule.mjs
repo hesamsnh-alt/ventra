@@ -1,3 +1,4 @@
+import {productivityFor,selectDefaultMethod} from './boqProductivity.mjs';
 // Planning suggestions, not UAE norms or structural release instructions.
 export const TRADES = [
   ['prelim','Mobilisation / site setup',null,'item'], ['demolition','Demolition',null,'m2'], ['excavation','Excavation',null,'m3'], ['backfill','Backfill / compaction',null,'m3'],
@@ -68,14 +69,14 @@ export function inferTrade(description){
  if(/waterproof|عایق/.test(s))return 'waterproof';
  if(/screed/.test(s))return 'screed';
  if(/concrete|بتن/.test(s)&&!/block/.test(s))return 'concrete';
- if(/blockwork|brickwork|masonry|دیوارچینی/.test(s))return 'masonry';
+ if(/blockwork|brickwork|masonry|block.wall|دیوارچینی/.test(s))return 'masonry';
  if(/plaster|گچ|اندود/.test(s)&&!/board/.test(s))return 'plaster';
  if(/tiling|tile|کاشی|سرامیک/.test(s))return 'tiling';
  if(/paint|رنگ/.test(s))return 'painting';
  if(/commission|testing|handover/.test(s))return 'testing';
- if(/final.fix|socket|switch|sanitary.fixture/.test(s))return 'mep_final';
+ if(/final.fix|socket|switch|sanitary.fixture|wash.?basin|toilet|sink|luminaire|light.fixture|روشویی|توالت|سینک|روشنایی/.test(s))return 'mep_final';
  if(/sprinkler|fire.alarm|fire.fight/.test(s))return 'fire';
- if(/duct|hvac|air.condition|تهویه/.test(s))return 'hvac';
+ if(/duct|hvac|air.condition|fan.coil|فن.?کویل|تهویه/.test(s))return 'hvac';
  if(/plumb|drain|water.pipe|لوله/.test(s))return 'plumbing';
  if(/cable|conduit|wiring|electrical|برق/.test(s))return 'electrical';
  if(/gypsum.board|ceiling|سقف کاذب/.test(s))return 'ceiling';
@@ -90,11 +91,11 @@ export function inferTrade(description){
 export function prepareBoq(items){
  if(!Array.isArray(items)||!items.length)throw new Error('No BOQ items found. Save the BOQ for this project first.');
  if(items.length>200)throw new Error('Use a reviewed package of at most 200 BOQ activities per plan.');
- return items.map((item,i)=>{const trade=inferTrade(item.description);const p=TRADES.find(t=>t.id===trade);const unit=unitOf(item.unit);return {
+ return items.map((item,i)=>{const trade=inferTrade(item.description);const p=TRADES.find(t=>t.id===trade);const unit=unitOf(item.unit);const method=selectDefaultMethod(trade,unit,item.description,methodsFor(trade)[0].id);const defaults=productivityFor(trade,method,unit,item.description);return {
  id:`boq-${i}`,sourceId:String(item.id??i),name:String(item.description||`BOQ item ${i+1}`),quantity:item.quantity,unit,
- trade,method:methodsFor(trade)[0].id,order:p?.order??16,rate:p?.unit===unit?p.rate??'':'',crews:1,
- waitDays:['concrete','plaster','waterproof','screed','tiling'].includes(trade)?'':0,
- included:true,exclusionReason:'',crewNote:trade==='concrete'?'One complete pump placement crew; ready-mix supply and access confirmed':'One trade operative with required support; confirm crew and method',
+ trade,method,order:p?.order??99,rate:defaults?.rate??'',crews:1,
+ waitDays:defaults?.waitDays??0,
+ included:Number(item.quantity)>0,exclusionReason:Number(item.quantity)>0?'':'Zero quantity / catalogue option',crewNote:defaults?.crewNote??(trade==='concrete'?'One complete pump placement crew; ready-mix supply and access confirmed':'One trade operative with required support; confirm crew and method'),
  };});
 }
 const DAY=86400000;

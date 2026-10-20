@@ -6,6 +6,8 @@ import {applyProjectRateCsv} from '../src/lib/boqProjectRates.mjs';
 import {planPdfCatalogRules,retainUnboundPdfQuantities,resolvePdfCatalogRate} from '../src/lib/pdfBoqCoverage.mjs';
 import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
 import {saveReadyBoq} from '../src/lib/boqDraftPersistence.mjs';
+import {applyBoqScope} from '../src/lib/boqScope.mjs';
+import {readBoqScope} from '../src/lib/boqScopeStore.mjs';
 import {buildBoqExport} from '../src/lib/boqExport.mjs';
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '../src/lib/drawingWorkflowGate.mjs';
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
@@ -28,7 +30,7 @@ function baseline(){
 const slice=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b));
 let serial=0;
 function context(){
-  const state={projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,boqSource:null,
+  const state={scopeState:null,scopeApplying:false,readBoqScope,applyBoqScope,priceAssumedRows:async x=>x,setScopeState:()=>{},projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,boqSource:null,
     loadedBoqProject:null,loadingTakeoff:false,generating:false,applyingProjectRates:false,vatPercentage:5,overheadPercentage:0,profitPercentage:0,discountPercentage:0,
     warnings:[],assumptions:[],projectRateRequestRef:{current:0},projectRateContextRef:{current:null},error:'',message:'',writes:0,fetches:0,
     projectRateImportCalls:0,beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,applyProjectRateCsv,requireBoqReview,saveReadyBoq,

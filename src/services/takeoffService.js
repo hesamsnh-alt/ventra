@@ -228,13 +228,14 @@ function readTakeoffLocally(projectId) {
   }
 }
 
-export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false, onProgress = null }) {
+export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false, savedPdfReport = null, onProgress = null, resumeExistingOnly = false }) {
   try {
     if (!projectId) throw new Error("Project ID is required.");
     if (!document?.file_path || !document?.file_name) {
       throw new Error("Drawing document information is incomplete.");
     }
 
+    onProgress?.({status:'running',progress:{stage:'reading_source'}});
     const { downloadProjectDocument } = await import("@/services/documentService");
     const { url, error: signedUrlError } = await downloadProjectDocument(document);
 
@@ -243,7 +244,13 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
     }
 
     const requestId = `takeoff-${projectId}-${document.id || document.file_name}-${Date.now()}`;
-    const {response, payload} = await submitDrawingAnalysis(
+    let progressStorage=null;try{progressStorage=window.localStorage;}catch{}
+    const {response, payload} = localPdfRecoveryOnly ? await (async()=>{
+      const saved=savedPdfReport||await readPersistedTakeoff(projectId);
+      const {recoverSavedPdfReport}=await import('@/services/pdfSavedReportRecovery.mjs');
+      const result=await recoverSavedPdfReport({saved,document,projectId,fileUrl:url});
+      return {response:{ok:true,status:200},payload:{success:true,result,documentId:document.id}};
+    })() : await submitDrawingAnalysis(
       {
         method: "POST",
         headers: {
@@ -259,20 +266,21 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
           fileType: document.file_type || "application/octet-stream",
           projectName: document.project_name || "",
           requestId,
+          ...(/\.pdf$/i.test(document.file_name)?{noAutomaticRetries:true}:{}),
           ...(resumeSourceMeasurementsOnly ? {resumeSourceMeasurementsOnly:true} : {}),
           ...(localPdfRecoveryOnly ? {localPdfRecoveryOnly:true} : {}),
         }),
         cache: "no-store",
       },
       commercialFetch,
-      {onProgress}
+      {onProgress,resumeOnly:resumeExistingOnly,storage:progressStorage}
     );
 
 
     if (!response.ok || payload?.success !== true || !payload?.result) {
-      throw new Error(
+      throw Object.assign(new Error(
         payload?.error || payload?.message || `Drawing analysis failed with HTTP ${response.status}.`
-      );
+      ),{code:payload?.code,status:response.status});
     }
 
     if(payload.documentId && payload.documentId!==document.id)throw Object.assign(new Error("Analysis belongs to a different drawing; saved result was not replaced."),{code:"DRAWING_SOURCE_MISMATCH"});
@@ -296,6 +304,7 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
       raw_result: payload.result,
     };
 
+    onProgress?.({status:'running',progress:{stage:'saving'}});
     await saveTakeoffLocally(projectId, takeoff);
     return { takeoff, error: null };
   } catch (error) {

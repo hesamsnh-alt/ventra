@@ -1,7 +1,15 @@
+import {nativePdfSupplementaryScope} from './pdfNativeSupplementaryScope.mjs';
 // Only explicit arithmetic source statements are recognized here. Unknown
 // prose is left unresolved; no project quantities or measurement defaults.
+import {nativeCoordinatedPdfCalculations} from './pdfNativeCoordinatedQuantities.mjs';
+import {nativePdfServiceOperations} from './pdfNativeServiceOperations.mjs';
 export function nativePdfDocumentCalculations(pages,review,validate){
- const calculations=[],issues=[],readable=pages.filter(p=>p.native_text_evidence?.status==='readable');
+ const supplementary=nativePdfSupplementaryScope(pages);
+ const calculations=[...supplementary.calculations],issues=[...supplementary.issues],readable=pages.filter(p=>p.native_text_evidence?.status==='readable');
+ const coordinated=nativeCoordinatedPdfCalculations(pages);
+ const services=coordinated.details.length?nativePdfServiceOperations(pages,coordinated.details):{operations:[],issues:[]};
+ calculations.push(...coordinated.calculations);issues.push(...coordinated.issues);
+ issues.push(...services.issues);
  const texts=readable.map(p=>({page:p.pageNumber,text:[...p.native_text_evidence.spans].sort((a,b)=>b.y-a.y||a.x-b.x).map(s=>s.text).join(' ')}));
  const cabinets=[];
  for(const p of texts.filter(p=>pages.find(x=>x.pageNumber===p.page)?.page_evidence?.kind==='specification')){
@@ -36,5 +44,8 @@ export function nativePdfDocumentCalculations(pages,review,validate){
   if(valid&&terms.length)calculations.push({key:'slab_formwork_area',scope_id:'project',terms,evidence:`Source suspended first/roof slab volume operands divided by their explicit source thickness; source page ${convention[0].page}: slab soffit includes beam undersides. Full original volume calculations and remaining area units validated; beam strips are not added again. Source operand transcription still requires review.`});
   else issues.push('Slab soffit could not be derived from complete source thickness/volume operands');
  }
- return {calculations,issues};
+ return {calculations,issues,coordinated_details:coordinated.details,
+  source_operations:services.operations,
+  coordinated_identities:[...coordinated.calculations,...supplementary.calculations].map(c=>[c.key,c.scope_id]),
+  coordinated_complete_keys:[...supplementary.calculations.map(c=>c.key),...[...new Set(coordinated.calculations.map(c=>c.key))].filter(key=>coordinated.details.every(d=>coordinated.calculations.some(c=>c.key===key&&c.scope_id===d.scope)))]};
 }

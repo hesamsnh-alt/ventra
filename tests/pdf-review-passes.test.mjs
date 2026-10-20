@@ -14,6 +14,14 @@ function service(client){
  vm.createContext(sandbox);vm.runInContext(schema+'\n'+source+'\nthis.run=reviewPdfDocumentMeasurements;this.passes=pdfMeasurementReviewPasses;this.passSchema=scopedPdfReviewSchema;',sandbox);return sandbox;
 }
 const factor=(value,unit,pages,evidence)=>({value,unit,pages,evidence,operation:'multiply',clip:null});
+test('a source sheet classified as other or elevation stays in the coordinated review packet',async()=>{
+ const c=client(),s=service(c),input=args();
+ input.pages.push({pageNumber:40,page_evidence:{kind:'other',scope_id:null,quantities:[]}});
+ input.pages.push({pageNumber:41,page_evidence:{kind:'elevation',scope_id:null,quantities:[]}});
+ let indices;
+ const result=await s.run({...input,extractPagePacket:async(_,selected)=>{indices=Array.from(selected);return new Uint8Array([1]);}});
+ assert.ok(indices.includes(39)&&indices.includes(40));assert.ok(result.source_pages.includes(40)&&result.source_pages.includes(41));
+});
 function beamCalculation(lengths=[120,117]){return {key:'beam_formwork_area',scope_id:'project',evidence:'Source declares beam sides only; slab soffit includes beam undersides',terms:lengths.map((length,i)=>({id:'beam-sides-'+i,operation:'add',factors:[factor(length,'m',[3],'Printed beam length'),factor(.25,'m',[3],'Printed downstand depth'),factor(2,'count',[6],'Only two downstand sides; do not duplicate slab soffit')]}))};}
 function client(failures={},calculation=beamCalculation()){
  const stats={calls:[],uploads:0,deletes:0,maxActive:0,active:0};
@@ -34,12 +42,12 @@ test('operation families partition metrics without any arithmetic bypass of floo
  const blocked=s.passes({withheld_area_metrics:['floor_area']});assert.equal(blocked[0].id,'geometry');assert.equal(s.passSchema(blocked[0]).properties.calculations,undefined);
 });
 test('one timed-out pass retains successful corrections from the actual observed report; retry submits only that pass',async()=>{
- const failures={surfaces:Error('Request timed out.')},c=client(failures),s=service(c),snapshots=[];
- const first=await s.run({...args(),onGroupComplete:groups=>snapshots.push(groups)});assert.equal(first.status,'failed');assert.equal(first.passes.find(p=>p.id==='surfaces').status,'failed');assert.ok(first.review.calculations.length);
+ const failures={surfaces_v152_1:Error('Request timed out.')},c=client(failures),s=service(c),snapshots=[];
+ const first=await s.run({...args(),onGroupComplete:groups=>snapshots.push(groups)});assert.equal(first.status,'failed');assert.equal(first.passes.find(p=>p.id==='surfaces_v152_1').status,'failed');assert.ok(first.review.calculations.length);
  const pages=structuredClone(observed.page_results);pages[0].document_measurement_review=first.review;pages[0].document_review_status={status:first.status,source_pages:first.source_pages};
  const merged=mergePdfEvidence(pages);assert.equal(merged.beam_formwork_area,118.5);assert.equal(merged.floor_area,372);assert.ok(c.stats.maxActive<=2);assert.equal(c.stats.uploads,1);assert.equal(c.stats.deletes,1);assert.ok(snapshots.some(g=>g.structure?.status==='completed'));
- delete failures.surfaces;const second=await s.run({...args(),cachedGroups:first.groups});assert.equal(second.status,'completed');assert.deepEqual(c.stats.calls.slice(3),['surfaces']);
- const third=await s.run({...args(),cachedGroups:second.groups});assert.equal(third.status,'completed');assert.equal(c.stats.calls.length,4);assert.equal(c.stats.uploads,2);
+ delete failures.surfaces_v152_1;const second=await s.run({...args(),cachedGroups:first.groups});assert.equal(second.status,'completed');assert.deepEqual(c.stats.calls.slice(first.passes.length),['surfaces_v152_1']);
+ const third=await s.run({...args(),cachedGroups:second.groups});assert.equal(third.status,'completed');assert.equal(c.stats.calls.length,first.passes.length+1);assert.equal(c.stats.uploads,2);
 });
 test('source lengths vary without project-specific answers in the review orchestration',async()=>{
  const c=client({},beamCalculation([80,95])),s=service(c),r=await s.run(args()),pages=structuredClone(observed.page_results);
@@ -55,5 +63,5 @@ test('a calculation returned under the wrong operation family is rejected rather
 });
 test('changing the review contract does not reuse a completed pass with a mismatched fingerprint',async()=>{
  const c=client(),s=service(c),first=await s.run(args());first.groups.structure.contract='outdated';
- await s.run({...args(),cachedGroups:first.groups});assert.deepEqual(c.stats.calls.slice(3),['structure']);
+ await s.run({...args(),cachedGroups:first.groups});assert.deepEqual(c.stats.calls.slice(first.passes.length),['structure']);
 });

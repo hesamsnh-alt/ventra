@@ -118,6 +118,8 @@ export async function analyzeDrawingPage({
     const response =
       await openai.responses.create({
         model: PAGE_MODEL,
+        max_output_tokens: 12000,
+        ...(/^gpt-5(?:$|-\d)/.test(PAGE_MODEL)?{reasoning:{effort:'minimal'}}:{}),
 
         input: [
           {
@@ -166,6 +168,7 @@ export async function analyzeDrawingPage({
         `OpenAI returned an empty response for page ${pageNumber}.`
       );
     }
+    if(response.status && response.status!=='completed')throw Object.assign(new Error(`PDF page ${pageNumber} response incomplete: ${response.incomplete_details?.reason||response.status}. Partial output withheld; no automatic retry.`),{code:'PDF_PAGE_RESPONSE_INCOMPLETE'});
 
     console.log(
       "[Page Analysis] OpenAI response received",

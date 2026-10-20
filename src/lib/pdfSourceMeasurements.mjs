@@ -117,7 +117,7 @@ export function calculatePdfSourceMeasurements(basis,pages,metricUnits,available
   });
   tryGroup(['ceiling_paint_area'],()=>{
     const paint=rule(basis.rules.paint_enclosed_ceilings);if(!paint.value)throw Error('Enclosed ceiling paint rule is not confirmed');
-    const terms=matched.map(({page})=>{const checked=auditPdfAreaGeometry(page);
+    const terms=matched.map(({page})=>{const checked=auditPdfAreaGeometry(page,pages);
       if(!checked.page.__areaGeometryValidated||checked.audit?.withheld_metrics?.includes('ceiling_area')||!(checked.page.ceiling_area>0))throw Error('Audited enclosed ceiling area unavailable');
       return term(`${canon(page.page_evidence.scope_id)}:enclosed-ceiling-paint`,'add',[source({value:checked.page.ceiling_area,pages:[...new Set([page.pageNumber,...(page.document_area_source_pages||[]),...paint.pages])],evidence:`Audited enclosed ceiling area; ${paint.evidence}`},'m2')]);
     });add('ceiling_paint_area',terms,'Explicit paint-all-enclosed rule applied independently of gypsum exclusions');
@@ -127,7 +127,7 @@ export function calculatePdfSourceMeasurements(basis,pages,metricUnits,available
     if(!gypsumRule.value)throw Error('Source gypsum finish rule is not confirmed');
     const gypsumTerms=[];
     for(const {f,page} of matched){
-      const checked=auditPdfAreaGeometry(page);
+      const checked=auditPdfAreaGeometry(page,pages);
       if(checked.audit?.withheld_metrics?.includes('ceiling_area')||!f.ceilings_complete||!Array.isArray(f.ceiling_spaces))throw Error('Ceiling areas or finish coverage remain unresolved');
       const indoor=(checked.page.detected_items||[]).filter(i=>['m2','m²'].includes(String(i.unit).toLowerCase())&&i.quantity>0&&!/\bvoid\b|\bterrace\b|\bbalcony\b/i.test(i.name)&&!/^VOID\b|^OUTDOOR\b/i.test(i.description));
       unique(f.ceiling_spaces,'room_name');

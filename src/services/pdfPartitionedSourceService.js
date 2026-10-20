@@ -60,14 +60,26 @@ export async function reviewPartitionedPdfSource({pdf,pages,extractPagePacket,ca
  if(!floors.length||floors.length>6||new Set(floors.map(p=>normalizePdfScope(p.page_evidence.scope_id))).size!==floors.length)return {status:'pending',partition_version:VERSION,groups,reason:'Bounded source plan requires one to six unambiguous architectural floors',source_pages:[]};
  const native=nativeOpeningEvidence(pages,normalizePdfScope),specs=pages.filter(p=>p.page_evidence?.kind==='specification');
  const parts=[{id:'rules',pages:specs,schema:pdfSourceRulesSchema,budget:RULE_OUTPUT_BUDGET},...floors.map(f=>({id:`floor:${normalizePdfScope(f.page_evidence.scope_id)}`,scope:normalizePdfScope(f.page_evidence.scope_id),
-  pages:pages.filter(p=>p===f||specs.includes(p)||p.page_evidence?.kind==='detail'||p.page_evidence?.kind==='opening_schedule'&&normalizePdfScope(p.page_evidence.scope_id)===normalizePdfScope(f.page_evidence.scope_id)),schema:pdfSourceFloorSchema,budget:Math.floor((TOTAL_OUTPUT_BUDGET-RULE_OUTPUT_BUDGET)/floors.length)}))];
+  pages:pages.filter(p=>p===f||specs.includes(p)||p.page_evidence?.kind==='detail'||p.page_evidence?.kind==='opening_schedule'&&
+    (!p.page_evidence.scope_id||normalizePdfScope(p.page_evidence.scope_id)==='project'||normalizePdfScope(p.page_evidence.scope_id)===normalizePdfScope(f.page_evidence.scope_id))),schema:pdfSourceFloorSchema,budget:Math.floor((TOTAL_OUTPUT_BUDGET-RULE_OUTPUT_BUDGET)/floors.length)}))];
  const sourcePages=[...new Set(parts.flatMap(p=>p.pages.map(p=>p.pageNumber)))].sort((a,b)=>a-b);
  const snapshot=()=>{const done=parts.every(p=>groups[p.id]?.status==='completed'),some=parts.some(p=>groups[p.id]?.status==='completed');return {status:done?'completed':some?'partial':'failed',partition_version:VERSION,groups,source_pages:sourcePages,
   parts:parts.map(p=>({id:p.id,status:groups[p.id]?.status||'pending',source_pages:groups[p.id]?.source_pages||[],usage:groups[p.id]?.usage||null,reason:groups[p.id]?.reason||null})),
   basis:some?composePdfSourceParts(floors,groups,native):null,reason:done?null:'Source parts incomplete; successful parts retained. Failed saved parts are not retried automatically.'};};
+ if(onCheckpoint)await onCheckpoint({...snapshot(),status:'running'});
  let creditStopped=false;
  for(const part of parts){
-  const contract=pdfAnalysisCacheKey(new Uint8Array(),{version:VERSION,id:part.id,pages:part.pages.map(p=>p.pageNumber),schema:part.schema,prompt:buildPdfSourcePartPrompt.toString(),budget:part.budget});
+  const contractBasis={version:VERSION,id:part.id,pages:part.pages.map(p=>p.pageNumber),schema:part.schema,prompt:buildPdfSourcePartPrompt.toString(),budget:part.budget};
+  const legacyContract=pdfAnalysisCacheKey(new Uint8Array(),contractBasis);
+  const model=process.env.OPENAI_DRAWING_MODEL||'gpt-5';
+  const options={max_output_tokens:part.budget,...(/^gpt-5(?:$|-\d)/.test(model)?{reasoning:{effort:'minimal'}}:{})};
+  const contract=pdfAnalysisCacheKey(new Uint8Array(),{...contractBasis,model,options});
+  // Completed legacy evidence remains reusable. Credit failures remain blocked;
+  // only an unfinished old output contract gets a new explicit continuation.
+  if(groups[part.id]?.contract===legacyContract && (groups[part.id].status==='completed'||groups[part.id].creditUnavailable)){
+   if(groups[part.id].creditUnavailable)creditStopped=true;
+   continue;
+  }
   if(groups[part.id]?.contract===contract){if(groups[part.id].creditUnavailable)creditStopped=true;continue;}
   if(creditStopped)continue;
   if(!part.pages.length||part.pages.length>20){groups[part.id]={contract,status:'pending',reason:'Missing or excessive source pages'};if(onCheckpoint)await onCheckpoint(snapshot());continue;}
@@ -77,7 +89,7 @@ export async function reviewPartitionedPdfSource({pdf,pages,extractPagePacket,ca
    client=getOpenAIClient();file=await client.files.create({file:new File([bytes],`source-${part.id.replace(/[^a-z0-9]/gi,'-')}.pdf`,{type:'application/pdf'}),purpose:'user_data'},{maxRetries:0});
    if(!file?.id)throw Error('Source part upload returned no file');
    console.log('[PDF source part] Started',{id:part.id,source_pages:part.pages.map(p=>p.pageNumber),max_output_tokens:part.budget});
-   const response=await client.responses.create({model:process.env.OPENAI_DRAWING_MODEL||'gpt-5',max_output_tokens:part.budget,input:[{role:'user',content:[{type:'input_text',text:buildPdfSourcePartPrompt(part,floors,native)},{type:'input_file',file_id:file.id}]}],text:{format:{type:'json_schema',name:part.id==='rules'?'source_finish_rules':'source_floor_inventory',strict:true,schema:part.schema}}},{maxRetries:0});
+   const response=await client.responses.create({model,...options,input:[{role:'user',content:[{type:'input_text',text:buildPdfSourcePartPrompt(part,floors,native)},{type:'input_file',file_id:file.id}]}],text:{format:{type:'json_schema',name:part.id==='rules'?'source_finish_rules':'source_floor_inventory',strict:true,schema:part.schema}}},{maxRetries:0});
    const meta={contract,usage:response.usage||null,source_pages:part.pages.map(p=>p.pageNumber)};
    console.log('[PDF source part] Response',{id:part.id,status:response.status,usage:meta.usage,elapsed_ms:Date.now()-started});
    if(response.status&&response.status!=='completed')groups[part.id]={...meta,status:'failed',reason:response.incomplete_details?.reason||response.status};

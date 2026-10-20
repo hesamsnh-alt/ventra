@@ -1,4 +1,6 @@
 "use client";
+import DrawingAnalysisProgress from "./DrawingAnalysisProgress";
+import {readDrawingProgress,updateDrawingProgress,subscribeDrawingProgress} from "@/lib/drawingProgressSession.mjs";
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '@/lib/drawingWorkflowGate.mjs';
 import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
@@ -20,6 +22,7 @@ import RasterTraceReview from "./RasterTraceReview";
 import { getRasterReview, subscribeRasterReview, updateRasterReview } from "@/lib/rasterReviewSession.mjs";
 import { buildTakeoffFromAps } from "@/services/apsTakeoffBuilder";
 import { useEffect, useRef, useState } from "react";
+import BoqScopePanel from "./BoqScopePanel";
 import { useBoqStore } from "@/modules/boq";
 import ApsViewer from "@/app/components/ApsViewer";
 import {
@@ -1584,10 +1587,14 @@ async function waitForApsTranslation(
 export default function ProjectDrawingCenter({
   projectId,
   onOpenBoq,
+  onOpen3D,
 }) {
   const {language}=useLanguage();
   const analysisRunIdRef = useRef('initial');
+  useEffect(()=>{if(window.location.hash==='#drawing-upload'){const frame=requestAnimationFrame(()=>{const target=document.getElementById('drawing-upload');target?.scrollIntoView({block:'center'});target?.focus({preventScroll:true});});return ()=>cancelAnimationFrame(frame);}},[]);
   const [analysisRunId,setAnalysisRunId]=useState('initial');
+  const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
+  const pdfPreviewInFlightRef=useRef(false);
   const fileInputRef = useRef(null);
   const localImagePreviewUrlRef = useRef("");
   const localImagePreviewDocumentIdRef = useRef(null);
@@ -1615,6 +1622,17 @@ export default function ProjectDrawingCenter({
   const [analyzing, setAnalyzing] =
     useState(false);
   const analysisInFlightRef = useRef(false);
+  const [analysisProgress,setAnalysisProgress]=useState(()=>readDrawingProgress(projectId));
+  const progressRecoveryRef=useRef(new Set());
+  useEffect(()=>{setAnalysisProgress(readDrawingProgress(projectId));return subscribeDrawingProgress(projectId,setAnalysisProgress);},[projectId]);
+  useEffect(()=>{
+    if(loading||!documents.length||analyzing||analysisInFlightRef.current||drawingWorkflowState(projectId).active)return;
+    for(const document of documents){
+      let pending;try{pending=JSON.parse(localStorage.getItem(`ventra:drawing-pending:${projectId}:${document.id}`)||'null');}catch{}
+      const key=projectId+':'+document.id;
+      if(pending&&!progressRecoveryRef.current.has(key)){progressRecoveryRef.current.add(key);handleAnalyzeDrawing({resumeExistingOnly:true,resumeDocumentId:document.id});break;}
+    }
+  },[projectId,documents,loading]);
     const [generatingBoq, setGeneratingBoq] = useState(false);
 
   const [dragging, setDragging] =
@@ -1975,7 +1993,7 @@ export default function ProjectDrawingCenter({
         key: `${projectId}:${document.id || document.file_name}`,
         fetcher: commercialFetch,
         storage: typeof window !== 'undefined' ? window.sessionStorage : null,
-        onProgress: transport => updateRasterReview(projectId,{...getRasterReview(projectId),report:{...getRasterReview(projectId)?.report,transport}}),
+        onProgress: transport => {updateRasterReview(projectId,{...getRasterReview(projectId),report:{...getRasterReview(projectId)?.report,transport}});if(readDrawingProgress(projectId)?.status==='running')updateDrawingProgress(projectId,{stage:'analyzing',updatedAt:Date.now()});},
       });
 
       const responseText = await response.text();
@@ -2212,7 +2230,51 @@ export default function ProjectDrawingCenter({
     fileInputRef.current?.click();
   }
 
-  async function handleAnalyzeDrawing() {
+  async function handleBuildPdf3D() {
+    const source=selectedDocumentForPreview;
+    const report=(kind,text)=>setPdfPreviewStatus({kind,text,documentId:source?.id});
+    if(!source?.id || getFileExtension(source.file_name)!=='pdf'){
+      report('error',language==='fa'?'ابتدا فایل PDF را از فهرست نقشه‌ها انتخاب کنید.':'Select a PDF in the drawing list first.');return;
+    }
+    if(pdfPreviewInFlightRef.current){
+      report('working',language==='fa'?'ساخت همین PDF در حال انجام است؛ منتظر نتیجه بمانید.':'This PDF preview is being built. Please wait.');return;
+    }
+    const active=drawingWorkflowState(projectId).active;
+    if(active || analysisInFlightRef.current || analyzing || generatingBoq){
+      report('error',language==='fa'?`عملیات دیگری در پروژه در حال اجراست (${active||'تحلیل یا BOQ'}). پس از پایان آن دوباره بزنید.`:`Another project operation is running (${active||'analysis or BOQ'}). Wait for it to finish, then try again.`);return;
+    }
+    const token=beginDrawingWorkflow(projectId,'preview');
+    if(!token){
+      report('error',language==='fa'?'قفل عملیات پروژه اجازه شروع 3D را نداد. اگر عملیاتی در جریان نیست، صفحه را تازه‌سازی کنید.':'The project workflow could not start PDF 3D. If no operation is running, refresh this page.');return;
+    }
+    pdfPreviewInFlightRef.current=true;
+    analysisInFlightRef.current=true;setAnalyzing(true);clearMessages();
+    report('working',language==='fa'?'در حال خواندن فایل PDF و ساخت پیش‌نمایش؛ بدون مصرف AI.':'Reading the PDF and building the preview, without AI requests.');
+    try {
+      const {buildNativePdfScene}=await import('@/services/pdfPlanSceneService.mjs');
+      const existing=await import('@/lib/schematicStorage.mjs').then(m=>m.readSchematic(projectId));
+      let scene=existing?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&existing.documentId===source.id?existing:null;
+      if(!scene){
+        setMessage(language==='fa'?'خواندن خطوط و ابعاد PDF برای 3D؛ بدون مصرف AI.':'Reading PDF vectors and dimensions for 3D, without AI requests.');
+        const {url,error}=await downloadProjectDocument(source);
+        if(error||!url)throw error||new Error('Could not download the selected PDF.');
+        const response=await commercialFetch(url,{cache:'no-store'});
+        if(!response.ok)throw new Error(`Could not read PDF (${response.status}).`);
+        if(Number(response.headers.get('content-length'))>100*1024*1024)throw new Error('PDF exceeds 100 MB.');
+        scene=await buildNativePdfScene({bytes:new Uint8Array(await response.arrayBuffer()),projectId,documentId:source.id,documentName:source.file_name});
+      }
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)throw new Error('Selected drawing changed. Select the original PDF and try again.');
+      selectDrawingDocument(projectId,source.id);
+      scene=await saveSchematic(projectId,scene,{preserveBase:!!existing&&existing.documentId===source.id});
+      await saveActiveSource(projectId,'schematic');
+      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
+      report('success',language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه ذخیره شد؛ تب «3D Model» بالای صفحه را باز کنید.`:`${scene.pdfStoreys.length} floor previews saved. Open the 3D Model tab at the top of this page.`);
+      setMessage(language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه آماده است. وارد تب 3D شوید و طبقه را انتخاب کنید. این نمایش طبقات جداست؛ مدل کامل اجرایی ساختمان نیست.`:`${scene.pdfStoreys.length} floor previews ready. Open 3D and choose a floor. Separate storey views, not a complete construction model.`);
+    }catch(error){report('error',(language==='fa'?'ساخت 3D انجام نشد: ':'PDF 3D could not be built: ')+(error?.message||String(error)));setErrorMessage((language==='fa'?'ساخت 3D از PDF متوقف شد؛ صحنه قبلی حفظ شد. این مسیر فقط پلان برداری با ابعاد و جداول هماهنگ را می‌پذیرد. جزئیات: ':'PDF 3D stopped; saved scene preserved. ')+(error?.message||String(error)));}
+    finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
+  }
+
+  async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null} = {}) {
     if (analysisInFlightRef.current || analyzing || generatingBoq) return;
     if (documents.length === 0) {
       setErrorMessage(
@@ -2236,7 +2298,7 @@ export default function ProjectDrawingCenter({
         : null;
 
     const selectedDocument =
-      explicitlySelectedDocument ||
+      (resumeDocumentId?documents.find(d=>d.id===resumeDocumentId):null) || explicitlySelectedDocument ||
       documents[0] ||
       null;
 
@@ -2303,6 +2365,10 @@ export default function ProjectDrawingCenter({
     const extension = getFileExtension(
       selectedDocument.file_name
     );
+    if(localPdfRecoveryOnly && extension !== 'pdf'){
+      setErrorMessage(language==='fa'?'برای بازمحاسبه بدون AI، همان PDF گزارش را انتخاب کنید.':'Select the saved report PDF for recalculation without AI.');
+      return;
+    }
 
     const isAiDrawing =
       AI_SUPPORTED_EXTENSIONS.includes(
@@ -2329,6 +2395,7 @@ export default function ProjectDrawingCenter({
     try {
       setAnalyzing(true);
       clearMessages();
+      updateDrawingProgress(projectId,{reset:true,status:"running",stage:extension==="pdf"?"reading_source":"analyzing",startedAt:Date.now(),updatedAt:Date.now(),fileName:selectedDocument.file_name,documentId:selectedDocument.id,isPdf:extension==="pdf",localPdfRecoveryOnly});
 
       if (isAiDrawing) {
         setMessage(
@@ -2362,11 +2429,14 @@ export default function ProjectDrawingCenter({
         }
         const samePdfRecord = !!savedPdf && (!!savedPdf.document_id && savedPdf.document_id === selectedDocument.id ||
           !!savedPdf.document_name && savedPdf.document_name === selectedDocument.file_name);
+        if(localPdfRecoveryOnly && (extension !== 'pdf' || !samePdfRecord || savedPdf.document_id && savedPdf.document_id !== selectedDocument.id))throw new Error(language==='fa'?'فایل PDF مربوط به همین گزارش ذخیره‌شده را انتخاب کنید.':'Select the PDF belonging to this saved report.');
         const resumeSourceMeasurementsOnly = extension === 'pdf' && samePdfRecord &&
-          savedPdf.pdf_analysis?.document_review_status?.status === 'completed' && savedPdf.pdf_analysis?.measurement_completion?.status === 'incomplete';
-        const localPdfRecoveryOnly = resumeSourceMeasurementsOnly && ['failed','partial'].includes(savedPdf.pdf_analysis?.source_measurement_status?.status);
-        if (localPdfRecoveryOnly) setMessage('Recovering native PDF schedules from the saved analysis. Model calls are disabled; missing cache stops recovery.');
-        else if (resumeSourceMeasurementsOnly) setMessage('Continuing saved PDF analysis: only missing source measurements; no full page analysis if the saved cache is unavailable.');
+          (localPdfRecoveryOnly || savedPdf.pdf_analysis?.document_review_status?.status === 'completed' && savedPdf.pdf_analysis?.measurement_completion?.status === 'incomplete');
+        // Analyze is an explicit continuation. The server validates the saved
+        // page/base-review cache and reuses completed source contracts. Do not
+        // trap a previously failed source extraction in model-disabled recovery.
+        if (resumeSourceMeasurementsOnly) setMessage('Continuing saved PDF analysis: only missing source measurements; no full page analysis if the saved cache is unavailable.');
+        if(localPdfRecoveryOnly)setMessage(language==='fa'?'بازمحاسبه از PDF و صفحات ذخیره‌شده؛ بدون درخواست به مدل AI.':'Recalculating original PDF and saved pages without AI model requests.');
         if (extension === "pdf") {
           takeoffResultRef.current = null;
           setTakeoffResult(null);
@@ -2375,13 +2445,11 @@ export default function ProjectDrawingCenter({
           await analyzeProjectDrawing({
             projectId,
             document: selectedDocument,
-            onProgress:progress=>{
-              const labels={queued:['Queued','در صف','في الانتظار'],reading_source:['Reading drawing','خواندن نقشه','قراءة المخطط'],pages:['Reading pages','خواندن صفحات','قراءة الصفحات'],cross_page_review:['Checking pages together','تطبیق صفحات','مراجعة الصفحات'],source_measurements:['Checking measurements','بررسی اندازه‌ها','مراجعة القياسات'],finalizing:['Preparing report','تکمیل گزارش','إعداد التقرير']};
-              const i=language==='fa'?1:language==='ar'?2:0;
-              setMessage(`${(labels[progress.progress?.stage]||labels.queued)[i]} · ${progress.progress?.pagesCompleted || 0}/${progress.progress?.totalPages || '?'} · ${['Reopen analysis to recover saved work.','با بازکردن دوباره تحلیل، کار ذخیره‌شده بازیابی می‌شود.','افتح التحليل مجدداً لاستعادة العمل المحفوظ.'][i]}`);
-            },
+            onProgress:payload=>updateDrawingProgress(projectId,{...(payload.progress||{}),status:'running',updatedAt:Date.now()}),
+            resumeExistingOnly,
             resumeSourceMeasurementsOnly,
             localPdfRecoveryOnly,
+            savedPdfReport: localPdfRecoveryOnly ? savedPdf : null,
           });
           console.log("TAKEOFF FROM API", takeoff);
 
@@ -2566,6 +2634,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         await waitForApsTranslation(
           uploadResult.urn,
           (progress) => {
+            updateDrawingProgress(projectId,{status:'running',stage:'analyzing',updatedAt:Date.now()});
             setMessage(
               `Autodesk translation: ${
                 progress || "in progress"
@@ -2617,6 +2686,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         error
       );
 
+      updateDrawingProgress(projectId,{status:(Number(error?.status)>=500||/OUTCOME_UNKNOWN|WAIT_INTERRUPTED|LOOKUP_LOST|DISPATCH_UNKNOWN|RESPONSE_UNREADABLE/.test(error?.code||''))?'interrupted':'failed',finishedAt:Date.now()});
       setErrorMessage(
         error?.message ||
           "Could not process the drawing."
@@ -2625,6 +2695,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
       analysisInFlightRef.current = false;
       finishDrawingWorkflow(projectId,workflowToken,analysisSucceeded);
       setAnalyzing(false);
+      if(analysisSucceeded)updateDrawingProgress(projectId,{status:'completed',stage:'completed',finishedAt:Date.now()});
     }
   }
 
@@ -5588,6 +5659,7 @@ async function handleApsGeometryExtracted(analysis) {
     actionType: "analyze",
     disabled:
       documents.length === 0 ||
+      analysisProgress?.status === "running" ||
       analyzing ||
       generatingBoq ||
       uploading,
@@ -5637,7 +5709,9 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       </LocalizedElement>
 
-      {message && (
+      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoffResult} fileName={selectedDocumentForPreview?.file_name||''} disabled={analysisProgress?.status==='running'}/>
+      {analysisProgress&&<DrawingAnalysisProgress progress={analysisProgress} language={language} onResume={()=>handleAnalyzeDrawing({resumeExistingOnly:true,resumeDocumentId:analysisProgress.documentId})}/>}
+      {message && !["running","interrupted","failed"].includes(analysisProgress?.status) && (
         <LocalizedElement as="div" className="drawing-message drawing-message-success">
           <CheckCircle2 size={18} />
 
@@ -5645,11 +5719,21 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
+      {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<div className="takeoff-result">
+        <p><strong>{selectedDocumentForPreview.file_name}</strong></p>
+        <button type="button" style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>
+        {pdfPreviewStatus?.documentId===selectedDocumentForPreview.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
+          {pdfPreviewStatus.text}
+          {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
+        </div>}
+        <p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>
+      </div>}
       {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
         <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
         <p>{language==='fa'?'صفحات پلان از جدول‌ها و جزئیات جدا شده‌اند. مقادیر AI نیاز به بررسی دارند.':language==='ar'?'تم فصل المخططات عن الجداول والتفاصيل. تحتاج كميات AI إلى المراجعة.':'Floor plans are reconciled separately from schedules and details. AI quantities require review.'}</p>
         {!!takeoffResult.pdf_analysis.withheld_area_metrics?.length&&<p role="alert">{language==='fa'?'بعضی مساحت‌ها به دلیل نبود هندسه مستقل یا مغایرت ابعاد، قیمت‌گذاری نمی‌شوند. گزارش را برای جزئیات بررسی کنید.':language==='ar'?'لا تُسعّر بعض المساحات لغياب هندسة مستقلة أو وجود تعارض في الأبعاد. راجع التقرير للتفاصيل.':'Some areas are withheld from pricing because independent geometry is missing or dimensions conflict. Check the report for details.'}</p>}
-        {(takeoffResult.pdf_analysis.area_validation||[]).map(a=><p key={a.page}>{language==='fa'?'صفحه':language==='ar'?'الصفحة':'Page'} {a.page}: {a.status==='partial_geometry_with_printed_labels'?(language==='fa'?'هندسه بخش‌های اندازه‌دار کنترل شد؛ مساحت سایر اتاق‌ها از برچسب نقشه است و نیازمند بازبینی است.':language==='ar'?'تم فحص الأجزاء ذات الأبعاد؛ مساحات الغرف الأخرى مأخوذة من تسميات المخطط وتحتاج إلى مراجعة.':'Dimensioned spaces checked; other room areas come from printed labels and require review.'):a.status==='dimension_geometry_checked'?(language==='fa'?'کنترل هندسی مساحت انجام شد؛ تشخیص ابعاد و مصالح AI همچنان نیازمند بررسی است.':language==='ar'?'تم فحص هندسة المساحة؛ لا تزال أبعاد ومواد AI بحاجة إلى مراجعة.':'Area geometry checked; AI dimensions and materials still require review.'):(language==='fa'?'هندسه مستقل برای تأیید کامل مساحت موجود نیست.':language==='ar'?'الهندسة المستقلة غير متاحة للتحقق الكامل من المساحة.':'Independent geometry is unavailable for complete area verification.')}</p>)}
+        {(takeoffResult.pdf_analysis.area_validation||[]).map(a=><p key={a.page}>{language==='fa'?'صفحه':language==='ar'?'الصفحة':'Page'} {a.page}: {a.status==='partial_geometry_with_printed_labels'?(language==='fa'?'هندسه بخش‌های اندازه‌دار کنترل شد؛ مساحت سایر اتاق‌ها از برچسب نقشه است و نیازمند بازبینی است.':language==='ar'?'تم فحص الأجزاء ذات الأبعاد؛ مساحات الغرف الأخرى مأخوذة من تسميات المخطط وتحتاج إلى مراجعة.':'Dimensioned spaces checked; other room areas come from printed labels and require review.'):['dimension_geometry_checked','native_clear_geometry_checked'].includes(a.status)?(language==='fa'?'کنترل هندسی مساحت انجام شد؛ تشخیص ابعاد و مصالح AI همچنان نیازمند بررسی است.':language==='ar'?'تم فحص هندسة المساحة؛ لا تزال أبعاد ومواد AI بحاجة إلى مراجعة.':'Area geometry checked; AI dimensions and materials still require review.'):(language==='fa'?'هندسه مستقل برای تأیید کامل مساحت موجود نیست.':language==='ar'?'الهندسة المستقلة غير متاحة للتحقق الكامل من المساحة.':'Independent geometry is unavailable for complete area verification.')}</p>)}
+        <button type="button" disabled={analyzing || generatingBoq} onClick={()=>handleAnalyzeDrawing({localPdfRecoveryOnly:true})}>{language==='fa'?'بازمحاسبه PDF بدون مصرف AI':language==='ar'?'إعادة حساب PDF دون ذكاء اصطناعي':'Recalculate PDF without AI'}</button>
         <button type="button" disabled={analyzing} onClick={async()=>{if(analysisInFlightRef.current)return;try{const report=await latestPdfReportForExport({projectId,visible:takeoffResultRef.current,readLatest:getLatestProjectTakeoff,workflow:drawingWorkflowState});takeoffResultRef.current=report;setTakeoffResult(report);const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ventra-pdf-analysis-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setErrorMessage(error?.message||'Could not export the saved PDF report.');}}}>{language==='fa'?'دانلود گزارش تحلیل PDF':language==='ar'?'تنزيل تقرير PDF':'Download PDF analysis report'}</button>
       </details>}
       {rasterReview && <RasterTraceReview {...rasterReview} />}
@@ -5662,7 +5746,7 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
-      <LocalizedElement as="div"
+      <LocalizedElement as="div" id="drawing-upload" tabIndex={-1}
         className={`drawing-upload-zone ${
           dragging
             ? "drawing-upload-zone-active"

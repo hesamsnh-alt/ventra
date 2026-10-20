@@ -83,8 +83,8 @@ test('client continuation forwards source-only mode with a single network attemp
  let request;const c={downloadProjectDocument:async()=>({url:'https://source.invalid/file.pdf'}),Date,JSON,Error,console:{error(){}},
   submitDrawingAnalysis:async(p)=>{request=JSON.parse(p.body);return {response:{ok:true},payload:{success:true,result:{floor_area:372}}};},commercialFetch:()=>{},saveTakeoffLocally:async()=>{}};
  vm.createContext(c);vm.runInContext(fn+'\nthis.run=analyzeProjectDrawing;',c);
- const r=await c.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf',file_type:'application/pdf'},resumeSourceMeasurementsOnly:true,localPdfRecoveryOnly:true});
- assert.equal(r.error,null);assert.equal(request.resumeSourceMeasurementsOnly,true);assert.equal(request.localPdfRecoveryOnly,true);
+ const r=await c.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf',file_type:'application/pdf'},resumeSourceMeasurementsOnly:true});
+ assert.equal(r.error,null);assert.equal(request.resumeSourceMeasurementsOnly,true);assert.equal(request.localPdfRecoveryOnly,undefined);
 });
 test('real PDF orchestration uses bounded source parts and retains every completed part across server instances',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'ventra-source-cache-'));t.after(()=>rm(dir,{recursive:true,force:true}));let pageCalls=0,baseCalls=0,sourceCalls=0;

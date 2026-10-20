@@ -1,4 +1,5 @@
 import {recoverNativeRoomInventory} from './pdfNativeRoomInventory.mjs';
+import {measureNativeClearPlan} from './pdfNativeClearPlan.mjs';
 const EPS=1e-8;
 const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
 const signed=p=>p.reduce((s,a,i)=>{const b=p[(i+1)%p.length];return s+a.x*b.y-b.x*a.y;},0)/2;
@@ -98,8 +99,18 @@ function withheld(page,keys,reason){
  return {page:next,audit:{page:page.pageNumber,status:'withheld',reason,withheld_metrics:keys,original_area_evidence:original},warnings:[`PDF page ${page.pageNumber}: ${reason}; ${keys.join(', ')} withheld.`]};
 }
 
-export function auditPdfAreaGeometry(page){
+export function auditPdfAreaGeometry(page,sourcePages=[]){
  if(page.page_evidence?.kind!=='floor_plan')return {page,audit:null,warnings:[]};
+ const native=measureNativeClearPlan(page,sourcePages);
+ if(native.status==='checked'){
+  const quantities=(page.page_evidence.quantities||[]).filter(q=>!metricKeys.includes(q.key));
+  for(const [key,value]of Object.entries(native.dimensions))quantities.push({key,value,unit:'m2',scope_id:page.page_evidence.scope_id,pages:native.audit.source_pages,native_calculated:true,
+   evidence:`Original PDF calibrated CL graph, source clear-face offsets and printed room dimensions. Stair holes deducted within their host once; upper void excluded. ${native.rooms.map(r=>`${r.tag}: ${r.width} × ${r.depth}${r.deductions.map(d=>` minus ${d.x1-d.x0} × ${d.y1-d.y0}`).join('')}${r.void?' VOID':''}`).join('; ')}. Source drawing requires review.`});
+  const withheldMetrics=metricKeys.filter(k=>!(k in native.dimensions));
+  const dimensions=Object.fromEntries(metricKeys.map(k=>[k,native.dimensions[k]||0]));
+  const detected=native.rooms.map(r=>({name:r.tag,unit:'m2',quantity:r.area,description:`${r.void?'VOID':'UNKNOWN'} | original PDF clear dimensions ${r.width} x ${r.depth} m; explicit stair deductions ${r.deductions.reduce((s,d)=>s+d.area,0)} m2. Native geometry; finish code requires separate source reconciliation.`}));
+  return {page:{...page,...dimensions,__areaGeometryValidated:true,native_clear_geometry:native.audit,page_evidence:{...page.page_evidence,quantities},detected_items:[...(page.detected_items||[]).filter(i=>!['m2','m²'].includes(String(i.unit).toLowerCase())),...detected]},audit:{...native.audit,withheld_metrics:withheldMetrics},warnings:withheldMetrics.length?[`PDF page ${page.pageNumber}: native clear geometry checked; floor material classifications remain unresolved.`]:[]};
+ }
  const geometry=page.area_geometry;
  if(!geometry){
   const ambiguous=(page.detected_items||[]).filter(r=>['m2','m²'].includes(String(r.unit).toLowerCase())&&inferred.test(r.description||''));

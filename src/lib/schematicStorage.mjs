@@ -18,10 +18,12 @@ export function drawingSceneMatches(id,scene,storage=local()) {
   return !selected || scene?.documentId===selected;
 }
 export function selectDrawingDocument(id,documentId,storage=local()) {
+  const previous=selectedDrawingSync(id,storage);
   const key=keyFor(id,'selected-drawing');
   if(!documentId){cache.delete(key);unsavedSelections.set(key,null);try{storage?.removeItem(key);unsavedSelections.delete(key);}catch{}return;}
   cache.set(key,documentId);
   try{storage?.setItem(key,documentId);unsavedSelections.delete(key);}catch{unsavedSelections.set(key,documentId); /* Session selection still isolates scenes. */ }
+  if(previous!==documentId&&typeof window!=='undefined')window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId:id}}));
 }
 export function selectSchematicDrawing(id,documentId,storage=local()) {
   if(!documentId)return;

@@ -23,7 +23,8 @@ import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource} from '@/lib/schematicStorage.mjs';
+import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource,selectedDrawingSync,selectDrawingDocument} from '@/lib/schematicStorage.mjs';
+import {drawingSourceBinding,selectPdfStorey} from '@/lib/pdfPlanScene.mjs';
 import {readTakeoffSync,readPersistedTakeoff,persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import {resolveDwgCalibration,dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {bindProjectCameraInputs} from '@/lib/projectCameraInputs.mjs';
@@ -6085,6 +6086,8 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
 
   group.userData = {
     ventraType: 'schematic_door_leaf',
+    openingId:opening.id,
+    doorVisualSource:opening.doorVisualSource||'source_or_existing_visual',
     schematic: true,
   };
 
@@ -6480,7 +6483,8 @@ function renderStructuredSchematicScene(viewer, scene) {
   }
   targetScene.add(schematicRoot);
 
-  const preserveRasterTrace = scene.rasterGeometryVersion === "raster-metric-trace-v1";
+  const nativePdf = scene.nativePdfGeometryVersion === "native-pdf-plan-v162";
+  const preserveRasterTrace = nativePdf || scene.rasterGeometryVersion === "raster-metric-trace-v1";
   const width = preserveRasterTrace ? Number(scene.width) : Math.max(2, Number(scene.width) || 12.5);
   const depth = preserveRasterTrace ? Number(scene.depth) : Math.max(2, Number(scene.depth) || 9.5);
   const fullHeight = preserveRasterTrace ? Number(scene.height) : Math.max(2.4, Math.min(3.4, Number(scene.height) || 2.8));
@@ -6587,34 +6591,17 @@ function renderStructuredSchematicScene(viewer, scene) {
       .filter(Boolean);
 
   if (footprintPoints.length >= 3) {
-    const footprintBuilder = preserveRasterTrace ? ventraBuildTracedRasterFloor : ventraBuildConcaveFloorMesh;
-    const footprintResult = footprintBuilder({
-      THREE,
-      polygon: footprintPoints,
-      holes: preserveRasterTrace ? (scene.holes || []).map((hole) => hole.polygon.map((point) => ventraScenePointToLocal(point, width, depth))) : [],
-      z: 0,
-      material: baseFloorMaterial,
-    });
-
-    if (footprintResult?.mesh) {
-      footprintResult.mesh.userData = {
-        ventraType: 'schematic_footprint_floor_v36',
-        schematic: true,
-      };
-      decorateSurfaceMesh(THREE,footprintResult.mesh,{kind:'floor-base',id:'footprint'},scene,surfaceMaterialCache);
-      configureFloorDepth(footprintResult.mesh,'base');
-      add(footprintResult.mesh);
+    const plates=nativePdf?scene.floorPlates:[{polygon:scene.footprint,holes:preserveRasterTrace?(scene.holes||[]).map(h=>h.polygon):[]}];
+    for(const plate of plates||[]){
+      const footprintBuilder=preserveRasterTrace?ventraBuildTracedRasterFloor:ventraBuildConcaveFloorMesh;
+      const footprintResult=footprintBuilder({THREE,polygon:plate.polygon.map(p=>ventraScenePointToLocal(p,width,depth)),holes:(plate.holes||[]).map(poly=>poly.map(p=>ventraScenePointToLocal(p,width,depth))),z:0,material:baseFloorMaterial});
+      if(footprintResult?.mesh){
+        footprintResult.mesh.userData={ventraType:'schematic_footprint_floor_v36',schematic:true};
+        decorateSurfaceMesh(THREE,footprintResult.mesh,{kind:'floor-base',id:'footprint'},scene,surfaceMaterialCache);
+        configureFloorDepth(footprintResult.mesh,'base');
+        add(footprintResult.mesh);
+      }
     }
-
-    console.log('[VENTRA JPG FOOTPRINT FIRST v41]', {
-      pointCount: footprintPoints.length,
-      strategy: footprintResult?.reason || 'unknown',
-      roomCount: Array.isArray(scene?.rooms) ? scene.rooms.length : 0,
-      width,
-      depth,
-    });
-  } else {
-    console.warn('[VENTRA JPG FOOTPRINT FIRST v41] missing footprint; room floors only');
   }
 
   // V36: render ONLY explicitly detected real holes/shafts as dark cut-out caps.
@@ -6716,6 +6703,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       roomFloorBuilder({
         THREE,
         polygon,
+        holes: nativePdf?(room.holes||[]).map(h=>h.polygon.map(p=>ventraScenePointToLocal(p,width,depth))):[],
         z: 0,
         material,
       });
@@ -6737,7 +6725,7 @@ function renderStructuredSchematicScene(viewer, scene) {
       configureFloorDepth(result.mesh,'finish');
       add(result.mesh);
 
-      if (!result.mesh.material.map) ventraAddVisibleFloorPattern({
+      if (!result.mesh.material.map && !(nativePdf&&room.holes?.length)) ventraAddVisibleFloorPattern({
         THREE,
         root:
           schematicRoot,
@@ -6803,7 +6791,7 @@ function renderStructuredSchematicScene(viewer, scene) {
     if (!Number.isFinite(wallLength) || wallLength < (preserveRasterTrace ? 0.001 : 0.05)) continue;
 
     const wallType = String(wall?.type || 'internal').toLowerCase();
-    const thickness = wall?.placementSource === 'manual_wall_editor' && Number(wall.thickness)>0 ? Number(wall.thickness) : wallType === 'external' ? externalThickness : internalThickness;
+    const thickness = nativePdf && Number(wall.thickness)>0 ? Number(wall.thickness) : wall?.placementSource === 'manual_wall_editor' && Number(wall.thickness)>0 ? Number(wall.thickness) : wallType === 'external' ? externalThickness : internalThickness;
     const requestedWallHeight = Number(wall?.height);
 
     // Architectural wall geometry must use real wall height. Previous versions
@@ -6826,8 +6814,9 @@ function renderStructuredSchematicScene(viewer, scene) {
         if (preserveRasterTrace || scene.furnishingMode === "source_observed") {
           return {
             ...opening,
-            preserveRasterTrace,
-            preserveSourceDimensions: scene.furnishingMode === "source_observed",
+            preserveRasterTrace: preserveRasterTrace && !nativePdf,
+            preserveSourceDimensions: nativePdf || scene.furnishingMode === "source_observed",
+            ...(nativePdf ? {doorVisualSource:opening.hinge&&opening.swing?'source_annotation':'proposed_closed_leaf'} : {}),
             wallPosition: pointAlongSegment(start, end, Number(opening.offset)),
           };
         }
@@ -6902,7 +6891,7 @@ function renderStructuredSchematicScene(viewer, scene) {
         height: displayHeight,
         thickness,
         zBase: 0,
-        material: wallType === 'external' ? externalWallMat : wallMat,
+        material: wallType === 'glass' ? glassMat : wallType === 'external' ? externalWallMat : wallMat,
       });
       if (!mesh) continue;
       mesh.userData = {
@@ -6931,7 +6920,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           opening,
           thickness,
           zBase: 0,
-          material: wallType === 'external' ? externalWallMat : wallMat,
+          material: wallType === 'glass' ? glassMat : wallType === 'external' ? externalWallMat : wallMat,
         });
         if(sillWall){sillWall.userData={...sillWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,sillWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(sillWall);
@@ -6942,7 +6931,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           thickness,
           wallHeight: displayHeight,
           zBase: 0,
-          material: wallType === 'external' ? externalWallMat : wallMat,
+          material: wallType === 'glass' ? glassMat : wallType === 'external' ? externalWallMat : wallMat,
         });
         if(headerWall){headerWall.userData={...headerWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,headerWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(headerWall);
@@ -6964,7 +6953,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           thickness,
           wallHeight: displayHeight,
           zBase: 0,
-          material: wallType === 'external' ? externalWallMat : wallMat,
+          material: wallType === 'glass' ? glassMat : wallType === 'external' ? externalWallMat : wallMat,
         });
         if(doorHeaderWall){doorHeaderWall.userData={...doorHeaderWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,doorHeaderWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(doorHeaderWall);
@@ -8350,7 +8339,9 @@ export default function Project3DViewer({ projectId }) {
       const savedEngineering=readTakeoffSync(projectId,'engineering');
       if(requestedSource==='dwg-interior')storedScene=savedDwgInterior(savedEngineering);
       if(requestedSource==='aps'||requestedSource==='dwg-interior')takeoff=chooseEngineeringTakeoff(takeoff,savedEngineering);
-      const resolvedUrn=engineeringUrn(takeoff)||engineeringUrn(savedEngineering);
+      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:chooseEngineeringTakeoff(takeoff,savedEngineering),source:requestedSource,scene:storedScene});
+      storedScene=binding.scene;
+      const resolvedUrn=binding.engineeringAllowed?(engineeringUrn(takeoff)||engineeringUrn(savedEngineering)):'';
 
       const hasSchematic =
         Boolean(
@@ -8369,7 +8360,8 @@ export default function Project3DViewer({ projectId }) {
           )
         );
 
-      const resolvedSource=requestedSource==='dwg-interior'&&storedScene?'dwg-interior':requestedSource==='aps'?'aps':requestedSource==='schematic'?'schematic':resolvedUrn?'aps':hasSchematic?'schematic':'aps';
+      const resolvedSource=binding.source==='dwg-interior'&&storedScene?'dwg-interior':binding.source==='aps'?'aps':'schematic';
+      if(!storedScene&&!binding.engineeringAllowed){setStatus('missing');setMessage('No 3D preview for the selected drawing. Open Drawings and use Build / open 3D from PDF. The other CAD model remains saved.');}
 
       setTakeoff(takeoff);
       setSchematicScene(
@@ -8386,7 +8378,8 @@ export default function Project3DViewer({ projectId }) {
       if(resolvedSource==='dwg-interior')setInteriorView(true);
 
       if (storedScene) {
-        const baseScene = requestedSource==='dwg-interior'?storedScene:readSchematicSync(projectId,'schematic3d-base') || storedScene;
+        let baseScene = requestedSource==='dwg-interior'?storedScene:readSchematicSync(projectId,'schematic3d-base') || storedScene;
+        if(storedScene.nativePdfGeometryVersion==='native-pdf-plan-v162'&&baseScene.pdfStoreys)baseScene=selectPdfStorey(baseScene,storedScene.sourcePage);
         schematicBaseSceneRef.current =
           baseScene;
 
@@ -8800,16 +8793,18 @@ export default function Project3DViewer({ projectId }) {
     })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
       if(cancelled)return;
       const selectedEngineering=reconcileEngineering(engineering,latest);
-      const resolvedUrn=engineeringUrn(selectedEngineering);
-      const selectedSource=source || (resolvedUrn?'aps':scene?'schematic':'aps');
+      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:selectedEngineering,source:source||(engineeringUrn(selectedEngineering)?'aps':'schematic'),scene});
+      const resolvedUrn=binding.engineeringAllowed?engineeringUrn(selectedEngineering):'';
+      scene=binding.scene;
+      const selectedSource=binding.source;
       const selected=selectedSource==='aps'||selectedSource==='dwg-interior'?selectedEngineering:latest;
       setTakeoff(selected || null);setUrn(resolvedUrn || '');
       const interior=selectedSource==='dwg-interior'?savedDwgInterior(selectedEngineering):null;
       setActive3DSource(selectedSource==='dwg-interior'&&!interior?'aps':selectedSource);setSchematicScene(interior||scene||null);
       if(interior)setInteriorView(true);
-      schematicBaseSceneRef.current=interior||base||scene||null;
+      schematicBaseSceneRef.current=interior||(scene?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&base?.pdfStoreys?selectPdfStorey(base,scene.sourcePage):base)||scene||null;
       setSchematicPreset(scene?.variant || 'classic');
-      if(!resolvedUrn&&!scene){setStatus('missing');setMessage('No Autodesk model or image schematic is linked yet. Open Drawings and upload/analyze a supported drawing or JPG/PNG/WebP image.');}
+      if(!resolvedUrn&&!scene){setStatus('missing');setMessage('No 3D model is linked to the selected drawing. Open Drawings and use Build / open 3D from PDF, or analyze a supported image/CAD drawing.');}
       else if(selectedSource==='aps'&&!resolvedUrn){setStatus('missing');setMessage('No engineering model is saved for this project. Analyze the DWG in Drawings again to restore its Autodesk source and calibrated geometry.');}
     }).catch(error=>{if(!cancelled){setStatus('error');setMessage(`Could not load saved drawing geometry: ${error.message}`);}});
     return()=>{cancelled=true;};
@@ -8819,7 +8814,7 @@ export default function Project3DViewer({ projectId }) {
     const updated=event=>{
       if(event.detail?.projectId!==projectId)return;
       const latest=reconcileEngineering(readTakeoffSync(projectId,'engineering'),readTakeoffSync(projectId));
-      if(active3DSource==='aps'&&engineeringUrn(latest)){
+      if(active3DSource==='aps'&&engineeringUrn(latest)&&drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:latest}).engineeringAllowed){
         setTakeoff(latest);setUrn(engineeringUrn(latest));
       }
     };
@@ -9195,7 +9190,7 @@ export default function Project3DViewer({ projectId }) {
 
   async function undoPromptEdit() {
     if (!promptUndoScene || designBusy) return;
-    if (!isInteriorSource(active3DSource) || promptUndoScene.projectId !== projectId || promptUndoScene.documentId !== schematicScene?.documentId || promptUndoScene.dwgRegion !== schematicScene?.dwgRegion || !currentSceneMatches(promptUndoScene)) {
+    if (!isInteriorSource(active3DSource) || promptUndoScene.projectId !== projectId || promptUndoScene.documentId !== schematicScene?.documentId || promptUndoScene.dwgRegion !== schematicScene?.dwgRegion || promptUndoScene.sourcePage !== schematicScene?.sourcePage || !currentSceneMatches(promptUndoScene)) {
       setPromptUndoScene(null);
       setMessage("This undo belongs to a different drawing.");
       return;
@@ -9694,9 +9689,14 @@ export default function Project3DViewer({ projectId }) {
         </LocalizedElement>
       )}
 
+      {active3DSource==='schematic'&&schematicScene?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&<div className="ventra-model-toolbar">
+        <span>{schematicScene.documentName} — PDF / طبقات جدا / Separate storeys</span>
+        {(schematicScene.pdfStoreys||[]).map(floor=><button data-model-tool="pdf-floor" key={floor.sourcePage} type="button" aria-pressed={schematicScene.sourcePage===floor.sourcePage} disabled={designBusy||walkActive||furnitureRepairBusy} onClick={async()=>{try{const next=selectPdfStorey(schematicScene,floor.sourcePage);await saveSchematic(projectId,next);schematicBaseSceneRef.current=next;refreshProject3DSourceFromStorage('schematic',next);}catch(error){setMessage(error.message);}}}>{floor.floorName} · {floor.height} m · p{floor.sourcePage}</button>)}
+        <small>پیش‌نمایش نیازمند بررسی؛ پله و مدل کامل ساختمان بازسازی نشده‌اند. / Review required; no assembled building or stair mesh.</small>
+      </div>}
       <LocalizedElement as="div" className="ventra-model-toolbar">
-        <LocalizedElement as="button" type="button" aria-pressed={active3DSource==='aps'} onClick={()=>{void saveActiveSource(projectId,'aps').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('aps');}}>DWG / Engineering</LocalizedElement>
-        <LocalizedElement as="button" type="button" disabled={!readSchematicSync(projectId)} aria-pressed={active3DSource==='schematic'} onClick={()=>{void saveActiveSource(projectId,'schematic').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('schematic');}}>JPG / Image</LocalizedElement>
+        <LocalizedElement as="button" type="button" aria-pressed={active3DSource==='aps'} onClick={()=>{const engineering=readTakeoffSync(projectId,'engineering');if(engineering?.document_id)selectDrawingDocument(projectId,engineering.document_id);void saveActiveSource(projectId,'aps').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('aps');}}>DWG / Engineering</LocalizedElement>
+        <LocalizedElement as="button" type="button" disabled={!readSchematicSync(projectId)} aria-pressed={active3DSource==='schematic'} onClick={()=>{void saveActiveSource(projectId,'schematic').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('schematic');}}>PDF / JPG / Image</LocalizedElement>
         <LocalizedElement as="button" type="button" disabled={designBusy||dwgFurnitureBusy||(!reconstruction&&!dwgFloorIndices(takeoff).length)} aria-pressed={active3DSource==='dwg-interior'} onClick={()=>openDwgInterior()}>DWG Interior / داخل طبقه / داخل الطابق</LocalizedElement>
         <LocalizedElement as="button" type="button" onClick={fitModel} disabled={status !== "ready"}>
           Fit to View
@@ -10091,8 +10091,8 @@ export default function Project3DViewer({ projectId }) {
 
         <aside className="ventra-model-sidebar">
           {schematicScene && isInteriorSource(active3DSource) && <WalkthroughPanel projectId={projectId} scene={schematicScene} getViewport={()=>containerRef.current?.closest('.ventra-model-canvas-shell')} getRenderer={()=>schematicRendererRef.current} disabled={designBusy||furnitureRepairBusy||status!=='ready'} onActiveChange={value=>{setWalkActive(value);if(value)setAutoOrbit(false);}}/>}
-          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel projectId={projectId} key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} onRequestSolidWalls={()=>setInteriorView(false)} disabled={walkActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
-          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel projectId={projectId} key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={walkActive||materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel projectId={projectId} key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??schematicScene.sourcePage??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} onRequestSolidWalls={()=>setInteriorView(false)} disabled={walkActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
+          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel projectId={projectId} key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??schematicScene.sourcePage??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={walkActive||materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
         <ToolDrawer title="inspector">
         <LocalizedElement as="div" className="ventra-model-inspector">
           {schematicScene && isInteriorSource(active3DSource) ? (

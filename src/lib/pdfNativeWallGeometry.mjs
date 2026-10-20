@@ -7,7 +7,7 @@ const round=n=>Math.round(n*1e6)/1e6;
 const dist=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);};
 const signed=p=>p.reduce((s,a,i)=>{const b=p[(i+1)%p.length];return s+a.x*b.y-b.x*a.y;},0)/2;
 function contains(poly,p){let yes=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++)if((poly[i].y>p.y)!==(poly[j].y>p.y)&&p.x<(poly[j].x-poly[i].x)*(p.y-poly[i].y)/(poly[j].y-poly[i].y)+poly[i].x)yes=!yes;return yes;}
-function facesOf(walls){
+export function facesOf(walls){
  const nodes=new Map(),edges=[];
  const node=p=>{const id=`${round(p.x)},${round(p.y)}`;if(!nodes.has(id))nodes.set(id,{...p,id,to:[]});return nodes.get(id);};
  for(const w of walls){const points=[w.a,w.b];for(const other of walls)for(const p of [other.a,other.b])if(dist(p,w.a,w.b)<EPS)points.push(p);
@@ -108,6 +108,12 @@ export function measureNativeWallFloor(page,schedule){
   for(const d of discarded){const enclosing=faces.filter(f=>f.tags.length===1&&contains(f.polygon,d.a)&&contains(f.polygon,d.b));if(enclosing.length!==1)throw Error('Isolated annotation is not inside one tagged source room');d.room_tag=enclosing[0].tags[0];}
   Object.assign(audit,{status:'provisional',calibration:{width_m:ew,height_m:eh,points_per_m:scale,source_dimension_factor_to_m:dimensionFactor,origin:{x:x0,y:y0}},wall_styles:{external:outer.width,internal:inner.width},discarded_annotations:discarded,
    opening_bindings:bindings.map(o=>({id:o.opening.id,host:o.opening.wall_id,gap_width_m:o.gap.width})),wall_count:walls.length,requires_review:true});
-  return {status:'provisional',walls,faces,audit};
+  const openingPlacements=bindings.map(({opening,gap})=>{
+   const wall=walls.find(w=>w.openings.includes(opening.id));
+   const middle=gap.g.axis==='h'?{x:(gap.a+gap.b)/2,y:gap.g.fixed}:{x:gap.g.fixed,y:(gap.a+gap.b)/2};
+   const offset=wall.axis==='h'?(middle.x-wall.a.x)/wall.length:(middle.y-wall.a.y)/wall.length;
+   return {...opening,wallId:wall.id,offset,center:middle};
+  });
+  return {status:'provisional',walls,faces,audit,openingPlacements,externalWallThickness:Number(ext[1])*.001,wallThickness:Number(int[1])*.001};
  }catch(e){audit.reason=e.message;return {status:'pending',walls:[],faces:[],audit};}
 }

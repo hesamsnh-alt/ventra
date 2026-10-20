@@ -1,4 +1,5 @@
-import {currentDrawingJob} from './drawingJobRuntime.mjs';
+import {currentDrawingJob,reportDrawingProgress} from './drawingJobRuntime.mjs';
+import {drawingCheckpointProgress} from '../lib/drawingProgress.mjs';
 import {createHash} from 'node:crypto';
 import {mkdir,readFile,writeFile,rename,readdir,stat,unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -18,7 +19,7 @@ function filename(key) {
   return `${key}.json`;
 }
 export async function readPdfAnalysisCache(key, directory = cacheDirectory) {
-  const job=currentDrawingJob();if(job)return job.read(key);
+  const job=currentDrawingJob();if(job?.read)return job.read(key);
   try {
     const file = join(directory,filename(key)), info = await stat(file);
     if (info.size > MAX_RECORD_BYTES || Date.now()-info.mtimeMs > MAX_AGE_MS) return null;
@@ -27,7 +28,9 @@ export async function readPdfAnalysisCache(key, directory = cacheDirectory) {
   } catch {return null;}
 }
 export async function writePdfAnalysisCache(key, record, directory = cacheDirectory) {
-  const job=currentDrawingJob();if(job)return job.write(key,{...record,version:CACHE_VERSION});
+  const job=currentDrawingJob();
+  if(job?.write)return job.write(key,{...record,version:CACHE_VERSION});
+  await reportDrawingProgress(drawingCheckpointProgress(record));
   const data = JSON.stringify({...record,version:CACHE_VERSION});
   if (Buffer.byteLength(data)>MAX_RECORD_BYTES) return false;
   const file = join(directory,filename(key)), temporary = `${file}.${process.pid}.tmp`;

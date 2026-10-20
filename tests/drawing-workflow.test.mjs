@@ -11,8 +11,8 @@ let sequence=0;
 function setup(){
   let resolveAnalysis,resolveSave;
   const pending=new Promise(r=>resolveAnalysis=r),saving=new Promise(r=>resolveSave=r);
-  const state={...gates,projectId:`workflow-test-${++sequence}`,analyzing:false,generatingBoq:false,
-    documents:[{id:'pdf',file_name:'source.pdf'}],selectedDocumentId:'pdf',AI_SUPPORTED_EXTENSIONS:['pdf'],APS_SUPPORTED_EXTENSIONS:['dwg'],
+  const state={updateDrawingProgress(){},...gates,projectId:`workflow-test-${++sequence}`,analyzing:false,generatingBoq:false,
+    documents:[{id:'pdf',file_name:'source.pdf'}],selectedDocumentId:'pdf',language:'en',AI_SUPPORTED_EXTENSIONS:['pdf'],APS_SUPPORTED_EXTENSIONS:['dwg'],
     getFileExtension:()=> 'pdf',selectDrawingDocument(){},analysisRunIdRef:{current:null},setAnalysisRunId(){},crypto:{randomUUID:()=> 'new-run'},
     analysisInFlightRef:{current:false},takeoffResult:{document_id:'old',rooms:1,floor_area:17},takeoffResultRef:{current:{document_id:'old'}},
     console:{log(){},warn(){},error(){}},clearMessages(){},messages:[],errors:[],apiCalls:0,persistCalls:0,boqCalls:[],
@@ -23,7 +23,7 @@ function setup(){
     importAiBoq(){},localStorage:{setItem(){}},onOpenBoq(){},
   };
   vm.createContext(state);
-  vm.runInContext(segment(center,'  async function handleAnalyzeDrawing()','  async function handleDownload(')+'\n'+
+  vm.runInContext(segment(center,'  async function handleAnalyzeDrawing(','  async function handleDownload(')+'\n'+
     segment(center,' async function handleGenerateBoq()','  const aiTools =')+'\nthis.analyze=handleAnalyzeDrawing;this.generate=handleGenerateBoq;',state);
   return {state,resolveAnalysis,resolveSave};
 }
@@ -92,12 +92,26 @@ test('uploading a same-named PDF again still uses the guarded continuation inste
  s.analyzeProjectDrawing=async args=>{request=args;return {takeoff:null,error:Error('Guarded cache check')};};
  await s.analyze();assert.equal(request.resumeSourceMeasurementsOnly,true);
 });
-test('a saved failed or partial source pass selects model-disabled native recovery before the visible result is cleared',async()=>{
+test('explicit Analyze continues failed or partial source work without trapping it in model-disabled recovery',async()=>{
  for(const status of ['failed','partial']){
   const {state:s}=setup();let request;
   s.takeoffResultRef.current={document_id:'pdf',pdf_analysis:{document_review_status:{status:'completed'},measurement_completion:{status:'incomplete'},source_measurement_status:{status}}};
   s.analyzeProjectDrawing=async args=>{request=args;return {takeoff:null,error:Error('Stopped after inspecting request')};};
-  await s.analyze();assert.equal(request.localPdfRecoveryOnly,true);assert.equal(request.resumeSourceMeasurementsOnly,true);
+  await s.analyze();assert.equal(request.localPdfRecoveryOnly,false);assert.equal(request.resumeSourceMeasurementsOnly,true);
+ }
+});
+test('explicit local recalculation requests the cache guard and never selects an AI continuation',async()=>{
+ const {state:s}=setup();let request;
+ s.takeoffResultRef.current={document_id:'pdf',pdf_analysis:{document_review_status:{status:'completed'},measurement_completion:{status:'incomplete'}}};
+ s.analyzeProjectDrawing=async args=>{request=args;return {takeoff:null,error:Error('Stopped before server call')};};
+ await s.analyze({localPdfRecoveryOnly:true});assert.equal(request.localPdfRecoveryOnly,true);assert.equal(request.resumeSourceMeasurementsOnly,true);
+});
+test('local recalculation rejects another drawing and non-PDF selection before an AI call',async()=>{
+ for(const mode of ['other-pdf','image']){
+  const {state:s}=setup();
+  s.takeoffResultRef.current={document_id:'different-pdf',document_name:'source.pdf',pdf_analysis:{}};
+  if(mode==='image')s.getFileExtension=()=> 'png';
+  await s.analyze({localPdfRecoveryOnly:true});assert.equal(s.apiCalls,0);assert.equal(s.persistCalls,0);assert.ok(s.errors.length);
  }
 });
 test('a failed retry recovers saved PDF context instead of starting a full paid page pass',async()=>{
@@ -108,7 +122,7 @@ test('a failed retry recovers saved PDF context instead of starting a full paid 
  s.analyzeProjectDrawing=async args=>{requests.push(args);return {takeoff:null,error:Error('Connection lost')};};
  await s.analyze();assert.equal(s.takeoffResultRef.current,null);
  await s.analyze();assert.equal(requests.length,2);
- assert.ok(requests.every(r=>r.resumeSourceMeasurementsOnly===true && r.localPdfRecoveryOnly===true));
+ assert.ok(requests.every(r=>r.resumeSourceMeasurementsOnly===true && r.localPdfRecoveryOnly===false));
  assert.equal(s.takeoffResult,null);assert.equal(s.persistCalls,0);
  assert.equal(drawingWorkflowState(s.projectId).analysisFailed,true);
  await s.generate();assert.equal(s.boqCalls.length,0);
@@ -157,5 +171,5 @@ test('an analysis started while the BOQ tab reads storage still blocks generatio
 test('UI disables Generate BOQ and report export while analysis is active',()=>{
   assert.match(center,/disabled: generatingBoq \|\| analyzing/);
   assert.match(center,/<button type="button" disabled=\{analyzing\} onClick=\{async\(\)=>\{if\(analysisInFlightRef.current\)return/);
-  assert.match(boq,/disabled=\{generating \|\| loadingTakeoff \|\| !!drawingWorkflow.active \|\| drawingWorkflow.analysisFailed\}/);
+  assert.match(boq,/disabled=\{generating \|\| scopeApplying \|\| loadingTakeoff \|\| !!drawingWorkflow.active \|\| drawingWorkflow.analysisFailed\}/);
 });
