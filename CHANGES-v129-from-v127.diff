@@ -1,0 +1,442 @@
+--- /dev/null
++++ b/src/lib/pdfNativePageExtraction.mjs
+@@ -0,0 +1,115 @@
++import {readNativeOpeningSchedule} from './pdfNativeSchedules.mjs';
++
++const number = text => /^\d+(?:\.\d+)?$/.test(String(text).trim()) ? Number(text) : NaN;
++const clean = text => String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
++const floor = text => /^(?:ground|first|second|third|basement|roof)(?: floor)?$|^floor \d+$/i.test(text.trim());
++const zero = {rooms:0,doors:0,windows:0,wall_length:0,wall_area:0,floor_area:0,ceiling_area:0,door_area:0,window_area:0};
++const claim = (key,value,unit,scope,page,evidence) => ({key,value,unit,scope_id:scope,pages:[page],evidence,native_calculated:true,document_calculated:true});
++
++// Only complete, explicitly headed table layouts are accepted. An unknown row,
++// unit, duplicated identity or ambiguous column sends this page to the existing
++// extraction path; readable text by itself never establishes complete takeoff.
++function table(spans, columns) {
++  const matches=[];
++  for(const anchor of spans) {
++    if(!columns[0].test(clean(anchor.text)))continue;
++    const band=spans.filter(s=>Math.abs(s.y-anchor.y)<1.5);
++    const cells=columns.map(pattern=>band.filter(s=>pattern.test(clean(s.text))));
++    if(cells.every(c=>c.length===1))matches.push({y:anchor.y,cols:cells.map(c=>c[0])});
++  }
++  if(matches.length!==1)throw Error('A single unambiguous table header is required');
++  const head=matches[0];
++  if(head.cols.some((c,i)=>i&&c.x-head.cols[i-1].x<25))throw Error('Table columns overlap');
++  const rows=[];
++  for(const s of [...spans].filter(s=>s.y<head.y-3).sort((a,b)=>b.y-a.y||a.x-b.x)) {
++    let row=rows.find(r=>Math.abs(r.y-s.y)<1.5);
++    if(!row){row={y:s.y,cells:head.cols.map(()=>[])};rows.push(row);}
++    // Numeric/unit columns must align to their printed header. Long footer
++    // prose is not silently truncated into a numeric table row.
++    let index=0;
++    for(let i=1;i<head.cols.length;i++)if(Math.abs(s.x-head.cols[i].x)<15)index=i;
++    row.cells[index].push(s.text.trim());
++  }
++  return {head,rows:rows.filter(r=>r.cells.slice(1).some(c=>c.length)).map(r=>r.cells.map(c=>c.join(' ')))};
++}
++
++const services = new Map([
++  ['light points',['light_count','nr']],['lighting points',['light_count','nr']],
++  ['socket points',['socket_count','nr']],['distribution boards',['distribution_board_count','nr']],
++  ['split ac units',['ac_count','nr']],['insulated ac pipes',['ac_pipe_length','m']],
++  ['smoke detectors',['smoke_detector_count','nr']],['water supply pipes',['water_pipe_length','m']],
++  ['waste pipes',['waste_pipe_length','m']],
++]);
++
++function serviceClaims(native,page,normalizePdfScope) {
++  const t=table(native.spans,[/^item$/, /^(?:ground|ground floor|gf)$/, /^(?:first|first floor|ff)$/, /^unit$/]);
++  const scopes=t.head.cols.slice(1,3).map(s=>normalizePdfScope(/^(ground|first)$/i.test(s.text)?s.text+' floor':s.text));
++  if(new Set(scopes).size!==2||!t.rows.length||t.rows.length>500)throw Error('Invalid service scope/table');
++  const seen=new Set(),claims=[];
++  for(const row of t.rows){
++    const mapping=services.get(clean(row[0]));
++    if(!mapping||seen.has(mapping[0]))throw Error('Unknown or repeated service row');
++    seen.add(mapping[0]);const [key,unit]=mapping;
++    if(clean(row[3])!==unit)throw Error('Unsupported service unit');
++    for(let i=0;i<2;i++){
++      const value=number(row[i+1]);
++      if(!Number.isFinite(value)||value<0||value>1e6||unit==='nr'&&!Number.isInteger(value))throw Error('Invalid service quantity');
++      claims.push(claim(key,value,unit,scopes[i],page,`Native source table: ${row[0]}; ${t.head.cols[i+1].text}: ${row[i+1]} ${unit}. Material, diameter and capacity are separate source requirements.`));
++    }
++  }
++  return claims;
++}
++
++function barClaims(native,page) {
++  const text=native.spans.map(s=>s.text).join(' ');
++  const formula=[...text.matchAll(/diameter\s*\(mm\)\s*\^\s*2\s*\/\s*(\d+(?:\.\d+)?)\s*kg\/m/gi)];
++  if(formula.length!==1||!(Number(formula[0][1])>0)||!/sum all rows/i.test(text)||!/(?:only scheduled\s+reinforcement|complete project reinforcement|all project reinforcement)/i.test(text))throw Error('Complete reinforcement scope/formula required');
++  const t=table(native.spans,[/^element$/, /^dia(?:meter)? mm$/, /^count$/, /^cut length m$/]);
++  if(!t.rows.length||t.rows.length>500)throw Error('Empty/excessive reinforcement table');
++  const seen=new Set(),terms=[];
++  for(const row of t.rows){
++    const id=clean(row[0]),[diameter,count,length]=row.slice(1).map(number);
++    if(!id||seen.has(id)||![diameter,count,length].every(n=>Number.isFinite(n)&&n>0)||!Number.isInteger(count)||diameter>100||count>1e6||length>1e6)throw Error('Invalid or repeated reinforcement row');
++    seen.add(id);terms.push({id,diameter,count,length,kg:count*length*diameter*diameter/Number(formula[0][1])});
++  }
++  const value=terms.reduce((sum,t)=>sum+t.kg,0);
++  if(!Number.isFinite(value))throw Error('Invalid reinforcement total');
++  return [claim('rebar_kg',value,'kg','project',page,`Native complete bar table; ${formula[0][0]}; no intermediate rounding: ${terms.map(t=>`${t.id}: ${t.count} × ${t.length} m × ${t.diameter} mm squared / ${formula[0][1]}`).join('; ')}. No unscheduled reinforcement or wastage added.`)];
++}
++
++export function extractNativePdfPages(readings,normalizePdfScope) {
++  const pages=[],audits=[];let inherited=null;
++  for(const reading of [...readings].sort((a,b)=>a.pageNumber-b.pageNumber)) {
++    const {pageNumber,native_text_evidence:native}=reading;
++    const audit={page:pageNumber,text_status:native?.status||'unavailable',extracted:false};
++    audits.push(audit);
++    if(native?.status!=='readable'||!Array.isArray(native.spans)||native.spans.length>3000){inherited=null;continue;}
++    const spans=native.spans,text=spans.map(s=>s.text).join(' ');
++    let kind=null,scope='project',quantities=[];
++    try {
++      const openingHeader=['id','type','width','height'].every(h=>spans.some(s=>clean(s.text)===h));
++      if(openingHeader){
++        const headings=spans.filter(s=>floor(s.text));
++        if(headings.length!==1)throw Error('Opening floor heading unresolved');
++        kind='opening_schedule';scope=normalizePdfScope(headings[0].text);
++        const result=readNativeOpeningSchedule({pageNumber,page_evidence:{kind,scope_id:scope},native_text_evidence:native},normalizePdfScope,inherited?.page===pageNumber-1?inherited.basis:null);
++        if(result.status!=='read')throw Error(result.reason||'Opening table unavailable');
++        inherited={page:pageNumber,basis:result.dimension_basis};
++      } else {
++        inherited=null;
++        if(/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text)){kind='quantity_schedule';quantities=serviceClaims(native,pageNumber,normalizePdfScope);}
++        else if(/\b(?:declared bar schedule|reinforcement schedule)\b/i.test(text)){kind='quantity_schedule';quantities=barClaims(native,pageNumber);}
++        else if(/\b(?:measurement and finishes|construction specifications|finish specifications)\b/i.test(text)&&['WALLS:','FLOORS:','CEILINGS:'].filter(s=>text.includes(s)).length>=2){kind='specification';}
++        else throw Error('No fully supported local page contract');
++      }
++      const revisions=[...new Set([...text.matchAll(/\bR\d+\b/g)].map(m=>m[0]))];
++      if(revisions.length>1)throw Error('Conflicting native source revisions');
++      pages.push({...zero,pageNumber,confidence:0,detected_items:[],area_geometry:null,
++        page_evidence:{kind,scope_id:scope,drawing_id:null,revision:revisions[0]||null,quantities},native_text_evidence:native,
++        native_extraction:{version:1,method:'explicit_source_table_or_specification',parsed_keys:[...new Set(quantities.map(q=>q.key))],requires_source_review:true},
++        notes:'Locally extracted source evidence. Unparsed prose and cross-page relationships require source review; not a complete or approved takeoff.'});
++      Object.assign(audit,{extracted:true,kind,scope,parsed_keys:[...new Set(quantities.map(q=>q.key))]});
++    } catch(error){audit.reason=String(error.message).slice(0,180);inherited=null;}
++  }
++  return {pages,audits};
++}
+--- a/src/services/largePdfAnalysisService.js
++++ b/src/services/largePdfAnalysisService.js
+@@ -11,6 +11,7 @@
+ import {extractNativePdfGraphics} from '@/services/pdfNativeGraphicsService.mjs';
+ import {buildNativePdfSourceBasis} from '@/lib/pdfNativeSourceBasis.mjs';
+ import {normalizePdfScope} from '@/lib/pdfTakeoffEvidence.mjs';
++import {extractNativePdfPages} from '@/lib/pdfNativePageExtraction.mjs';
+ 
+ const DEFAULT_CONCURRENCY = 2;
+ 
+@@ -61,6 +62,21 @@
+   if((resumeSourceMeasurementsOnly||localPdfRecoveryOnly) && (collected.size!==totalPages||cached?.review?.status!=='completed')){
+     throw Object.assign(new Error('Saved PDF page/base-review cache is unavailable. Source-only continuation stopped before model calls; full analysis was not started.'),{status:409,code:'pdf_resume_cache_required'});
+   }
++  // Read every original page before scheduling any paid page request. This
++  // pass is independent of model success and never turns readable text into
++  // an assumed measurement. Existing cache identity/contracts stay unchanged.
++  const nativeReadings = [];
++  if(typeof extractNativePdfText==='function')for(let i=0;i<totalPages;i++){
++    nativeReadings.push({pageNumber:i+1,native_text_evidence:extractNativePdfText(pdf,i,{allowRotated:true})});
++  }
++  const nativeByPage = new Map(nativeReadings.map(p=>[p.pageNumber,p.native_text_evidence]));
++  const nativeExtraction = typeof extractNativePdfPages==='function' ? extractNativePdfPages(nativeReadings,normalizePdfScope) : {pages:[],audits:[]};
++  const addedNative=[];
++  for(const page of nativeExtraction.pages)if(!collected.has(page.pageNumber)){
++    collected.set(page.pageNumber,page);addedNative.push(page.pageNumber);
++  }
++  if(addedNative.length)await writePdfAnalysisCache(cacheKey,{totalPages,pages:[...collected.values()].sort((a,b)=>a.pageNumber-b.pageNumber),review:null,
++    review_groups:cached?.review_groups||{},source_basis:cached?.source_basis||null});
+   const pages = [];
+ 
+   for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+@@ -92,10 +108,11 @@
+ 
+   await cacheWrite;
+ 
+-  const successfulPages = [...reusable, ...queueResults
+-    .filter((entry) => entry.success)
+-    .map((entry) => entry.result)]
+-    .sort((a, b) => a.pageNumber - b.pageNumber);
++  for(const entry of queueResults)if(entry.success){
++    const pageNumber=entry.pageNumber??entry.result?.pageNumber;
++    if(Number.isInteger(pageNumber)&&pageNumber>=1&&pageNumber<=totalPages)collected.set(pageNumber,entry.result);
++  }
++  const successfulPages = [...collected.values()].sort((a,b)=>a.pageNumber-b.pageNumber);
+ 
+   const failedPages = queueResults
+     .filter((entry) => !entry.success)
+@@ -115,11 +132,11 @@
+   // No SDK/API call; unsupported encodings remain on the existing evidence path.
+   if(typeof extractNativePdfText==='function')for(let i=0;i<successfulPages.length;i++){
+     const p=successfulPages[i];if(['opening_schedule','specification','quantity_schedule','structural_plan'].includes(p.page_evidence?.kind)){
+-      successfulPages[i]={...p,native_text_evidence:extractNativePdfText(pdf,p.pageNumber-1,{allowRotated:['quantity_schedule','structural_plan'].includes(p.page_evidence.kind)})};
++      successfulPages[i]={...p,native_text_evidence:nativeByPage.get(p.pageNumber)||extractNativePdfText(pdf,p.pageNumber-1,{allowRotated:['quantity_schedule','structural_plan'].includes(p.page_evidence.kind)})};
+       collected.set(p.pageNumber,successfulPages[i]);
+     }
+     if(p.page_evidence?.kind==='floor_plan'&&typeof extractNativePdfGraphics==='function'){
+-      successfulPages[i]={...successfulPages[i],native_plan_text:extractNativePdfText(pdf,p.pageNumber-1,{allowRotated:true}),native_graphics:extractNativePdfGraphics(pdf,p.pageNumber-1)};
++      successfulPages[i]={...successfulPages[i],native_plan_text:nativeByPage.get(p.pageNumber)||extractNativePdfText(pdf,p.pageNumber-1,{allowRotated:true}),native_graphics:extractNativePdfGraphics(pdf,p.pageNumber-1)};
+       collected.set(p.pageNumber,successfulPages[i]);
+     }
+   }
+@@ -130,6 +147,10 @@
+       status:failure?.status || 500,code:failure?.code || null,type:failure?.type || null,
+     });
+   }
++  successfulPages[0]={...successfulPages[0],native_first_read:{version:1,total_pages:totalPages,
++    readable_text_pages:nativeReadings.filter(p=>p.native_text_evidence.status==='readable').length,
++    reused_pages:reusable.length,locally_extracted_pages:addedNative,model_page_requests:pages.map(p=>p.pageNumber),
++    page_audits:nativeExtraction.audits,requires_source_review:true}};
+ 
+   const initial = mergePdfEvidence(successfulPages, failedPages, totalPages);
+   const review = creditFailure
+--- a/src/lib/pdfTakeoffEvidence.mjs
++++ b/src/lib/pdfTakeoffEvidence.mjs
+@@ -5,6 +5,7 @@
+ import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
+ import {pdfCatalogScope,pdfCatalogThicknessMatches,pdfCatalogHeightMatches} from './pdfCatalogScope.mjs';
+ import {readPdfSourceSpecifications,sourceSpecificationMetric,hasSourceSpecificationScope,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
++import {extractNativePdfPages} from './pdfNativePageExtraction.mjs';
+ // PDF quantities require explicit page roles/scopes. No project-specific totals.
+ export const PDF_METRIC_UNITS=Object.freeze({rooms:'nr',door_count:'nr',window_count:'nr',door_area:'m2',window_area:'m2',wall_length:'m',wall_area:'m2',floor_area:'m2',ceiling_area:'m2',roof_area:'m2',pcc_volume:'m3',foundation_volume:'m3',pedestal_volume:'m3',column_volume:'m3',beam_volume:'m3',ground_slab_volume:'m3',first_slab_volume:'m3',roof_slab_volume:'m3',rebar_kg:'kg',foundation_formwork_area:'m2',column_formwork_area:'m2',beam_formwork_area:'m2',slab_formwork_area:'m2',external_block_area:'m2',internal_block_area:'m2',wood_floor_area:'m2',ceramic_floor_area:'m2',epoxy_floor_area:'m2',terrace_floor_area:'m2',wet_floor_area:'m2',wet_wall_area:'m2',plaster_area:'m2',paint_area:'m2',gypsum_ceiling_area:'m2',excavation_volume:'m3',toilet_count:'nr',basin_count:'nr',shower_count:'nr',socket_count:'nr',light_count:'nr',distribution_board_count:'nr',ac_count:'nr',smoke_detector_count:'nr',water_pipe_length:'m',waste_pipe_length:'m',ac_pipe_length:'m',kitchen_cabinet_length:'m',terrace_railing_length:'m',roof_waterproofing_area:'m2',terrace_waterproofing_area:'m2',wet_floor_waterproofing_area:'m2',wet_wall_waterproofing_area:'m2',wet_wall_tile_area:'m2',ceiling_paint_area:'m2',backsplash_area:'m2',driveway_area:'m2',landscape_area:'m2',kitchen_sink_count:'nr',laundry_sink_count:'nr',internal_wall_length:'m',external_wall_length:'m',internal_door_count:'nr',service_door_count:'nr',entrance_door_count:'nr',garage_door_count:'nr',kitchen_hob_hood_count:'nr'});
+ export function normalizePdfScope(s){const v=String(s||'').toLowerCase().trim().replace(/[ _-]+/g,' ');if(['gf','ground','ground floor','floor 0','همکف','الطابق الأرضي'].includes(v))return 'floor:0';if(['ff','first','first floor','floor 1','طبقه اول','الطابق الأول'].includes(v))return 'floor:1';if(['project','whole project','all floors','total'].includes(v))return 'project';return v;}
+@@ -37,7 +38,13 @@
+  }
+  const floors=[...selected.entries()].filter(([scope])=>!conflictedFloors.has(scope)).map(([,p])=>p),fields={rooms:0,doors:0,windows:0,wall_length:0,wall_area:0,floor_area:0,ceiling_area:0,door_area:0,window_area:0};
+  const native=nativeOpeningEvidence(pages.filter(p=>p.page_evidence?.kind!=='floor_plan'||floors.includes(p)),normalizePdfScope);
+- warnings.push(...native.warnings);const nativeKeys=new Set(native.claims.map(q=>q.key));
++ const nativeTables=extractNativePdfPages(pages.map(p=>({pageNumber:p.pageNumber,native_text_evidence:p.native_text_evidence})),normalizePdfScope);
++ const tableClaims=nativeTables.pages.flatMap(p=>p.page_evidence.quantities);
++ const nativeOpeningKeys=new Set(native.claims.map(q=>q.key));
++ const nativeWholeTableKeys=new Set(tableClaims.filter(q=>normalizePdfScope(q.scope_id)==='project').map(q=>q.key));
++ const nativeFloorTableKeys=new Set(tableClaims.filter(q=>normalizePdfScope(q.scope_id)!=='project').map(q=>q.key));
++ const nativeTableIdentities=new Set(tableClaims.map(q=>q.key+'|'+normalizePdfScope(q.scope_id)));
++ warnings.push(...native.warnings);const nativeKeys=new Set([...native.claims,...tableClaims].map(q=>q.key));
+  for(const p of floors)for(const k of Object.keys(fields)){if(valid(p[k]))fields[k]+=p[k];}
+  // Schedules/specs are reconciled by semantic key + physical scope, not added
+  // to plan totals. Exact repetitions collapse; conflicting claims are withheld.
+@@ -47,9 +54,10 @@
+   return {...p,claims:[...direct,...(p.page_evidence?.quantities||[])]};
+  });
+  if(native.claims.length)observations.push({pageNumber:native.schedules[0].page,page_evidence:{kind:'opening_schedule'},claims:native.claims});
++ for(const p of nativeTables.pages)if(p.page_evidence.quantities.length)observations.push({pageNumber:p.pageNumber,page_evidence:p.page_evidence,claims:p.page_evidence.quantities});
+  for(const p of observations)for(const q of p.claims){
+-  if(nativeKeys.has(q.key)&&!q.native_calculated)continue;
+   const scope=normalizePdfScope(q.scope_id),unit=PDF_METRIC_UNITS[q.key];
++  if(!q.native_calculated&&(nativeOpeningKeys.has(q.key)||nativeWholeTableKeys.has(q.key)||nativeTableIdentities.has(q.key+'|'+scope)||nativeFloorTableKeys.has(q.key)&&scope==='project'))continue;
+   if(!unit||q.unit!==unit||!scope||!valid(q.value)||(unit==='nr'&&!Number.isInteger(q.value))||!String(q.evidence||'').trim()){rejected.push({page:p.pageNumber,key:q.key,reason:'invalid_or_unsupported_evidence'});continue;}
+   const id=q.key+'|'+scope,priority=q.document_calculated?3:p.page_evidence.kind==='floor_plan'?1:2;
+   const sourcePages=q.document_calculated?q.pages:PDF_AREA_KEYS.includes(q.key)&&p.document_area_source_pages?p.document_area_source_pages:[p.pageNumber];
+@@ -57,12 +65,15 @@
+   if(!old||priority>old.priority)claims.set(id,row);
+   else if(priority===old.priority){old.pages=[...new Set([...old.pages,...row.pages])];if(Math.abs(old.value-row.value)>.001)old.conflict=true;}
+  }
+- const resolved={},evidence={},overlappingScopeClaims=[];
++ const resolved={},evidence={},overlappingScopeClaims=[],nativeIncompleteKeys=new Set();
+  const floorScopes=new Set(floors.map(p=>normalizePdfScope(p.page_evidence.scope_id)));
+  for(const key of Object.keys(PDF_METRIC_UNITS)){
+   const values=[...claims.values()].filter(q=>q.key===key),whole=values.find(q=>q.scope_id==='project');
+   const isFloorScope=q=>floorScopes.has(q.scope_id)||/^floor:-?\d+$/.test(q.scope_id);
+   const floorTotals=values.filter(isFloorScope);
++  if(nativeFloorTableKeys.has(key)&&[...floorScopes].some(scope=>!floorTotals.some(q=>q.scope_id===scope))){
++   warnings.push('Native table does not cover every selected floor for '+key+'; project total withheld');resolved[key]=0;nativeIncompleteKeys.add(key);continue;
++  }
+   // A named subset (wet rooms, kitchen, etc.) is not a disjoint extra floor.
+   // Structural roof-level work remains distinct from floor-level work.
+   const structural=/^(?:beam|column|foundation|pedestal|.*slab)_volume$|_formwork_area$/.test(key);
+@@ -76,8 +87,8 @@
+  for(const [key,n] of Object.entries(resolved))fields[names[key]||key]=n;
+  // A withheld floor cannot be silently omitted while another floor's partial
+  // quantity is priced as a complete project total.
+- const blocked=new Set([...areaValidation.flatMap(a=>a.withheld_metrics||[]),...documentReview.blocked]);
+- for(const key of nativeKeys)blocked.delete(key);
++ const blocked=new Set([...areaValidation.flatMap(a=>a.withheld_metrics||[]),...documentReview.blocked,...nativeIncompleteKeys]);
++ for(const key of nativeKeys)if(!nativeIncompleteKeys.has(key))blocked.delete(key);
+  const omitted=pdfExcludedMetricKeys(documentReview.audit?.exclusions);
+  // An explicit unresolved wall/finish operation cannot use an older plan
+  // summary as a complete quantity. A valid reviewed calculation can resolve it.
+@@ -92,6 +103,7 @@
+  report.source_measurement_status=pages.find(p=>p.source_measurement_status)?.source_measurement_status||null;
+  report.native_opening_schedules=native.schedules.map(s=>({page:s.page,status:s.status,scope_id:s.scope_id,rows:s.rows.length,reason:s.reason||null}));
+  report.local_pdf_recovery=pages.find(p=>p.local_pdf_recovery)?.local_pdf_recovery||null;
++ report.native_first_read=pages.find(p=>p.native_first_read)?.native_first_read||null;
+  report.specification_facts=readPdfSourceSpecifications({page_results:pages});
+  report.specification_conflicts=pdfSpecificationConflicts(report.specification_facts);
+  for(const issue of report.specification_conflicts)warnings.push(`PDF specifications ${issue.metric}/${issue.property}: ${issue.values.join(', ')} on pages ${issue.pages.join(', ')}; source breakdown required before selecting a catalog variant.`);
+--- a/src/lib/serverBoqAnalysis.js
++++ b/src/lib/serverBoqAnalysis.js
+@@ -5390,6 +5390,20 @@
+ 
+     const rawTakeoff =
+       body?.takeoff || {};
++
++    // Reject interrupted extraction before catalog reads or row generation.
++    // A provisional quantity can be reviewed; an unprocessed drawing set is
++    // not a valid basis for replacing the project's BOQ with a smaller total.
++    if(rawTakeoff.pdf_analysis){
++      const total=Number(rawTakeoff.total_pages||rawTakeoff.pdf_analysis.total_pages||0);
++      const analyzed=Array.isArray(rawTakeoff.page_results)?new Set(rawTakeoff.page_results.map(p=>p.pageNumber)).size:Number(rawTakeoff.analyzed_pages||0);
++      const review=rawTakeoff.pdf_analysis.document_review_status?.status;
++      if(rawTakeoff.pdf_analysis.summaryOnly || rawTakeoff.failed_pages?.length || rawTakeoff.pdf_analysis.failed_pages?.length ||
++        total>0&&analyzed<total || ['failed','pending'].includes(review)){
++        return NextResponse.json({success:false,code:'PDF_ANALYSIS_INCOMPLETE',error:
++          `BOQ generation stopped: PDF page extraction or document review is incomplete (${analyzed}/${total||'?'} pages; review: ${review||'unavailable'}). The saved BOQ was not replaced. Recover complete source evidence before generating again.`},{status:409});
++      }
++    }
+ 
+     const takeoff =
+       normalizeTakeoff(
+--- a/src/services/takeoffService.js
++++ b/src/services/takeoffService.js
+@@ -2,6 +2,7 @@
+ import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
+ import {rememberEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
+ import {commercialFetch} from '@/lib/commercialFetch';
++import {submitDrawingAnalysis} from '@/lib/drawingAnalysisTransport.mjs';
+ const TAKEOFF_STORAGE_PREFIX = "ventra:project-takeoff:";
+ 
+ function getStorageKey(projectId) {
+@@ -227,45 +228,6 @@
+   }
+ }
+ 
+-async function ventraFetchWithTransientRetry(url, options = {}, { attempts = 3, label = "request" } = {}) {
+-  let lastError = null;
+-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+-    try {
+-      return await commercialFetch(url, options);
+-    } catch (error) {
+-      lastError = error;
+-      const message = String(error?.message || error || "");
+-      const transient =
+-        error instanceof TypeError ||
+-        /failed to fetch|network error|network request failed|load failed/i.test(message);
+-
+-      if (!transient || attempt >= attempts) throw error;
+-
+-      const delayMs = attempt === 1 ? 1200 : 2500;
+-      console.warn("[VENTRA TAKEOFF NETWORK RETRY v54]", {
+-        label,
+-        attempt,
+-        nextAttempt: attempt + 1,
+-        delayMs,
+-        message,
+-      });
+-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+-    }
+-  }
+-  throw lastError || new Error(`${label} failed.`);
+-}
+-
+-async function parseJsonResponse(response) {
+-  const text = await response.text();
+-  if (!text) return {};
+-
+-  try {
+-    return JSON.parse(text);
+-  } catch {
+-    throw new Error(text || "The server returned an invalid response.");
+-  }
+-}
+-
+ export async function analyzeProjectDrawing({ projectId, document, resumeSourceMeasurementsOnly = false, localPdfRecoveryOnly = false }) {
+   try {
+     if (!projectId) throw new Error("Project ID is required.");
+@@ -281,8 +243,7 @@
+     }
+ 
+     const requestId = `takeoff-${projectId}-${document.id || document.file_name}-${Date.now()}`;
+-    const response = await ventraFetchWithTransientRetry(
+-      "/api/ai/analyze-drawing",
++    const {response, payload} = await submitDrawingAnalysis(
+       {
+         method: "POST",
+         headers: {
+@@ -302,15 +263,24 @@
+         }),
+         cache: "no-store",
+       },
+-      { attempts: resumeSourceMeasurementsOnly || localPdfRecoveryOnly ? 1 : 3, label: "drawing-analysis" }
++      commercialFetch
+     );
+ 
+-    const payload = await parseJsonResponse(response);
+ 
+     if (!response.ok || payload?.success !== true || !payload?.result) {
+       throw new Error(
+         payload?.error || payload?.message || `Drawing analysis failed with HTTP ${response.status}.`
+       );
++    }
++
++    const incoming = payload.result;
++    const reviewStatus = incoming.pdf_analysis?.document_review_status?.status;
++    const totalPages = Number(incoming.total_pages || incoming.pdf_analysis?.total_pages || 0);
++    const analyzedPages = Array.isArray(incoming.page_results) ? new Set(incoming.page_results.map(p=>p.pageNumber)).size : Number(incoming.analyzed_pages || 0);
++    if (incoming.pdf_analysis && (incoming.failed_pages?.length || incoming.pdf_analysis.failed_pages?.length ||
++      totalPages > 0 && analyzedPages < totalPages || ['failed','pending'].includes(reviewStatus))) {
++      throw Object.assign(new Error(`PDF analysis is incomplete (${analyzedPages}/${totalPages || '?'} pages; document review: ${reviewStatus || 'unavailable'}). The previous saved report was not replaced. ${incoming.pdf_analysis.document_review_status?.reason || 'Complete source evidence is required before generating a new BOQ.'}`),
++        {code:'PDF_ANALYSIS_INCOMPLETE'});
+     }
+ 
+     const takeoff = {
+--- /dev/null
++++ b/src/lib/drawingAnalysisTransport.mjs
+@@ -0,0 +1,41 @@
++const endpoint = '/api/ai/analyze-drawing';
++
++function connectionError(message, code, cause, requestId) {
++  return Object.assign(new Error(message, {cause}), {code, requestId});
++}
++
++// GET is an existing, read-only health check. Never replay an analysis POST:
++// a missing response does not tell us whether the server already ran the model.
++export async function submitDrawingAnalysis(options, fetchRequest) {
++  const requestId = new Headers(options.headers).get('X-Ventra-Request-Id') || '';
++  const controller = new AbortController();
++  const timer = setTimeout(() => controller.abort(), 10000);
++  try {
++    const health = await fetchRequest(endpoint, {
++      method: 'GET', cache: 'no-store', headers: {Accept: 'application/json'}, signal: controller.signal,
++    });
++    const payload = await health.json();
++    if (!health.ok || payload?.success !== true) throw new Error('Analysis endpoint unavailable.');
++  } catch (cause) {
++    throw connectionError('Cannot reach the drawing analysis service. No analysis POST was sent. Keep the dev server running and check the service connection before trying again.',
++      'DRAWING_CONNECTION_CHECK_FAILED', cause, requestId);
++  } finally {
++    clearTimeout(timer);
++  }
++
++  let response;
++  try {
++    response = await fetchRequest(endpoint, options);
++  } catch (cause) {
++    throw connectionError(`Connection lost while submitting analysis. The server outcome is unknown; the request was not retried automatically. Check the server log and saved PDF report before submitting again. Request: ${requestId}`,
++      'DRAWING_ANALYSIS_OUTCOME_UNKNOWN', cause, requestId);
++  }
++  try {
++    const text = await response.text();
++    const payload = text ? JSON.parse(text) : {};
++    return {response, payload};
++  } catch (cause) {
++    throw connectionError(`Could not read the analysis response (HTTP ${response.status}). The result is unknown; the request was not retried automatically. Check the server log and saved PDF report before submitting again. Request: ${requestId}`,
++      'DRAWING_ANALYSIS_RESPONSE_UNREADABLE', cause, requestId);
++  }
++}
+--- a/src/app/projects/[id]/ProjectDrawingCenter.jsx
++++ b/src/app/projects/[id]/ProjectDrawingCenter.jsx
+@@ -2350,7 +2350,14 @@
+ 
+         // Keep the last successful record in storage, but never expose it as
+         // the result of this pending/failed PDF analysis or use it for BOQ.
+-        const savedPdf = takeoffResultRef.current;
++        // The visible result is cleared during analysis. After a failed request,
++        // reload saved evidence to preserve guarded source-only continuation.
++        let savedPdf = takeoffResultRef.current;
++        if (extension === "pdf" && !savedPdf) {
++          const saved = await getLatestProjectTakeoff(projectId);
++          if (saved.error) throw saved.error;
++          savedPdf = saved.takeoff;
++        }
+         const samePdfRecord = !!savedPdf && (!!savedPdf.document_id && savedPdf.document_id === selectedDocument.id ||
+           !!savedPdf.document_name && savedPdf.document_name === selectedDocument.file_name);
+         const resumeSourceMeasurementsOnly = extension === 'pdf' && samePdfRecord &&

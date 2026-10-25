@@ -1,0 +1,509 @@
+--- /dev/null
++++ b/src/lib/pdfSourceSpecifications.mjs
+@@ -0,0 +1,117 @@
++// Source facts only: no catalog prices, project IDs, benchmark dimensions or
++// model calls. A missing/conflicting specification never becomes a default.
++const concrete=[['pcc_volume',/\b(?:pcc|blinding)\b/],['foundation_volume',/\b(?:foundations?|footings?)\b/],['pedestal_volume',/\bpedestals?\b/],['column_volume',/\bcolumns?\b/],['beam_volume',/\bbeams?\b/],['ground_slab_volume',/\b(?:ground|gf)(?: floor)? slabs?\b/],['first_slab_volume',/\b(?:first|ff)(?: floor)? slabs?\b/],['roof_slab_volume',/\broof slabs?\b/]];
++const normal=s=>String(s||'').toLowerCase().replace(/[‐‑–—-]/g,' ').replace(/\s+/g,' ').trim();
++const unique=xs=>[...new Set(xs)];
++function clauses(text){return String(text).split(/;|\n|\.(?=\s+[A-Z])/).map(s=>s.trim()).filter(Boolean);}
++function factsIn(text,page,scope='project'){
++ const facts=[];
++ for(const quote of clauses(text)){
++  if(quote.length>2000)continue;
++  const d=normal(quote),local=d.match(/\b(gf|ff|ground floor|first floor|floor\s*-?\d+)\b/);
++  const scopeId=local?['gf','ground floor'].includes(local[1])?'floor:0':['ff','first floor'].includes(local[1])?'floor:1':local[1].replace(/floor\s*/,'floor:'):scope;
++  const add=(metric,property,values)=>{for(const value of unique(values))facts.push({metric,property,value,page,scope_id:scopeId,quote,source:'native_pdf_text'});};
++  if(/\b(?:not|unless|option|optional|alternative|except|excluding)\b/.test(d))continue;
++  for(const [word,key] of [['external','external_block_area'],['exterior','external_block_area'],['internal','internal_block_area'],['interior','internal_block_area']]){
++   const pattern=new RegExp(`\\b${word}\\s*(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`,'g');
++   add(key,'thickness_mm',[...d.matchAll(pattern)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]])));
++   const reversed=new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\s+(?:thick\\s+)?${word}\\s+(?:walls?|partitions?|blockwork|masonry)\\b`,'g');
++   add(key,'thickness_mm',[...d.matchAll(reversed)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]])));
++  }
++  const grades=[...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map(m=>`C${m[1]}${m[2]?'/'+m[2]:''}`);
++  for(const [key,re] of concrete)if(re.test(d))add(key,'concrete_grade',grades);
++  if(/\ball\s+(?:structural\s+)?concrete\b/.test(d)&&!/\bexcept\b/.test(d))for(const [key] of concrete.filter(([k])=>k!=='pcc_volume'))add(key,'concrete_grade',grades);
++  for(const [key,re] of [['water_pipe_length',/\b(?:water supply|domestic water|water pipes?)\b/],['waste_pipe_length',/\b(?:waste|drainage|soil)\s*(?:water\s*)?pipes?\b/]])if(re.test(d)){
++   const dn=[...d.matchAll(/\b(?:dn|dia(?:meter)?)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?\b/g)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]||'mm']));
++   add(key,'diameter_mm',dn.length?dn:[...d.matchAll(/\b(\d+(?:\.\d+)?)\s*mm\b/g)].map(m=>Number(m[1])));
++   add(key,'pipe_material',[...d.matchAll(/\b(ppr|u?pvc|hdpe|copper)\b/g)].map(m=>m[1].toUpperCase()));
++  }
++  if(/\b(?:ac|air conditioning|air conditioner|split)\b/.test(d))add('ac_count','capacity_tr',[...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/g)].map(m=>Number(m[1])));
++ }
++ return facts.filter(f=>typeof f.value!=='number'||Number.isFinite(f.value)&&f.value>0&&f.value<1e6);
++}
++export function readPdfSourceSpecifications(takeoff){
++ const pages=takeoff?.page_results||[],facts=[];let native=false;
++ for(const p of pages){
++  if(['boq','estimate','quotation','cost_schedule'].includes(p.page_evidence?.kind))continue;
++  const text=p.native_text_evidence?.status==='readable'?p.native_text_evidence:p.native_plan_text?.status==='readable'?p.native_plan_text:null;
++  if(!text)continue;native=true;
++  if(!Number.isInteger(p.pageNumber)||p.pageNumber<1||!Array.isArray(text.spans)||text.spans.length>10000)continue;
++  // Retain row boundaries. Text from different table rows cannot create a
++  // fictitious "pipe + diameter" or "member + grade" association.
++  const bands=[];
++  const spans=text.spans.filter(s=>typeof s.text==='string'&&Number.isFinite(s.y)&&Number.isFinite(s.x)).sort((a,b)=>b.y-a.y||a.x-b.x);
++  for(const s of spans){let band=bands.at(-1);if(!band||Math.abs(band.y-s.y)>=1.5){band={y:s.y,spans:[]};bands.push(band);}band.spans.push(s);}
++  const value=bands.map(b=>b.spans.sort((a,b)=>a.x-b.x).map(s=>s.text).join(' ')).join('\n');
++  let scope=normal(p.page_evidence?.scope_id||'project').replace(/floor\s*[: ]\s*/,'floor:');
++  if(['gf','ground floor'].includes(scope))scope='floor:0';if(['ff','first floor'].includes(scope))scope='floor:1';
++  if(value.length>100000)continue;
++  facts.push(...factsIn(value,p.pageNumber,scope));
++ }
++ if(!native&&!pages.length){
++  // Compact saved evidence may retain typed native facts. Re-parse every
++  // quoted source clause; arbitrary typed values are not accepted on trust.
++  for(const f of takeoff?.pdf_analysis?.specification_facts||[]){
++   if(f?.source!=='native_pdf_text'||!Number.isInteger(f.page)||f.page<1||typeof f.scope_id!=='string'||typeof f.quote!=='string'||f.quote.length>2000)continue;
++   if(factsIn(f.quote,f.page,f.scope_id).some(r=>r.metric===f.metric&&r.property===f.property&&r.value===f.value&&r.scope_id===f.scope_id))facts.push({...f});
++  }
++ }
++ return [...new Map(facts.map(f=>[JSON.stringify([f.metric,f.property,f.value,f.page,f.scope_id,f.quote]),f])).values()];
++}
++function valueFor(facts,key,property,takeoff){
++ const rows=facts.filter(f=>f.metric===key&&f.property===property),found=unique(rows.map(f=>f.value));if(found.length!==1)return null;
++ if(rows.some(f=>f.scope_id==='project'))return found[0];
++ const intrinsic={ground_slab_volume:'floor:0',first_slab_volume:'floor:1',roof_slab_volume:'roof'}[key];
++ const scopes=intrinsic?[intrinsic]:unique((takeoff?.pdf_analysis?.selected_floor_pages||[]).map(p=>p.scope));
++ return scopes.length&&scopes.every(s=>rows.some(f=>f.scope_id===s))?found[0]:null;
++}
++function compatible(facts,key,constraints,takeoff){return Object.entries(constraints).every(([p,v])=>valueFor(facts,key,p,takeoff)===v);}
++export function resolvedPdfSpecifications(takeoff,key,facts=readPdfSourceSpecifications(takeoff)){
++ return unique(facts.filter(f=>f.metric===key).map(f=>f.property)).flatMap(property=>{
++  const value=valueFor(facts,key,property,takeoff);return value===null?[]:[{property,value,pages:unique(facts.filter(f=>f.metric===key&&f.property===property).map(f=>f.page))}];
++ });
++}
++export function pdfSpecificationConflicts(facts){
++ const groups=new Map();for(const f of facts){const key=f.metric+'|'+f.property;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(f);}
++ return [...groups.values()].filter(rows=>unique(rows.map(f=>f.value)).length>1).map(rows=>({metric:rows[0].metric,property:rows[0].property,values:unique(rows.map(f=>f.value)),pages:unique(rows.map(f=>f.page)),reason:'Mixed or conflicting specifications cannot price one aggregate quantity.'}));
++}
++export function sourceSpecificationMetric(description,unit,takeoff,facts=readPdfSourceSpecifications(takeoff)){
++ const d=normal(description),finish=(keys,expected,constraints={})=>{
++  if(!keys.length||!['m2','m3','m','nr','nos','no','each','ea'].includes(unit)||!(unit===expected||expected==='nr'&&['nos','no','each','ea'].includes(unit)))return null;
++  return {key:keys.join('+'),...(keys.length>1?{keys}:{}),factor:1,specificationFacts:facts.filter(f=>keys.includes(f.metric)&&Object.keys(constraints).includes(f.property))};
++ };
++ if(/\b(?:blockwork|blocks?|masonry)\b/.test(d)&&unit==='m2'){
++  const thickness=d.match(/\b(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/),constraints=thickness?{thickness_mm:Number(thickness[1])*({mm:1,cm:10,m:1000}[thickness[2]])}:{};
++  const ext=/\b(?:external|exterior)\b/.test(d),int=/\b(?:internal|interior|partition)\b/.test(d);
++  if(ext&&int||!thickness&&!ext&&!int||/\b(?:aac|autoclaved|gypsum|glass|clay|brick)\b/.test(d))return null;
++  const keys=(ext?['external_block_area']:int?['internal_block_area']:['external_block_area','internal_block_area']).filter(k=>compatible(facts,k,constraints,takeoff));
++  // Without an explicit location, equal thicknesses cannot distinguish two
++  // measurement classes. Do not attach either complete class by preference.
++  return keys.length===1?finish(keys,'m2',constraints):null;
++ }
++ const grades=[...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map(m=>`C${m[1]}${m[2]?'/'+m[2]:''}`);
++ if(grades.length&&/\b(?:concrete|rc|blinding)\b/.test(d)){
++  if(unique(grades).length!==1||/\b(?:precast|prestressed|post tensioned|mesh)\b/.test(d))return null;
++  if(/\b\d+(?:\.\d+)?\s*(?:mm|cm)\b|\d\s*[x×]\s*\d/.test(d))return null;
++  const named=concrete.filter(([,re])=>re.test(d));
++  const keys=(named.length?named.map(([k])=>k):concrete.filter(([k])=>k!=='pcc_volume').map(([k])=>k)).filter(k=>takeoff?.pdf_analysis?.quantity_evidence?.[k]?.length&&compatible(facts,k,{concrete_grade:grades[0]},takeoff));
++  if(named.length&&keys.length!==named.length)return null;
++  return finish(keys,'m3',{concrete_grade:grades[0]});
++ }
++ if(/\bpipes?\b/.test(d)&&/\b(?:water|waste|drainage|soil)\b/.test(d)){
++  const waste=/\b(?:waste|drainage|soil)\b/.test(d),water=/\bwater\b/.test(d)&&!waste;
++  const key=waste?'waste_pipe_length':water?'water_pipe_length':null,diameter=d.match(/\b(?:dn\s*)?(\d+(?:\.\d+)?)\s*(mm|cm)?\b/),material=d.match(/\b(ppr|u?pvc|hdpe|copper)\b/);
++  if(!key||!diameter&&!material)return null;
++  const constraints={...(diameter?{diameter_mm:Number(diameter[1])*(diameter[2]==='cm'?10:1)}:{}),...(material?{pipe_material:material[1].toUpperCase()}: {})};
++  return compatible(facts,key,constraints,takeoff)?finish([key],'m',constraints):null;
++ }
++ if(/\b(?:ac|air conditioning|air conditioner)\b/.test(d)&&/\b(?:units?|split)\b/.test(d)){
++  const capacity=d.match(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/);if(!capacity)return null;
++  const constraints={capacity_tr:Number(capacity[1])};return compatible(facts,'ac_count',constraints,takeoff)?finish(['ac_count'],'nr',constraints):null;
++ }
++ return null;
++}
++export function hasSourceSpecificationScope(description){
++ const d=normal(description);
++ return /\b(?:blockwork|blocks?|masonry)\b/.test(d)||/\bc\s*\d/.test(d)&&/\b(?:concrete|rc|blinding)\b/.test(d)||/\bpipes?\b/.test(d)&&/\b(?:ppr|u?pvc|hdpe|copper|dn)\b|\d\s*mm\b/.test(d)||/\b(?:ac|air conditioning|air conditioner)\b/.test(d)&&/\d+(?:\.\d+)?\s*(?:tr|tons?|tonnes?)\b/.test(d);
++}
+--- a/src/lib/pdfTakeoffEvidence.mjs
++++ b/src/lib/pdfTakeoffEvidence.mjs
+@@ -4,6 +4,7 @@
+ import {PDF_SOURCE_MEASUREMENT_KEYS} from './pdfSourceMeasurements.mjs';
+ import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
+ import {pdfCatalogScope,pdfCatalogThicknessMatches,pdfCatalogHeightMatches} from './pdfCatalogScope.mjs';
++import {readPdfSourceSpecifications,sourceSpecificationMetric,hasSourceSpecificationScope,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
+ // PDF quantities require explicit page roles/scopes. No project-specific totals.
+ export const PDF_METRIC_UNITS=Object.freeze({rooms:'nr',door_count:'nr',window_count:'nr',door_area:'m2',window_area:'m2',wall_length:'m',wall_area:'m2',floor_area:'m2',ceiling_area:'m2',roof_area:'m2',pcc_volume:'m3',foundation_volume:'m3',pedestal_volume:'m3',column_volume:'m3',beam_volume:'m3',ground_slab_volume:'m3',first_slab_volume:'m3',roof_slab_volume:'m3',rebar_kg:'kg',foundation_formwork_area:'m2',column_formwork_area:'m2',beam_formwork_area:'m2',slab_formwork_area:'m2',external_block_area:'m2',internal_block_area:'m2',wood_floor_area:'m2',ceramic_floor_area:'m2',epoxy_floor_area:'m2',terrace_floor_area:'m2',wet_floor_area:'m2',wet_wall_area:'m2',plaster_area:'m2',paint_area:'m2',gypsum_ceiling_area:'m2',excavation_volume:'m3',toilet_count:'nr',basin_count:'nr',shower_count:'nr',socket_count:'nr',light_count:'nr',distribution_board_count:'nr',ac_count:'nr',smoke_detector_count:'nr',water_pipe_length:'m',waste_pipe_length:'m',ac_pipe_length:'m',kitchen_cabinet_length:'m',terrace_railing_length:'m',roof_waterproofing_area:'m2',terrace_waterproofing_area:'m2',wet_floor_waterproofing_area:'m2',wet_wall_waterproofing_area:'m2',wet_wall_tile_area:'m2',ceiling_paint_area:'m2',backsplash_area:'m2',driveway_area:'m2',landscape_area:'m2',kitchen_sink_count:'nr',laundry_sink_count:'nr',internal_wall_length:'m',external_wall_length:'m',internal_door_count:'nr',service_door_count:'nr',entrance_door_count:'nr',garage_door_count:'nr',kitchen_hob_hood_count:'nr'});
+ export function normalizePdfScope(s){const v=String(s||'').toLowerCase().trim().replace(/[ _-]+/g,' ');if(['gf','ground','ground floor','floor 0','همکف','الطابق الأرضي'].includes(v))return 'floor:0';if(['ff','first','first floor','floor 1','طبقه اول','الطابق الأول'].includes(v))return 'floor:1';if(['project','whole project','all floors','total'].includes(v))return 'project';return v;}
+@@ -91,6 +92,9 @@
+  report.source_measurement_status=pages.find(p=>p.source_measurement_status)?.source_measurement_status||null;
+  report.native_opening_schedules=native.schedules.map(s=>({page:s.page,status:s.status,scope_id:s.scope_id,rows:s.rows.length,reason:s.reason||null}));
+  report.local_pdf_recovery=pages.find(p=>p.local_pdf_recovery)?.local_pdf_recovery||null;
++ report.specification_facts=readPdfSourceSpecifications({page_results:pages});
++ report.specification_conflicts=pdfSpecificationConflicts(report.specification_facts);
++ for(const issue of report.specification_conflicts)warnings.push(`PDF specifications ${issue.metric}/${issue.property}: ${issue.values.join(', ')} on pages ${issue.pages.join(', ')}; source breakdown required before selecting a catalog variant.`);
+  // Transport completion says nothing about complete measured scope. Record
+  // explicit omitted metric names without deleting unrelated saved evidence.
+  const unmeasured=omitted.filter(k=>!evidence[k]?.length);
+@@ -101,11 +105,12 @@
+  const sourcedHeight=Number.isFinite(nativeHeight?.value)&&nativeHeight.value>0&&nativeHeight.evidence?.trim()&&nativeHeight.pages?.length&&nativeHeight.pages.every(n=>pages.some(p=>p.pageNumber===n));
+  return {...fields,confidence:floors.length?Math.round(floors.reduce((s,p)=>s+(p.confidence||0),0)/floors.length*10)/10:0,wall_height:sourcedHeight?nativeHeight.value:3.2,wall_length_estimated:false,wall_area_estimated:false,wall_length_source:'pdf_scoped_floor_plan',wall_area_source:'pdf_scoped_floor_plan',wall_height_source:sourcedHeight?'pdf_native_source_rule':'project_default',total_pages:total,analyzed_pages:pages.length,failed_pages:failed,page_results:pages,detected_items:floors.flatMap(p=>(p.detected_items||[]).map(i=>({...i,pages:[p.pageNumber]}))),scheduled_quantities:resolved,pdf_analysis:report,notes:`PDF reconciled by page role and floor scope. ${floors.length} distinct floor plans selected. Schedules override matching scope instead of adding duplicates. AI extraction requires review. ${warnings.join('; ')}`};
+ }
+-export function pdfRuleMetric(description,unit){
++export function pdfRuleMetric(description,unit,takeoff=null,specificationFacts=undefined){
+  const d=String(description||'').toLowerCase().replace(/[-‐‑–—]/g,' ').replace(/\s+/g,' ').trim(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
+  const u=({'sqm':'m2','sq.m':'m2','sq m':'m2','cum':'m3','cu.m':'m3','cu m':'m3','lm':'m','lin.m':'m','linear metre':'m','linear meter':'m','no.':'nr','nos.':'nr','each':'nr','ea':'nr','set':'nr'})[rawUnit]||rawUnit;
+  // Similar words do not establish the same operation or fixture specification.
+  if(/disposal|cart\s*away|haul|backfill|downlight|luminaire|light fixture|\bled\b/.test(d))return null;
++ if(hasSourceSpecificationScope(d))return sourceSpecificationMetric(d,u,takeoff,specificationFacts);
+  // Beam sides and beam undersides are different operations. The latter is
+  // already part of slab/beam soffit scope, never an extra beam-side quantity.
+  if(/\bformwork\b/.test(d)&&/\bbeams?\b/.test(d)&&/\b(?:soffits?|undersides?|bottoms?)\b/.test(d)&&!/\bslabs?\b/.test(d))return null;
+@@ -137,7 +142,7 @@
+   if(u===expected||expected==='nr'&&['nos','no','number','nr'].includes(u))return {...metric,factor:1};
+   return null;
+  }
+- const rules=[[/blinding/,'pcc_volume','m3'],[/\bexcavation\b/,'excavation_volume','m3'],[/formwork.*found/,'foundation_formwork_area','m2'],[/formwork.*column/,'column_formwork_area','m2'],[/formwork.*beam/,'beam_formwork_area','m2'],[/formwork.*slab/,'slab_formwork_area','m2'],[/reinforcement|reinforcing steel/,'rebar_kg','kg'],[/200.*block|block.*200/,'external_block_area','m2'],[/120.*block|block.*120/,'internal_block_area','m2'],[/wood.*floor|parquet/,'wood_floor_area','m2'],[/ceramic.*floor/,'ceramic_floor_area','m2'],[/epoxy.*floor|garage.*epoxy/,'epoxy_floor_area','m2'],[/plaster/,'plaster_area','m2'],[/internal wall.*paint|wall emulsion/,'paint_area','m2'],[/gypsum.*ceiling/,'gypsum_ceiling_area','m2'],[/glazed window|aluminium.*window/,'window_area','m2'],[/water closet|toilet pan/,'toilet_count','nr'],[/wash\s*basin/,'basin_count','nr'],[/shower/,'shower_count','nr'],[/socket/,'socket_count','nr'],[/lighting?\s+point|light\s+point/,'light_count','nr'],[/distribution board/,'distribution_board_count','nr'],[/smoke detector/,'smoke_detector_count','nr']];
++ const rules=[[/blinding/,'pcc_volume','m3'],[/\bexcavation\b/,'excavation_volume','m3'],[/formwork.*found/,'foundation_formwork_area','m2'],[/formwork.*column/,'column_formwork_area','m2'],[/formwork.*beam/,'beam_formwork_area','m2'],[/formwork.*slab/,'slab_formwork_area','m2'],[/reinforcement|reinforcing steel/,'rebar_kg','kg'],[/wood.*floor|parquet/,'wood_floor_area','m2'],[/ceramic.*floor/,'ceramic_floor_area','m2'],[/epoxy.*floor|garage.*epoxy/,'epoxy_floor_area','m2'],[/plaster/,'plaster_area','m2'],[/internal wall.*paint|wall emulsion/,'paint_area','m2'],[/gypsum.*ceiling/,'gypsum_ceiling_area','m2'],[/glazed window|aluminium.*window/,'window_area','m2'],[/water closet|toilet pan/,'toilet_count','nr'],[/wash\s*basin/,'basin_count','nr'],[/shower/,'shower_count','nr'],[/socket/,'socket_count','nr'],[/lighting?\s+point|light\s+point/,'light_count','nr'],[/distribution board/,'distribution_board_count','nr'],[/smoke detector/,'smoke_detector_count','nr']];
+  for(const [pattern,key,expected] of rules)if(pattern.test(d)){
+   if(expected==='kg'&&['ton','tonne','t'].includes(u))return {key,factor:.001};
+   if(u===expected||expected==='nr'&&['nos','no','number','point','nr'].includes(u))return {key,factor:1};
+@@ -145,8 +150,8 @@
+  }
+  return null;
+ }
+-export function pdfScheduledRule(takeoff,description,unit){
+- const metric=pdfRuleMetric(description,unit);if(!metric)return null;
++export function pdfScheduledRule(takeoff,description,unit,specificationFacts=undefined){
++ const metric=pdfRuleMetric(description,unit,takeoff,specificationFacts);if(!metric)return null;
+  const keys=metric.keys||[metric.key],rows=[];let value=0;
+  for(const key of keys){
+   const claims=takeoff.pdf_analysis?.quantity_evidence?.[key],quantity=takeoff.scheduled_quantities?.[key];
+@@ -155,5 +160,6 @@
+   rows.push(...claims);value+=quantity;
+  }
+  if(!pdfCatalogThicknessMatches(metric,rows)||!pdfCatalogHeightMatches(metric,rows,description))return null;
+- return {quantity:value*metric.factor,metricKey:metric.key,...(metric.keys?{metricKeys:keys}:{}),source:'pdf_schedule_evidence',measured:true,pages:[...new Set(rows.flatMap(r=>r.pages))],evidence:rows.map(r=>r.evidence).join(' | ')};
++ const specifications=metric.specificationFacts||[];
++ return {quantity:value*metric.factor,metricKey:metric.key,...(metric.keys?{metricKeys:keys}:{}),source:'pdf_schedule_evidence',measured:true,pages:[...new Set([...rows.flatMap(r=>r.pages),...specifications.map(f=>f.page)])],evidence:[...rows.map(r=>r.evidence),...specifications.map(f=>`Source specification p.${f.page}: ${f.quote}`)].join(' | ')};
+ }
+--- a/src/lib/pdfBoqCoverage.mjs
++++ b/src/lib/pdfBoqCoverage.mjs
+@@ -1,11 +1,13 @@
+ import {PDF_METRIC_UNITS, pdfScheduledRule} from './pdfTakeoffEvidence.mjs';
+ import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
++import {readPdfSourceSpecifications} from './pdfSourceSpecifications.mjs';
+ export {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
+ 
+ // A quantity must not be repeated across competing catalog variants. There is
+ // no basis for selecting a grade, diameter, capacity or finish from price alone.
+ export function planPdfCatalogBindings(takeoff, candidates) {
+   const byMetric = new Map(),byCode=new Map();
++  const specificationFacts=readPdfSourceSpecifications(takeoff);
+   const signatures = new Map(), conflictingCodes = new Set();
+   for (const item of candidates || []) {
+     if (!item || item.is_active === false) continue;
+@@ -14,7 +16,7 @@
+     const signature=JSON.stringify([String(item.description||'').trim().toLowerCase(),String(item.unit||'').trim().toLowerCase()]);
+     if(signatures.has(code)&&signatures.get(code)!==signature)conflictingCodes.add(code);
+     signatures.set(code,signature);
+-    const evidence = pdfScheduledRule(takeoff, item.description, item.unit);
++    const evidence = pdfScheduledRule(takeoff, item.description, item.unit,specificationFacts);
+     if (!evidence || evidence.quantity <= 0) continue;
+     byCode.set(code,evidence);
+     for(const key of evidence.metricKeys||[evidence.metricKey]){
+--- a/src/lib/pdfBoqCompletion.mjs
++++ b/src/lib/pdfBoqCompletion.mjs
+@@ -1,4 +1,5 @@
+ import {pdfRuleMetric} from './pdfTakeoffEvidence.mjs';
++import {readPdfSourceSpecifications,resolvedPdfSpecifications,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
+ import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
+ 
+ const requirements={
+@@ -19,9 +20,11 @@
+ export function annotatePdfBoqCompletion(items,takeoff,catalog=[]){
+   if(!takeoff.pdf_analysis)return {items,summary:null,gaps:[]};
+   const candidates=new Map();
++  const specificationFacts=readPdfSourceSpecifications(takeoff);
++  const specificationConflicts=pdfSpecificationConflicts(specificationFacts);
+   for(const p of catalog){
+     if(p?.is_active===false)continue;
+-    const m=pdfRuleMetric(p?.description,p?.unit);if(!m)continue;
++    const m=pdfRuleMetric(p?.description,p?.unit,takeoff,specificationFacts);if(!m)continue;
+     const rows=candidates.get(m.key)||[];
+     rows.push({code:p.item_code||p.itemCode,unit:p.unit,rateAvailable:!resolvePdfCatalogRate(p).missingRate});candidates.set(m.key,rows);
+   }
+@@ -39,12 +42,16 @@
+     summary.unpricedMeasuredOperations++;
+     const key=item.pdfEvidence?.metricKey||String(item.itemCode||'').replace(/^PDF-/,'').toLowerCase();
+     const matching=candidates.get(key)||[];
+-    const required=/_volume$/.test(key)&&key!=='excavation_volume'?['Concrete grade/specification for this element','Applicable own catalog or project rate']:
++    let required=/_volume$/.test(key)&&key!=='excavation_volume'?['Concrete grade/specification for this element','Applicable own catalog or project rate']:
+       requirements[key]||['Applicable scope/material specification and matching own catalog or project rate'];
+-    const code=matching.length&&matching.every(p=>!p.rateAvailable)?'catalog_rate_missing':matching.length>1?'catalog_selection_required':'specification_or_catalog_match_required';
+-    const completion={code,metric:key,required_information:required,candidate_codes:matching.map(p=>p.code)};
++    let code=matching.length&&matching.every(p=>!p.rateAvailable)?'catalog_rate_missing':matching.length>1?'catalog_selection_required':'specification_or_catalog_match_required';
++    const known=resolvedPdfSpecifications(takeoff,key,specificationFacts),conflicts=specificationConflicts.filter(f=>f.metric===key);
++    if(conflicts.length){code='source_specification_breakdown_required';required=['Provide disjoint measured quantities for the mixed/conflicting source specifications before selecting rates.'];}
++    else if(known.length&&!matching.length){code='source_specification_without_catalog_match';required=['Select or provide an applicable rate matching the known source specification; the source quantity is retained.'];}
++    const completion={code,metric:key,required_information:required,candidate_codes:matching.map(p=>p.code),...(known.length?{source_specifications:known}:{}),...(conflicts.length?{specification_conflicts:conflicts}: {})};
+     gaps.push({itemCode:item.itemCode,description:item.description,quantity,unit:item.unit,...completion});
+-    const note=`[BOQ GAP] ${code}: ${required.join('; ')}.${matching.length?' Catalog candidates: '+matching.map(p=>p.code).join(', ')+'.':''} [/BOQ GAP]`;
++    const sourceNote=known.length?' Source: '+known.map(f=>`${f.property}=${f.value} (pages ${f.pages.join(', ')})`).join('; ')+'.':'';
++    const note=`[BOQ GAP] ${code}: ${required.join('; ')}.${matching.length?' Catalog candidates: '+matching.map(p=>p.code).join(', ')+'.':''}${sourceNote} [/BOQ GAP]`;
+     return {...item,completion,notes:[existingNotes,note].filter(Boolean).join(' ')};
+   });
+   summary.knownMeasuredOperationsHaveRates=summary.pricedMeasuredOperations>0&&summary.unpricedMeasuredOperations===0;
+--- a/src/lib/pdfNativeWallGeometry.mjs
++++ b/src/lib/pdfNativeWallGeometry.mjs
+@@ -33,13 +33,14 @@
+   if(text?.status!=='readable'||graphics?.status!=='readable'||schedule?.status!=='read')throw Error('Readable plan text, vectors and complete opening table are required');
+   if(graphics.strokes.length>5000||schedule.rows.length>300)throw Error('Native wall graph size limit; independent extraction required');
+   const all=text.spans.map(s=>s.text).join(' '),envelopes=[...all.matchAll(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
+-  if(envelopes.length!==1||!/all dimensions (?:in|are) met(?:re|er)s\b/i.test(all)||!/datum\s*:\s*wall cent(?:re|er)lines/i.test(all))throw Error('Explicit metric envelope and wall-centreline datum are required');
+-  const ew=Number(envelopes[0][1]),eh=Number(envelopes[0][2]),ext=all.match(/External:\s*(\d+(?:\.\d+)?)\s*mm/i),int=all.match(/Internal:\s*(\d+(?:\.\d+)?)\s*mm/i);
+-  if(!(ew>0&&eh>0)||!ext||!int||Number(ext[1])<=Number(int[1]))throw Error('Two explicit distinct source wall thickness classes are required');
++  const declared=[...all.matchAll(/all dimensions (?:in|are)\s*(millimet(?:re|er)s|centimet(?:re|er)s|met(?:re|er)s|mm|cm|m)\b/gi)].map(m=>/^milli|^mm$/i.test(m[1])?.001:/^centi|^cm$/i.test(m[1])?.01:1);
++  if(envelopes.length!==1||!declared.length||new Set(declared).size!==1||!/datum\s*:\s*wall cent(?:re|er)lines/i.test(all))throw Error('Explicit metric envelope and wall-centreline datum are required');
++  const dimensionFactor=declared[0],ew=Number(envelopes[0][1])*dimensionFactor,eh=Number(envelopes[0][2])*dimensionFactor,ext=all.match(/External:\s*(\d+(?:\.\d+)?)\s*mm/i),int=all.match(/Internal:\s*(\d+(?:\.\d+)?)\s*mm/i);
++  if(!(ew>0&&eh>0)||!ext||!int||!(Number(ext[1])>0&&Number(int[1])>0)||Number(ext[1])===Number(int[1]))throw Error('Two explicit distinct source wall thickness classes are required');
+   const styles=new Map();for(const s of graphics.strokes){if(s.dash?.length)continue;const id=s.width.toFixed(5)+'|'+s.color.map(n=>n.toFixed(5)).join(',');if(!styles.has(id))styles.set(id,{width:s.width,color:s.color,paths:[]});styles.get(id).paths.push(s);}
+   if(styles.size>50)throw Error('Excessive source line styles');
+   const pairs=[];for(const outer of styles.values())for(const inner of styles.values()){
+-   if(outer.width<=inner.width||JSON.stringify(outer.color)!==JSON.stringify(inner.color)||Math.abs(outer.width/inner.width-Number(ext[1])/Number(int[1]))>.01)continue;
++   if(!(outer.width>0&&inner.width>0)||outer.width===inner.width||JSON.stringify(outer.color)!==JSON.stringify(inner.color)||Math.abs(outer.width/inner.width-Number(ext[1])/Number(int[1]))>.01)continue;
+    if(outer.paths.some(p=>p.curved)||inner.paths.some(p=>p.curved))continue;
+    const pts=outer.paths.flatMap(s=>s.segments.flatMap(l=>[l.a,l.b]));if(!pts.length)continue;
+    const x0=Math.min(...pts.map(p=>p.x)),x1=Math.max(...pts.map(p=>p.x)),y0=Math.min(...pts.map(p=>p.y)),y1=Math.max(...pts.map(p=>p.y)),sx=(x1-x0)/ew,sy=(y1-y0)/eh;
+@@ -48,8 +49,8 @@
+   if(pairs.length!==1)throw Error('Wall stroke classes or envelope calibration are ambiguous');
+   const {outer,inner,x0,y0,scale}=pairs[0],toMetres=p=>({x:round((p.x-x0)/scale),y:round((p.y-y0)/scale)});
+   const numeric=text.spans.filter(s=>/^\d+(?:\.\d+)?$/.test(s.text));
+-  const widthAnchors=numeric.filter(s=>near(Number(s.text),ew)&&Math.abs(s.angle||0)<EPS&&s.y<y0&&y0-s.y<6*s.height&&Math.abs(s.x-(x0+ew*scale/2))<2*s.height);
+-  const heightAnchors=numeric.filter(s=>near(Number(s.text),eh)&&Math.abs(Math.abs(s.angle||0)-Math.PI/2)<EPS&&s.x<x0&&x0-s.x<6*s.height&&Math.abs(s.y-(y0+eh*scale/2))<2*s.height);
++  const widthAnchors=numeric.filter(s=>near(Number(s.text)*dimensionFactor,ew)&&Math.abs(s.angle||0)<EPS&&s.y<y0&&y0-s.y<6*s.height&&Math.abs(s.x-(x0+ew*scale/2))<2*s.height);
++  const heightAnchors=numeric.filter(s=>near(Number(s.text)*dimensionFactor,eh)&&Math.abs(Math.abs(s.angle||0)-Math.PI/2)<EPS&&s.x<x0&&x0-s.x<6*s.height&&Math.abs(s.y-(y0+eh*scale/2))<2*s.height);
+   if(widthAnchors.length!==1||heightAnchors.length!==1)throw Error('Independent overall dimension anchors do not confirm the envelope scale');
+   const spans=text.spans.filter(s=>Math.abs(s.angle||0)<EPS).map(s=>({...s,...toMetres(s),height:s.height/scale}));
+   const groups=new Map();
+@@ -105,7 +106,7 @@
+    face.opening_ids=bindings.filter(o=>{const g=o.gap,p=g.g.axis==='h'?{x:(g.a+g.b)/2,y:g.g.fixed}:{x:g.g.fixed,y:(g.a+g.b)/2};return face.polygon.some((a,i)=>dist(p,a,face.polygon[(i+1)%face.polygon.length])<EPS);}).map(o=>o.opening.id);
+   }
+   for(const d of discarded){const enclosing=faces.filter(f=>f.tags.length===1&&contains(f.polygon,d.a)&&contains(f.polygon,d.b));if(enclosing.length!==1)throw Error('Isolated annotation is not inside one tagged source room');d.room_tag=enclosing[0].tags[0];}
+-  Object.assign(audit,{status:'provisional',calibration:{width_m:ew,height_m:eh,points_per_m:scale,origin:{x:x0,y:y0}},wall_styles:{external:outer.width,internal:inner.width},discarded_annotations:discarded,
++  Object.assign(audit,{status:'provisional',calibration:{width_m:ew,height_m:eh,points_per_m:scale,source_dimension_factor_to_m:dimensionFactor,origin:{x:x0,y:y0}},wall_styles:{external:outer.width,internal:inner.width},discarded_annotations:discarded,
+    opening_bindings:bindings.map(o=>({id:o.opening.id,host:o.opening.wall_id,gap_width_m:o.gap.width})),wall_count:walls.length,requires_review:true});
+   return {status:'provisional',walls,faces,audit};
+  }catch(e){audit.reason=e.message;return {status:'pending',walls:[],faces:[],audit};}
+--- a/src/lib/pdfNativeSourceBasis.mjs
++++ b/src/lib/pdfNativeSourceBasis.mjs
+@@ -11,12 +11,12 @@
+   for(let i=0;i<headers.length;i++){const key=headers[i][1].trim(),value=text.slice(headers[i].index+headers[i][0].length,headers[i+1]?.index??text.length).trim();if(!sections.has(key))sections.set(key,[]);sections.get(key).push({text:value,page:p.pageNumber});}
+  }
+  const get=key=>{const rows=sections.get(key)||[];return rows.length&&new Set(rows.map(r=>r.text)).size===1?{text:rows[0].text,pages:rows.map(r=>r.page)}:null;};
+- const dimension=(section,regex)=>{const s=get(section),match=s?.text.match(regex);return match?source(Number(match[1]),s.pages,`${section}: ${match[0]}`):empty();};
++ const dimension=(section,regex)=>{const s=get(section),match=s?.text.match(regex);return match?source(Number(match[1])*({mm:.001,cm:.01,m:1}[match[2]]||1),s.pages,`${section}: ${match[0]}`):empty();};
+  const flag=(section,regex)=>{const s=get(section);return s&&regex.test(s.text)?source(true,s.pages,`${section}: ${s.text}`):empty();};
+- const wallHeight=dimension('WALLS',/clear height\s*(\d+(?:\.\d+)?)\s*m\b/i),plaster=get('PLASTER'),ceilings=get('CEILINGS'),wet=get('WET ROOMS'),kitchen=get('KITCHEN');
++ const wallHeight=dimension('WALLS',/clear height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i),plaster=get('PLASTER'),ceilings=get('CEILINGS'),wet=get('WET ROOMS'),kitchen=get('KITCHEN');
+  const rules={wall_height:wallHeight,plaster_internal_faces:plaster&&/both faces of internal walls/i.test(plaster.text)?source(2,plaster.pages,plaster.text):empty(),
+   plaster_external_faces:plaster&&/inner face of external walls/i.test(plaster.text)?source(1,plaster.pages,plaster.text):empty(),
+-  wet_tile_height:dimension('WET ROOMS',/\btile height\s*(\d+(?:\.\d+)?)\s*m\b/i),wet_waterproof_height:dimension('WET ROOMS',/wall waterproofing\s+height\s*(\d+(?:\.\d+)?)\s*m\b/i),
++  wet_tile_height:dimension('WET ROOMS',/\btile height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i),wet_waterproof_height:dimension('WET ROOMS',/wall waterproofing\s+height\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)\b/i),
+   backsplash_length:dimension('KITCHEN',/Backsplash\s+is\s+\d+(?:\.\d+)?\s+high\s+along\s*(\d+(?:\.\d+)?)\s*m\b/i),
+   backsplash_height:kitchen&&/Backsplash\s+is\s+(\d+(?:\.\d+)?)\s+high\s+along\s*\d+(?:\.\d+)?\s*m\b/i.test(kitchen.text)?source(Number(kitchen.text.match(/Backsplash\s+is\s+(\d+(?:\.\d+)?)/i)[1]),kitchen.pages,kitchen.text):empty(),
+   paint_uses_plastered_faces:plaster&&/both faces of internal walls plus inner face of external walls/i.test(plaster.text)&&/Interior paint excludes/i.test(plaster.text)?source(true,plaster.pages,plaster.text):empty(),
+--- a/tools/check-pdf-rate-catalog.mjs
++++ b/tools/check-pdf-rate-catalog.mjs
+@@ -14,8 +14,11 @@
+ import {parseCsv,rateCatalogFromCsv} from '../src/lib/boqRateCsv.mjs';
+ 
+ export async function runOfflinePdfCatalogCheck(takeoff,rateCsv){
++  return runOfflinePdfCatalog(takeoff,rateCatalogFromCsv(rateCsv));
++}
++export async function runOfflinePdfCatalog(takeoff,prices){
+   if(!takeoff?.pdf_analysis?.quantity_evidence)throw Error('A PDF report with source quantity evidence is required.');
+-  const prices=rateCatalogFromCsv(rateCsv),tables={price_items:structuredClone(prices),boq_rules:[],boq_sections:[]};
++  const tables={price_items:structuredClone(prices),boq_rules:[],boq_sections:[]};
+   let reads=0,modelAttempts=0,databaseWrites=0;
+   const forbidden=()=>{throw Error('Offline check forbids model calls and database writes.');};
+   const forbiddenModel=()=>{modelAttempts++;return forbidden();},forbiddenWrite=()=>{databaseWrites++;return forbidden();};
+--- /dev/null
++++ b/tests/pdf-source-specifications.test.mjs
+@@ -0,0 +1,113 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import {createRequire} from 'node:module';
++import vm from 'node:vm';
++import {readPdfSourceSpecifications,pdfSpecificationConflicts} from '../src/lib/pdfSourceSpecifications.mjs';
++import {pdfScheduledRule} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogBindings} from '../src/lib/pdfBoqCoverage.mjs';
++import {measureNativeWallFloor} from '../src/lib/pdfNativeWallGeometry.mjs';
++import {buildNativePdfSourceBasis} from '../src/lib/pdfNativeSourceBasis.mjs';
++import {runOfflinePdfCatalog} from '../tools/check-pdf-rate-catalog.mjs';
++const require=createRequire(import.meta.url);let pdfLib;try{pdfLib=require('pdf-lib');}catch{pdfLib=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/pdf-lib');}
++const text=vm.createContext({...pdfLib,TextDecoder});
++vm.runInContext(readFileSync('src/services/pdfNativeTextService.mjs','utf8').replace(/^import[^\n]*\n/gm,'').replace(/export /g,'')+'\nthis.read=extractNativePdfText;',text);
++const specPage=(lines,page=3,scope='project')=>({pageNumber:page,page_evidence:{kind:'specification',scope_id:scope},native_text_evidence:{status:'readable',spans:lines.map((text,i)=>({text,x:30,y:740-20*i,height:10}))}});
++const units={external_block_area:'m2',internal_block_area:'m2',column_volume:'m3',beam_volume:'m3',foundation_volume:'m3',water_pipe_length:'m',waste_pipe_length:'m',ac_count:'nr'};
++function takeoff(lines,quantities){return {...quantities,floor_area:80,rooms:2,scheduled_quantities:{...quantities},page_results:[],
++ pdf_analysis:{quantity_evidence:Object.fromEntries(Object.entries(quantities).map(([key,value])=>[key,[{key,value,unit:units[key],scope_id:'project',pages:[1,2],evidence:`Independently defined source measurement for ${key}: ${value} ${units[key]}`}]])),specification_facts:readPdfSourceSpecifications({page_results:[specPage(lines)]})}};}
++const catalog=[['B175','175mm concrete blockwork','m2',63],['B100','100mm concrete blockwork','m2',45],['C25','C25 RC concrete including placing','m3',410],['C30','C30 RC concrete including placing','m3',460],
++ ['P20','PPR water supply pipe 20mm','m',20],['P25','PPR water supply pipe 25mm','m',25],['P32','PPR water supply pipe 32mm','m',32],
++ ['W50','UPVC waste pipe 50mm','m',30],['W110','UPVC waste pipe 110mm','m',65],['AC15','Wall mounted split air conditioning unit 1.5 ton','nos',3300],['AC2','Wall mounted split air conditioning unit 2 ton','nos',4200]].map(([item_code,description,unit,standard_rate])=>({item_code,description,unit,standard_rate,section_code:'REAL-CATALOG-TEST',is_active:true}));
++const projectA=()=>takeoff(['External walls: 175 mm; Internal partitions: 100 mm','Foundations: C25 reinforced concrete','Columns and beams: C30 concrete','Water supply pipes: PPR DN25','Waste pipes: UPVC DN110','Split AC units: 2 TR'],
++ {external_block_area:48*3.4-12,internal_block_area:31*3.4-8,foundation_volume:11*.9*.9*.35,column_volume:12*.25*.25*3.4,beam_volume:37*.2*.3,water_pipe_length:55,waste_pipe_length:39,ac_count:6});
++const projectB=()=>takeoff(['External walls: 10 cm; Internal partitions: 0.175 m','Foundations: C30 reinforced concrete','Columns and beams: C25 concrete','Water supply pipes: PPR DN20','Waste pipes: UPVC DN50','Split AC units: 1.5 TR'],
++ {external_block_area:51*2.8-13,internal_block_area:26*2.8-10,foundation_volume:4*1.1*1.1*.4,column_volume:8*.3*.4*2.8,beam_volume:19*.25*.2,water_pipe_length:31,waste_pipe_length:22,ac_count:4});
++test('two independent source PDFs provide different actual specification facts through the native reader',async()=>{
++ for(const [factory,expected] of [[projectA,175],[projectB,100]]){
++  const t=factory(),doc=await pdfLib.PDFDocument.create(),page=doc.addPage([620,800]),font=await doc.embedFont(pdfLib.StandardFonts.Helvetica);
++  let y=740;for(const fact of t.pdf_analysis.specification_facts){page.drawText(fact.quote,{x:30,y,size:10,font});y-=20;}
++  const pdf=await pdfLib.PDFDocument.load(await doc.save()),native=text.read(pdf,0);
++  assert.equal(native.status,'readable');const facts=readPdfSourceSpecifications({page_results:[{pageNumber:1,page_evidence:{kind:'specification',scope_id:'project'},native_text_evidence:native}]});
++  assert.ok(facts.some(f=>f.metric==='external_block_area'&&f.value===expected));assert.ok(facts.some(f=>f.property==='concrete_grade'));
++ }
++});
++test('the normal server catalog route prices two different projects from source specifications, with no CSV or model call',async()=>{
++ const original=structuredClone(catalog);
++ for(const [factory,externalCode,pipeCode,acCode,gradeColumn] of [[projectA,'B175','P25','AC2','C30'],[projectB,'B100','P20','AC15','C25']]){
++  const t=factory(),before=structuredClone(t),r=await runOfflinePdfCatalog(t,catalog),items=r.boq.items;
++  assert.equal(r.modelCalls,0);assert.equal(r.databaseWrites,0);assert.equal(r.boq.summary.provisionalItems,7);
++  const ext=items.find(i=>i.itemCode===externalCode);assert.equal(ext.quantity,t.external_block_area);assert.equal(ext.pdfEvidence.metricKey,'external_block_area');
++  assert.equal(items.find(i=>i.itemCode===pipeCode).quantity,t.water_pipe_length);assert.equal(items.find(i=>i.itemCode===acCode).quantity,t.ac_count);
++  const concrete=items.find(i=>i.itemCode===gradeColumn);assert.ok(Math.abs(concrete.quantity-t.column_volume-t.beam_volume)<1e-9);
++  assert.deepEqual(concrete.pdfEvidence.metricKeys,['column_volume','beam_volume']);assert.ok(concrete.notes.includes('Source specification'));
++  assert.equal(items.filter(i=>i.quantity>0&&i.pdfEvidence?.metricKeys?.includes('column_volume')).length,1);
++  assert.equal(r.boq.summary.verifiedSubtotal,0);assert.deepEqual(t,before);
++ }
++ assert.deepEqual(catalog,original);
++});
++test('wall class follows the drawing thickness, including reversal, rather than fixed 200/120 values',()=>{
++ const a=projectA(),b=projectB();
++ assert.equal(pdfScheduledRule(a,'175 mm concrete block wall','m2').metricKey,'external_block_area');
++ assert.equal(pdfScheduledRule(b,'175 mm concrete block wall','m2').metricKey,'internal_block_area');
++ assert.equal(pdfScheduledRule(a,'200 mm blockwork','m2'),null);assert.equal(pdfScheduledRule(a,'External 100mm blockwork','m2'),null);
++ const none=takeoff([],{external_block_area:91,internal_block_area:37});assert.equal(pdfScheduledRule(none,'200mm blockwork','m2'),null);
++});
++test('equal thicknesses, mixed grades/capacities and source material/diameter mismatches are withheld',()=>{
++ const t=projectA();t.pdf_analysis.specification_facts=readPdfSourceSpecifications({page_results:[specPage(['External: 100 mm; Internal: 100 mm','Columns C30 concrete','Columns C25 concrete','Water supply pipes PPR DN25','Split AC units 1.5 TR','Split AC units 2 TR'])]});
++ assert.equal(pdfScheduledRule(t,'100mm concrete blockwork','m2'),null);assert.equal(pdfScheduledRule(t,'External 100mm blockwork','m2').quantity,t.external_block_area);
++ assert.equal(pdfScheduledRule(t,'C30 concrete for columns','m3'),null);assert.equal(pdfScheduledRule(t,'Split AC unit 2 ton','nr'),null);
++ assert.equal(pdfScheduledRule(t,'UPVC water pipe 25mm','m'),null);assert.equal(pdfScheduledRule(t,'PPR water pipe 20mm','m'),null);
++ assert.ok(pdfSpecificationConflicts(t.pdf_analysis.specification_facts).some(c=>c.metric==='column_volume'));
++});
++test('one floor specification cannot be applied to a whole-project total unless all selected floors are covered',()=>{
++ const t=projectA();t.pdf_analysis.selected_floor_pages=[{page:1,scope:'floor:0'},{page:2,scope:'floor:1'}];
++ t.pdf_analysis.specification_facts=readPdfSourceSpecifications({page_results:[specPage(['Columns C30 concrete'],3,'floor:0')]});
++ assert.equal(pdfScheduledRule(t,'C30 concrete for columns','m3'),null);
++ t.pdf_analysis.specification_facts=readPdfSourceSpecifications({page_results:[specPage(['Columns C30 concrete'],3,'floor:0'),specPage(['Columns C30 concrete'],4,'floor:1')]});
++ assert.equal(pdfScheduledRule(t,'C30 concrete for columns','m3').quantity,t.column_volume);
++ t.pdf_analysis.specification_facts=readPdfSourceSpecifications({page_results:[specPage(['GF columns C30 concrete'])]});
++ assert.equal(pdfScheduledRule(t,'C30 concrete for columns','m3'),null);
++});
++test('native source facts take precedence over stale or forged summary specifications',()=>{
++ const t=projectA(),forged={...t.pdf_analysis.specification_facts.find(f=>f.metric==='column_volume'),value:'C25'};
++ t.pdf_analysis.specification_facts=[forged];assert.equal(pdfScheduledRule(t,'C25 concrete for columns','m3'),null);
++ t.page_results=[specPage(['Columns C40 concrete'])];assert.equal(pdfScheduledRule(t,'C30 concrete for columns','m3'),null);
++ assert.equal(pdfScheduledRule(t,'C40 concrete for columns','m3').quantity,t.column_volume);
++ t.page_results[0].native_text_evidence.status='unsupported';assert.equal(pdfScheduledRule(t,'C25 concrete for columns','m3'),null);
++});
++test('duplicate commercial variants are still ambiguous even when the drawing specification is known',()=>{
++ const t=projectA(),a=catalog.find(i=>i.item_code==='P25');
++ const p=planPdfCatalogBindings(t,[a,{...a,item_code:'ALTERNATIVE',standard_rate:999}]);assert.equal(p.bindings.size,0);assert.ok(p.warnings.length);
++ assert.equal(pdfScheduledRule(t,'C30 concrete for columns 300mm','m3'),null);
++});
++test('known specifications without a matching price remain measured and explain the actual catalog gap',async()=>{
++ const t=projectA();t.pdf_analysis.specification_facts=readPdfSourceSpecifications({page_results:[specPage(['Columns: C35 concrete'])]});
++ const result=await runOfflinePdfCatalog(t,catalog),row=result.boq.items.find(i=>i.pdfEvidence?.metricKey==='column_volume');
++ assert.equal(row.quantity,t.column_volume);assert.equal(row.rate,0);assert.equal(row.completion.code,'source_specification_without_catalog_match');
++ assert.equal(row.completion.source_specifications[0].value,'C35');assert.ok(row.notes.includes('concrete_grade=C35'));
++ assert.ok(!row.completion.required_information.some(s=>s.startsWith('Concrete grade')));
++});
++test('native wall and wet-finish rule heights convert explicitly printed mm and cm to metres',()=>{
++ const page=specPage(['WALLS: clear height 2800 mm','WET ROOMS: tile height 240 cm; Wall waterproofing height 1800 mm']);
++ const basis=buildNativePdfSourceBasis([page],s=>s).basis;
++ assert.ok(Math.abs(basis.rules.wall_height.value-2.8)<1e-9);assert.equal(basis.rules.wet_tile_height.value,2.4);assert.equal(basis.rules.wet_waterproof_height.value,1.8);
++ assert.ok(basis.rules.wall_height.evidence.includes('2800 mm'));
++});
++function warehouse(unit='mm',external=150,internal=200){
++ const factor={mm:1000,cm:100,m:1}[unit]||1,x0=100,y0=200,scale=20;
++ const segment=(a,b)=>({a:{x:x0+a[0]*scale,y:y0+a[1]*scale},b:{x:x0+b[0]*scale,y:y0+b[1]*scale}});
++ const span=(text,x,y,angle=0)=>({text,x,y,height:3,angle});
++ const page={pageNumber:1,native_plan_text:{status:'readable',spans:[span(`${10*factor} x ${8*factor} envelope. All dimensions are ${unit}. Datum: wall centrelines. External: ${external} mm; Internal: ${internal} mm.`,100,400),
++ span(String(10*factor),200,190),span(String(8*factor),90,280,Math.PI/2),span('W101 Store',130,260),span('W102 Workshop',240,260)]},native_graphics:{status:'readable',strokes:[
++ {width:external/100,color:[0],dash:[],curved:false,segments:[segment([0,0],[10,0]),segment([10,0],[10,8]),segment([10,8],[0,8]),segment([0,8],[0,0])]},
++ {width:internal/100,color:[0],dash:[],curved:false,segments:[segment([4,0],[4,8])]}]}};
++ return measureNativeWallFloor(page,{status:'read',rows:[]});
++}
++test('independent 10x8 warehouse geometry works in mm, cm and m with internal walls thicker than external walls',()=>{
++ for(const unit of ['mm','cm','m']){
++  const r=warehouse(unit);assert.equal(r.status,'provisional',r.audit.reason);assert.equal(r.walls.filter(w=>w.classification==='external').reduce((n,w)=>n+w.length,0),36);
++  assert.equal(r.walls.filter(w=>w.classification==='internal').reduce((n,w)=>n+w.length,0),8);assert.deepEqual(r.faces.map(f=>f.area).sort((a,b)=>a-b),[32,48]);
++ }
++ assert.equal(warehouse('mm',175,250).status,'provisional');assert.equal(warehouse('feet').status,'pending');assert.equal(warehouse('mm',150,150).status,'pending');
++});
+--- a/tests/pdf-catalog-rules.test.mjs
++++ b/tests/pdf-catalog-rules.test.mjs
+@@ -159,13 +159,16 @@
+  const before=planPdfCatalogBindings(observed,realPrices);assert.ok(before.bindings.has('PNT-008'));assert.ok(before.bindings.has('PNT-010'));assert.ok(!before.bindings.has('CON-008'));
+  const plan=planPdfCatalogRules(observed,[],realPrices);
+  assert.equal(plan.catalogAudit.activeEntries,3762);assert.equal(plan.catalogAudit.commercialCandidates,52);assert.equal(plan.catalogAudit.unconfiguredEntries,3710);
+- assert.equal(plan.bindings.size,19);assert.equal(plan.bindings.has('PNT-008'),false);
++ assert.equal(plan.bindings.size,18);assert.equal(plan.bindings.has('PNT-008'),false);
++ // C15 is a catalog grade, not a grade declared by this source PDF.
++ // The previous match silently used that specification for generic blinding.
++ assert.equal(plan.bindings.has('CON-001'),false);
+  const {boq}=await run(realPrices);assert.equal(boq.pdfCatalogAudit.unconfiguredEntries,3710);
+  for(const [code,quantity,rate] of [['SITE-001',72.2,39],['CON-004',12.16813827160494,3550],['CON-005',75.6,78],['CON-006',138.06,90],['CON-007',118.5,94],['CON-008',360,84],['MAS-003',305.72,66],['FIN-001',978.62,27],['FIN-005',312,80]]){
+   const row=boq.items.find(i=>i.itemCode===code);assert.ok(row,code);close(row.quantity,quantity);close(row.rate,rate);
+  }
+- assert.equal(boq.items.filter(i=>i.quantity>0&&i.rate>0).length,19);close(boq.summary.provisionalSubtotal,265239.95);assert.equal(boq.summary.verifiedSubtotal,0);
+- const exported=buildBoqExport(boq.items,{vatPercentage:5});assert.equal(exported.summary.find(r=>r[0].startsWith('BOQ budget total'))[1],'278501.95');
++ assert.equal(boq.items.filter(i=>i.quantity>0&&i.rate>0).length,18);close(boq.summary.provisionalSubtotal,263274.75);assert.equal(boq.summary.verifiedSubtotal,0);
++ const exported=buildBoqExport(boq.items,{vatPercentage:5});assert.equal(exported.summary.find(r=>r[0].startsWith('BOQ budget total'))[1],'276438.49');
+  for(const [key,quantity] of [['epoxy_floor_area',28],['internal_block_area',336.45],['ceiling_paint_area',360],['wet_wall_tile_area',117.24],['wet_wall_waterproofing_area',97.92]]){
+   const row=boq.items.find(i=>i.pdfEvidence?.metricKey===key);assert.ok(row,key);close(row.quantity,quantity);assert.equal(row.rate,0);
+  }
+@@ -175,8 +178,8 @@
+  // Also exercise existing formulas for all configured items; formula contents
+  // are test scaffolding because the catalog export does not include boq_rules.
+  const configuredRules=realPrices.filter(i=>i.section_code).map(rule);
+- const withRules=await run(realPrices,configuredRules);close(withRules.boq.summary.provisionalSubtotal,265239.95);
+- assert.equal(withRules.boq.items.filter(i=>i.quantity>0&&i.rate>0).length,19);
+- assert.equal(withRules.boq.pdfCompletion.unpricedMeasuredOperations,31);assert.equal(withRules.boq.pdfCompletion.catalogOptionsWithoutQuantity,33);
++ const withRules=await run(realPrices,configuredRules);close(withRules.boq.summary.provisionalSubtotal,263274.75);
++ assert.equal(withRules.boq.items.filter(i=>i.quantity>0&&i.rate>0).length,18);
++ assert.equal(withRules.boq.pdfCompletion.unpricedMeasuredOperations,32);assert.equal(withRules.boq.pdfCompletion.catalogOptionsWithoutQuantity,34);
+  assert.ok(withRules.boq.items.find(i=>i.pdfEvidence?.metricKey==='internal_block_area').notes.includes('[BOQ GAP]'));
+ });
+--- a/tests/boq-pdf-price-selection.test.mjs
++++ b/tests/boq-pdf-price-selection.test.mjs
+@@ -91,11 +91,11 @@
+  const retained=retainUnboundPdfQuantities(bound,observed).items;
+  const opts=Array.from({length:33},(_,i)=>({itemCode:`CAT-${i}`,quantity:0,rate:0,status:'quantity_pending'}));
+  const audited=annotatePdfBoqCompletion([...retained,...opts],observed,prices);
+- assert.equal(audited.summary.pricedMeasuredOperations,19);assert.equal(audited.summary.unpricedMeasuredOperations,31);assert.equal(audited.summary.catalogOptionsWithoutQuantity,33);assert.equal(audited.summary.completePricedBudget,false);
++ assert.equal(audited.summary.pricedMeasuredOperations,18);assert.equal(audited.summary.unpricedMeasuredOperations,32);assert.equal(audited.summary.catalogOptionsWithoutQuantity,33);assert.equal(audited.summary.completePricedBudget,false);
+  assert.equal(audited.gaps.find(g=>g.metric==='epoxy_floor_area').code,'catalog_rate_missing');assert.equal(audited.gaps.find(g=>g.metric==='ceiling_paint_area').code,'catalog_rate_missing');
+  assert.ok(audited.gaps.find(g=>g.metric==='foundation_volume').required_information.some(t=>t.includes('grade')));
+  assert.ok(audited.items.find(i=>i.itemCode==='CAT-0').notes.includes('not evidence of an additional missing project scope'));
+- assert.equal(buildBoqExport(audited.items,{vatPercentage:5}).sums.provisional.toFixed(2),'265239.95');
++ assert.equal(buildBoqExport(audited.items,{vatPercentage:5}).sums.provisional.toFixed(2),'263274.75');
+  const repeated=annotatePdfBoqCompletion(audited.items,observed,prices);assert.deepEqual(repeated.summary,audited.summary);assert.equal(repeated.items.find(i=>i.itemCode==='CAT-0').notes,audited.items.find(i=>i.itemCode==='CAT-0').notes);
+ });
+ test('catalog GET serialization exposes existing component rates without any write or model call',async()=>{
+--- a/tests/boq-project-rate-import.test.mjs
++++ b/tests/boq-project-rate-import.test.mjs
+@@ -69,7 +69,7 @@
+   const reopened=s.normalize(stored.items),steel=reopened.find(i=>i.projectRateSelection?.itemCode==='REB-01');assert.equal(steel.rate,4.5);assert.equal(steel.unit,'kg');
+   assert.equal(summary(reopened).sums.provisional.toFixed(2),'492535.51');
+   s.projectRateImport=stored.projectRateImport;s.items=reopened;s.refresh();s.restore();
+-  assert.equal(s.projectRateImport,null);assert.equal(s.items.length,before.length);assert.equal(summary(s.items).sums.provisional.toFixed(2),'265239.95');
++  assert.equal(s.projectRateImport,null);assert.equal(s.items.length,before.length);assert.equal(summary(s.items).sums.provisional.toFixed(2),'263274.75');
+   assert.equal(JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`)).projectRateImport,null);assert.equal(drawingWorkflowState(s.projectId).active,null);
+ });
+ test('actual Generate BOQ handler reapplies the project CSV for the same PDF, with a fresh restore point',async()=>{
+@@ -89,7 +89,7 @@
+ });
+ test('partial CSV keeps unrelated prices visible, zero means rate pending, and competing/answer files cannot fabricate priced scope',()=>{
+   const rows=baseline(),csv='code,description_en,unit,rate_aed\nPL,Internal plaster,m2,0';
+-  const result=applyProjectRateCsv(rows,takeoff,csv);assert.equal(result.summary.appliedRows,1);assert.equal(result.summary.otherPricedRowsRetained,18);
++  const result=applyProjectRateCsv(rows,takeoff,csv);assert.equal(result.summary.appliedRows,1);assert.equal(result.summary.otherPricedRowsRetained,17);
+   const plaster=result.items.find(i=>i.projectRateSelection);assert.equal(plaster.quantity,978.6199999999997);assert.equal(plaster.rate,0);assert.equal(plaster.status,'measured_rate_pending');
+   assert.throws(()=>applyProjectRateCsv(rows,takeoff,'code,description_en,unit,rate_aed,quantity\nPL,Internal plaster,m2,30,999'));
+   assert.throws(()=>applyProjectRateCsv(rows,takeoff,'code,description_en,unit,rate_aed\nA,Internal plaster,m2,30\nB,Internal plaster,m2,40'));

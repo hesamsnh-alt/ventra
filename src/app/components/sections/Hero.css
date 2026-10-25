@@ -288,86 +288,72 @@
   }
 }
 
-/* Mobile */
-
+/* Mobile: keep the drawing clear below the compact copy. */
 @media (max-width: 600px) {
   .hero {
     min-height: 100svh;
-    background-position: 64% center;
+    align-items: flex-start;
+    background-color: #070b0e;
+    background-size: auto 340px;
+    background-position: 68% bottom;
   }
-
   .hero-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-
-  background:
-    linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.68) 0%,
-      rgba(0, 0, 0, 0.45) 35%,
-      rgba(0, 0, 0, 0.18) 65%,
-      rgba(0, 0, 0, 0.05) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.08) 0%,
-      rgba(0, 0, 0, 0.05) 60%,
-      rgba(0, 0, 0, 0.35) 100%
-    );
-}
-
+    background: linear-gradient(180deg, #070b0e 0%, #070b0e 46%,
+      rgba(7, 11, 14, .92) 58%, rgba(7, 11, 14, .18) 78%, rgba(7, 11, 14, .12) 100%);
+  }
   .hero-content {
-    width: calc(100% - 32px);
-
-    padding-top: 125px;
-    padding-bottom: 55px;
+    width: calc(100% - 40px);
+    padding-top: 106px;
+    padding-bottom: 240px;
   }
-
   .hero-eyebrow {
-    margin-bottom: 18px;
-
+    max-width: 310px;
+    margin-bottom: 16px;
     font-size: 10px;
-    letter-spacing: 0.2em;
+    line-height: 1.6;
+    letter-spacing: .12em;
   }
-
   .hero-title {
-    max-width: 100%;
-
-    font-size: clamp(42px, 13vw, 58px);
-    line-height: 1.02;
+    max-width: 380px;
+    font-size: clamp(30px, 8vw, 36px);
+    line-height: 1.14;
+    letter-spacing: -.035em;
+    text-wrap: balance;
+    overflow-wrap: break-word;
   }
-.hero-description {
-  max-width: 610px;
-  margin: 28px 0 0;
-
-  color: rgba(255, 255, 255, 0.75);
-
-  font-size: 17px;
-  font-weight: 400;
-  line-height: 1.75;
-
-  font-family: "Plus Jakarta Sans", sans-serif;
-}
+  .hero-description {
+    max-width: 380px;
+    margin-top: 18px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, .78);
+  }
   .hero-actions {
-    margin-top: 30px;
-    flex-direction: column;
-    align-items: stretch;
+    margin-top: 24px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px 14px;
   }
-
-  .hero-primary-btn,
+  .hero-primary-btn, .hero-secondary-btn {
+    width: auto;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 11px;
+    font-size: 13px;
+    gap: 7px;
+  }
   .hero-secondary-btn {
-    width: 100%;
+    padding-inline: 0;
+    background: transparent;
+    border-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
   }
-
-  .hero-features {
-    margin-top: 34px;
-    gap: 12px 18px;
-  }
-
-  .hero-features span {
-    font-size: 12px;
-  }
+  .hero-play-icon { width: 24px; height: 24px; }
+  .hero-features { margin-top: 20px; gap: 8px 14px; }
+  .hero-features span { font-size: 10px; padding-inline-start: 11px; }
+  .hero-features span::before { width: 4px; height: 4px; inset-inline-start: 0; }
 }
 
 /* Accessibility */

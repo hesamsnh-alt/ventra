@@ -1,0 +1,4 @@
+Rate fixture: exact control/test-rates.csv bytes from user-supplied Ventra-BOQ-Test-Villa02.zip. Fictional AED rates, not market prices. No expected quantities were supplied to the BOQ generator. Comparison oracle was read only after generation.
+Source report: user-supplied ventra-pdf-analysis-report (3).json, analyzed_at 2026-10-15T10:28:37.784Z.
+Source PDF SHA256: e5a5aac8927a5ac6f43e43fef93cc8d08fd3e59f4ccf3f7d526035f11084f33d
+Rate CSV SHA256: dfa24c3f9989c9bd1fdb2349cc0faa131fc4651e8696c6b1399ba1f1d9674bcd

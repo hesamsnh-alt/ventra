@@ -1,0 +1,217 @@
+{
+  "mode": "OFFLINE_CHECK_NOT_A_LIVE_WINDOWS_RESULT",
+  "input_hashes": {
+    "catalog_sha256": "fdfd26638c36b7e7c68078d05f7e242dfbcc55b4a50f5310fb926a0033276e24",
+    "report_sha256": "aaf157d3638798b8c86a7c69527791b131b23f05c9a97b836d970428b3c16eaf"
+  },
+  "catalog_audit": {
+    "activeEntries": 3762,
+    "commercialCandidates": 52,
+    "unconfiguredEntries": 3710
+  },
+  "legacy_v122_candidate_bindings": 11,
+  "current_bindings": 19,
+  "provisional_subtotal": 265239.95,
+  "vat_percent": 5,
+  "vat": 13262,
+  "provisional_budget_total": 278501.95,
+  "verified_tender_total": 0,
+  "model_calls": 0,
+  "live_database_calls": 0,
+  "limitations": [
+    "Catalog export includes the three price levels but not component rates or active formula definitions. Production continues to read its existing database fields.",
+    "Operation and specification choices remain provisional and require source review. Missing specifications and rates have not been invented."
+  ],
+  "rows": [
+    {
+      "code": "SITE-001",
+      "metric": "excavation_volume",
+      "description": "Excavation in normal soil including loading",
+      "unit": "m3",
+      "quantity": 72.2,
+      "rate": 39,
+      "amount": 2815.8,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-001",
+      "metric": "pcc_volume",
+      "description": "Plain cement concrete blinding grade C15",
+      "unit": "m3",
+      "quantity": 5.78,
+      "rate": 340,
+      "amount": 1965.2,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-004",
+      "metric": "rebar_kg",
+      "description": "High yield steel reinforcement bars including cutting bending and fixing",
+      "unit": "ton",
+      "quantity": 12.168138271604942,
+      "rate": 3550,
+      "amount": 43196.89,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-005",
+      "metric": "foundation_formwork_area",
+      "description": "Formwork to foundations including fixing and removal",
+      "unit": "m2",
+      "quantity": 75.6,
+      "rate": 78,
+      "amount": 5896.8,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-006",
+      "metric": "column_formwork_area",
+      "description": "Formwork to columns including fixing and removal",
+      "unit": "m2",
+      "quantity": 138.06,
+      "rate": 90,
+      "amount": 12425.4,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-007",
+      "metric": "beam_formwork_area",
+      "description": "Formwork to beams including fixing and removal",
+      "unit": "m2",
+      "quantity": 118.5,
+      "rate": 94,
+      "amount": 11139,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "CON-008",
+      "metric": "slab_formwork_area",
+      "description": "Formwork to suspended slabs including props",
+      "unit": "m2",
+      "quantity": 360,
+      "rate": 84,
+      "amount": 30240,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "MAS-003",
+      "metric": "external_block_area",
+      "description": "200mm thick concrete block wall including mortar",
+      "unit": "m2",
+      "quantity": 305.7200000000001,
+      "rate": 66,
+      "amount": 20177.52,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "WIN-001",
+      "metric": "window_area",
+      "description": "Aluminium framed glazed window complete",
+      "unit": "m2",
+      "quantity": 39.06,
+      "rate": 750,
+      "amount": 29295,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "FIN-001",
+      "metric": "plaster_area",
+      "description": "Internal cement sand plaster to walls",
+      "unit": "m2",
+      "quantity": 978.6199999999997,
+      "rate": 27,
+      "amount": 26422.74,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "FIN-003",
+      "metric": "ceramic_floor_area",
+      "description": "Ceramic floor tiles including adhesive and grout",
+      "unit": "m2",
+      "quantity": 154,
+      "rate": 77,
+      "amount": 11858,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "FIN-005",
+      "metric": "gypsum_ceiling_area",
+      "description": "Gypsum board suspended ceiling including framing",
+      "unit": "m2",
+      "quantity": 312,
+      "rate": 80,
+      "amount": 24960,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "PNT-001",
+      "metric": "paint_area",
+      "description": "Internal wall emulsion paint including primer and putty",
+      "unit": "m2",
+      "quantity": 858.3799999999994,
+      "rate": 20,
+      "amount": 17167.6,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "PLB-005",
+      "metric": "toilet_count",
+      "description": "European type water closet complete with fittings",
+      "unit": "nos",
+      "quantity": 3,
+      "rate": 920,
+      "amount": 2760,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "PLB-006",
+      "metric": "basin_count",
+      "description": "Wash basin complete with mixer and fittings",
+      "unit": "nos",
+      "quantity": 3,
+      "rate": 730,
+      "amount": 2190,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "ELE-001",
+      "metric": "light_count",
+      "description": "Lighting point including wiring conduit and accessories",
+      "unit": "point",
+      "quantity": 60,
+      "rate": 120,
+      "amount": 7200,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "ELE-002",
+      "metric": "socket_count",
+      "description": "13A switched socket outlet including wiring and accessories",
+      "unit": "point",
+      "quantity": 70,
+      "rate": 145,
+      "amount": 10150,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "ELE-004",
+      "metric": "distribution_board_count",
+      "description": "Single phase distribution board complete with breakers",
+      "unit": "nos",
+      "quantity": 2,
+      "rate": 1450,
+      "amount": 2900,
+      "rate_source": "direct_standard_rate"
+    },
+    {
+      "code": "FIR-002",
+      "metric": "smoke_detector_count",
+      "description": "Addressable smoke detector including wiring and installation",
+      "unit": "point",
+      "quantity": 8,
+      "rate": 310,
+      "amount": 2480,
+      "rate_source": "direct_standard_rate"
+    }
+  ]
+}

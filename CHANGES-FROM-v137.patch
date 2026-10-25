@@ -1,0 +1,204 @@
+--- a/src/app/projects/[id]/Project3DViewer.jsx
++++ b/src/app/projects/[id]/Project3DViewer.jsx
+@@ -8,7 +8,7 @@
+ import {assertWallOnlyEdit} from '@/lib/manualWalls.mjs';
+ import FurnitureEditorPanel from "./FurnitureEditorPanel";
+ import SurfaceMaterialPanel from './SurfaceMaterialPanel';
+-import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit} from '@/lib/surfaceMaterials.mjs';
++import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit,surfaceMaterialList} from '@/lib/surfaceMaterials.mjs';
+ import {raycastVisibleMeshes} from '@/lib/raycastMeshes.mjs';
+ import {configureFloorDepth} from '@/lib/floorDepthLayers.mjs';
+ import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
+@@ -4530,7 +4530,7 @@
+       sceneAfter.remove(previous);
+       previous.traverse?.((object) => {
+         try { object.geometry?.dispose?.(); } catch {}
+-        const materials = Array.isArray(object.material) ? object.material : [object.material];
++        const materials = surfaceMaterialList(object.material);
+         for (const material of materials) {
+           try { material?.map?.dispose?.(); } catch {}
+           try { material?.dispose?.(); } catch {}
+@@ -7390,8 +7390,13 @@
+ 
+ function ventraCreateInteriorView(root){
+   const materials=new Map(),objects=new Map(),wallMaterials=new Set();
+-  root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))wallMaterials.add(object.material);});
+-  root.traverse(object=>{if(!wallMaterials.has(object.material))return;objects.set(object,object.castShadow);const mat=object.material;if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});});
++  root.traverse(object=>{if(['schematic_plan_wall','schematic_wall','schematic_cutaway_wall'].includes(object.userData?.ventraType))for(const mat of surfaceMaterialList(object.material))if(mat)wallMaterials.add(mat);});
++  root.traverse(object=>{
++    const matches=surfaceMaterialList(object.material).filter(mat=>wallMaterials.has(mat));
++    if(!matches.length)return;
++    objects.set(object,object.castShadow);
++    for(const mat of matches)if(!materials.has(mat))materials.set(mat,{opacity:mat.opacity,transparent:mat.transparent,depthWrite:mat.depthWrite});
++  });
+   return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.045,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
+ }
+ 
+@@ -7682,7 +7687,7 @@
+       resizeObserver?.disconnect();
+       threeScene.traverse?.((object) => {
+         try { object.geometry?.dispose?.(); } catch {}
+-        const materials = Array.isArray(object.material) ? object.material : [object.material];
++        const materials = surfaceMaterialList(object.material);
+         for (const material of materials) {
+           try { material?.map?.dispose?.(); } catch {}
+           try { material?.dispose?.(); } catch {}
+--- a/src/app/projects/[id]/SurfaceMaterialPanel.jsx
++++ b/src/app/projects/[id]/SurfaceMaterialPanel.jsx
+@@ -52,10 +52,10 @@
+   },[scene,disabled]);
+   useEffect(()=>{onModeChange(paintMode);return()=>onModeChange(false);},[paintMode,onModeChange]);
+   function choose(id){setSelected(id);setPaintMode(true);getRenderer()?.setFurnitureTool?.(null);}
+-  const targetName=target=>!target?'':`${target.kind==='wall'?text('Wall','دیوار','جدار'):text('Floor','کف','أرضية')} · ${target.id}`;
++  const targetName=target=>!target?'':`${target.kind==='wall'?text('Wall face','وجه دیوار','وجه الجدار'):text('Floor','کف','أرضية')} · ${target.id}`;
+   return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('Surface materials','متریال کف و دیوار','مواد الأرضيات والجدران')}>
+     <details open><summary>{text('Floor & wall materials','متریال کف و دیوار','مواد الأرضيات والجدران')}</summary>
+-      <p>{text('Drag a swatch onto a floor or wall. Or select a swatch, then click the surface.','نمونه را روی کف یا دیوار بکش و رها کن؛ یا نمونه را انتخاب کن و روی سطح بزن.','اسحب العينة إلى الأرضية أو الجدار، أو اخترها ثم اضغط على السطح.')}</p>
++      <p>{text('Drag a swatch onto a floor or one wall face. Or select a swatch, then click that face.','نمونه را روی کف یا یک وجه دیوار بکش و رها کن؛ یا نمونه را انتخاب کن و روی همان وجه بزن.','اسحب العينة إلى الأرضية أو وجه الجدار، أو اخترها ثم اضغط على الوجه المطلوب.')}</p>
+       <div className={styles.groups} aria-label={text('Material categories','گروه متریال','فئات المواد')}>
+         {SURFACE_GROUPS.map(g=><button key={g.id} type="button" aria-pressed={group===g.id} onClick={()=>setGroup(g.id)}>{g[lang]}</button>)}
+       </div>
+--- a/src/lib/surfaceMaterials.mjs
++++ b/src/lib/surfaceMaterials.mjs
+@@ -50,9 +50,19 @@
+   ...(pattern?{pattern,accent}:{}),...(['paint','wallpaper'].includes(kind)?{wallOnly:true}:{})})));
+ export const findSurfaceMaterial=id=>SURFACE_MATERIALS.find(m=>m.id===id)||null;
+ export const surfaceMaterialAllowed=(id,target)=>!!target&&!!findSurfaceMaterial(id)&&(!findSurfaceMaterial(id).wallOnly||target.kind==='wall');
+-export const surfaceKey=target=>JSON.stringify([target.kind,String(target.id)]);
++export const WALL_SURFACE_SIDES=Object.freeze(['x+','x-','y+','y-','z+','z-']);
++// Raycaster face normals are mesh-local: camera motion and wall rotation do
++// not change the saved face identity. Never infer the face from screen space.
++export function wallSurfaceSide(normal){
++  if(!normal||![normal.x,normal.y,normal.z].every(Number.isFinite))return null;
++  const axis=['x','y','z'].reduce((a,b)=>Math.abs(normal[b])>Math.abs(normal[a])?b:a);
++  return Math.abs(normal[axis])>.7?axis+(normal[axis]>0?'+':'-'):null;
++}
++export const surfaceMaterialList=material=>Array.isArray(material)?material:material?.materials||[material];
++export const surfaceKey=target=>JSON.stringify([target.kind,String(target.id),...(target.side===undefined?[]:[target.side])]);
+ export function validSurfaceTarget(scene,target){
+   if(!target||typeof target.id!=='string'||!target.id)return false;
++  if(target.side!==undefined&&(target.kind!=='wall'||!WALL_SURFACE_SIDES.includes(target.side)))return false;
+   if(target.kind==='floor-base')return target.id==='footprint'&&scene.footprint?.length>=3;
+   if(target.kind==='floor')return scene.rooms?.some(r=>String(r.id)===target.id&&!r.scopeOnly);
+   if(target.kind==='wall')return scene.walls?.some(w=>String(w.id)===target.id&&w.type!=='railing');
+@@ -63,6 +73,18 @@
+   if(materialId!==null&&!findSurfaceMaterial(materialId))throw new Error('Unknown surface material.');
+   if(materialId!==null&&!surfaceMaterialAllowed(materialId,target))throw new Error('Paint and wallpaper apply to walls only.');
+   const assignments={...(scene.surfaceFinishes?.assignments||{})};
++  // Expand an older whole-wall finish before the first face edit. Untouched
++  // faces keep their appearance, while resetting one face restores its base.
++  if(target.kind==='wall'&&target.side!==undefined){
++    const legacyKey=surfaceKey({kind:'wall',id:target.id}),legacy=assignments[legacyKey];
++    if(findSurfaceMaterial(legacy)){
++      for(const side of WALL_SURFACE_SIDES){
++        const faceKey=surfaceKey({...target,side});
++        if(!Object.hasOwn(assignments,faceKey))assignments[faceKey]=legacy;
++      }
++      delete assignments[legacyKey];
++    }
++  }
+   const key=surfaceKey(target);
+   if(materialId===null)delete assignments[key];else assignments[key]=materialId;
+   return {...scene,surfaceFinishes:{version:1,assignments}};
+@@ -78,21 +100,30 @@
+     let parts;try{parts=JSON.parse(key);}catch{throw new Error('Invalid surface reference.');}
+     // Old, orphaned assignments may remain after a wall edit, but cannot be
+     // introduced by this editor. This avoids destroying unrelated saved work.
+-    const target=Array.isArray(parts)&&parts.length===2?{kind:parts[0],id:parts[1]}:null;
++    const target=Array.isArray(parts)&&[2,3].includes(parts.length)?{kind:parts[0],id:parts[1],...(parts.length===3?{side:parts[2]}:{})}:null;
++    if(parts?.length===3&&(target?.kind!=='wall'||!WALL_SURFACE_SIDES.includes(target.side)))throw new Error('Invalid wall face.');
+     if(!surfaceMaterialAllowed(id,target)||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.assignments?.[key]!==id))throw new Error('Invalid surface material or target.');
+   }
++}
++
++function surfaceHitMaterial(hit){
++  return surfaceMaterialList(hit.object.material)[hit.face?.materialIndex||0];
+ }
+ 
+ export function pickSurfaceHit(hits){
+   const visible=object=>{for(let p=object;p;p=p.parent)if(p.visible===false)return false;return true;};
+   const candidates=hits.filter(h=>visible(h.object)&&!h.object.userData?.nonSelectable&&!h.object.isLine&&!h.object.isSprite&&
+     !['Line','LineSegments','Sprite'].includes(h.object.type)&&
+-    !(h.object.userData?.surfaceTarget?.kind==='wall'&&h.object.material?.transparent&&h.object.material.opacity<.1));
++    !(h.object.userData?.surfaceTarget?.kind==='wall'&&surfaceHitMaterial(h)?.transparent&&surfaceHitMaterial(h)?.opacity<.1));
+   // The base plate and a room floor can be coplanar. Prefer the actual room.
+   candidates.sort((a,b)=>Math.abs(a.distance-b.distance)<1e-5
+     ? Number(a.object.userData?.surfaceTarget?.kind==='floor-base')-Number(b.object.userData?.surfaceTarget?.kind==='floor-base')
+     : a.distance-b.distance);
+-  const target=candidates[0]?.object.userData?.surfaceTarget;
++  const hit=candidates[0],target=hit?.object.userData?.surfaceTarget;
++  if(target?.kind==='wall'){
++    const side=wallSurfaceSide(hit.face?.normal);
++    return side?{...target,side}:null; // missing face must never paint both sides
++  }
+   return target?{...target}:null; // furniture/glass blocks painting through it
+ }
+ 
+@@ -205,18 +236,59 @@
+   }
+ }
+ 
++// Assign one slot per local box face. Legacy Face3 indices also feed the
++// physical renderer's BufferGeometry groups; no source vertices are changed.
++export function assignWallFaceMaterials(THREE,mesh,materials){
++  const g=mesh.geometry;
++  if(g?.faces){
++    for(const face of g.faces){
++      const index=WALL_SURFACE_SIDES.indexOf(wallSurfaceSide(face.normal));
++      if(index<0)throw new Error('Wall face normal is unavailable.');
++      face.materialIndex=index;
++    }
++    g.groupsNeedUpdate=true;
++    mesh.material=THREE.MeshFaceMaterial?new THREE.MeshFaceMaterial(materials):materials;
++  }else if(g?.attributes?.normal&&g.clearGroups&&g.addGroup){
++    const n=g.attributes.normal,index=g.index;
++    const count=index?index.count:g.attributes.position.count;
++    const groups=[];
++    for(let start=0;start<count;start+=3){
++      const i=index?index.getX(start):start;
++      const slot=WALL_SURFACE_SIDES.indexOf(wallSurfaceSide({x:n.getX(i),y:n.getY(i),z:n.getZ(i)}));
++      if(slot<0)throw new Error('Wall face normal is unavailable.');
++      const last=groups[groups.length-1];
++      if(last?.materialIndex===slot)last.count+=3;
++      else groups.push({start,count:3,materialIndex:slot});
++    }
++    g.clearGroups();for(const group of groups)g.addGroup(group.start,group.count,group.materialIndex);
++    mesh.material=materials;
++  }else throw new Error('Wall geometry does not support face materials.');
++}
++
+ export function decorateSurfaceMesh(THREE,mesh,target,scene,cache){
+   if(!mesh)return;
+   mesh.userData={...mesh.userData,surfaceTarget:target};
+-  const id=scene.surfaceFinishes?.assignments?.[surfaceKey(target)];
++  const assignments=scene.surfaceFinishes?.assignments||{};
++  const id=assignments[surfaceKey(target)];
++  const resolve=id=>{
++    const key=`${target.kind}:${id}`;
++    let material=cache?.get(key);
++    if(!material){material=createSurfaceMeshMaterial(THREE,id);cache?.set(key,material);}
++    return material;
++  };
++  if(target.kind==='wall'&&WALL_SURFACE_SIDES.some(side=>Object.hasOwn(assignments,surfaceKey({...target,side})))){
++    const original=mesh.material;
++    const materials=WALL_SURFACE_SIDES.map(side=>{
++      const faceId=assignments[surfaceKey({...target,side})]??id;
++      return findSurfaceMaterial(faceId)?resolve(faceId):original;
++    });
++    assignWallFaceMaterials(THREE,mesh,materials);
++    applySurfaceUVs(THREE,mesh,target.kind);return;
++  }
++  // Legacy whole-wall assignments remain readable until the next face edit.
+   if(!findSurfaceMaterial(id))return;
+   if(target.kind!=='wall'){
+     mesh.material?.map?.dispose?.();mesh.material?.bumpMap?.dispose?.();mesh.material?.dispose?.();
+   }
+-  // A render-scoped cache bounds texture memory by swatches used, rather than
+-  // wall segment count. Wall/floor materials remain separate for cutaway mode.
+-  const key=`${target.kind}:${id}`;
+-  let material=cache?.get(key);
+-  if(!material){material=createSurfaceMeshMaterial(THREE,id);cache?.set(key,material);}
+-  mesh.material=material;applySurfaceUVs(THREE,mesh,target.kind);
+-}
++  mesh.material=resolve(id);applySurfaceUVs(THREE,mesh,target.kind);
++}

@@ -1,0 +1,44 @@
+✔ cloud state denies another owner before reading or writing storage (20.544061ms)
+✔ cloud state derives the storage path on the server and permits an empty project (11.43333ms)
+✔ project viewers can restore but cannot replace shared model state (6.091982ms)
+✔ project managers save into the project owner storage namespace (12.733915ms)
+✔ DWG interior source selection is authenticated and restored using the existing engineering state (12.283851ms)
+✔ all 63 existing viewer, furniture and render buttons retain their original click handlers (489.858983ms)
+✔ native drawers default closed, keep controls mounted and use the three UI languages (132.125054ms)
+✔ previously coincident base and finish cannot remain at the same render height (9.850254ms)
+✔ changing a floor material does not lose depth separation; applying the policy twice does not sink the floor (2.689664ms)
+✔ room layer retains selected color, opacity, texture and depth occlusion (6.216669ms)
+✔ surface picking still selects the nearest room finish rather than underlying plate (1.916876ms)
+✔ actual renderer configures depth after user materials, and PBR bridge copies the same bias (21.370147ms)
+✔ actual panel switches from blocked DWG placement to review mode and saves a mouse-inserted door (244.101353ms)
+✔ actual panel draws a wall with two clicks, deletes a clicked wall and undoes it with its opening (132.853998ms)
+✔ actual panel supports drawing a wall in one drag gesture (117.499326ms)
+✔ full orbit returns camera to position while preserving radius (7.653326ms)
+✔ pitch stops short of singular poles and fit adapts to portrait and model scale (1.690839ms)
+✔ named views expose every side with equal camera distance (5.095763ms)
+✔ compact scene restores every field, orientation, source label and unknown dimension exactly (5.373648ms)
+✔ observed 8000-token truncated response is classified before parsing, including valid but incomplete JSON (1.148315ms)
+✔ malformed completed coordinates, missing fields and out-of-contract enums cannot enter the renderer (3.002662ms)
+✔ actual handler rejects the uploaded-log failure: one request, no normalization, no furniture review or scene (24.72153ms)
+✔ actual handler decodes before existing normalization, retains separate review and caches only successful scenes (18.726412ms)
+✔ incomplete furniture review preserves the complete architecture and first furniture trace (8.240515ms)
+✔ explicit reasoning override remains respected; invalid token configuration has a finite capped fallback (8.478626ms)
+✔ image analysis POST is never replayed automatically after an unknown transport outcome (11.408403ms)
+✔ mouse drag invokes rotation without toolbar and right drag invokes pan (6.06287ms)
+✔ wheel zoom, keyboard and touch pinch reach camera actions (1.437449ms)
+✔ rebinding same canvas disposes old handlers; disposal stops camera movement (1.205979ms)
+✔ cancel and lost capture stop drag and leave no stuck pointer (0.471498ms)
+✔ preset changes are consumed by mesh construction, not only inspector text (8.921009ms)
+✔ visible room floor and exterior palette change with style (1.504055ms)
+✔ styles visibly differ in rendered palette and asset model variant while architecture and placement stay exact (3.213617ms)
+✔ source selection prefers saved engineering geometry after image input (1.023896ms)
+✔ same DWG full extraction wins over translation placeholders and compact pointers (1.667107ms)
+✔ equally complete extracts select newer analysis without merging different geometry (0.733456ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 36
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1512.515812

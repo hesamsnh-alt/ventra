@@ -1,0 +1,50 @@
+[
+  {
+    "item_code": "VNT-OP-FIXED-GLAZING",
+    "section_code": "07",
+    "category": "Doors & Windows",
+    "sub_category": "fixed-glazing",
+    "description": "Fixed internal glass partition excluding separately measured doors",
+    "unit": "m2",
+    "currency": "AED",
+    "standard_rate": 500,
+    "total_rate": 500,
+    "is_active": true,
+    "status": "ProvisionalEstimate",
+    "source_name": "Ventra source surface scope budget v160",
+    "source_date": "2026-10-19",
+    "source_reference": "{\"kind\": \"construction_operation_rate\", \"version\": 1, \"batch\": \"ventra-v160-native-surface-scope\", \"enabled\": true, \"match\": {\"family\": \"fixed-glazing\", \"system\": \"fixed_internal_glass\"}, \"rate_basis\": \"Existing editable analyst allowance GLZ-008: standard 10mm tempered fixed glass partition including installation, doors excluded\", \"provenance\": {\"kind\": \"existing_user_catalog_budget\", \"reference_item_code\": \"GLZ-008\", \"independently_verified_supplier_quote\": false}, \"conditions\": \"Editable AED budget excluding VAT. Verify specification, glazing thickness/performance, paint system, access and site scope. No automatic tender approval.\", \"assumed_specification\": {\"glass_thickness_mm\": 10}, \"required_information\": []}"
+  },
+  {
+    "item_code": "VNT-OP-EXTERNAL-PAINT",
+    "section_code": "09",
+    "category": "Painting",
+    "sub_category": "external-paint",
+    "description": "Exterior weather resistant paint including primer; net external faces only",
+    "unit": "m2",
+    "currency": "AED",
+    "standard_rate": 26,
+    "total_rate": 26,
+    "is_active": true,
+    "status": "ProvisionalEstimate",
+    "source_name": "Ventra source surface scope budget v160",
+    "source_date": "2026-10-19",
+    "source_reference": "{\"kind\": \"construction_operation_rate\", \"version\": 1, \"batch\": \"ventra-v160-native-surface-scope\", \"enabled\": true, \"match\": {\"family\": \"external-paint\", \"system\": \"exterior_weather_paint\"}, \"rate_basis\": \"Existing catalog PNT-002 inherited installed budget rate; retained as preliminary allowance, not a new supplier quotation\", \"provenance\": {\"kind\": \"existing_user_catalog_budget\", \"reference_item_code\": \"PNT-002\", \"independently_verified_supplier_quote\": false}, \"conditions\": \"Editable AED budget excluding VAT. Verify specification, glazing thickness/performance, paint system, access and site scope. No automatic tender approval.\", \"assumed_specification\": {}, \"required_information\": []}"
+  },
+  {
+    "item_code": "VNT-OP-WINDOW-ALU-DG",
+    "section_code": "07",
+    "category": "Doors & Windows",
+    "sub_category": "window-set",
+    "description": "Powder-coated aluminium double-glazed windows; measured opening area by source type",
+    "unit": "m2",
+    "currency": "AED",
+    "standard_rate": 750,
+    "total_rate": 750,
+    "is_active": true,
+    "status": "ProvisionalEstimate",
+    "source_name": "Ventra source surface scope budget v160",
+    "source_date": "2026-10-19",
+    "source_reference": "{\"kind\": \"construction_operation_rate\", \"version\": 1, \"batch\": \"ventra-v160-native-surface-scope\", \"enabled\": true, \"match\": {\"family\": \"window-set\", \"material\": \"aluminium\", \"glazing\": \"double\"}, \"rate_basis\": \"Existing catalog WIN-001 inherited installed budget rate; retained as preliminary allowance, not a new supplier quotation\", \"provenance\": {\"kind\": \"existing_user_catalog_budget\", \"reference_item_code\": \"WIN-001\", \"independently_verified_supplier_quote\": false}, \"conditions\": \"Editable AED budget excluding VAT. Verify specification, glazing thickness/performance, paint system, access and site scope. No automatic tender approval.\", \"assumed_specification\": {}, \"required_information\": []}"
+  }
+]

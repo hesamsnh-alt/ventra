@@ -1,0 +1,9 @@
+PASS actual WebGL renderer: original user texture replaces placeholder in GPU output.
+{"physical":true,"maps":[{"id":"personal:2ee35ac0-0481-44b9-9c2b-73387e01789d","width":1024,"height":1024,"revision":1,"side":2}]}
+page errors []
+camera {
+  source: { position: [ 0, -0.1, 6 ] },
+  physical: [ 0, -0.1, 6 ],
+  bounds: undefined,
+  textures: [ { w: 1024, h: 1024, v: 1, stamp: '0:1' } ]
+}

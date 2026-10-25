@@ -1,0 +1,403 @@
+{
+  "mode": "OFFLINE_CHECK_NOT_LIVE_WINDOWS_RESULT",
+  "summary": {
+    "pricedMeasuredOperations": 19,
+    "unpricedMeasuredOperations": 31,
+    "catalogOptionsWithoutQuantity": 33,
+    "unmeasuredCatalogRowsAreNotMissingProjectScope": true,
+    "completePricedBudget": false,
+    "knownMeasuredOperationsHaveRates": false
+  },
+  "gaps": [
+    {
+      "itemCode": "PDF-FOUNDATION_VOLUME",
+      "description": "Foundation concrete — grade requires confirmation",
+      "quantity": 20.25,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "foundation_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-PEDESTAL_VOLUME",
+      "description": "Pedestal concrete — grade requires confirmation",
+      "quantity": 2.4299999999999997,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "pedestal_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-COLUMN_VOLUME",
+      "description": "Column concrete — grade requires confirmation",
+      "quantity": 10.3545,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "column_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-BEAM_VOLUME",
+      "description": "Beam concrete — grade requires confirmation",
+      "quantity": 14.8125,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "beam_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-GROUND_SLAB_VOLUME",
+      "description": "Ground slab concrete — grade requires confirmation",
+      "quantity": 28.799999999999997,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "ground_slab_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-FIRST_SLAB_VOLUME",
+      "description": "First floor slab concrete — grade requires confirmation",
+      "quantity": 36.00000000000001,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "first_slab_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-ROOF_SLAB_VOLUME",
+      "description": "Roof slab concrete — grade requires confirmation",
+      "quantity": 36.00000000000001,
+      "unit": "m3",
+      "code": "specification_or_catalog_match_required",
+      "metric": "roof_slab_volume",
+      "required_information": [
+        "Concrete grade/specification for this element",
+        "Applicable own catalog or project rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-INTERNAL_BLOCK_AREA",
+      "description": "Internal blockwork — specification requires confirmation",
+      "quantity": 336.4500000000001,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "internal_block_area",
+      "required_information": [
+        "Block thickness/material matching the drawing",
+        "An own catalog or project rate for that specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WOOD_FLOOR_AREA",
+      "description": "Wood floor finish",
+      "quantity": 178,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "wood_floor_area",
+      "required_information": [
+        "Wood flooring system/material and its own rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-EPOXY_FLOOR_AREA",
+      "description": "Epoxy floor finish",
+      "quantity": 28,
+      "unit": "m2",
+      "code": "catalog_rate_missing",
+      "metric": "epoxy_floor_area",
+      "required_information": [
+        "Epoxy floor system and its own rate"
+      ],
+      "candidate_codes": [
+        "PNT-008"
+      ]
+    },
+    {
+      "itemCode": "PDF-TERRACE_FLOOR_AREA",
+      "description": "Terrace floor finish — specification requires confirmation",
+      "quantity": 12,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "terrace_floor_area",
+      "required_information": [
+        "Outdoor flooring material and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-DOOR_COUNT",
+      "description": "Door sets — material and type require confirmation",
+      "quantity": 19,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "door_count",
+      "required_information": [
+        "Door material/type breakdown including garage doors",
+        "Applicable rate for each selected door type"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-KITCHEN_HOB_HOOD_COUNT",
+      "description": "Kitchen hob and hood package — specification requires confirmation",
+      "quantity": 1,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "kitchen_hob_hood_count",
+      "required_information": [
+        "Hob/hood package specification and package rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-SHOWER_COUNT",
+      "description": "Showers",
+      "quantity": 3,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "shower_count",
+      "required_information": [
+        "Shower/fittings package specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WATER_PIPE_LENGTH",
+      "description": "Water pipe — diameter and material require confirmation",
+      "quantity": 80,
+      "unit": "m",
+      "code": "specification_or_catalog_match_required",
+      "metric": "water_pipe_length",
+      "required_information": [
+        "Pipe material and diameter breakdown"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WASTE_PIPE_LENGTH",
+      "description": "Waste pipe — diameter and material require confirmation",
+      "quantity": 60,
+      "unit": "m",
+      "code": "specification_or_catalog_match_required",
+      "metric": "waste_pipe_length",
+      "required_information": [
+        "Drainage material and diameter breakdown"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-AC_COUNT",
+      "description": "Air conditioning units — capacities require confirmation",
+      "quantity": 9,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "ac_count",
+      "required_information": [
+        "Unit type and capacity breakdown"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-AC_PIPE_LENGTH",
+      "description": "Air conditioning pipe — specification requires confirmation",
+      "quantity": 90,
+      "unit": "m",
+      "code": "specification_or_catalog_match_required",
+      "metric": "ac_pipe_length",
+      "required_information": [
+        "AC pipe material/diameter and insulation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-KITCHEN_CABINET_LENGTH",
+      "description": "Kitchen cabinetry — specification requires confirmation",
+      "quantity": 5,
+      "unit": "m",
+      "code": "specification_or_catalog_match_required",
+      "metric": "kitchen_cabinet_length",
+      "required_information": [
+        "Base cabinet material/finish and linear-metre rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-TERRACE_RAILING_LENGTH",
+      "description": "Terrace railing — specification requires confirmation",
+      "quantity": 7,
+      "unit": "m",
+      "code": "specification_or_catalog_match_required",
+      "metric": "terrace_railing_length",
+      "required_information": [
+        "Railing material/system and linear-metre rate"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-ROOF_WATERPROOFING_AREA",
+      "description": "Roof waterproofing",
+      "quantity": 180,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "roof_waterproofing_area",
+      "required_information": [
+        "Roof waterproofing system, layers and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-TERRACE_WATERPROOFING_AREA",
+      "description": "Terrace waterproofing",
+      "quantity": 12,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "terrace_waterproofing_area",
+      "required_information": [
+        "Terrace waterproofing system and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WET_FLOOR_WATERPROOFING_AREA",
+      "description": "Wet area floor waterproofing",
+      "quantity": 46,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "wet_floor_waterproofing_area",
+      "required_information": [
+        "Wet floor waterproofing system and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WET_WALL_WATERPROOFING_AREA",
+      "description": "Wet area wall waterproofing",
+      "quantity": 97.92000000000002,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "wet_wall_waterproofing_area",
+      "required_information": [
+        "Wet wall waterproofing system and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-WET_WALL_TILE_AREA",
+      "description": "Wet area wall tiles",
+      "quantity": 117.23999999999998,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "wet_wall_tile_area",
+      "required_information": [
+        "Wall tile material and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-CEILING_PAINT_AREA",
+      "description": "Ceiling paint",
+      "quantity": 360,
+      "unit": "m2",
+      "code": "catalog_rate_missing",
+      "metric": "ceiling_paint_area",
+      "required_information": [
+        "Applicable ceiling paint system and its own rate"
+      ],
+      "candidate_codes": [
+        "PNT-010"
+      ]
+    },
+    {
+      "itemCode": "PDF-BACKSPLASH_AREA",
+      "description": "Kitchen backsplash",
+      "quantity": 3,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "backsplash_area",
+      "required_information": [
+        "Backsplash material and installation specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-DRIVEWAY_AREA",
+      "description": "Driveway — paving specification requires confirmation",
+      "quantity": 40,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "driveway_area",
+      "required_information": [
+        "Driveway paving material and construction specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-LANDSCAPE_AREA",
+      "description": "Landscaping — planting specification requires confirmation",
+      "quantity": 60,
+      "unit": "m2",
+      "code": "specification_or_catalog_match_required",
+      "metric": "landscape_area",
+      "required_information": [
+        "Landscape planting/groundcover specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-KITCHEN_SINK_COUNT",
+      "description": "Kitchen sinks",
+      "quantity": 1,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "kitchen_sink_count",
+      "required_information": [
+        "Kitchen sink and fittings specification"
+      ],
+      "candidate_codes": []
+    },
+    {
+      "itemCode": "PDF-LAUNDRY_SINK_COUNT",
+      "description": "Laundry sinks",
+      "quantity": 1,
+      "unit": "nr",
+      "code": "specification_or_catalog_match_required",
+      "metric": "laundry_sink_count",
+      "required_information": [
+        "Laundry sink and fittings specification"
+      ],
+      "candidate_codes": []
+    }
+  ],
+  "notes": [
+    "No source specification, catalog rate or measured quantity was invented.",
+    "Known price totals remain those validated in the user local v123 export.",
+    "A quantity-free catalog option is not evidence of another missing measured project scope."
+  ]
+}

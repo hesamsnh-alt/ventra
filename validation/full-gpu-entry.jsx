@@ -1,0 +1,3 @@
+import Legacy from 'three-test';import {mountStandaloneSchematicRenderer}from'../../src/app/projects/[id]/Project3DViewer.jsx';
+window.THREE=Legacy;const host=document.createElement('div');host.style.cssText='position:relative;width:560px;height:420px';document.body.appendChild(host);const canvas=document.createElement('canvas');host.appendChild(canvas);
+fetch('/source-scene.json').then(r=>r.json()).then(scene=>{window.sourceScene=scene;window.mounted=mountStandaloneSchematicRenderer(host,scene,canvas,null,scene.projectId);window.mounted.setNamedView('top');window.mounted.setInteriorView(false);window.gpuReady=true;}).catch(e=>window.gpuError=e.stack);

@@ -1,0 +1,34 @@
+{
+  "mode": "offline_actual_server_handler_mocked_catalog",
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "catalogRows": 3762,
+  "sourceUnchanged": true,
+  "olderEightPageReport": {
+    "documentId": "d893920a-dd2a-43bd-b902-f3f96349a7b7",
+    "analyzedAt": "2026-10-15T10:28:37.784Z",
+    "summary": {
+      "totalItems": 50,
+      "verifiedItems": 0,
+      "provisionalItems": 18,
+      "pendingItems": 32,
+      "verifiedSubtotal": 0,
+      "provisionalSubtotal": 263274.75,
+      "subtotal": 0,
+      "vatPercentage": 0,
+      "vatAmount": 0,
+      "grandTotal": 0,
+      "commercialSafe": false,
+      "evidencePolicyVersion": 37,
+      "scopeCoverage": "unconfirmed",
+      "reviewRequiredItems": 50
+    }
+  },
+  "latestInterruptedReport": {
+    "documentId": "6018683e-d338-4a35-a9a2-ea994a43bbd7",
+    "analyzedPages": 3,
+    "totalPages": 8,
+    "blocked": true,
+    "message": "BOQ generation stopped: PDF page extraction or document review is incomplete (3/8 pages; review: failed). The saved BOQ was not replaced. Recover complete source evidence before generating again."
+  }
+}

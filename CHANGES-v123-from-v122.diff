@@ -1,0 +1,209 @@
+--- a/src/lib/pdfBoqCoverage.mjs
++++ b/src/lib/pdfBoqCoverage.mjs
+@@ -1,4 +1,18 @@
+ import {PDF_METRIC_UNITS, pdfScheduledRule} from './pdfTakeoffEvidence.mjs';
++
++// PDF budget rates must belong to the selected catalog item. A peer median
++// does not establish an epoxy, concrete or other specification's own rate.
++// Keep the existing preference between this item's price levels/components.
++export function resolvePdfCatalogRate(item, priceLevel='standard') {
++  const positive=v=>Number.isFinite(Number(v))&&Number(v)>0?Number(v):0;
++  const components=['material_rate','labor_rate','equipment_rate','transport_rate'].map(k=>Number(item?.[k]||0));
++  const rates={standard:positive(item?.standard_rate),economy:positive(item?.economy_rate),premium:positive(item?.premium_rate),
++    component:components.every(v=>Number.isFinite(v)&&v>=0)?positive(components.reduce((a,b)=>a+b,0)):0};
++  const level=String(priceLevel||'standard').toLowerCase();
++  const order=level==='economy'?['economy','standard','premium','component']:level==='premium'?['premium','standard','economy','component']:['standard','economy','premium','component'];
++  for(const key of order)if(rates[key]>0)return {rate:rates[key],source:key===level?`direct_${key}_rate`:`fallback_${key}_rate`,peerCount:0,missingRate:false};
++  return {rate:0,source:'rate_missing_on_catalog_item',peerCount:0,missingRate:true};
++}
+ 
+ // A quantity must not be repeated across competing catalog variants. There is
+ // no basis for selecting a grade, diameter, capacity or finish from price alone.
+@@ -35,16 +49,33 @@
+ // to use one unique matching existing catalog item. These rows exist only for
+ // this calculation: nothing is inserted into boq_rules or price_items.
+ export function planPdfCatalogRules(takeoff, rules, candidates) {
+-  const plan=planPdfCatalogBindings(takeoff,candidates);
+   const next=[...(rules||[])],codes=new Set(next.map(r=>String(r.item_code||'').trim().toUpperCase()));
+-  for(const item of candidates||[]){
++  // A large scope dictionary can coexist with the published commercial
++  // catalog. Active-but-unconfigured records (no section, source, own rate or
++  // formula rule) are not commercial variants. Do not let those placeholders
++  // shadow genuine items, and do not manufacture rates for them. Configured
++  // zero-rate variants DO still participate, so price alone never resolves
++  // competing specifications.
++  const active=(candidates||[]).filter(i=>i&&i.is_active!==false);
++  const configuredCodes=new Set(active.filter(i=>{
++    const code=String(i.item_code||i.itemCode||'').trim().toUpperCase();
++    const section=String(i.section_code||'').trim();
++    return codes.has(code)||Boolean(section&&!/^unassigned$/i.test(section))||Boolean(String(i.source_name||'').trim())||!resolvePdfCatalogRate(i).missingRate;
++  }).map(i=>String(i.item_code||i.itemCode||'').trim().toUpperCase()));
++  // Keep every definition of a configured code in the conflict check, even
++  // if a duplicate definition itself has incomplete metadata.
++  const eligible=active.filter(i=>configuredCodes.has(String(i.item_code||i.itemCode||'').trim().toUpperCase()));
++  const plan=planPdfCatalogBindings(takeoff,eligible);
++  const ignored=active.length-eligible.length;
++  if(ignored)plan.warnings.push(`PDF catalog: ${ignored} unconfigured scope entries have no section, source, own catalog rate or active formula rule; they were not treated as competing commercial items. No catalog records were changed.`);
++  for(const item of eligible){
+     const code=String(item?.item_code||'').trim().toUpperCase();
+     if(!plan.bindings.has(code)||codes.has(code))continue;
+     next.push({item_code:item.item_code,section_code:item.section_code,formula_type:'manual',
+       rule_name:'PDF evidence: existing catalog item',notes:'Explicit PDF operation matched to a unique existing catalog item; review required.'});
+     codes.add(code);
+   }
+-  return {...plan,rules:next};
++  return {...plan,rules:next,catalogAudit:{activeEntries:active.length,commercialCandidates:eligible.length,unconfiguredEntries:ignored}};
+ }
+ 
+ // Aggregate room/floor/wall summaries are diagnostic, not extra billable work.
+--- a/src/lib/serverBoqAnalysis.js
++++ b/src/lib/serverBoqAnalysis.js
+@@ -1,4 +1,4 @@
+-import {planPdfCatalogRules, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
++import {planPdfCatalogRules, resolvePdfCatalogRate, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
+ import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
+ import { classifyEstimateItem } from '@/lib/estimateClassification.mjs';
+ import {applyDwgScheduleToBoq} from "@/lib/dwgSchedule.mjs";
+@@ -6120,11 +6120,13 @@
+         );
+ 
+       const rateResolution =
+-        resolveRate(
++        takeoff.pdf_analysis ? resolvePdfCatalogRate(priceItem,priceLevel) : resolveRate(
+           priceItem,
+           priceLevel,
+           prices
+         );
++      const pdfRatePending=Boolean(pdfQuantity&&rateResolution.missingRate);
++      if(pdfRatePending)warnings.push(`PDF catalog item ${pdfCode} has no own rate. Its measured quantity is retained without a peer or median rate.`);
+ 
+       const unitRate =
+         rateResolution.rate;
+@@ -6292,6 +6294,8 @@
+         status:
+           isQuantityPending
+             ? "quantity_pending"
++            : pdfRatePending
++              ? "measured_rate_pending"
+             : isEstimatedRule
+               ? "provisional_estimate"
+               : "measured",
+@@ -6299,13 +6303,15 @@
+         verification:
+           isQuantityPending
+             ? "pending"
++            : pdfRatePending
++              ? "pending"
+             : isEstimatedRule
+               ? "provisional"
+               : "verified",
+ 
+         includeInCommercialTotal:
+           !isQuantityPending &&
+-          !isEstimatedRule,
++          !isEstimatedRule && !pdfRatePending,
+ 
+         measuredFromApsStructure:
+           isMeasuredDerivedRule && !pdfQuantity,
+@@ -6344,6 +6350,7 @@
+ 
+         notes:
+           [
++            pdfRatePending ? "The matched catalog item has no own rate. Quantity retained; no peer or median rate borrowed." : "",
+             pdfQuantity ? "Quantity transcribed from PDF evidence; scope, specification and rate require review." : rule.notes || "",
+             pdfQuantity ? `PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages ${pdfQuantity.pages.join(", ")}; ${pdfQuantity.evidence}` : isEstimatedRule
+               ? `PROVISIONAL: ${quantityEstimate?.source || "derived allowance"}. Excluded from verified commercial subtotal until replaced by measured quantity.`
+@@ -7536,6 +7543,7 @@
+           "Rates were loaded from the Ventra UAE price database.",
+         ],
+         warnings,
++        pdfCatalogAudit:pdfCatalogPlan?.catalogAudit||null,
+         aiScope: {
+           detectedRooms:
+             semanticRooms.map((room) => ({
+--- a/tests/pdf-catalog-rules.test.mjs
++++ b/tests/pdf-catalog-rules.test.mjs
+@@ -3,7 +3,7 @@
+ import {readFileSync} from 'node:fs';
+ import vm from 'node:vm';
+ import {mergePdfEvidence,pdfScheduledRule} from '../src/lib/pdfTakeoffEvidence.mjs';
+-import {planPdfCatalogBindings,planPdfCatalogRules,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {planPdfCatalogBindings,planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
+ import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
+ import {classifyEstimateItem} from '../src/lib/estimateClassification.mjs';
+ import {buildBoqExport} from '../src/lib/boqExport.mjs';
+@@ -25,7 +25,7 @@
+    insert(){writes++;throw Error('database write forbidden');},delete(){writes++;throw Error('database write forbidden');}};return q;
+  }};
+  const forbidden=()=>{modelCalls++;throw Error('model calls forbidden');};
+- const context=vm.createContext({planPdfCatalogRules,retainUnboundPdfQuantities,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
++ const context=vm.createContext({planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
+   process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-only',VENTRA_DISABLE_BOQ_AI:'true'}},
+   createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
+   getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty room inventory'}),
+@@ -115,3 +115,65 @@
+  assert.ok(boq.items.some(i=>i.itemCode==='EXT'));assert.ok(!boq.items.some(i=>i.itemCode==='INT'));
+  assert.ok(boq.items.every(i=>!i.pdfEvidence));
+ });
++
++test('unconfigured zero-rate dictionary entries cannot shadow published catalog items or create their own priced rules',()=>{
++ const base=price('MAIN','Formwork to suspended slabs including props','m2',84,'03');
++ const dictionary={...price('DICT','Formwork for Slabs','m2',0),section_code:null,source_name:''};
++ const snapshot=structuredClone([base,dictionary]);
++ const plan=planPdfCatalogRules(observed,[],[base,dictionary]);assert.equal(plan.bindings.size,1);assert.ok(plan.bindings.has('MAIN'));
++ assert.equal(plan.rules.length,1);assert.equal(plan.rules[0].item_code,'MAIN');assert.equal(plan.catalogAudit.unconfiguredEntries,1);
++ assert.deepEqual([base,dictionary],snapshot);
++ const contradictory={...dictionary,item_code:'MAIN',description:'Unknown different scope',unit:'m3'};
++ assert.equal(planPdfCatalogRules(observed,[],[base,contradictory]).bindings.size,0);
++});
++test('configured or directly priced variants remain competing specifications even when other metadata or rates are missing',()=>{
++ const main=price('MAIN','Internal cement sand plaster to walls','m2',27,'08');
++ const blank={...price('OTHER','Internal cement plaster 15mm','m2',0),section_code:null,source_name:''};
++ for(const [variant,rules] of [[{...blank,section_code:'08'},[]],[{...blank,source_name:'Published supplier catalog'},[]],[{...blank,standard_rate:15},[]],[blank,[rule(blank)]]]){
++  const plan=planPdfCatalogRules(observed,rules,[main,variant]);assert.equal(plan.bindings.size,0);assert.equal(plan.catalogAudit.unconfiguredEntries,0);
++ }
++});
++test('PDF rates use only the selected item and retain an explicitly matched zero-rate operation without a painting median',async()=>{
++ const prices=[price('EPOXY','Epoxy Floor Paint','m2',0,'09'),price('PAINT-A','Decorative paint','m2',20,'09'),price('PAINT-B','Exterior paint','m2',26,'09')];
++ const {boq}=await run(prices,prices.map(rule));
++ const row=boq.items.find(i=>i.itemCode==='EPOXY');close(row.quantity,28);assert.equal(row.rate,0);assert.equal(row.referenceRate,0);assert.equal(row.rateMissing,true);assert.equal(row.rateSource,'rate_missing_on_catalog_item');assert.equal(row.status,'measured_rate_pending');assert.equal(row.includeInCommercialTotal,false);
++ assert.ok(!boq.items.some(i=>/median/.test(i.rateSource||'')));
++ const exported=buildBoqExport([row]);assert.equal(exported.rows[0][7],'Quantity recorded / rate and specification pending');assert.equal(exported.sums.provisional,0);
++ const own=resolvePdfCatalogRate({...prices[0],economy_rate:12,premium_rate:25},'premium');assert.equal(own.rate,25);assert.equal(own.source,'direct_premium_rate');
++ assert.equal(resolvePdfCatalogRate({...prices[0],material_rate:8,labor_rate:3}).rate,11);
++ assert.equal(resolvePdfCatalogRate({...prices[0],material_rate:-8,labor_rate:11}).missingRate,true);
++});
++test('non-PDF catalog peer fallback remains unchanged for the same unpriced legacy operation',async()=>{
++ const prices=[price('EPOXY','Epoxy floor paint','m2',0,'09'),price('PAINT-A','Internal wall paint','m2',20,'09'),price('PAINT-B','Exterior paint','m2',26,'09')];
++ const formula={...rule(prices[0]),formula_type:'direct',geometry_type:'floor',geometry_property:'area',multiplier:1};
++ const {boq}=await run(prices,[formula],{floor_area:28,wall_area:0});
++ const row=boq.items.find(i=>i.itemCode==='EPOXY');assert.ok(row);assert.equal(row.rate,23);assert.match(row.rateSource,/median/);
++});
++
++const realCatalog=JSON.parse(readFileSync(new URL('./fixtures/pdf-observed-price-catalog.json',import.meta.url),'utf8')).catalog;
++const realPrices=realCatalog.sections.flatMap(s=>s.items.map(i=>({item_code:i.itemCode,description:i.description,unit:i.unit,
++ section_code:s.sectionCode==='UNASSIGNED'?null:s.sectionCode,source_name:i.sourceName,category:i.category,sub_category:i.subCategory,
++ standard_rate:i.standardRate,economy_rate:i.economyRate,premium_rate:i.premiumRate,is_active:true})));
++test('actual 3762-entry user catalog reproduces and resolves dictionary interference without changing one rate or quantity',async()=>{
++ const before=planPdfCatalogBindings(observed,realPrices);assert.equal(before.bindings.size,11);assert.ok(before.bindings.has('PNT-008'));assert.ok(!before.bindings.has('CON-008'));
++ const plan=planPdfCatalogRules(observed,[],realPrices);
++ assert.equal(plan.catalogAudit.activeEntries,3762);assert.equal(plan.catalogAudit.commercialCandidates,52);assert.equal(plan.catalogAudit.unconfiguredEntries,3710);
++ assert.equal(plan.bindings.size,19);assert.equal(plan.bindings.has('PNT-008'),false);
++ const {boq}=await run(realPrices);assert.equal(boq.pdfCatalogAudit.unconfiguredEntries,3710);
++ for(const [code,quantity,rate] of [['SITE-001',72.2,39],['CON-004',12.16813827160494,3550],['CON-005',75.6,78],['CON-006',138.06,90],['CON-007',118.5,94],['CON-008',360,84],['MAS-003',305.72,66],['FIN-001',978.62,27],['FIN-005',312,80]]){
++  const row=boq.items.find(i=>i.itemCode===code);assert.ok(row,code);close(row.quantity,quantity);close(row.rate,rate);
++ }
++ assert.equal(boq.items.filter(i=>i.quantity>0&&i.rate>0).length,19);close(boq.summary.provisionalSubtotal,265239.95);assert.equal(boq.summary.verifiedSubtotal,0);
++ const exported=buildBoqExport(boq.items,{vatPercentage:5});assert.equal(exported.summary.find(r=>r[0].startsWith('BOQ budget total'))[1],'278501.95');
++ for(const [key,quantity] of [['epoxy_floor_area',28],['internal_block_area',336.45],['ceiling_paint_area',360],['wet_wall_tile_area',117.24],['wet_wall_waterproofing_area',97.92]]){
++  const row=boq.items.find(i=>i.pdfEvidence?.metricKey===key);assert.ok(row,key);close(row.quantity,quantity);assert.equal(row.rate,0);
++ }
++ const physicalKeys=boq.items.filter(i=>i.quantity>0).map(i=>i.pdfEvidence?.metricKey);assert.equal(new Set(physicalKeys).size,physicalKeys.length);
++ assert.ok(boq.items.every(i=>!i.includeInCommercialTotal));
++ const reverse=planPdfCatalogRules(observed,[],[...realPrices].reverse());assert.deepEqual([...reverse.bindings.keys()].sort(),[...plan.bindings.keys()].sort());
++ // Also exercise existing formulas for all configured items; formula contents
++ // are test scaffolding because the catalog export does not include boq_rules.
++ const configuredRules=realPrices.filter(i=>i.section_code).map(rule);
++ const withRules=await run(realPrices,configuredRules);close(withRules.boq.summary.provisionalSubtotal,265239.95);
++ assert.equal(withRules.boq.items.filter(i=>i.quantity>0&&i.rate>0).length,19);
++});

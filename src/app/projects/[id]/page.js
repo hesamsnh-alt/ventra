@@ -26,6 +26,7 @@ import {
   getProjectById,
 } from "@/services/projectService";
 
+import ProjectWaitOverlay from "./ProjectWaitOverlay";
 import ProjectControl from "./ProjectControl";
 import ProjectProgressEditor from "./ProjectProgressEditor";
 import ProjectTimeline from "./ProjectTimeline";
@@ -284,6 +285,7 @@ export default function ProjectWorkspacePage() {
   if (loading) {
     return (
       <LocalizedElement as="main" className="project-workspace">
+        <ProjectWaitOverlay projectId={projectId} loading />
         <LocalizedElement as="div" className="project-loading">
           Loading project...
         </LocalizedElement>
@@ -334,6 +336,7 @@ export default function ProjectWorkspacePage() {
 
   return (
     <LocalizedElement as="main" className="project-workspace">
+      <ProjectWaitOverlay projectId={projectId} />
       <LocalizedElement as="header" className="project-header">
           <SignOutButton />
         <LocalizedElement as="div" className="project-header-main">

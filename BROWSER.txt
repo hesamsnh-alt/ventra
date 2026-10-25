@@ -1,0 +1,1 @@
+PASS browser: real photo preparation, single model POST, automatic library refresh, dimension save/selection, texture upload/selection, no page errors. GPU render excluded.

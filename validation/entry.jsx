@@ -1,0 +1,2 @@
+import React from 'react';import{createRoot}from'react-dom/client';import Library from '../../src/app/projects/[id]/PersonalAssetLibrary.jsx';
+createRoot(document.getElementById('root')).render(<><div id="model"><Library kind="model" projectId="test" onChoose={r=>window.chosenModel=r}/></div><div id="material"><Library kind="material" projectId="test" onChoose={r=>window.chosenMaterial=r}/></div></>);

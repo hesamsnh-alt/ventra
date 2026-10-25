@@ -1,0 +1,58 @@
+--- a/src/app/projects/[id]/Project3DViewer.jsx
++++ b/src/app/projects/[id]/Project3DViewer.jsx
+@@ -10,6 +10,7 @@
+ import SurfaceMaterialPanel from './SurfaceMaterialPanel';
+ import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit} from '@/lib/surfaceMaterials.mjs';
+ import {raycastVisibleMeshes} from '@/lib/raycastMeshes.mjs';
++import {configureFloorDepth} from '@/lib/floorDepthLayers.mjs';
+ import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
+ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
+ import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
+@@ -6595,6 +6596,7 @@
+         schematic: true,
+       };
+       decorateSurfaceMesh(THREE,footprintResult.mesh,{kind:'floor-base',id:'footprint'},scene,surfaceMaterialCache);
++      configureFloorDepth(footprintResult.mesh,'base');
+       add(footprintResult.mesh);
+     }
+ 
+@@ -6726,6 +6728,7 @@
+       };
+ 
+       decorateSurfaceMesh(THREE,result.mesh,{kind:'floor',id:String(room.id)},scene,surfaceMaterialCache);
++      configureFloorDepth(result.mesh,'finish');
+       add(result.mesh);
+ 
+       if (!result.mesh.material.map) ventraAddVisibleFloorPattern({
+--- a/src/lib/surfaceMaterials.mjs
++++ b/src/lib/surfaceMaterials.mjs
+@@ -127,6 +127,9 @@
+   const item=findSurfaceMaterial(id);if(!item)return null;
+   const canvas=makeCanvas();canvas.width=256;paintSurfaceSwatch(canvas,item);
+   const texture=new THREE.Texture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
++  texture.generateMipmaps=true;texture.anisotropy=4;
++  texture.minFilter=THREE.LinearMipmapLinearFilter??THREE.LinearMipMapLinearFilter??THREE.LinearFilter;
++  texture.magFilter=THREE.LinearFilter;
+   texture.repeat.set(.5,.5);texture.needsUpdate=true;
+   const Material=THREE.MeshPhongMaterial||THREE.MeshLambertMaterial;
+   const material=new Material({color:0xffffff,map:texture,side:THREE.DoubleSide,
+--- a/src/lib/floorDepthLayers.mjs
++++ b/src/lib/floorDepthLayers.mjs
+@@ -0,0 +1,17 @@
++// Render-only separation. The source room polygons, floor level and quantities
++// remain unchanged. The base plate must never compete with the room finish.
++export function configureFloorDepth(mesh,layer){
++  if(!mesh)return;
++  if(!['base','finish'].includes(layer))throw new Error('Unknown floor render layer.');
++  const sourceZ=mesh.userData?.ventraFloorDepth?.sourceZ??mesh.position.z;
++  const offset=layer==='base'?-.025:0;
++  mesh.position.z=sourceZ+offset;
++  mesh.userData={...mesh.userData,ventraFloorDepth:{layer,sourceZ,renderOffsetMeters:offset}};
++  for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material]){
++    if(!material)continue;
++    material.polygonOffset=true;
++    material.polygonOffsetFactor=layer==='base'?4:-1;
++    material.polygonOffsetUnits=layer==='base'?4:-1;
++    material.needsUpdate=true;
++  }
++}

@@ -1,0 +1,1556 @@
+--- a/src/lib/pdfTakeoffEvidence.mjs
++++ b/src/lib/pdfTakeoffEvidence.mjs
+@@ -101,9 +101,26 @@
+  return {...fields,confidence:floors.length?Math.round(floors.reduce((s,p)=>s+(p.confidence||0),0)/floors.length*10)/10:0,wall_height:sourcedHeight?nativeHeight.value:3.2,wall_length_estimated:false,wall_area_estimated:false,wall_length_source:'pdf_scoped_floor_plan',wall_area_source:'pdf_scoped_floor_plan',wall_height_source:sourcedHeight?'pdf_native_source_rule':'project_default',total_pages:total,analyzed_pages:pages.length,failed_pages:failed,page_results:pages,detected_items:floors.flatMap(p=>(p.detected_items||[]).map(i=>({...i,pages:[p.pageNumber]}))),scheduled_quantities:resolved,pdf_analysis:report,notes:`PDF reconciled by page role and floor scope. ${floors.length} distinct floor plans selected. Schedules override matching scope instead of adding duplicates. AI extraction requires review. ${warnings.join('; ')}`};
+ }
+ export function pdfRuleMetric(description,unit){
+- const d=String(description||'').toLowerCase(),u=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
++ const d=String(description||'').toLowerCase(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
++ const u=({'sqm':'m2','sq.m':'m2','sq m':'m2','cum':'m3','cu.m':'m3','cu m':'m3','lm':'m','lin.m':'m','linear metre':'m','linear meter':'m','no.':'nr','nos.':'nr','each':'nr','ea':'nr','set':'nr'})[rawUnit]||rawUnit;
+  // Similar words do not establish the same operation or fixture specification.
+  if(/disposal|cart\s*away|haul|backfill|downlight|luminaire|light fixture|\bled\b/.test(d))return null;
++ // plaster_area is the interior plaster operation. An exterior render or a
++ // plaster ceiling must not receive it or compete with an interior wall item.
++ // An unspecified plaster location is not enough to select the operation.
++ if(/\bplaster(?:ing)?\b/.test(d)&&(!/\b(?:internal|interior)\b/.test(d)||/\b(?:external|exterior|facade|ceiling|render)\b/.test(d)))return null;
++ const specific=[
++  [/\b(?:ceiling\s+paint|paint(?:ing)?\s+(?:to\s+)?(?:internal\s+)?ceilings?)\b/,'ceiling_paint_area','m2'],
++  [/\b(?:wet\s+(?:area|room)s?\s+wall\s+(?:tiles?|tiling)|wall\s+(?:tiles?|tiling)\s+(?:to|in)\s+wet\s+(?:area|room)s?)\b/,'wet_wall_tile_area','m2'],
++  [/\bwet\s+(?:area|room)s?\s+wall\s+waterproofing\b/,'wet_wall_waterproofing_area','m2'],
++  [/\bwet\s+(?:area|room)s?\s+floor\s+waterproofing\b/,'wet_floor_waterproofing_area','m2'],
++  [/\bkitchen\s+backsplash\b/,'backsplash_area','m2'],
++  [/\b(?:kitchen\s+base\s+cabinets?|base\s+kitchen\s+cabinets?)\b/,'kitchen_cabinet_length','m'],
++ ];
++ // Combined wall/floor or floor/ceiling packages need their own measurement
++ // rule; they cannot consume only one part of the package by keyword order.
++ if(/\b(?:wall|walls)\b/.test(d)&&/\b(?:floor|floors|ceiling|ceilings)\b/.test(d))return null;
++ for(const [pattern,key,expected] of specific)if(pattern.test(d))return u===expected?{key,factor:1}:null;
+  const rules=[[/blinding/,'pcc_volume','m3'],[/\bexcavation\b/,'excavation_volume','m3'],[/formwork.*found/,'foundation_formwork_area','m2'],[/formwork.*column/,'column_formwork_area','m2'],[/formwork.*beam/,'beam_formwork_area','m2'],[/formwork.*slab/,'slab_formwork_area','m2'],[/reinforcement|reinforcing steel/,'rebar_kg','kg'],[/200.*block|block.*200/,'external_block_area','m2'],[/120.*block|block.*120/,'internal_block_area','m2'],[/wood.*floor|parquet/,'wood_floor_area','m2'],[/ceramic.*floor/,'ceramic_floor_area','m2'],[/epoxy.*floor|garage.*epoxy/,'epoxy_floor_area','m2'],[/plaster/,'plaster_area','m2'],[/internal wall.*paint|wall emulsion/,'paint_area','m2'],[/gypsum.*ceiling/,'gypsum_ceiling_area','m2'],[/glazed window|aluminium.*window/,'window_area','m2'],[/water closet|toilet pan/,'toilet_count','nr'],[/wash\s*basin/,'basin_count','nr'],[/shower/,'shower_count','nr'],[/socket/,'socket_count','nr'],[/lighting?\s+point|light\s+point/,'light_count','nr'],[/distribution board/,'distribution_board_count','nr'],[/smoke detector/,'smoke_detector_count','nr']];
+  for(const [pattern,key,expected] of rules)if(pattern.test(d)){
+   if(expected==='kg'&&['ton','tonne','t'].includes(u))return {key,factor:.001};
+--- a/src/lib/pdfBoqCoverage.mjs
++++ b/src/lib/pdfBoqCoverage.mjs
+@@ -4,26 +4,47 @@
+ // no basis for selecting a grade, diameter, capacity or finish from price alone.
+ export function planPdfCatalogBindings(takeoff, candidates) {
+   const byMetric = new Map();
+-  for (const item of candidates) {
+-    if (!item) continue;
++  const signatures = new Map(), conflictingCodes = new Set();
++  for (const item of candidates || []) {
++    if (!item || item.is_active === false) continue;
++    const code = String(item.item_code || item.itemCode || '').trim().toUpperCase();
++    if (!code) continue;
++    const signature=JSON.stringify([String(item.description||'').trim().toLowerCase(),String(item.unit||'').trim().toLowerCase()]);
++    if(signatures.has(code)&&signatures.get(code)!==signature)conflictingCodes.add(code);
++    signatures.set(code,signature);
+     const evidence = pdfScheduledRule(takeoff, item.description, item.unit);
+     if (!evidence || evidence.quantity <= 0) continue;
+-    const code = String(item.item_code || item.itemCode || '').trim().toUpperCase();
+-    if (!code) continue;
+     const group = byMetric.get(evidence.metricKey) || new Map();
+     group.set(code, evidence);
+     byMetric.set(evidence.metricKey, group);
+   }
+   const bindings = new Map(), warnings = [];
+   for (const [metric, group] of byMetric) {
+-    if (group.size === 1) {
++    if (group.size === 1 && !conflictingCodes.has([...group.keys()][0])) {
+       const [code, quantity] = [...group][0];
+       bindings.set(code, quantity);
+     } else {
+-      warnings.push(`PDF quantity ${metric} has competing catalog items (${[...group.keys()].join(', ')}). Specification selection required; quantity was not repeated across them.`);
++      warnings.push(`PDF quantity ${metric} has ${group.size===1?'inconsistent definitions for catalog code':'competing catalog items'} (${[...group.keys()].join(', ')}). Specification selection required; quantity was not repeated across them.`);
+     }
+   }
+   return {bindings, warnings};
++}
++
++// Active price items and formula rules are separate inventories. A PDF already
++// supplies the measured operation; it does not need a generic geometry formula
++// to use one unique matching existing catalog item. These rows exist only for
++// this calculation: nothing is inserted into boq_rules or price_items.
++export function planPdfCatalogRules(takeoff, rules, candidates) {
++  const plan=planPdfCatalogBindings(takeoff,candidates);
++  const next=[...(rules||[])],codes=new Set(next.map(r=>String(r.item_code||'').trim().toUpperCase()));
++  for(const item of candidates||[]){
++    const code=String(item?.item_code||'').trim().toUpperCase();
++    if(!plan.bindings.has(code)||codes.has(code))continue;
++    next.push({item_code:item.item_code,section_code:item.section_code,formula_type:'manual',
++      rule_name:'PDF evidence: existing catalog item',notes:'Explicit PDF operation matched to a unique existing catalog item; review required.'});
++    codes.add(code);
++  }
++  return {...plan,rules:next};
+ }
+ 
+ // Aggregate room/floor/wall summaries are diagnostic, not extra billable work.
+--- a/src/lib/serverBoqAnalysis.js
++++ b/src/lib/serverBoqAnalysis.js
+@@ -1,4 +1,4 @@
+-import {planPdfCatalogBindings, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
++import {planPdfCatalogRules, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
+ import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
+ import { classifyEstimateItem } from '@/lib/estimateClassification.mjs';
+ import {applyDwgScheduleToBoq} from "@/lib/dwgSchedule.mjs";
+@@ -5773,7 +5773,7 @@
+     const rules = rulesResult.data || [];
+     const prices = pricesResult.data || [];
+ 
+-    if (rules.length === 0 || prices.length === 0) {
++    if (prices.length === 0 || (!takeoff.pdf_analysis && rules.length === 0)) {
+       const fallbackBoq = takeoff.pdf_analysis ? {items:[],warnings:[]} : buildLocalBoq({
+         takeoff,
+         projectName,
+@@ -5892,14 +5892,13 @@
+       }
+     );
+ 
+-    const pdfCatalogPlan = takeoff.pdf_analysis ? planPdfCatalogBindings(takeoff,
+-      rules.map(rule=>pricesByCode.get(normalizeCode(rule.item_code)))) : null;
++    const pdfCatalogPlan = takeoff.pdf_analysis ? planPdfCatalogRules(takeoff,rules,prices) : null;
+     if(pdfCatalogPlan)warnings.push(...pdfCatalogPlan.warnings);
+     const pdfConsumedCodes = new Set();
+ 
+     for (
+       const rule of
+-      rulesResult.data || []
++      pdfCatalogPlan?.rules || rulesResult.data || []
+     ) {
+       const priceItem =
+         pricesByCode.get(
+@@ -5915,7 +5914,7 @@
+       }
+ 
+       if (
+-        shouldSuppressDatabaseAutoRule(
++        !takeoff.pdf_analysis && shouldSuppressDatabaseAutoRule(
+           rule,
+           priceItem,
+           claimedMeasuredFamilies
+--- /dev/null
++++ b/tests/pdf-catalog-rules.test.mjs
+@@ -0,0 +1,117 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import vm from 'node:vm';
++import {mergePdfEvidence,pdfScheduledRule} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogBindings,planPdfCatalogRules,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
++import {classifyEstimateItem} from '../src/lib/estimateClassification.mjs';
++import {buildBoqExport} from '../src/lib/boqExport.mjs';
++
++// The fixture is the user's actual successful local v121 report, reduced to
++// quantities and complete pricing-boundary claims. All catalog rates below
++// are test data; no production rate, database or model is accessed.
++const observed=JSON.parse(readFileSync(new URL('./fixtures/pdf-observed-catalog-recovery.json',import.meta.url),'utf8'));
++const source=readFileSync(new URL('../src/lib/serverBoqAnalysis.js',import.meta.url),'utf8');
++const price=(code,description,unit='m2',rate=10,section='07')=>({item_code:code,description,unit,standard_rate:rate,section_code:section,is_active:true});
++const rule=(item)=>({item_code:item.item_code,section_code:item.section_code,rule_name:'DB Auto: wall operation',formula_type:'manual',geometry_type:'wall',geometry_property:'area'});
++async function run(prices,rules=[],takeoff=observed){
++ const tables={price_items:structuredClone(prices),boq_rules:structuredClone(rules),boq_sections:[]},reads=[];
++ let modelCalls=0,writes=0;
++ const db={from(table){
++  assert.ok(table in tables,`unexpected database access ${table}`);reads.push(table);
++  const q={select(){return q;},eq(){return q;},order(){return q;},range(from,to){return Promise.resolve({data:tables[table].slice(from,to+1),error:null});},
++   then(resolve,reject){return Promise.resolve({data:tables[table],error:null}).then(resolve,reject);},
++   insert(){writes++;throw Error('database write forbidden');},delete(){writes++;throw Error('database write forbidden');}};return q;
++ }};
++ const forbidden=()=>{modelCalls++;throw Error('model calls forbidden');};
++ const context=vm.createContext({planPdfCatalogRules,retainUnboundPdfQuantities,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
++  process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-only',VENTRA_DISABLE_BOQ_AI:'true'}},
++  createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
++  getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty room inventory'}),
++  getDrawingEvidence:()=>null,applyDwgScheduleToBoq:items=>({items,warnings:[]}),
++  buildLocalBoq:()=>{throw Error('PDF geometry allowance fallback forbidden');},
++  inferConstructionScopes:forbidden,shortlistPriceCatalog:forbidden,matchScopesToCatalog:forbidden,resolveAiQuantity:forbidden});
++ vm.runInContext(source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/export /g,'')+'\nthis.handle=handleCommercialRequest;',context);
++ const response=await context.handle({json:async()=>({takeoff:structuredClone(takeoff),priceLevel:'standard',vatPercentage:5})});
++ const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.success,true);
++ assert.equal(modelCalls,0);assert.equal(writes,0);assert.deepEqual(prices,tables.price_items);assert.deepEqual(rules,tables.boq_rules);
++ return {boq:result.boq,reads};
++}
++const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
++
++test('observed interior plaster does not compete with exterior render, plaster ceilings or unknown plaster scope',()=>{
++ close(pdfScheduledRule(observed,'Internal cement sand plaster to walls','m²').quantity,978.62);
++ for(const description of ['External cement plaster to walls','Exterior plaster','Gypsum plaster to ceilings','Cement sand plaster','Internal and external plaster','External plastering to walls']){
++  assert.equal(pdfScheduledRule(observed,description,'m2'),null,description);
++ }
++ const candidates=[price('INT','Internal cement sand plaster to walls'),price('EXT','External cement plaster to walls')];
++ const plan=planPdfCatalogBindings(observed,candidates);assert.equal(plan.bindings.size,1);assert.equal(plan.bindings.get('INT').metricKey,'plaster_area');assert.equal(plan.warnings.length,0);
++});
++test('operation-specific descriptions and unit aliases retain distinct paint, tiles, waterproofing and cabinetry scopes',()=>{
++ for(const [description,unit,key,value] of [
++  ['Paint to internal ceilings','sq.m','ceiling_paint_area',360],
++  ['Wet area wall tiles','sqm','wet_wall_tile_area',117.24],
++  ['Wet area wall waterproofing','m2','wet_wall_waterproofing_area',97.92],
++  ['Wet area floor waterproofing','m²','wet_floor_waterproofing_area',46],
++  ['Kitchen backsplash','m2','backsplash_area',3],
++  ['Kitchen base cabinets','lm','kitchen_cabinet_length',5],
++ ]){const got=pdfScheduledRule(observed,description,unit);assert.equal(got?.metricKey,key);close(got.quantity,value);}
++ for(const [description,unit] of [
++  ['Wet area wall waterproofing','m'],['Kitchen base cabinets','m2'],
++  ['Wet area wall and floor waterproofing','m2'],['Internal wall and ceiling paint','m2'],
++  ['Cementitious waterproofing to toilets and wet areas','m2'],['Torch applied membrane to horizontal surfaces','m2'],
++  ['PPR water pipe 20mm','m'],['Split AC unit 1.5 ton','nos'],['Single leaf timber door','nos'],
++ ])assert.equal(pdfScheduledRule(observed,description,unit),null,description);
++});
++test('existing catalog items without geometry formulas can receive explicit PDF operations without mutating either inventory',()=>{
++ const prices=[price('PL','Internal cement sand plaster to walls'),price('CEIL','Ceiling paint')],rules=[rule(prices[0])],snapshot=structuredClone({prices,rules});
++ const p=planPdfCatalogRules(observed,rules,prices);
++ assert.equal(p.bindings.size,2);assert.equal(p.rules.length,2);assert.equal(p.rules[1].item_code,'CEIL');assert.equal(p.rules[1].formula_type,'manual');
++ assert.deepEqual({prices,rules},snapshot);
++ const duplicate=planPdfCatalogRules(observed,p.rules,prices);assert.equal(duplicate.rules.length,2);
++});
++test('the full active catalog participates in ambiguity checks, even when only one variant has a geometry rule',async()=>{
++ const prices=[price('PL-A','Internal cement sand plaster to walls'),price('PL-B','Interior wall plaster', 'm2',99)];
++ const {boq}=await run(prices,[rule(prices[0])]);
++ assert.equal(boq.items.find(i=>i.itemCode==='PL-A').quantity,0);
++ const retained=boq.items.filter(i=>i.pdfEvidence?.metricKey==='plaster_area');assert.equal(retained.length,1);assert.equal(retained[0].rate,0);close(retained[0].quantity,978.62);
++ assert.ok(boq.warnings.some(w=>w.includes('PL-A, PL-B')));
++ const inactive=planPdfCatalogRules(observed,[],[prices[0],{...prices[1],is_active:false}]);assert.equal(inactive.bindings.size,1);
++});
++test('one inconsistent catalog code cannot bind a quantity to a different description or unit',()=>{
++ for(const other of [price('SAME','Ceiling paint'),price('SAME','Unknown scope','m3')]){
++  const plan=planPdfCatalogBindings(observed,[price('SAME','Internal wall plaster'),other]);assert.equal(plan.bindings.size,0);assert.ok(plan.warnings.length);
++ }
++});
++test('actual server keeps internal and external PDF operations separate despite legacy whole-wall-family suppression',async()=>{
++ const prices=[price('EXT','200mm thick concrete block wall','m2',66,'04'),price('INT','120mm thick concrete block wall','m2',51,'04'),price('PL','Internal cement sand plaster to walls','m2',17),price('RENDER','External cement plaster to walls','m2',19)];
++ const {boq}=await run(prices,prices.map(rule));
++ close(boq.items.find(i=>i.itemCode==='EXT').quantity,305.72);close(boq.items.find(i=>i.itemCode==='INT').quantity,336.45);close(boq.items.find(i=>i.itemCode==='PL').quantity,978.62);
++ assert.equal(boq.items.find(i=>i.itemCode==='RENDER').quantity,0);
++ for(const key of ['internal_block_area','external_block_area','plaster_area'])assert.equal(boq.items.filter(i=>i.quantity>0&&i.pdfEvidence?.metricKey===key).length,1);
++ assert.equal(boq.summary.verifiedSubtotal,0);assert.equal(boq.summary.grandTotal,0);
++ for(const i of boq.items.filter(i=>i.quantity>0&&i.rate>0))assert.equal(i.includeInCommercialTotal,false);
++ const exported=buildBoqExport(boq.items,{});close(exported.sums.provisional,305.72*66+336.45*51+978.62*17);
++});
++test('actual server supports a populated existing catalog with zero formula rules, with no model or database write',async()=>{
++ const prices=[price('PL','Internal cement sand plaster to walls','m²',17),price('CEIL','Ceiling paint','sqm',9)];
++ const {boq}=await run(prices);
++ close(boq.items.find(i=>i.itemCode==='PL').quantity,978.62);close(boq.items.find(i=>i.itemCode==='CEIL').quantity,360);
++ assert.equal(boq.items.filter(i=>i.pdfEvidence?.metricKey==='ceiling_paint_area').length,1);
++ const pending=boq.items.find(i=>i.pdfEvidence?.metricKey==='water_pipe_length');close(pending.quantity,80);assert.equal(pending.rate,0);
++});
++test('missing or incompatible catalog specifications remain unpriced rather than borrowing another operation rate',async()=>{
++ const prices=[price('BLOCK','100mm thick concrete block wall','m2',31,'04'),price('PIPE','PPR water supply pipe 20mm','m',23,'08'),price('AC','Wall mounted split air conditioning unit 1.5 ton','nos',1200,'10')];
++ const {boq}=await run(prices,prices.map(rule));
++ for(const [key,quantity] of [['internal_block_area',336.45],['water_pipe_length',80],['ac_count',9]]){
++  const row=boq.items.find(i=>i.pdfEvidence?.metricKey===key);close(row.quantity,quantity);assert.equal(row.rate,0);assert.equal(row.status,'measured_rate_pending');
++ }
++ assert.equal(boq.summary.provisionalSubtotal,0);
++});
++test('the non-PDF legacy wall-family suppression still applies to generic CAD quantities',async()=>{
++ const prices=[price('EXT','200mm thick concrete block wall','m2',66,'04'),price('INT','120mm thick concrete block wall','m2',51,'04')];
++ const {boq}=await run(prices,prices.map(rule),{wall_length:226,wall_area:642.17,wall_height:3.2,floor_area:372});
++ assert.ok(boq.items.some(i=>i.itemCode==='EXT'));assert.ok(!boq.items.some(i=>i.itemCode==='INT'));
++ assert.ok(boq.items.every(i=>!i.pdfEvidence));
++});
+--- /dev/null
++++ b/tests/fixtures/pdf-observed-catalog-recovery.json
+@@ -0,0 +1,1304 @@
++{
++  "rooms": 18,
++  "doors": 19,
++  "windows": 15,
++  "wall_length": 226,
++  "wall_area": 642.1699999999998,
++  "floor_area": 372,
++  "ceiling_area": 360,
++  "door_area": 41.970000000000006,
++  "window_area": 39.06,
++  "roof_area": 180,
++  "pcc_volume": 5.78,
++  "foundation_volume": 20.25,
++  "pedestal_volume": 2.4299999999999997,
++  "column_volume": 10.3545,
++  "beam_volume": 14.8125,
++  "ground_slab_volume": 28.799999999999997,
++  "first_slab_volume": 36.00000000000001,
++  "roof_slab_volume": 36.00000000000001,
++  "rebar_kg": 12168.138271604941,
++  "foundation_formwork_area": 75.6,
++  "column_formwork_area": 138.06,
++  "beam_formwork_area": 118.5,
++  "slab_formwork_area": 360,
++  "external_block_area": 305.7200000000001,
++  "internal_block_area": 336.4500000000001,
++  "wood_floor_area": 178,
++  "ceramic_floor_area": 154,
++  "epoxy_floor_area": 28,
++  "terrace_floor_area": 12,
++  "wet_floor_area": 46,
++  "plaster_area": 978.6199999999997,
++  "paint_area": 858.3799999999994,
++  "gypsum_ceiling_area": 312,
++  "excavation_volume": 72.2,
++  "toilet_count": 3,
++  "basin_count": 3,
++  "shower_count": 3,
++  "socket_count": 70,
++  "light_count": 60,
++  "distribution_board_count": 2,
++  "ac_count": 9,
++  "smoke_detector_count": 8,
++  "water_pipe_length": 80,
++  "waste_pipe_length": 60,
++  "ac_pipe_length": 90,
++  "kitchen_cabinet_length": 5,
++  "terrace_railing_length": 7,
++  "roof_waterproofing_area": 180,
++  "terrace_waterproofing_area": 12,
++  "wet_floor_waterproofing_area": 46,
++  "wet_wall_waterproofing_area": 97.92000000000002,
++  "wet_wall_tile_area": 117.23999999999998,
++  "ceiling_paint_area": 360,
++  "backsplash_area": 3,
++  "driveway_area": 40,
++  "landscape_area": 60,
++  "kitchen_sink_count": 1,
++  "laundry_sink_count": 1,
++  "internal_wall_length": 114,
++  "external_wall_length": 112,
++  "internal_door_count": 15,
++  "garage_door_count": 1,
++  "kitchen_hob_hood_count": 1,
++  "confidence": 81.5,
++  "wall_height": 3.2,
++  "wall_height_source": "pdf_native_source_rule",
++  "scheduled_quantities": {
++    "rooms": 18,
++    "door_count": 19,
++    "window_count": 15,
++    "door_area": 41.970000000000006,
++    "window_area": 39.06,
++    "wall_length": 226,
++    "wall_area": 642.1699999999998,
++    "floor_area": 372,
++    "ceiling_area": 360,
++    "roof_area": 180,
++    "pcc_volume": 5.78,
++    "foundation_volume": 20.25,
++    "pedestal_volume": 2.4299999999999997,
++    "column_volume": 10.3545,
++    "beam_volume": 14.8125,
++    "ground_slab_volume": 28.799999999999997,
++    "first_slab_volume": 36.00000000000001,
++    "roof_slab_volume": 36.00000000000001,
++    "rebar_kg": 12168.138271604941,
++    "foundation_formwork_area": 75.6,
++    "column_formwork_area": 138.06,
++    "beam_formwork_area": 118.5,
++    "slab_formwork_area": 360,
++    "external_block_area": 305.7200000000001,
++    "internal_block_area": 336.4500000000001,
++    "wood_floor_area": 178,
++    "ceramic_floor_area": 154,
++    "epoxy_floor_area": 28,
++    "terrace_floor_area": 12,
++    "wet_floor_area": 46,
++    "plaster_area": 978.6199999999997,
++    "paint_area": 858.3799999999994,
++    "gypsum_ceiling_area": 312,
++    "excavation_volume": 72.2,
++    "toilet_count": 3,
++    "basin_count": 3,
++    "shower_count": 3,
++    "socket_count": 70,
++    "light_count": 60,
++    "distribution_board_count": 2,
++    "ac_count": 9,
++    "smoke_detector_count": 8,
++    "water_pipe_length": 80,
++    "waste_pipe_length": 60,
++    "ac_pipe_length": 90,
++    "kitchen_cabinet_length": 5,
++    "terrace_railing_length": 7,
++    "roof_waterproofing_area": 180,
++    "terrace_waterproofing_area": 12,
++    "wet_floor_waterproofing_area": 46,
++    "wet_wall_waterproofing_area": 97.92000000000002,
++    "wet_wall_tile_area": 117.23999999999998,
++    "ceiling_paint_area": 360,
++    "backsplash_area": 3,
++    "driveway_area": 40,
++    "landscape_area": 60,
++    "kitchen_sink_count": 1,
++    "laundry_sink_count": 1,
++    "internal_wall_length": 114,
++    "external_wall_length": 112,
++    "internal_door_count": 15,
++    "garage_door_count": 1,
++    "kitchen_hob_hood_count": 1
++  },
++  "pdf_analysis": {
++    "quantity_evidence": {
++      "rooms": [
++        {
++          "key": "rooms",
++          "value": 9,
++          "unit": "nr",
++          "scope_id": "floor:0",
++          "evidence": "Architectural plan page 1: rooms summary; AI extraction requires review.",
++          "pages": [
++            1
++          ]
++        },
++        {
++          "key": "rooms",
++          "value": 9,
++          "unit": "nr",
++          "scope_id": "floor:1",
++          "evidence": "Architectural plan page 2: rooms summary; AI extraction requires review.",
++          "pages": [
++            2
++          ]
++        }
++      ],
++      "door_count": [
++        {
++          "key": "door_count",
++          "value": 11,
++          "unit": "nr",
++          "scope_id": "floor:0",
++          "pages": [
++            4
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: GD01 | GE-S | door | 1.20 | 2.20 | 0.00; GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00; GD03 | GE-N | door | 0.90 | 2.10 | 0.00; GD04 | GI-1 | door | 0.90 | 2.10 | 0.00; GD05 | GI-2 | door | 0.90 | 2.10 | 0.00; GD06 | GI-8 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD09 | GI-1 | door | 0.90 | 2.10 | 0.00; GD10 | GI-2 | door | 0.90 | 2.10 | 0.00; GD11 | GI-2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review."
++        },
++        {
++          "key": "door_count",
++          "value": 8,
++          "unit": "nr",
++          "scope_id": "floor:1",
++          "pages": [
++            4,
++            5
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: FD01 | FI-1 | door | 0.90 | 2.10 | 0.00; FD02 | FI-1 | door | 0.90 | 2.10 | 0.00; FD03 | FI-1 | door | 0.90 | 2.10 | 0.00; FD04 | FI-2 | door | 0.90 | 2.10 | 0.00; FD05 | FI-2 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review."
++        }
++      ],
++      "window_count": [
++        {
++          "key": "window_count",
++          "value": 6,
++          "unit": "nr",
++          "scope_id": "floor:0",
++          "pages": [
++            4
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW02 | GE-W | window | 1.80 | 1.50 | 1.00; GW03 | GE-E | window | 1.80 | 1.50 | 1.00; GW04 | GE-E | window | 2.40 | 1.50 | 1.00; GW05 | GE-N | window | 2.40 | 1.50 | 1.00; GW06 | GE-N | window | 1.80 | 1.50 | 1.00. Dimensions read from printed table and source units; specification requires review."
++        },
++        {
++          "key": "window_count",
++          "value": 9,
++          "unit": "nr",
++          "scope_id": "floor:1",
++          "pages": [
++            4,
++            5
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: FW01 | FE-W | window | 1.80 | 1.50 | 1.00; FW02 | FE-W | window | 1.80 | 1.50 | 1.00; FW03 | FE-W | window | 2.40 | 1.50 | 1.00; FW04 | FE-N | window | 2.40 | 1.50 | 1.00; FW05 | FE-N | window | 1.80 | 1.50 | 1.00; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW07 | FE-E | window | 1.80 | 1.50 | 1.00; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40. Dimensions read from printed table and source units; specification requires review."
++        }
++      ],
++      "door_area": [
++        {
++          "key": "door_area",
++          "value": 26.850000000000005,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "pages": [
++            4
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: GD01 | GE-S | door | 1.20 | 2.20 | 0.00; GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00; GD03 | GE-N | door | 0.90 | 2.10 | 0.00; GD04 | GI-1 | door | 0.90 | 2.10 | 0.00; GD05 | GI-2 | door | 0.90 | 2.10 | 0.00; GD06 | GI-8 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD09 | GI-1 | door | 0.90 | 2.10 | 0.00; GD10 | GI-2 | door | 0.90 | 2.10 | 0.00; GD11 | GI-2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review."
++        },
++        {
++          "key": "door_area",
++          "value": 15.120000000000003,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "pages": [
++            4,
++            5
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: FD01 | FI-1 | door | 0.90 | 2.10 | 0.00; FD02 | FI-1 | door | 0.90 | 2.10 | 0.00; FD03 | FI-1 | door | 0.90 | 2.10 | 0.00; FD04 | FI-2 | door | 0.90 | 2.10 | 0.00; FD05 | FI-2 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review."
++        }
++      ],
++      "window_area": [
++        {
++          "key": "window_area",
++          "value": 16.740000000000002,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "pages": [
++            4
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW02 | GE-W | window | 1.80 | 1.50 | 1.00; GW03 | GE-E | window | 1.80 | 1.50 | 1.00; GW04 | GE-E | window | 2.40 | 1.50 | 1.00; GW05 | GE-N | window | 2.40 | 1.50 | 1.00; GW06 | GE-N | window | 1.80 | 1.50 | 1.00. Dimensions read from printed table and source units; specification requires review."
++        },
++        {
++          "key": "window_area",
++          "value": 22.320000000000004,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "pages": [
++            4,
++            5
++          ],
++          "native_calculated": true,
++          "document_calculated": true,
++          "evidence": "Native PDF opening table, complete source rows including garage doors: FW01 | FE-W | window | 1.80 | 1.50 | 1.00; FW02 | FE-W | window | 1.80 | 1.50 | 1.00; FW03 | FE-W | window | 2.40 | 1.50 | 1.00; FW04 | FE-N | window | 2.40 | 1.50 | 1.00; FW05 | FE-N | window | 1.80 | 1.50 | 1.00; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW07 | FE-E | window | 1.80 | 1.50 | 1.00; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40. Dimensions read from printed table and source units; specification requires review."
++        }
++      ],
++      "wall_length": [
++        {
++          "key": "wall_length",
++          "scope_id": "project",
++          "value": 226,
++          "unit": "m",
++          "pages": [
++            1,
++            2
++          ],
++          "evidence": "Complete internal and external wall inventory. Independently calculated: add floor:0:GI-1:length: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope]; add floor:0:GI-2:length: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope]; add floor:0:GI-3:length: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope]; add floor:0:native:h:4:9:16:length: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope]; add floor:0:native:h:8:0:7:length: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope]; add floor:0:native:h:8:9:16:length: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope]; add floor:0:native:v:4:4:8:length: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope]; add floor:0:GI-8:length: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:FI-1:length: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope]; add floor:1:FI-2:length: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:4:0:7:length: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope]; add floor:1:native:h:4:9:13:length: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:native:h:8:0:7:length: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope]; add floor:1:native:h:8:9:16:length: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope]; add floor:1:FI-7:length: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope]; add floor:1:FI-9:length: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:6:13:16:length: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope]; add floor:0:GE-S:length: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope]; add floor:0:GE-E:length: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:0:GE-N:length: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:0:GE-W:length: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:0:0:13:length: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope]; add floor:1:FE-E:length: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:1:FE-N:length: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:1:FE-W:length: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope]; add floor:1:native:v:13:0:4:length: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:FE-T2:length: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] = 226 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "wall_area": [
++        {
++          "key": "wall_area",
++          "scope_id": "project",
++          "value": 642.1699999999998,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Net single wall faces, by source classification. Independently calculated: add floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00]; add floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00]; subtract floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00]; add floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00]; add floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00]; add floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40]; subtract floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00]; add floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40]; subtract floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00]; add floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] = 642.1699999999998 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "floor_area": [
++        {
++          "key": "floor_area",
++          "value": 192,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Architectural plan page 1: floor_area summary; AI extraction requires review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "floor_area",
++          "value": 180,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Architectural plan page 2: floor_area summary; AI extraction requires review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "ceiling_area": [
++        {
++          "key": "ceiling_area",
++          "value": 192,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Architectural plan page 1: ceiling_area summary; AI extraction requires review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "ceiling_area",
++          "value": 168,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Architectural plan page 2: ceiling_area summary; AI extraction requires review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "roof_area": [
++        {
++          "key": "roof_area",
++          "scope_id": "project / s01 r1",
++          "value": 180,
++          "unit": "m2",
++          "pages": [
++            3
++          ],
++          "evidence": "Roof slab area excl. terrace per S01. Independently calculated: add roof-gross: * 16 m [Building length] * 12 m [Building width]; subtract omit-terrace: * 3 m [Terrace 3 m] * 4 m [Terrace 4 m] = 180 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "pcc_volume": [
++        {
++          "key": "pcc_volume",
++          "scope_id": "project",
++          "value": 5.78,
++          "unit": "m3",
++          "pages": [
++            3
++          ],
++          "evidence": "S01 p.3: Blinding each 1.70 x 1.70 x 0.10. Independently calculated: add blinding_20: * 20 count [20 foundations (S01)] * 1.7 m [blinding length (S01)] * 1.7 m [blinding width (S01)] * 0.1 m [blinding thickness (S01)] = 5.78 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "foundation_volume": [
++        {
++          "key": "foundation_volume",
++          "scope_id": "project",
++          "value": 20.25,
++          "unit": "m3",
++          "pages": [
++            3
++          ],
++          "evidence": "S01 p.3: RC footing each 1.50 x 1.50 x 0.45. Independently calculated: add footings_20: * 20 count [20 foundations (S01)] * 1.5 m [footing length (S01)] * 1.5 m [footing width (S01)] * 0.45 m [footing thickness (S01)] = 20.25 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "pedestal_volume": [
++        {
++          "key": "pedestal_volume",
++          "scope_id": "project",
++          "value": 2.4299999999999997,
++          "unit": "m3",
++          "pages": [
++            3
++          ],
++          "evidence": "S01 p.3: Pedestal each 0.45 x 0.45 x 0.60. Independently calculated: add pedestals_20: * 20 count [20 foundations (S01)] * 0.45 m [pedestal length (S01)] * 0.45 m [pedestal width (S01)] * 0.6 m [pedestal height (S01)] = 2.4299999999999997 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "column_volume": [
++        {
++          "key": "column_volume",
++          "scope_id": "project",
++          "value": 10.3545,
++          "unit": "m3",
++          "pages": [
++            3
++          ],
++          "evidence": "S01 p.3: Columns 0.30 x 0.30; clear 2.95 m. 20 GF + 19 FF column-storeys (omit FF at E1).. Independently calculated: add columns_total_39_storeys: * 39 count [20 GF + 19 FF column-storeys (S01)] * 0.3 m [column width (S01)] * 0.3 m [column breadth (S01)] * 2.95 m [net clear height (S01)] = 10.3545 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "beam_volume": [
++        {
++          "key": "beam_volume",
++          "scope_id": "project",
++          "value": 14.8125,
++          "unit": "m3",
++          "pages": [
++            3,
++            6
++          ],
++          "evidence": "S01 p.3: Beam overall 0.25 x 0.45; slab 0.20. Bill ONLY 0.25 downstand. First-floor beam CL total 120 m; roof 117 m.. Independently calculated: add first_floor_beams: * 120 m [first-floor beam centreline total (S01)] * 0.25 m [beam width 0.25 m (S01); bill only downstand (A04)] * 0.25 m [downstand depth 0.25 m = 0.45-0.20 (S01); bill downstand only (A04)]; add roof_beams: * 117 m [roof beam total (S01)] * 0.25 m [beam width 0.25 m (S01); downstand only (A04)] * 0.25 m [downstand depth (S01/A04)] = 14.8125 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "ground_slab_volume": [
++        {
++          "key": "ground_slab_volume",
++          "scope_id": "project",
++          "value": 28.799999999999997,
++          "unit": "m3",
++          "pages": [
++            1,
++            3
++          ],
++          "evidence": "S01 p.3: GF slab 0.15 thick; entire 16 x 12.. Independently calculated: add gf_slab: * 16 m [envelope length 16.00 (A01/S01)] * 12 m [envelope width 12.00 (A01/S01)] * 0.15 m [GF slab thickness (S01)] = 28.799999999999997 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "first_slab_volume": [
++        {
++          "key": "first_slab_volume",
++          "scope_id": "project",
++          "value": 36.00000000000001,
++          "unit": "m3",
++          "pages": [
++            2,
++            3
++          ],
++          "evidence": "S01 p.3: First slab 0.20; omit 3 x 4 stair void.. Independently calculated: add ff_slab_gross: * 16 m [envelope length 16.00 (A02/S01)] * 12 m [envelope width 12.00 (A02/S01)] * 0.2 m [first slab thickness (S01)]; subtract ff_slab_void: * 3 m [void length (S01)] * 4 m [void width (S01)] * 0.2 m [first slab thickness (S01)] = 36.00000000000001 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "roof_slab_volume": [
++        {
++          "key": "roof_slab_volume",
++          "scope_id": "project",
++          "value": 36.00000000000001,
++          "unit": "m3",
++          "pages": [
++            2,
++            3
++          ],
++          "evidence": "S01 p.3: Roof slab 0.20; omit 3 x 4 terrace.. Independently calculated: add roof_slab_gross: * 16 m [envelope length 16.00 (A02/S01)] * 12 m [envelope width 12.00 (A02/S01)] * 0.2 m [roof slab thickness (S01)]; subtract roof_slab_terrace_omit: * 3 m [terrace length (S01)] * 4 m [terrace width (S01)] * 0.2 m [roof slab thickness (S01)] = 36.00000000000001 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "rebar_kg": [
++        {
++          "key": "rebar_kg",
++          "scope_id": "project",
++          "value": 12168.138271604941,
++          "unit": "kg",
++          "pages": [
++            8
++          ],
++          "evidence": "S02 p.8: Declared bar schedule; theoretical mass = dia^2/162 kg/m; sum all rows; no wastage.. Independently calculated: add rebar_foundation_bottom: * 480 count [count (S02)] * 1.4 m [cut length (S02)] * 12 mm [diameter (S02)] * 12 mm [diameter (S02)] / 162 m_mm2_per_kg [formula divisor (S02)]; add rebar_foundation_top: * 480 count [count (S02)] * 1.4 m [cut length (S02)] * 10 mm [diameter (S02)] * 10 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_pedestal_vertical: * 160 count [count (S02)] * 1.2 m [cut length (S02)] * 16 mm [diameter (S02)] * 16 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_pedestal_ties: * 100 count [count (S02)] * 1.64 m [cut length (S02)] * 8 mm [diameter (S02)] * 8 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_column_vertical: * 312 count [count (S02)] * 3.7 m [cut length (S02)] * 16 mm [diameter (S02)] * 16 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_column_ties: * 780 count [count (S02)] * 0.96 m [cut length (S02)] * 8 mm [diameter (S02)] * 8 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_beam_longitudinal: * 1 count [single aggregated line (S02)] * 1044 m [cut length (S02)] * 16 mm [diameter (S02)] * 16 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_beam_stirrups: * 1185 count [count (S02)] * 1.32 m [cut length (S02)] * 8 mm [diameter (S02)] * 8 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)]; add rebar_slab_mats_both_slabs: * 1 count [single aggregated line (S02)] * 7200 m [cut length (S02)] * 12 mm [diameter (S02)] * 12 mm [diameter (S02)] / 162 m_mm2_per_kg [divisor (S02)] = 12168.138271604941 kg. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "foundation_formwork_area": [
++        {
++          "key": "foundation_formwork_area",
++          "scope_id": "project",
++          "value": 75.6,
++          "unit": "m2",
++          "pages": [
++            3,
++            6
++          ],
++          "evidence": "A04 p.6: Formwork footing/pedestal sides only. S01 p.3 sizes: footing 1.50x1.50x0.45; pedestal 0.45x0.45x0.60.. Independently calculated: add footing_sides: * 20 count [20 foundations (S01)] * 4 scalar [four sides (A04)] * 1.5 m [footing side length (S01)] * 0.45 m [footing depth/side height (S01)]; add pedestal_sides: * 20 count [20 pedestals (S01)] * 4 scalar [four sides (A04)] * 0.45 m [pedestal side width (S01)] * 0.6 m [pedestal height (S01)] = 75.6 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "column_formwork_area": [
++        {
++          "key": "column_formwork_area",
++          "scope_id": "project",
++          "value": 138.06,
++          "unit": "m2",
++          "pages": [
++            3,
++            6
++          ],
++          "evidence": "A04 p.6: Columns formwork full four sides at clear length 2.95. S01 p.3: 20 GF + 19 FF storeys, 0.30 x 0.30.. Independently calculated: add column_sides_all_storeys: * 39 count [39 column-storeys (S01)] * 4 scalar [four sides (A04)] * 0.3 m [column side width (S01)] * 2.95 m [clear length (S01/A04)] = 138.06 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "beam_formwork_area": [
++        {
++          "key": "beam_formwork_area",
++          "scope_id": "project",
++          "value": 118.5,
++          "unit": "m2",
++          "pages": [
++            3,
++            6
++          ],
++          "evidence": "A04 p.6: Beam formwork contains ONLY two downstand sides. S01 p.3: downstand=0.25; first-floor 120 m; roof 117 m.. Independently calculated: add first_floor_beam_sides: * 120 m [first-floor beam CL total (S01)] * 0.25 m [downstand height 0.25 m (S01)] * 2 scalar [two sides only (A04)]; add roof_beam_sides: * 117 m [roof beam total (S01)] * 0.25 m [downstand height 0.25 m (S01)] * 2 scalar [two sides only (A04)] = 118.5 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "slab_formwork_area": [
++        {
++          "key": "slab_formwork_area",
++          "scope_id": "project",
++          "value": 360,
++          "unit": "m2",
++          "pages": [
++            2,
++            3,
++            6
++          ],
++          "evidence": "Source suspended first/roof slab volume operands divided by their explicit source thickness; source page 6: slab soffit includes beam undersides. Full original volume calculations and remaining area units validated; beam strips are not added again. Source operand transcription still requires review.. Independently calculated: add native-soffit:first_slab_volume:ff_slab_gross: * 16 m [envelope length 16.00 (A02/S01); original source First slab: .20; omit 3 x 4 stair void; envelope 12 x 16 m] * 12 m [envelope width 12.00 (A02/S01); original source First slab: .20; omit 3 x 4 stair void; envelope 12 x 16 m]; subtract native-soffit:first_slab_volume:ff_slab_void: * 3 m [void length (S01); original source First slab: .20; omit 3 x 4 stair void; envelope 12 x 16 m] * 4 m [void width (S01); original source First slab: .20; omit 3 x 4 stair void; envelope 12 x 16 m]; add native-soffit:roof_slab_volume:roof_slab_gross: * 16 m [envelope length 16.00 (A02/S01); original source Roof slab: .20; omit 3 x 4 terrace; envelope 12 x 16 m] * 12 m [envelope width 12.00 (A02/S01); original source Roof slab: .20; omit 3 x 4 terrace; envelope 12 x 16 m]; subtract native-soffit:roof_slab_volume:roof_slab_terrace_omit: * 3 m [terrace length (S01); original source Roof slab: .20; omit 3 x 4 terrace; envelope 12 x 16 m] * 4 m [terrace width (S01); original source Roof slab: .20; omit 3 x 4 terrace; envelope 12 x 16 m] = 360 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "external_block_area": [
++        {
++          "key": "external_block_area",
++          "scope_id": "project",
++          "value": 305.7200000000001,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Net wall face area: source lengths × heights minus each hosted opening once. Independently calculated: add floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00]; subtract floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00]; add floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00]; add floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00]; add floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40]; subtract floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00]; add floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40]; subtract floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00]; add floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] = 305.7200000000001 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "internal_block_area": [
++        {
++          "key": "internal_block_area",
++          "scope_id": "project",
++          "value": 336.4500000000001,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Net wall face area: source lengths × heights minus each hosted opening once. Independently calculated: add floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00]; add floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] = 336.4500000000001 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "wood_floor_area": [
++        {
++          "key": "wood_floor_area",
++          "value": 56,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Villa 02 | 16.00 x 12.00 envelope (A01).; AI dimension transcription and materials require review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "wood_floor_area",
++          "value": 122,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 2; Villa 02 | 16.00 x 12.00 envelope (A02).; AI dimension transcription and materials require review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "ceramic_floor_area": [
++        {
++          "key": "ceramic_floor_area",
++          "value": 108,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Villa 02 | 16.00 x 12.00 envelope (A01).; AI dimension transcription and materials require review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "ceramic_floor_area",
++          "value": 46,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 2; Villa 02 | 16.00 x 12.00 envelope (A02).; AI dimension transcription and materials require review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "epoxy_floor_area": [
++        {
++          "key": "epoxy_floor_area",
++          "value": 28,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Villa 02 | 16.00 x 12.00 envelope (A01).; AI dimension transcription and materials require review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "epoxy_floor_area",
++          "value": 0,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 2; Villa 02 | 16.00 x 12.00 envelope (A02).; AI dimension transcription and materials require review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "terrace_floor_area": [
++        {
++          "key": "terrace_floor_area",
++          "value": 0,
++          "unit": "m2",
++          "scope_id": "floor:0",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Villa 02 | 16.00 x 12.00 envelope (A01).; AI dimension transcription and materials require review.",
++          "pages": [
++            1,
++            6
++          ]
++        },
++        {
++          "key": "terrace_floor_area",
++          "value": 12,
++          "unit": "m2",
++          "scope_id": "floor:1",
++          "evidence": "Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 2; Villa 02 | 16.00 x 12.00 envelope (A02).; AI dimension transcription and materials require review.",
++          "pages": [
++            2,
++            6
++          ]
++        }
++      ],
++      "wet_floor_area": [
++        {
++          "key": "wet_floor_area",
++          "scope_id": "ground floor / a01 r1",
++          "value": 28,
++          "unit": "m2",
++          "pages": [
++            1,
++            6
++          ],
++          "evidence": "Wet rooms per A04; areas printed on A01. Independently calculated: add G02-area: * 16 m2 [G02 16 m2 TILE]; add G03-area: * 12 m2 [G03 12 m2 TILE] = 28 m2. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "wet_floor_area",
++          "scope_id": "first floor / a02 r1",
++          "value": 18,
++          "unit": "m2",
++          "pages": [
++            2,
++            6
++          ],
++          "evidence": "Wet rooms per A04; areas printed on A02. Independently calculated: add F09-area: * 6 m2 [F09 BATH 6 m2 TILE]; add F11-area: * 12 m2 [F11 Ensuite 12 m2 TILE] = 18 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "plaster_area": [
++        {
++          "key": "plaster_area",
++          "scope_id": "project",
++          "value": 978.6199999999997,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Source plaster face convention applied to net walls. Independently calculated: add plaster:floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.] = 978.6199999999997 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "paint_area": [
++        {
++          "key": "paint_area",
++          "scope_id": "project",
++          "value": 858.3799999999994,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Explicit source paint face and exclusion convention. Independently calculated: add plaster:floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract paint-exclude:floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:backsplash: * 5 m [KITCHEN: Backsplash is 0.60 high along5.00 m] * 0.6 m [L base cabinet measured 3.00+2.00 =5.00 linear metres, no double-counted corner. Backsplash is 0.60 high along5.00 m. Include one hob/hood package.] = 858.3799999999994 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "gypsum_ceiling_area": [
++        {
++          "key": "gypsum_ceiling_area",
++          "scope_id": "project",
++          "value": 312,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            6
++          ],
++          "evidence": "Audited room areas with source gypsum exclusions. Independently calculated: add floor:0:G02 Laundry:ceiling: * 16 m2 [Area of calibrated original closed wall face g02; polygon [{\"x\":0,\"y\":8},{\"x\":0,\"y\":4},{\"x\":4,\"y\":4},{\"x\":4,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G03 WC / Shower:ceiling: * 12 m2 [Area of calibrated original closed wall face g03; polygon [{\"x\":7,\"y\":4},{\"x\":7,\"y\":8},{\"x\":4,\"y\":8},{\"x\":4,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G04 Kitchen / Dining:ceiling: * 28 m2 [Area of calibrated original closed wall face g04; polygon [{\"x\":7,\"y\":12},{\"x\":0,\"y\":12},{\"x\":0,\"y\":8},{\"x\":4,\"y\":8},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G05 Hall:ceiling: * 24 m2 [Area of calibrated original closed wall face g05; polygon [{\"x\":7,\"y\":0},{\"x\":9,\"y\":0},{\"x\":9,\"y\":4},{\"x\":9,\"y\":8},{\"x\":9,\"y\":12},{\"x\":7,\"y\":12},{\"x\":7,\"y\":8},{\"x\":7,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G07 Foyer:ceiling: * 12 m2 [Area of calibrated original closed wall face g07; polygon [{\"x\":13,\"y\":0},{\"x\":16,\"y\":0},{\"x\":16,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G08 Study:ceiling: * 28 m2 [Area of calibrated original closed wall face g08; polygon [{\"x\":16,\"y\":4},{\"x\":16,\"y\":8},{\"x\":9,\"y\":8},{\"x\":9,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G09 Living / TV:ceiling: * 28 m2 [Area of calibrated original closed wall face g09; polygon [{\"x\":16,\"y\":8},{\"x\":16,\"y\":12},{\"x\":9,\"y\":12},{\"x\":9,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F01 Bedroom 2:ceiling: * 28 m2 [Area of calibrated original closed wall face f01; polygon [{\"x\":0,\"y\":0},{\"x\":7,\"y\":0},{\"x\":7,\"y\":4},{\"x\":0,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F02 Bedroom 3:ceiling: * 28 m2 [Area of calibrated original closed wall face f02; polygon [{\"x\":0,\"y\":8},{\"x\":0,\"y\":4},{\"x\":7,\"y\":4},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F03 Master Bedroom:ceiling: * 28 m2 [Area of calibrated original closed wall face f03; polygon [{\"x\":7,\"y\":12},{\"x\":0,\"y\":12},{\"x\":0,\"y\":8},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F04 Hall:ceiling: * 24 m2 [Audited source room area: F04 Hall; TILE | source dimensioned space: F04 HALL / TILE (no printed area). Open boundary to landing along x=9, y=0..4 noted on A04.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F08 Bedroom 4 (L):ceiling: * 22 m2 [Area of calibrated original closed wall face f08; polygon [{\"x\":16,\"y\":4},{\"x\":16,\"y\":6},{\"x\":13,\"y\":6},{\"x\":13,\"y\":8},{\"x\":9,\"y\":8},{\"x\":9,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F09 Bath:ceiling: * 6 m2 [Area of calibrated original closed wall face f09; polygon [{\"x\":16,\"y\":6},{\"x\":16,\"y\":8},{\"x\":13,\"y\":8},{\"x\":13,\"y\":6}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F10 Family Lounge:ceiling: * 16 m2 [Area of calibrated original closed wall face f10; polygon [{\"x\":13,\"y\":12},{\"x\":9,\"y\":12},{\"x\":9,\"y\":8},{\"x\":13,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F11 Ensuite:ceiling: * 12 m2 [Area of calibrated original closed wall face f11; polygon [{\"x\":16,\"y\":8},{\"x\":16,\"y\":12},{\"x\":13,\"y\":12},{\"x\":13,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.] = 312 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "excavation_volume": [
++        {
++          "key": "excavation_volume",
++          "scope_id": "project",
++          "value": 72.2,
++          "unit": "m3",
++          "pages": [
++            3
++          ],
++          "evidence": "S01 p.3: 20 foundation locations; excavation pit each 1.90 x 1.90 x 1.00. Independently calculated: add pit_excavations_20: * 20 count [20 foundations on 5x4 grid (S01)] * 1.9 m [pit length 1.90 m (S01)] * 1.9 m [pit width 1.90 m (S01)] * 1 m [pit depth 1.00 m (S01)] = 72.2 m3. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "toilet_count": [
++        {
++          "key": "toilet_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add G03 set: * 1 nr [Toilet in G03] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "toilet_count",
++          "scope_id": "floor:1",
++          "value": 2,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add F09+F11: * 2 nr [Toilets in F09 and F11] = 2 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "basin_count": [
++        {
++          "key": "basin_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add G03 set: * 1 nr [Basin in G03] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "basin_count",
++          "scope_id": "floor:1",
++          "value": 2,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add F09+F11: * 2 nr [Basins in F09 and F11] = 2 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "shower_count": [
++        {
++          "key": "shower_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add G03 set: * 1 nr [Shower in G03] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "shower_count",
++          "scope_id": "floor:1",
++          "value": 2,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add F09+F11: * 2 nr [Showers in F09 and F11] = 2 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "socket_count": [
++        {
++          "key": "socket_count",
++          "scope_id": "floor:0",
++          "value": 34,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Sockets GF: * 34 nr [Socket points Ground] = 34 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "socket_count",
++          "scope_id": "floor:1",
++          "value": 36,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Sockets FF: * 36 nr [Socket points First] = 36 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "light_count": [
++        {
++          "key": "light_count",
++          "scope_id": "floor:0",
++          "value": 28,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Lights GF: * 28 nr [Light points Ground] = 28 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "light_count",
++          "scope_id": "floor:1",
++          "value": 32,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Lights FF: * 32 nr [Light points First] = 32 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "distribution_board_count": [
++        {
++          "key": "distribution_board_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add DB GF: * 1 nr [Distribution boards Ground] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "distribution_board_count",
++          "scope_id": "floor:1",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add DB FF: * 1 nr [Distribution boards First] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "ac_count": [
++        {
++          "key": "ac_count",
++          "scope_id": "floor:0",
++          "value": 4,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Split AC GF: * 4 nr [Split AC units Ground] = 4 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "ac_count",
++          "scope_id": "floor:1",
++          "value": 5,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Split AC FF: * 5 nr [Split AC units First] = 5 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "smoke_detector_count": [
++        {
++          "key": "smoke_detector_count",
++          "scope_id": "floor:0",
++          "value": 4,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add SD GF: * 4 nr [Smoke detectors Ground] = 4 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "smoke_detector_count",
++          "scope_id": "floor:1",
++          "value": 4,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add SD FF: * 4 nr [Smoke detectors First] = 4 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "water_pipe_length": [
++        {
++          "key": "water_pipe_length",
++          "scope_id": "floor:0",
++          "value": 45,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Water pipes GF: * 45 m [Water supply pipes Ground] = 45 m. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "water_pipe_length",
++          "scope_id": "floor:1",
++          "value": 35,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Water pipes FF: * 35 m [Water supply pipes First] = 35 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "waste_pipe_length": [
++        {
++          "key": "waste_pipe_length",
++          "scope_id": "floor:0",
++          "value": 35,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Waste pipes GF: * 35 m [Waste pipes Ground] = 35 m. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "waste_pipe_length",
++          "scope_id": "floor:1",
++          "value": 25,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add Waste pipes FF: * 25 m [Waste pipes First] = 25 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "ac_pipe_length": [
++        {
++          "key": "ac_pipe_length",
++          "scope_id": "floor:0",
++          "value": 40,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add AC pipes GF: * 40 m [Insulated AC pipes Ground] = 40 m. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "ac_pipe_length",
++          "scope_id": "floor:1",
++          "value": 50,
++          "unit": "m",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 services schedule. Independently calculated: add AC pipes FF: * 50 m [Insulated AC pipes First] = 50 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "kitchen_cabinet_length": [
++        {
++          "key": "kitchen_cabinet_length",
++          "scope_id": "project",
++          "value": 5,
++          "unit": "m",
++          "pages": [
++            6
++          ],
++          "evidence": "Original PDF explicit cabinet measurement equation: base cabinet measured 3.00+2.00 =5.00 linear metres. Independently calculated: add native-cabinet-leg:1: * 3 m [base cabinet measured 3.00+2.00 =5.00 linear metres]; add native-cabinet-leg:2: * 2 m [base cabinet measured 3.00+2.00 =5.00 linear metres] = 5 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "terrace_railing_length": [
++        {
++          "key": "terrace_railing_length",
++          "scope_id": "project",
++          "value": 7,
++          "unit": "m",
++          "evidence": "Terrace railing south edge 3 m + east edge 4 m = 7 m; height 1.10 m noted",
++          "pages": [
++            7
++          ]
++        }
++      ],
++      "roof_waterproofing_area": [
++        {
++          "key": "roof_waterproofing_area",
++          "scope_id": "project / a04 r1",
++          "value": 180,
++          "unit": "m2",
++          "pages": [
++            3,
++            6
++          ],
++          "evidence": "Spec: waterproof roof excludes open terrace. Independently calculated: add roof-wp: * 16 m [Roof base 16] * 12 m [Roof base 12]; subtract omit-terrace: * 3 m [Terrace 3] * 4 m [Terrace 4] = 180 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "terrace_waterproofing_area": [
++        {
++          "key": "terrace_waterproofing_area",
++          "scope_id": "first floor / s01 r1",
++          "value": 12,
++          "unit": "m2",
++          "pages": [
++            3
++          ],
++          "evidence": "Terrace area per S01. Independently calculated: add terrace: * 3 m [Terrace 3 m] * 4 m [Terrace 4 m] = 12 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "wet_floor_waterproofing_area": [
++        {
++          "key": "wet_floor_waterproofing_area",
++          "scope_id": "ground floor / a04 r1",
++          "value": 28,
++          "unit": "m2",
++          "pages": [
++            1,
++            6
++          ],
++          "evidence": "Spec: waterproof entire floor in wet rooms; use printed areas. Independently calculated: add G02-wp: * 16 m2 [G02 16 m2]; add G03-wp: * 12 m2 [G03 12 m2] = 28 m2. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "wet_floor_waterproofing_area",
++          "scope_id": "first floor / a04 r1",
++          "value": 18,
++          "unit": "m2",
++          "pages": [
++            2,
++            6
++          ],
++          "evidence": "Spec: waterproof entire floor in wet rooms; use printed areas. Independently calculated: add F09-wp: * 6 m2 [F09 6 m2]; add F11-wp: * 12 m2 [F11 12 m2] = 18 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "wet_wall_waterproofing_area": [
++        {
++          "key": "wet_wall_waterproofing_area",
++          "scope_id": "project",
++          "value": 97.92000000000002,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Wet-room perimeters × source membrane height, openings clipped to that height. Independently calculated: add floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; add floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; add floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; add floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; subtract floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}] = 97.92000000000002 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "wet_wall_tile_area": [
++        {
++          "key": "wet_wall_tile_area",
++          "scope_id": "project",
++          "value": 117.23999999999998,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            4,
++            5,
++            6
++          ],
++          "evidence": "Wet-room perimeters × source tile height, openings clipped to that height. Independently calculated: add floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}] = 117.23999999999998 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "ceiling_paint_area": [
++        {
++          "key": "ceiling_paint_area",
++          "scope_id": "project",
++          "value": 360,
++          "unit": "m2",
++          "pages": [
++            1,
++            2,
++            6
++          ],
++          "evidence": "Explicit paint-all-enclosed rule applied independently of gypsum exclusions. Independently calculated: add floor:0:enclosed-ceiling-paint: * 192 m2 [Audited enclosed ceiling area; CEILINGS: paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:enclosed-ceiling-paint: * 168 m2 [Audited enclosed ceiling area; CEILINGS: paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.] = 360 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "backsplash_area": [
++        {
++          "key": "backsplash_area",
++          "scope_id": "project",
++          "value": 3,
++          "unit": "m2",
++          "evidence": "Backsplash height 0.60 m along 5.00 m => 0.60 x 5.00 = 3.00 m2.",
++          "pages": [
++            6
++          ]
++        }
++      ],
++      "driveway_area": [
++        {
++          "key": "driveway_area",
++          "scope_id": "project",
++          "value": 40,
++          "unit": "m2",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 External works. Independently calculated: add Driveway: * 10 m [length] * 4 m [width] = 40 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "landscape_area": [
++        {
++          "key": "landscape_area",
++          "scope_id": "project",
++          "value": 60,
++          "unit": "m2",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 External works. Independently calculated: add Landscape: * 10 m [length] * 6 m [width] = 60 m2. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "kitchen_sink_count": [
++        {
++          "key": "kitchen_sink_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add Kitchen sink G04: * 1 nr [Separate kitchen sink in G04] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "laundry_sink_count": [
++        {
++          "key": "laundry_sink_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            7
++          ],
++          "evidence": "M01 sanitary fixtures text. Independently calculated: add Laundry sink G02: * 1 nr [Laundry sink in G02] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "internal_wall_length": [
++        {
++          "key": "internal_wall_length",
++          "scope_id": "project",
++          "value": 114,
++          "unit": "m",
++          "pages": [
++            1,
++            2
++          ],
++          "evidence": "Complete source wall centreline inventory, shared walls counted once. Independently calculated: add floor:0:GI-1:length: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope]; add floor:0:GI-2:length: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope]; add floor:0:GI-3:length: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope]; add floor:0:native:h:4:9:16:length: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope]; add floor:0:native:h:8:0:7:length: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope]; add floor:0:native:h:8:9:16:length: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope]; add floor:0:native:v:4:4:8:length: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope]; add floor:0:GI-8:length: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:FI-1:length: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope]; add floor:1:FI-2:length: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:4:0:7:length: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope]; add floor:1:native:h:4:9:13:length: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:native:h:8:0:7:length: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope]; add floor:1:native:h:8:9:16:length: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope]; add floor:1:FI-7:length: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope]; add floor:1:FI-9:length: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:6:13:16:length: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] = 114 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "external_wall_length": [
++        {
++          "key": "external_wall_length",
++          "scope_id": "project",
++          "value": 112,
++          "unit": "m",
++          "pages": [
++            1,
++            2
++          ],
++          "evidence": "Complete source wall centreline inventory, shared walls counted once. Independently calculated: add floor:0:GE-S:length: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope]; add floor:0:GE-E:length: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:0:GE-N:length: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:0:GE-W:length: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope]; add floor:1:native:h:0:0:13:length: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope]; add floor:1:FE-E:length: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:1:FE-N:length: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope]; add floor:1:FE-W:length: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope]; add floor:1:native:v:13:0:4:length: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope]; add floor:1:FE-T2:length: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] = 112 m. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "internal_door_count": [
++        {
++          "key": "internal_door_count",
++          "scope_id": "floor:0",
++          "value": 8,
++          "unit": "nr",
++          "pages": [
++            4
++          ],
++          "evidence": "A03 Ground floor, Host GI-*. Independently calculated: add GI doors GF: * 8 nr [GD04..GD11 on GI-*] = 8 nr. Source transcription requires review.",
++          "document_calculated": true
++        },
++        {
++          "key": "internal_door_count",
++          "scope_id": "floor:1",
++          "value": 7,
++          "unit": "nr",
++          "pages": [
++            5
++          ],
++          "evidence": "A03 First floor, Host FI-*. Independently calculated: add FI doors FF: * 7 nr [FD01..FD07 on FI-*] = 7 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "garage_door_count": [
++        {
++          "key": "garage_door_count",
++          "scope_id": "floor:0",
++          "value": 1,
++          "unit": "nr",
++          "pages": [
++            4
++          ],
++          "evidence": "A03 Ground floor schedule. Independently calculated: add GD02 garage: * 1 nr [GD02 type garage_door] = 1 nr. Source transcription requires review.",
++          "document_calculated": true
++        }
++      ],
++      "kitchen_hob_hood_count": [
++        {
++          "key": "kitchen_hob_hood_count",
++          "scope_id": "project",
++          "value": 1,
++          "unit": "nr",
++          "evidence": "Include one hob/hood package.",
++          "pages": [
++            6
++          ]
++        }
++      ]
++    },
++    "conflicts": [],
++    "measurement_completion": {
++      "status": "incomplete",
++      "unmeasured_metrics": [
++        "wet_wall_area",
++        "service_door_count",
++        "entrance_door_count"
++      ],
++      "withheld_metrics": [],
++      "reason": "AI-extracted evidence requires source review; completed requests do not establish a complete or approved BOQ."
++    }
++  },
++  "_fixture": {
++    "source": "ventra-pdf-analysis-report (2).json",
++    "analyzed_at": "2026-10-14T20:48:45.809Z",
++    "document_id": "d893920a-dd2a-43bd-b902-f3f96349a7b7",
++    "purpose": "Observed local v121 quantities and their complete pricing-boundary evidence, without the raw page/cache payload. No rates supplied."
++  }
++}

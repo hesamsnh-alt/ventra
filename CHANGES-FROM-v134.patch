@@ -1,0 +1,65 @@
+--- a/src/lib/takeoffStorage.mjs
++++ b/src/lib/takeoffStorage.mjs
+@@ -1,21 +1,12 @@
+ import {resolveDwgCalibration} from './dwgCalibration.mjs';
++import {createDrawingIndexedRecords} from './drawingIndexedRecords.mjs';
+ // Full geometry lives in IndexedDB; localStorage carries a small compatibility
+ // summary. Engineering and latest pointers share one stored CAD record.
+-const cache=new Map();const writes=new Map();let opening;
++const cache=new Map();const writes=new Map();
+ const rootKey=id=>`ventra:project-takeoff:${id}`,engKey=id=>`ventra:project-engineering-takeoff:${id}`;
+ const isEngineering=t=>!!(t?.aps_urn||t?.apsUrn||t?.urn||t?.advanced_takeoff?.aps_urn||t?.raw_result?.aps_urn)&&!/image|raster/i.test(t?.source||'')&&!/^(jpg|jpeg|png|webp)$/i.test(t?.document_type||'');
+ const local=()=>typeof window!=='undefined'?window.localStorage:null;
+-function database(){
+- if(!opening)opening=new Promise((resolve,reject)=>{if(typeof indexedDB==='undefined'){reject(new Error('IndexedDB is unavailable; full drawing geometry could not be saved.'));return;}
+- const request=indexedDB.open('ventra-drawing-data',1);request.onupgradeneeded=()=>request.result.createObjectStore('takeoffs');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);request.onblocked=()=>reject(new Error('Close older Ventra tabs to open drawing storage.'));}).catch(error=>{opening=null;throw error;});
+- return opening;
+-}
+-export const indexedTakeoffRecords={
+- async putMany(entries){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite'),store=tx.objectStore('takeoffs');for(const [key,value] of entries)store.put(value,key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error||new Error('Drawing storage transaction aborted.'));tx.onerror=()=>reject(tx.error);});},
+- async put(key,value){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite');tx.objectStore('takeoffs').put(value,key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error||new Error('Drawing storage transaction aborted.'));tx.onerror=()=>reject(tx.error);});},
+- async get(key){const db=await database();return new Promise((resolve,reject)=>{const request=db.transaction('takeoffs','readonly').objectStore('takeoffs').get(key);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error);});},
+- async delete(key){const db=await database();await new Promise((resolve,reject)=>{const tx=db.transaction('takeoffs','readwrite');tx.objectStore('takeoffs').delete(key);tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});}
+-};
++export const indexedTakeoffRecords=createDrawingIndexedRecords();
+ export function compactTakeoff(takeoff,recordKey){
+  const out={};for(const [k,v]of Object.entries(takeoff||{}))if(v===null||['number','boolean'].includes(typeof v)||typeof v==='string'&&!v.startsWith('data:')&&v.length<4000)out[k]=v;
+  out.geometry={};for(const [k,v]of Object.entries(takeoff?.geometry||{}))if(typeof v==='number'||typeof v==='string'&&v.length<100)out.geometry[k]=v;
+--- a/src/app/projects/[id]/Project3DViewer.jsx
++++ b/src/app/projects/[id]/Project3DViewer.jsx
+@@ -9,6 +9,7 @@
+ import FurnitureEditorPanel from "./FurnitureEditorPanel";
+ import SurfaceMaterialPanel from './SurfaceMaterialPanel';
+ import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit} from '@/lib/surfaceMaterials.mjs';
++import {raycastVisibleMeshes} from '@/lib/raycastMeshes.mjs';
+ import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
+ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
+ import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
+@@ -7572,6 +7573,7 @@
+ 
+   let furnitureTool=null, furniturePreview=null, furniturePreviewTransforms=[];
+   const raycaster=new THREE.Raycaster();
++  const meshHits=()=>raycastVisibleMeshes(raycaster,threeScene,THREE);
+   const origin=sceneData.designDefaults?.viewOriginMeters||{x:sceneData.width/2,y:sceneData.depth/2};
+   const rayFor=e=>{
+     const r=renderer.domElement.getBoundingClientRect();if(!r.width||!r.height)return false;
+@@ -7593,7 +7595,7 @@
+   };
+   const unbindFurniture=bindFurnitureInputs(renderer.domElement,{
+     getTool:()=>furnitureTool,pickPoint,
+-    pickAsset:e=>rayFor(e)?raycaster.intersectObjects(threeScene.children,true).find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
++    pickAsset:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
+     clearPreview:clearFurniturePreview,
+     preview:(a,valid)=>{
+       clearFurniturePreview();if(!a)return;
+@@ -7658,8 +7660,8 @@
+       }finally{if(scale>1){renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);}selectionGroup.visible=selectedVisible;wallPointsGroup.visible=wallPointsVisible;render();}
+     },
+     getCameraState:()=>({position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray()}),
+-    pickSurface:e=>rayFor(e)?pickSurfaceHit(raycaster.intersectObjects(threeScene.children,true)):null,
+-    pickWall:e=>rayFor(e)?raycaster.intersectObjects(threeScene.children,true).find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
++    pickSurface:e=>rayFor(e)?pickSurfaceHit(meshHits()):null,
++    pickWall:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
+     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
+     clearFurniturePreview,
+     setInteriorView: enabled => {setInteriorView(enabled);render();},

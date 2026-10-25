@@ -1,0 +1,419 @@
+--- /dev/null
++++ b/src/lib/pdfCatalogScope.mjs
+@@ -0,0 +1,60 @@
++// Catalog language is independent of a drawing's quantities and item codes.
++// Only explicit operation/location combinations are recognized here. A price
++// description is never a source for a missing drawing measurement.
++export function pdfCatalogScope(description) {
++  const d=String(description||'').toLowerCase().replace(/[-‐‑–—]/g,' ').replace(/\s+/g,' ').trim();
++  if(/\b(?:disposal|haul|backfill|pool|tank|raft|pile|stairs?|staircase)\b/.test(d))return null;
++  const match=(key,unit,extra={})=>({key,unit,...extra});
++  if(/\bformwork\b/.test(d)){
++    if(/\bslabs?\b/.test(d)&&(!/\bbeams?\b/.test(d)||/\bsoffit\b/.test(d)))return match('slab_formwork_area','m2');
++    if(/\bbeams?\b/.test(d)&&!/\b(?:slabs?|soffits?|undersides?|bottoms?)\b/.test(d))return match('beam_formwork_area','m2');
++    if(/\bcolumns?\b/.test(d)&&!/\b(?:beam|slab|footing|pedestal)\b/.test(d))return match('column_formwork_area','m2');
++    // The existing foundation metric covers footing AND pedestal sides.
++    // A footing-only or pedestal-only item cannot consume that combined area.
++    if(/\bfootings?\b/.test(d)&&/\bpedestals?\b/.test(d)&&!/\b(?:column|beam|slab)\b/.test(d))return match('foundation_formwork_area','m2');
++    return null;
++  }
++  if(/\b(?:rc|reinforced concrete)\b/.test(d)&&!/\bc\s*\d|\bmpa\b|\bgrade\b|\b(?:precast|prestressed|post tensioned)\b/.test(d)){
++    const members=[[/\bfootings?\b/,'foundation_volume'],[/\bpedestals?\b/,'pedestal_volume'],[/\bcolumns?\b/,'column_volume'],[/\bbeam downstands?\b/,'beam_volume'],[/\bground (?:floor )?slabs?\b/,'ground_slab_volume'],[/\bfirst (?:floor )?slabs?\b/,'first_slab_volume'],[/\broof slabs?\b/,'roof_slab_volume']].filter(([re])=>re.test(d));
++    if(members.length===1){
++      const thickness=d.match(/\b(\d+(?:\.\d+)?)\s*mm\b/);
++      return match(members[0][1],'m3',thickness?{sourceThicknessM:Number(thickness[1])/1000}:{});
++    }
++  }
++  if(/^excavat(?:e|ion|ing)\b/.test(d)&&!/\b(?:rock|trench|strip)\b/.test(d))return match('excavation_volume','m3');
++  if(/^rebar\b/.test(d)&&!/\b(?:footing|slab|beam|column|pedestal|mesh)\b/.test(d))return match('rebar_kg','kg');
++  if(/\bterrace\b/.test(d)&&/\bceramic\b/.test(d)&&!/\b(?:wall|walls|balcony)\b/.test(d))return match('terrace_floor_area','m2');
++  if(/^roof (?:waterproofing|membrane)$/.test(d))return match('roof_waterproofing_area','m2');
++  if(/^terrace (?:floor )?(?:waterproofing|membrane)$/.test(d))return match('terrace_waterproofing_area','m2');
++  if(/^wc pans?(?: complete)?$/.test(d))return match('toilet_count','nr');
++  if(/^(?:water supply|water) pipes?(?: complete)?$/.test(d))return match('water_pipe_length','m');
++  if(/^waste pipes?(?: complete)?$/.test(d))return match('waste_pipe_length','m');
++  if(/^split (?:ac|air conditioning) units?(?: complete)?$/.test(d))return match('ac_count','nr');
++  if(/^ac insulated pipe(?:work|s)?$/.test(d))return match('ac_pipe_length','m');
++  if(/^kitchen and laundry sink sets?(?: complete)?$/.test(d))return match('kitchen_sink_count+laundry_sink_count','nr',{keys:['kitchen_sink_count','laundry_sink_count']});
++  if(/^kitchen sink sets?(?: complete)?$/.test(d))return match('kitchen_sink_count','nr');
++  if(/^laundry sink sets?(?: complete)?$/.test(d))return match('laundry_sink_count','nr');
++  if(/^kitchen (?:hob and hood|hob hood) package$/.test(d))return match('kitchen_hob_hood_count','nr');
++  if(/^(?:glass and metal )?terrace railing$/.test(d))return match('terrace_railing_length','m');
++  if(/^driveway paving$/.test(d))return match('driveway_area','m2');
++  if(/^soft landscaping$/.test(d))return match('landscape_area','m2');
++  return null;
++}
++
++// A stated catalog thickness is a restriction, not a way to set the source
++// thickness. Accept only explicit calculated thickness operands for that exact
++// measured operation. Missing or conflicting source operands keep it unbound.
++export function pdfCatalogThicknessMatches(metric,rows){
++  if(metric.sourceThicknessM===undefined)return true;
++  const values=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[[^\]]*\bthickness\b[^\]]*\]/gi)].map(m=>Number(m[1])));
++  return values.length>0&&values.every(v=>Math.abs(v-metric.sourceThicknessM)<1e-9);
++}
++
++export function pdfCatalogHeightMatches(metric,rows,description){
++  if(!['wet_wall_tile_area','wet_wall_waterproofing_area'].includes(metric.key))return true;
++  const text=String(description||'').toLowerCase(),dimension=text.match(/\b(\d+(?:\.\d+)?)\s*(mm|m)\b/);
++  if(!dimension)return true;
++  const height=Number(dimension[1])*(dimension[2]==='mm'?.001:1),kind=metric.key==='wet_wall_tile_area'?'tile':'waterproofing';
++  const operands=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[WET ROOMS:\s*([^\]]*height[^\]]*)\]/gi)].filter(m=>m[2].toLowerCase().includes(kind)).map(m=>Number(m[1])));
++  return operands.length>0&&operands.every(v=>Math.abs(v-height)<1e-9);
++}
+--- a/src/lib/pdfTakeoffEvidence.mjs
++++ b/src/lib/pdfTakeoffEvidence.mjs
+@@ -3,6 +3,7 @@
+ import {applyPdfDocumentReview,PDF_AREA_KEYS} from './pdfMeasurementCalculations.mjs';
+ import {PDF_SOURCE_MEASUREMENT_KEYS} from './pdfSourceMeasurements.mjs';
+ import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
++import {pdfCatalogScope,pdfCatalogThicknessMatches,pdfCatalogHeightMatches} from './pdfCatalogScope.mjs';
+ // PDF quantities require explicit page roles/scopes. No project-specific totals.
+ export const PDF_METRIC_UNITS=Object.freeze({rooms:'nr',door_count:'nr',window_count:'nr',door_area:'m2',window_area:'m2',wall_length:'m',wall_area:'m2',floor_area:'m2',ceiling_area:'m2',roof_area:'m2',pcc_volume:'m3',foundation_volume:'m3',pedestal_volume:'m3',column_volume:'m3',beam_volume:'m3',ground_slab_volume:'m3',first_slab_volume:'m3',roof_slab_volume:'m3',rebar_kg:'kg',foundation_formwork_area:'m2',column_formwork_area:'m2',beam_formwork_area:'m2',slab_formwork_area:'m2',external_block_area:'m2',internal_block_area:'m2',wood_floor_area:'m2',ceramic_floor_area:'m2',epoxy_floor_area:'m2',terrace_floor_area:'m2',wet_floor_area:'m2',wet_wall_area:'m2',plaster_area:'m2',paint_area:'m2',gypsum_ceiling_area:'m2',excavation_volume:'m3',toilet_count:'nr',basin_count:'nr',shower_count:'nr',socket_count:'nr',light_count:'nr',distribution_board_count:'nr',ac_count:'nr',smoke_detector_count:'nr',water_pipe_length:'m',waste_pipe_length:'m',ac_pipe_length:'m',kitchen_cabinet_length:'m',terrace_railing_length:'m',roof_waterproofing_area:'m2',terrace_waterproofing_area:'m2',wet_floor_waterproofing_area:'m2',wet_wall_waterproofing_area:'m2',wet_wall_tile_area:'m2',ceiling_paint_area:'m2',backsplash_area:'m2',driveway_area:'m2',landscape_area:'m2',kitchen_sink_count:'nr',laundry_sink_count:'nr',internal_wall_length:'m',external_wall_length:'m',internal_door_count:'nr',service_door_count:'nr',entrance_door_count:'nr',garage_door_count:'nr',kitchen_hob_hood_count:'nr'});
+ export function normalizePdfScope(s){const v=String(s||'').toLowerCase().trim().replace(/[ _-]+/g,' ');if(['gf','ground','ground floor','floor 0','همکف','الطابق الأرضي'].includes(v))return 'floor:0';if(['ff','first','first floor','floor 1','طبقه اول','الطابق الأول'].includes(v))return 'floor:1';if(['project','whole project','all floors','total'].includes(v))return 'project';return v;}
+@@ -101,10 +102,18 @@
+  return {...fields,confidence:floors.length?Math.round(floors.reduce((s,p)=>s+(p.confidence||0),0)/floors.length*10)/10:0,wall_height:sourcedHeight?nativeHeight.value:3.2,wall_length_estimated:false,wall_area_estimated:false,wall_length_source:'pdf_scoped_floor_plan',wall_area_source:'pdf_scoped_floor_plan',wall_height_source:sourcedHeight?'pdf_native_source_rule':'project_default',total_pages:total,analyzed_pages:pages.length,failed_pages:failed,page_results:pages,detected_items:floors.flatMap(p=>(p.detected_items||[]).map(i=>({...i,pages:[p.pageNumber]}))),scheduled_quantities:resolved,pdf_analysis:report,notes:`PDF reconciled by page role and floor scope. ${floors.length} distinct floor plans selected. Schedules override matching scope instead of adding duplicates. AI extraction requires review. ${warnings.join('; ')}`};
+ }
+ export function pdfRuleMetric(description,unit){
+- const d=String(description||'').toLowerCase(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
++ const d=String(description||'').toLowerCase().replace(/[-‐‑–—]/g,' ').replace(/\s+/g,' ').trim(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
+  const u=({'sqm':'m2','sq.m':'m2','sq m':'m2','cum':'m3','cu.m':'m3','cu m':'m3','lm':'m','lin.m':'m','linear metre':'m','linear meter':'m','no.':'nr','nos.':'nr','each':'nr','ea':'nr','set':'nr'})[rawUnit]||rawUnit;
+  // Similar words do not establish the same operation or fixture specification.
+  if(/disposal|cart\s*away|haul|backfill|downlight|luminaire|light fixture|\bled\b/.test(d))return null;
++ // Beam sides and beam undersides are different operations. The latter is
++ // already part of slab/beam soffit scope, never an extra beam-side quantity.
++ if(/\bformwork\b/.test(d)&&/\bbeams?\b/.test(d)&&/\b(?:soffits?|undersides?|bottoms?)\b/.test(d)&&!/\bslabs?\b/.test(d))return null;
++ if(/\bformwork\b/.test(d)){
++  const groups=[/\b(?:foundations?|footings?|pedestals?)\b/,/\bcolumns?\b/,/\bbeams?\b/,/\bslabs?\b/].filter(re=>re.test(d));
++  const slabBeamSoffit=groups.length===2&&/\bslabs?\b/.test(d)&&/\bbeams?\b/.test(d)&&/\bsoffit\b/.test(d);
++  if(groups.length>1&&!slabBeamSoffit)return null;
++ }
+  // plaster_area is the interior plaster operation. An exterior render or a
+  // plaster ceiling must not receive it or compete with an interior wall item.
+  // An unspecified plaster location is not enough to select the operation.
+@@ -121,6 +130,13 @@
+  // rule; they cannot consume only one part of the package by keyword order.
+  if(/\b(?:wall|walls)\b/.test(d)&&/\b(?:floor|floors|ceiling|ceilings)\b/.test(d))return null;
+  for(const [pattern,key,expected] of specific)if(pattern.test(d))return u===expected?{key,factor:1}:null;
++ const operation=pdfCatalogScope(d);
++ if(operation){
++  const {unit:expected,...metric}=operation;
++  if(expected==='kg'&&['ton','tonne','t'].includes(u))return {...metric,factor:.001};
++  if(u===expected||expected==='nr'&&['nos','no','number','nr'].includes(u))return {...metric,factor:1};
++  return null;
++ }
+  const rules=[[/blinding/,'pcc_volume','m3'],[/\bexcavation\b/,'excavation_volume','m3'],[/formwork.*found/,'foundation_formwork_area','m2'],[/formwork.*column/,'column_formwork_area','m2'],[/formwork.*beam/,'beam_formwork_area','m2'],[/formwork.*slab/,'slab_formwork_area','m2'],[/reinforcement|reinforcing steel/,'rebar_kg','kg'],[/200.*block|block.*200/,'external_block_area','m2'],[/120.*block|block.*120/,'internal_block_area','m2'],[/wood.*floor|parquet/,'wood_floor_area','m2'],[/ceramic.*floor/,'ceramic_floor_area','m2'],[/epoxy.*floor|garage.*epoxy/,'epoxy_floor_area','m2'],[/plaster/,'plaster_area','m2'],[/internal wall.*paint|wall emulsion/,'paint_area','m2'],[/gypsum.*ceiling/,'gypsum_ceiling_area','m2'],[/glazed window|aluminium.*window/,'window_area','m2'],[/water closet|toilet pan/,'toilet_count','nr'],[/wash\s*basin/,'basin_count','nr'],[/shower/,'shower_count','nr'],[/socket/,'socket_count','nr'],[/lighting?\s+point|light\s+point/,'light_count','nr'],[/distribution board/,'distribution_board_count','nr'],[/smoke detector/,'smoke_detector_count','nr']];
+  for(const [pattern,key,expected] of rules)if(pattern.test(d)){
+   if(expected==='kg'&&['ton','tonne','t'].includes(u))return {key,factor:.001};
+@@ -131,8 +147,13 @@
+ }
+ export function pdfScheduledRule(takeoff,description,unit){
+  const metric=pdfRuleMetric(description,unit);if(!metric)return null;
+- const rows=takeoff.pdf_analysis?.quantity_evidence?.[metric.key];if(!rows?.length)return null;
+- if(rows.some(r=>r.key!==metric.key||r.unit!==PDF_METRIC_UNITS[metric.key]||!valid(r.value)||!String(r.evidence||'').trim()||!Array.isArray(r.pages)||!r.pages.length))return null;
+- if(Math.abs(rows.reduce((n,r)=>n+r.value,0)-takeoff.scheduled_quantities?.[metric.key])>.001)return null;
+- const value=takeoff.scheduled_quantities?.[metric.key];return valid(value)?{quantity:value*metric.factor,metricKey:metric.key,source:'pdf_schedule_evidence',measured:true,pages:[...new Set(rows.flatMap(r=>r.pages))],evidence:rows.map(r=>r.evidence).join(' | ')}:null;
++ const keys=metric.keys||[metric.key],rows=[];let value=0;
++ for(const key of keys){
++  const claims=takeoff.pdf_analysis?.quantity_evidence?.[key],quantity=takeoff.scheduled_quantities?.[key];
++  if(!claims?.length||!valid(quantity)||claims.some(r=>r.key!==key||r.unit!==PDF_METRIC_UNITS[key]||!valid(r.value)||(r.unit==='nr'&&!Number.isInteger(r.value))||!String(r.evidence||'').trim()||!Array.isArray(r.pages)||!r.pages.length))return null;
++  if(Math.abs(claims.reduce((n,r)=>n+r.value,0)-quantity)>.001)return null;
++  rows.push(...claims);value+=quantity;
++ }
++ if(!pdfCatalogThicknessMatches(metric,rows)||!pdfCatalogHeightMatches(metric,rows,description))return null;
++ return {quantity:value*metric.factor,metricKey:metric.key,...(metric.keys?{metricKeys:keys}:{}),source:'pdf_schedule_evidence',measured:true,pages:[...new Set(rows.flatMap(r=>r.pages))],evidence:rows.map(r=>r.evidence).join(' | ')};
+ }
+--- a/src/lib/pdfBoqCoverage.mjs
++++ b/src/lib/pdfBoqCoverage.mjs
+@@ -5,7 +5,7 @@
+ // A quantity must not be repeated across competing catalog variants. There is
+ // no basis for selecting a grade, diameter, capacity or finish from price alone.
+ export function planPdfCatalogBindings(takeoff, candidates) {
+-  const byMetric = new Map();
++  const byMetric = new Map(),byCode=new Map();
+   const signatures = new Map(), conflictingCodes = new Set();
+   for (const item of candidates || []) {
+     if (!item || item.is_active === false) continue;
+@@ -16,19 +16,18 @@
+     signatures.set(code,signature);
+     const evidence = pdfScheduledRule(takeoff, item.description, item.unit);
+     if (!evidence || evidence.quantity <= 0) continue;
+-    const group = byMetric.get(evidence.metricKey) || new Map();
+-    group.set(code, evidence);
+-    byMetric.set(evidence.metricKey, group);
++    byCode.set(code,evidence);
++    for(const key of evidence.metricKeys||[evidence.metricKey]){
++      const group=byMetric.get(key)||new Map();group.set(code,evidence);byMetric.set(key,group);
++    }
+   }
+   const bindings = new Map(), warnings = [];
+   for (const [metric, group] of byMetric) {
+-    if (group.size === 1 && !conflictingCodes.has([...group.keys()][0])) {
+-      const [code, quantity] = [...group][0];
+-      bindings.set(code, quantity);
+-    } else {
++    if (group.size !== 1 || conflictingCodes.has([...group.keys()][0])) {
+       warnings.push(`PDF quantity ${metric} has ${group.size===1?'inconsistent definitions for catalog code':'competing catalog items'} (${[...group.keys()].join(', ')}). Specification selection required; quantity was not repeated across them.`);
+     }
+   }
++  for(const [code,evidence] of byCode)if(!conflictingCodes.has(code)&&(evidence.metricKeys||[evidence.metricKey]).every(k=>byMetric.get(k)?.size===1))bindings.set(code,evidence);
+   return {bindings, warnings};
+ }
+ 
+@@ -132,7 +131,7 @@
+   const doorKeys=['internal_door_count','service_door_count','entrance_door_count','garage_door_count'];
+   const doorBreakdown=doorKeys.filter(k=>Number.isFinite(takeoff.scheduled_quantities?.[k]));
+   const completeDoors=doorBreakdown.length>0&&Math.abs(doorBreakdown.reduce((n,k)=>n+takeoff.scheduled_quantities[k],0)-(takeoff.scheduled_quantities?.door_count ?? -1))<.001;
+-  const bound = new Set(items.filter(i => i.quantity > 0).map(i => i.pdfEvidence?.metricKey).filter(Boolean));
++  const bound = new Set(items.filter(i => i.quantity > 0).flatMap(i => i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).filter(Boolean));
+   for (const [key, [sectionCode, section, description]] of Object.entries(operations)) {
+     if(key==='door_count'&&completeDoors)continue;
+     if(doorKeys.includes(key)&&!completeDoors)continue;
+--- a/src/lib/serverBoqAnalysis.js
++++ b/src/lib/serverBoqAnalysis.js
+@@ -6318,7 +6318,7 @@
+ 
+         measuredFromApsStructure:
+           isMeasuredDerivedRule && !pdfQuantity,
+-        pdfEvidence:pdfQuantity?{metricKey:pdfQuantity.metricKey,pages:pdfQuantity.pages,basis:pdfQuantity.evidence}:null,
++        pdfEvidence:pdfQuantity?{metricKey:pdfQuantity.metricKey,...(pdfQuantity.metricKeys?{metricKeys:pdfQuantity.metricKeys}:{}),pages:pdfQuantity.pages,basis:pdfQuantity.evidence}:null,
+ 
+         confidence:
+           isEstimatedRule
+--- /dev/null
++++ b/tools/check-pdf-rate-catalog.mjs
+@@ -0,0 +1,99 @@
++// Read-only, offline exercise of the actual server BOQ path. No dependencies,
++// database connection, model, browser state, or catalog updates are used.
++import {readFileSync,writeFileSync} from 'node:fs';
++import {resolve} from 'node:path';
++import {pathToFileURL} from 'node:url';
++import vm from 'node:vm';
++import {mergePdfEvidence} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {annotatePdfBoqCompletion} from '../src/lib/pdfBoqCompletion.mjs';
++import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
++import {classifyEstimateItem} from '../src/lib/estimateClassification.mjs';
++
++export function parseCsv(text){
++  const rows=[];let row=[],cell='',quoted=false,closed=false;
++  text=String(text).replace(/^\uFEFF/,'');
++  if(text.length>4*1024*1024)throw Error('CSV exceeds 4 MiB.');
++  for(let i=0;i<text.length;i++){
++    const c=text[i];
++    if(quoted){if(c==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;closed=true;}}else cell+=c;continue;}
++    if(c==='"'){if(cell||closed)throw Error('Invalid CSV quote.');quoted=true;continue;}
++    if(c===','||c==='\n'||c==='\r'){
++      row.push(cell);cell='';closed=false;
++      if(c!==','){if(c==='\r'&&text[i+1]==='\n')i++;if(row.some(v=>v.trim()))rows.push(row);row=[];}
++    }else{if(closed)throw Error('Unexpected text after a CSV quote.');cell+=c;}
++  }
++  if(quoted)throw Error('Unclosed CSV quote.');
++  if(cell||closed||row.length){row.push(cell);if(row.some(v=>v.trim()))rows.push(row);}
++  if(rows.length<2||rows.length>10001)throw Error('CSV requires headers and 1–10000 rows.');
++  const headers=rows.shift().map(s=>s.trim());
++  if(new Set(headers).size!==headers.length)throw Error('Duplicate CSV header.');
++  return rows.map(r=>{if(r.length!==headers.length)throw Error('CSV row/header column count mismatch.');return Object.fromEntries(headers.map((h,i)=>[h,r[i]]));});
++}
++
++export function rateCatalogFromCsv(text){
++  const seen=new Set();
++  return parseCsv(text).map((row,i)=>{
++    for(const key of ['code','description_en','unit','rate_aed'])if(!String(row[key]??'').trim())throw Error(`Rate CSV row ${i+2}: ${key} required.`);
++    const code=row.code.trim().toUpperCase();if(seen.has(code))throw Error(`Duplicate rate code: ${code}`);seen.add(code);
++    if(!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(row.rate_aed.trim()))throw Error(`Invalid rate for ${code}.`);
++    const rate=Number(row.rate_aed);if(!Number.isFinite(rate)||rate>1e12)throw Error(`Invalid rate for ${code}.`);
++    return {item_code:code,description:row.description_en.trim(),unit:row.unit.trim(),standard_rate:rate,
++      section_code:'OFFLINE-RATE-CATALOG',source_name:'Supplied CSV; offline comparison only',is_active:true};
++  });
++}
++
++export async function runOfflinePdfCatalogCheck(takeoff,rateCsv){
++  if(!takeoff?.pdf_analysis?.quantity_evidence)throw Error('A PDF report with source quantity evidence is required.');
++  const prices=rateCatalogFromCsv(rateCsv),tables={price_items:structuredClone(prices),boq_rules:[],boq_sections:[]};
++  let reads=0,modelAttempts=0,databaseWrites=0;
++  const forbidden=()=>{throw Error('Offline check forbids model calls and database writes.');};
++  const forbiddenModel=()=>{modelAttempts++;return forbidden();},forbiddenWrite=()=>{databaseWrites++;return forbidden();};
++  const db={from(name){
++    if(!Object.hasOwn(tables,name))throw Error(`Unexpected database access: ${name}`);reads++;
++    const q={select(){return q;},eq(){return q;},order(){return q;},
++      range(a,b){return Promise.resolve({data:tables[name].slice(a,b+1),error:null});},
++      then(ok,fail){return Promise.resolve({data:tables[name],error:null}).then(ok,fail);},insert:forbiddenWrite,update:forbiddenWrite,upsert:forbiddenWrite,delete:forbiddenWrite};return q;
++  }};
++  const context=vm.createContext({planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
++    process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-placeholder',VENTRA_DISABLE_BOQ_AI:'true'}},
++    createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
++    getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty inventory'}),
++    getDrawingEvidence:()=>null,applyDwgScheduleToBoq:items=>({items,warnings:[]}),
++    buildLocalBoq:forbidden,inferConstructionScopes:forbiddenModel,shortlistPriceCatalog:forbiddenModel,matchScopesToCatalog:forbiddenModel,resolveAiQuantity:forbiddenModel});
++  const source=readFileSync(new URL('../src/lib/serverBoqAnalysis.js',import.meta.url),'utf8');
++  vm.runInContext(source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/export /g,'')+'\nthis.handle=handleCommercialRequest;',context);
++  const response=await context.handle({json:async()=>({takeoff:structuredClone(takeoff),priceLevel:'standard',vatPercentage:0})});
++  const result=await response.json();
++  if(response.status!==200||!result.success)throw Error(result.error||'Offline server BOQ failed.');
++  if(modelAttempts||databaseWrites)throw Error('Offline-only invariant failed: model/write path was attempted.');
++  return {mode:'offline_supplied_rate_catalog_only',productionCatalogChanged:false,modelCalls:0,databaseWrites,mockedTableReads:reads,
++    rateRows:prices.length,boq:result.boq};
++}
++
++export function compareExpectedRows(result,expectedCsv){
++  // The oracle is used only AFTER generating the BOQ. It never supplies a
++  // quantity, material, mapping, rate, or missing opening classification.
++  const expected=parseCsv(expectedCsv),items=result.boq.items||[];
++  const comparisons=expected.map(ref=>{
++    const row=items.find(i=>i.itemCode===ref.code&&i.quantity>0);
++    if(!row)return {code:ref.code,description:ref.description_en,status:'unbound',expectedQuantity:Number(ref.quantity),expectedUnit:ref.unit};
++    const quantityDelta=Number(row.quantity)-Number(ref.quantity),amountDelta=Number(row.amount)-Number(ref.amount_aed);
++    const quantityMatches=Math.abs(quantityDelta)<=.001,rateMatches=Math.abs(Number(row.rate)-Number(ref.rate_aed))<=.01,unitMatches=row.unit===ref.unit;
++    return {code:ref.code,description:ref.description_en,quantity:row.quantity,unit:row.unit,rate:row.rate,amount:row.amount,
++      quantityMatches,rateMatches,unitMatches,quantityDelta,amountDelta,
++      status:quantityMatches&&rateMatches&&unitMatches&&Math.abs(amountDelta)<=.01?'pass':'difference',metricKey:row.pdfEvidence?.metricKey};
++  });
++  return {expectedRows:expected.length,matchedQuantityRows:comparisons.filter(r=>r.quantityMatches&&r.unitMatches).length,
++    passedRows:comparisons.filter(r=>r.status==='pass').length,differenceRows:comparisons.filter(r=>r.status==='difference').length,
++    unboundRows:comparisons.filter(r=>r.status==='unbound').length,comparisons};
++}
++
++if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
++  const [reportPath,ratesPath,expectedPath,outputPath]=process.argv.slice(2);
++  if(!reportPath||!ratesPath)throw Error('Usage: node tools/check-pdf-rate-catalog.mjs report.json rates.csv [expected-boq.csv] [output.json]');
++  const reportText=readFileSync(reportPath,'utf8');if(reportText.length>20*1024*1024)throw Error('Report exceeds 20 MiB.');
++  const result=await runOfflinePdfCatalogCheck(JSON.parse(reportText),readFileSync(ratesPath,'utf8'));
++  if(expectedPath)result.comparison=compareExpectedRows(result,readFileSync(expectedPath,'utf8'));
++  const text=JSON.stringify(result,null,2)+'\n';if(outputPath)writeFileSync(outputPath,text);else process.stdout.write(text);
++}
+--- /dev/null
++++ b/tests/pdf-rate-catalog-benchmark.test.mjs
+@@ -0,0 +1,76 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import {pdfRuleMetric,pdfScheduledRule} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogBindings,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {parseCsv,rateCatalogFromCsv,runOfflinePdfCatalogCheck,compareExpectedRows} from '../tools/check-pdf-rate-catalog.mjs';
++const observed=JSON.parse(readFileSync(new URL('./fixtures/pdf-observed-catalog-recovery.json',import.meta.url),'utf8'));
++const rateCsv=readFileSync(new URL('./fixtures/pdf-villa02-test-rates.csv',import.meta.url),'utf8');
++const price=(code,description,unit)=>({item_code:code,description,unit,is_active:true});
++
++test('actual 52-row supplied rate CSV connects 48 explicit operations without reading the answer key',async()=>{
++  const input=structuredClone(observed),prices=rateCatalogFromCsv(rateCsv),plan=planPdfCatalogBindings(observed,prices);
++  assert.equal(prices.length,52);assert.equal(plan.bindings.size,48);
++  assert.deepEqual(prices.filter(p=>!plan.bindings.has(p.item_code)).map(p=>p.item_code),['DOR-01','DOR-02','DOR-03','DOR-04']);
++  const result=await runOfflinePdfCatalogCheck(observed,rateCsv);
++  assert.equal(result.modelCalls,0);assert.equal(result.databaseWrites,0);assert.equal(result.productionCatalogChanged,false);
++  assert.equal(result.boq.summary.provisionalItems,48);assert.equal(result.boq.summary.pendingItems,1);
++  assert.equal(result.boq.summary.provisionalSubtotal,492535.51);assert.equal(result.boq.summary.verifiedSubtotal,0);
++  assert.deepEqual(observed,input);assert.ok(result.boq.items.every(i=>!i.includeInCommercialTotal));
++  const sinks=result.boq.items.find(i=>i.itemCode==='PLB-04');assert.equal(sinks.quantity,2);assert.deepEqual(sinks.pdfEvidence.metricKeys,['kitchen_sink_count','laundry_sink_count']);
++  assert.ok(!result.boq.items.some(i=>/^PDF-(KITCHEN|LAUNDRY)_SINK_COUNT$/.test(i.itemCode)));
++});
++test('matching uses equivalent scope words rather than benchmark codes, rates, counts or quantities',()=>{
++  const variants=[['Column side formwork','Formwork to columns','m2','column_formwork_area'],
++    ['Beam downstand side formwork','Formwork to beam sides','m2','beam_formwork_area'],
++    ['Footing and pedestal side formwork','Formwork to footing and pedestal sides','m2','foundation_formwork_area'],
++    ['Wet-room wall tiles','Wet room wall tiles','m2','wet_wall_tile_area'],
++    ['Wet-room floor waterproofing','Wet area floor waterproofing','m2','wet_floor_waterproofing_area']];
++  for(const [a,b,u,key] of variants){assert.equal(pdfRuleMetric(a,u)?.key,key);assert.equal(pdfRuleMetric(b,u)?.key,key);}
++  const modified=structuredClone(observed);
++  modified.scheduled_quantities.column_volume=7.25;modified.pdf_analysis.quantity_evidence.column_volume=[{key:'column_volume',value:7.25,unit:'m3',pages:[2],evidence:'Different source project, column calculation'}];
++  const plan=planPdfCatalogBindings(modified,[price('UNRELATED-CODE','RC columns, net clear length','m3')]);assert.equal(plan.bindings.get('UNRELATED-CODE').quantity,7.25);
++});
++test('beam soffit-only and combined unrelated formwork packages cannot consume side-only or single-member quantities',()=>{
++  for(const d of ['Beam soffit formwork','Formwork to beam undersides','Column and beam formwork','Slab and column formwork','Formwork to columns and slabs','Formwork to beam sides and slabs'])assert.equal(pdfRuleMetric(d,'m2'),null,d);
++  assert.equal(pdfRuleMetric('Slab and beam soffit formwork','m2').key,'slab_formwork_area');
++  assert.equal(pdfRuleMetric('Beam downstand side formwork','m3'),null);
++});
++test('new generic descriptions never select unknown grades, pipe diameters, AC capacities or opening materials',()=>{
++  for(const [d,u] of [['RC columns C30','m3'],['RC first-floor slab grade C25','m3'],['RC isolated footings and pedestals','m3'],
++    ['Water supply pipes 20mm','m'],['Waste pipes UPVC','m'],['Split AC units 2 ton','nr'],['AC insulated pipework 16mm','m'],
++    ['Internal timber door sets 900 x 2100','nr'],['Main entrance door set 1200 x 2200','nr'],
++    ['Excavate swimming pool','m3'],['Terrace ceramic wall tiles','m2']])assert.equal(pdfScheduledRule(observed,d,u),null,d);
++});
++test('catalog thickness and wet-wall finish heights are checked against source operands, not copied into the measurement',()=>{
++  assert.equal(pdfScheduledRule(observed,'RC ground slab, 150 mm','m3').quantity,observed.ground_slab_volume);
++  assert.equal(pdfScheduledRule(observed,'RC ground slab, 200 mm','m3'),null);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall tiles, 2.40 m high','m2').quantity,observed.wet_wall_tile_area);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall tiles, 3.00 m high','m2'),null);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall waterproofing to 2.0 m','m2').quantity,observed.wet_wall_waterproofing_area);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall waterproofing to 2.4 m','m2'),null);
++  const noOperands=structuredClone(observed);noOperands.pdf_analysis.quantity_evidence.ground_slab_volume[0].evidence='Summary volume only';
++  assert.equal(pdfScheduledRule(noOperands,'RC ground slab, 150 mm','m3'),null);
++});
++test('combined sink scope requires both source claims and cannot be repeated in separate catalog rows or retained quantities',()=>{
++  const combined=price('PAIR','Kitchen and laundry sink sets','nr'),kitchen=price('K','Kitchen sink sets','nr');
++  const binding=planPdfCatalogBindings(observed,[combined]);assert.equal(binding.bindings.get('PAIR').quantity,2);
++  const row={quantity:2,pdfEvidence:{metricKey:'kitchen_sink_count+laundry_sink_count',metricKeys:['kitchen_sink_count','laundry_sink_count']}};
++  const retained=retainUnboundPdfQuantities([row],observed).items;
++  assert.ok(!retained.some(i=>['kitchen_sink_count','laundry_sink_count'].includes(i.pdfEvidence?.metricKey)));
++  assert.equal(planPdfCatalogBindings(observed,[combined,kitchen]).bindings.size,0);
++  const partial=structuredClone(observed);delete partial.pdf_analysis.quantity_evidence.laundry_sink_count;
++  assert.equal(pdfScheduledRule(partial,combined.description,combined.unit),null);
++});
++test('CSV parsing handles quoted commas/newlines, BOM and escaped quotes and rejects malformed or contradictory rates',()=>{
++  assert.deepEqual(parseCsv('\uFEFFcode,description_en\r\nA,"First, second\nthird ""quoted"""\r\n'),[{code:'A',description_en:'First, second\nthird "quoted"'}]);
++  for(const text of ['code,code\nA,B','code,description_en\nA,"unfinished','code,description_en\nA,"finished"x','a,b\n1,2,3'])assert.throws(()=>parseCsv(text));
++  const header='code,description_en,unit,rate_aed\n';
++  for(const rows of ['A,Test,m,NaN','A,Test,m,-10','A,Test,m,0x20','A,Test,m,1\na,Test,m,1','A,Test,m,'])assert.throws(()=>rateCatalogFromCsv(header+rows));
++  assert.equal(rateCatalogFromCsv(header+'A,Test,m,0')[0].standard_rate,0);
++});
++test('answer-key comparison cannot alter an already generated quantity/rate and reports partial rows honestly',()=>{
++  const result={boq:{items:[{itemCode:'A',quantity:10.3545,unit:'m3',rate:400,amount:4141.8}]}};
++  const before=structuredClone(result),check=compareExpectedRows(result,'code,description_en,unit,quantity,rate_aed,amount_aed\nA,Column,m3,10.355,400,4142.00\nB,Missing,nr,2,5,10\n');
++  assert.equal(check.matchedQuantityRows,1);assert.equal(check.differenceRows,1);assert.equal(check.unboundRows,1);assert.deepEqual(result,before);
++});
+--- /dev/null
++++ b/tests/fixtures/pdf-villa02-test-rates.csv
+@@ -0,0 +1,53 @@
++﻿code,description_en,unit,rate_aed
++EAR-01,Excavate 20 isolated footing pits,m3,45
++CON-01,"PCC blinding, 100 mm",m3,300
++CON-02,RC isolated footings,m3,400
++CON-03,RC pedestals,m3,400
++FRM-01,Footing and pedestal side formwork,m2,65
++CON-04,"RC ground slab, 150 mm",m3,400
++CON-05,"RC first-floor slab, 200 mm",m3,400
++CON-06,"RC roof slab, 200 mm",m3,400
++CON-07,"RC columns, net clear length",m3,400
++CON-08,RC beam downstands,m3,400
++FRM-02,Column side formwork,m2,65
++FRM-03,Beam downstand side formwork,m2,65
++FRM-04,Slab and beam soffit formwork,m2,65
++REB-01,Rebar from declared BBS,kg,4.5
++MAS-01,"External 200 mm blockwork, net face",m2,110
++MAS-02,"Internal 120 mm blockwork, net face",m2,85
++FIN-01,Wood flooring,m2,120
++FIN-02,Internal ceramic floor finish,m2,95
++FIN-03,Garage epoxy finish,m2,65
++FIN-04,Terrace outdoor ceramic,m2,110
++FIN-05,"Wet-room wall tiles, 2.40 m high",m2,100
++FIN-06,"Kitchen backsplash, 600 mm high",m2,100
++FIN-07,"Internal plaster, net",m2,30
++FIN-08,"Internal wall paint, net",m2,18
++FIN-09,Internal ceiling paint,m2,18
++FIN-10,Gypsum suspended ceilings,m2,90
++WAT-01,Wet-room floor waterproofing,m2,40
++WAT-02,Wet-room wall waterproofing to 2.0 m,m2,40
++WAT-03,Roof membrane,m2,55
++WAT-04,Terrace floor membrane,m2,55
++DOR-01,Internal timber door sets 900 x 2100,nr,950
++DOR-02,External service door sets 900 x 2100,nr,1500
++DOR-03,Main entrance door set 1200 x 2200,nr,3200
++DOR-04,Garage door set 3000 x 2400,nr,4500
++WIN-01,Glazed aluminium windows,m2,650
++PLB-01,WC pans complete,nr,900
++PLB-02,Wash basins complete,nr,700
++PLB-03,Shower sets complete,nr,1200
++PLB-04,Kitchen and laundry sink sets,nr,800
++PLB-05,Water supply pipes,m,45
++PLB-06,Waste pipes,m,55
++ELE-01,"Light points, complete",nr,180
++ELE-02,"Socket points, complete",nr,150
++ELE-03,Distribution boards,nr,1800
++HVC-01,Split AC units,nr,2500
++HVC-02,AC insulated pipework,m,65
++FIR-01,Smoke detectors,nr,180
++KIT-01,L-shaped base kitchen cabinets,m,800
++KIT-02,Kitchen hob and hood package,set,2500
++EXT-01,Glass-and-metal terrace railing,m,1200
++EXT-02,Driveway paving,m2,95
++EXT-03,Soft landscaping,m2,60

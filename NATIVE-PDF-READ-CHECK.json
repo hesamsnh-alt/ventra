@@ -1,0 +1,92 @@
+{
+  "mode": "read_only_native_pdf_check",
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "totalPages": 8,
+  "readableTextPages": 8,
+  "locallyExtractedPages": [
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "unresolvedPageExtractions": [
+    1,
+    2,
+    3
+  ],
+  "completeMeasuredBoq": false,
+  "note": "Reading text or tables does not establish a complete takeoff. Unparsed geometry, prose and source relationships remain for review.",
+  "pages": [
+    {
+      "page": 1,
+      "text_status": "readable",
+      "extracted": false,
+      "reason": "No fully supported local page contract"
+    },
+    {
+      "page": 2,
+      "text_status": "readable",
+      "extracted": false,
+      "reason": "No fully supported local page contract"
+    },
+    {
+      "page": 3,
+      "text_status": "readable",
+      "extracted": false,
+      "reason": "No fully supported local page contract"
+    },
+    {
+      "page": 4,
+      "text_status": "readable",
+      "extracted": true,
+      "kind": "opening_schedule",
+      "scope": "floor:0",
+      "parsed_keys": []
+    },
+    {
+      "page": 5,
+      "text_status": "readable",
+      "extracted": true,
+      "kind": "opening_schedule",
+      "scope": "floor:1",
+      "parsed_keys": []
+    },
+    {
+      "page": 6,
+      "text_status": "readable",
+      "extracted": true,
+      "kind": "specification",
+      "scope": "project",
+      "parsed_keys": []
+    },
+    {
+      "page": 7,
+      "text_status": "readable",
+      "extracted": true,
+      "kind": "quantity_schedule",
+      "scope": "project",
+      "parsed_keys": [
+        "light_count",
+        "socket_count",
+        "distribution_board_count",
+        "ac_count",
+        "ac_pipe_length",
+        "smoke_detector_count",
+        "water_pipe_length",
+        "waste_pipe_length"
+      ]
+    },
+    {
+      "page": 8,
+      "text_status": "readable",
+      "extracted": true,
+      "kind": "quantity_schedule",
+      "scope": "project",
+      "parsed_keys": [
+        "rebar_kg"
+      ]
+    }
+  ]
+}

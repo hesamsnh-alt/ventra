@@ -2,3 +2,12 @@
 
 /* Native disclosure keeps the complete panel reachable before hydration. */
 .vh-launcher{list-style:none;user-select:none}.vh-launcher::-webkit-details-marker{display:none}.vh-floating:not([open])>.vh-panel{display:none}.vh-floating[open]>.vh-panel{display:flex}.vh-panel button:disabled{opacity:.5;cursor:wait}.vh-options{flex-shrink:0}.vh-head,.vh-compose,.vh-bottom{flex-shrink:0}.vh-options p{margin:0}
+
+@media (max-width: 600px) {
+  body:has(.hero) .vh-floating { right: auto; left: auto; inset-inline-end: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  body:has(.hero) .vh-launcher {
+    width: 44px; height: 44px; padding: 0; justify-content: center; gap: 0; font-size: 0;
+  }
+  body:has(.hero) .vh-launcher span { font-size: 16px; width: 24px; height: 24px; line-height: 20px; }
+  body:has(.hero) .vh-floating .vh-panel { bottom: 56px; right: auto; left: auto; inset-inline-end: 0; }
+}

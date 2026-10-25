@@ -1,0 +1,1465 @@
+--- a/src/lib/surfaceMaterials.mjs
++++ b/src/lib/surfaceMaterials.mjs
+@@ -1,3 +1,4 @@
++import {validAssetId} from './personalAssets.mjs';
+ // Visual finishes only. These IDs never enter the quantity or pricing engine.
+ export const SURFACE_MIME = 'application/x-ventra-surface-material';
+ export const SURFACE_GROUPS = Object.freeze([
+@@ -48,8 +49,8 @@
+   ['wallpaper-leaf-olive','wallpaper','Olive botanical','برگ‌دار زیتونی','نباتي زيتوني','#65735b','botanical','#bbc5a6'],
+ ].map(([id,kind,en,fa,ar,color,pattern,accent])=>Object.freeze({id,kind,en,fa,ar,color,
+   ...(pattern?{pattern,accent}:{}),...(['paint','wallpaper'].includes(kind)?{wallOnly:true}:{})})));
+-export const findSurfaceMaterial=id=>SURFACE_MATERIALS.find(m=>m.id===id)||null;
+-export const surfaceMaterialAllowed=(id,target)=>!!target&&!!findSurfaceMaterial(id)&&(!findSurfaceMaterial(id).wallOnly||target.kind==='wall');
++export const findSurfaceMaterial=(id,scene)=>SURFACE_MATERIALS.find(m=>m.id===id)||(validAssetId(scene?.surfaceFinishes?.customMaterials?.[id]?.assetId)&&id==='personal:'+scene.surfaceFinishes.customMaterials[id].assetId?scene.surfaceFinishes.customMaterials[id]:null);
++export const surfaceMaterialAllowed=(id,target,scene)=>!!target&&!!findSurfaceMaterial(id,scene)&&(!findSurfaceMaterial(id,scene).wallOnly||target.kind==='wall');
+ export const WALL_SURFACE_SIDES=Object.freeze(['x+','x-','y+','y-','z+','z-']);
+ // Raycaster face normals are mesh-local: camera motion and wall rotation do
+ // not change the saved face identity. Never infer the face from screen space.
+@@ -70,24 +71,37 @@
+ }
+ export function applySurfaceMaterial(scene,target,materialId){
+   if(!validSurfaceTarget(scene,target))throw new Error('The floor or wall is no longer available.');
+-  if(materialId!==null&&!findSurfaceMaterial(materialId))throw new Error('Unknown surface material.');
+-  if(materialId!==null&&!surfaceMaterialAllowed(materialId,target))throw new Error('Paint and wallpaper apply to walls only.');
+-  const assignments={...(scene.surfaceFinishes?.assignments||{})};
++  if(materialId!==null&&!findSurfaceMaterial(materialId,scene))throw new Error('Unknown surface material.');
++  if(materialId!==null&&!surfaceMaterialAllowed(materialId,target,scene))throw new Error('Paint and wallpaper apply to walls only.');
++  const assignments={...(scene.surfaceFinishes?.assignments||{})},scales={...(scene.surfaceFinishes?.scales||{})};
+   // Expand an older whole-wall finish before the first face edit. Untouched
+   // faces keep their appearance, while resetting one face restores its base.
+   if(target.kind==='wall'&&target.side!==undefined){
+     const legacyKey=surfaceKey({kind:'wall',id:target.id}),legacy=assignments[legacyKey];
+-    if(findSurfaceMaterial(legacy)){
++    if(findSurfaceMaterial(legacy,scene)){
+       for(const side of WALL_SURFACE_SIDES){
+         const faceKey=surfaceKey({...target,side});
+         if(!Object.hasOwn(assignments,faceKey))assignments[faceKey]=legacy;
++        if(scales[legacyKey]!==undefined&&!Object.hasOwn(scales,faceKey))scales[faceKey]=scales[legacyKey];
+       }
+-      delete assignments[legacyKey];
++      delete assignments[legacyKey];delete scales[legacyKey];
+     }
+   }
+   const key=surfaceKey(target);
+-  if(materialId===null)delete assignments[key];else assignments[key]=materialId;
+-  return {...scene,surfaceFinishes:{version:1,assignments}};
++  if(materialId===null){delete assignments[key];delete scales[key];}else assignments[key]=materialId;
++  return {...scene,surfaceFinishes:{...scene.surfaceFinishes,version:1,assignments,...(scene.surfaceFinishes?.scales||Object.keys(scales).length?{scales}:{})}};
++}
++export function surfaceTextureSize(scene,target){
++ const key=surfaceKey(target),legacy=surfaceKey({kind:target.kind,id:target.id});
++ const n=scene.surfaceFinishes?.scales?.[key]??scene.surfaceFinishes?.scales?.[legacy]??2;
++ return Number.isFinite(n)&&n>=.05&&n<=20?n:2;
++}
++export function applySurfaceTextureSize(scene,target,sizeMeters){
++ if(!Number.isFinite(sizeMeters)||sizeMeters<.05||sizeMeters>20)throw new Error('Texture repeat size must be 0.05–20 metres. / اندازه تکرار بافت باید بین ۰٫۰۵ تا ۲۰ متر باشد.');
++ const id=scene.surfaceFinishes?.assignments?.[surfaceKey(target)]??scene.surfaceFinishes?.assignments?.[surfaceKey({kind:target.kind,id:target.id})];
++ if(!findSurfaceMaterial(id,scene))throw new Error('Apply a material to this face first. / ابتدا متریال را روی این سطح اعمال کن.');
++ const next=applySurfaceMaterial(scene,target,id);
++ return {...next,surfaceFinishes:{...next.surfaceFinishes,scales:{...next.surfaceFinishes.scales,[surfaceKey(target)]:sizeMeters}}};
+ }
+ export function assertSurfaceOnlyEdit(before,after){
+   for(const key of new Set([...Object.keys(before),...Object.keys(after)])){
+@@ -102,8 +116,23 @@
+     // introduced by this editor. This avoids destroying unrelated saved work.
+     const target=Array.isArray(parts)&&[2,3].includes(parts.length)?{kind:parts[0],id:parts[1],...(parts.length===3?{side:parts[2]}:{})}:null;
+     if(parts?.length===3&&(target?.kind!=='wall'||!WALL_SURFACE_SIDES.includes(target.side)))throw new Error('Invalid wall face.');
+-    if(!surfaceMaterialAllowed(id,target)||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.assignments?.[key]!==id))throw new Error('Invalid surface material or target.');
+-  }
++    if(!surfaceMaterialAllowed(id,target,after)||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.assignments?.[key]!==id))throw new Error('Invalid surface material or target.');
++  }
++  if(finish.scales!==undefined){
++   if(!finish.scales||typeof finish.scales!=='object'||Array.isArray(finish.scales))throw new Error('Invalid texture sizes.');
++   for(const[key,value]of Object.entries(finish.scales)){
++    let p;try{p=JSON.parse(key);}catch{throw new Error('Invalid texture target.');}
++    const target=Array.isArray(p)&&[2,3].includes(p.length)?{kind:p[0],id:p[1],...(p.length===3?{side:p[2]}:{})}:null;
++    if(!Number.isFinite(value)||value<.05||value>20||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.scales?.[key]!==value))throw new Error('Invalid texture size or target.');
++   }
++  }
++  if(finish.customMaterials!==undefined){
++   if(!finish.customMaterials||typeof finish.customMaterials!=='object'||Array.isArray(finish.customMaterials))throw new Error('Invalid personal materials.');
++   for(const[key,item]of Object.entries(finish.customMaterials)){
++    if(!validAssetId(item?.assetId)||key!=='personal:'+item.assetId||item.id!==key||item.kind!=='custom'||['en','fa','ar'].some(k=>typeof item[k]!=='string'||item[k].length>100)||Object.keys(item).some(k=>!['id','assetId','kind','en','fa','ar','color'].includes(k)))throw new Error('Invalid personal material reference.');
++   }
++  }
++
+ }
+ 
+ function surfaceHitMaterial(hit){
+@@ -205,21 +234,30 @@
+   }
+ }
+ 
+-export function createSurfaceMeshMaterial(THREE,id,makeCanvas=()=>document.createElement('canvas')){
+-  const item=findSurfaceMaterial(id);if(!item)return null;
+-  const canvas=makeCanvas();canvas.width=256;paintSurfaceSwatch(canvas,item);
++export function createSurfaceMeshMaterial(THREE,id,makeCanvas=()=>document.createElement('canvas'),options={}){
++  const item=findSurfaceMaterial(id,options.scene);if(!item)return null;
++  const canvas=makeCanvas();canvas.width=256;if(item.kind==='custom'){canvas.height=256;const c=canvas.getContext('2d');if(c){c.fillStyle='#cccccc';c.fillRect(0,0,256,256);}}else paintSurfaceSwatch(canvas,item);
+   const texture=new THREE.Texture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+   texture.generateMipmaps=true;texture.anisotropy=4;
+   texture.minFilter=THREE.LinearMipmapLinearFilter??THREE.LinearMipMapLinearFilter??THREE.LinearFilter;
+   texture.magFilter=THREE.LinearFilter;
+-  texture.repeat.set(.5,.5);texture.needsUpdate=true;
++  const tile=Number.isFinite(options.tileSize)&&options.tileSize>=.05&&options.tileSize<=20?options.tileSize:2;
++  texture.repeat.set(1/tile,1/tile);texture.needsUpdate=true;
+   const Material=THREE.MeshPhongMaterial||THREE.MeshLambertMaterial;
+   const material=new Material({color:0xffffff,map:texture,side:THREE.DoubleSide,
+     shininess:item.kind==='stone'?34:item.kind==='wood'?12:2});
+-  if(item.kind!=='paint'){
++  if(!['paint','custom'].includes(item.kind)){
+     material.bumpMap=texture;material.bumpScale=item.kind==='brick'?.008:item.kind==='sand'?.012:item.kind==='wallpaper'?.0005:.002;
+   }
+-  material.userData={ventraSurfaceMaterial:id};return material;
++  material.userData={ventraSurfaceMaterial:id};
++  if(item.kind==='custom'&&typeof window!=='undefined'){
++   let disposed=false,image;material.addEventListener?.('dispose',()=>{disposed=true;if(image){image.onload=null;image.onerror=null;image.src='';}});
++   import('../services/personalAssetService.js').then(m=>m.getPersonalAssetUrl(item.assetId,options.scene?.projectId)).then(url=>{
++    if(disposed)return;image=new Image();image.crossOrigin='anonymous';image.onload=()=>{if(disposed)return;const c=canvas.getContext('2d');c.clearRect(0,0,256,256);c.drawImage(image,0,0,256,256);texture.repeat.set(1/tile,(image.naturalWidth/image.naturalHeight)/tile);texture.needsUpdate=true;window.dispatchEvent(new CustomEvent('ventra:surface-resource',{detail:{projectId:options.scene?.projectId}}));};
++    image.onerror=()=>{if(!disposed)window.dispatchEvent(new CustomEvent('ventra:surface-resource-error',{detail:{assetId:item.assetId}}));};image.src=url;
++   }).catch(()=>{if(!disposed)window.dispatchEvent(new CustomEvent('ventra:surface-resource-error',{detail:{assetId:item.assetId}}));});
++  }
++  return material;
+ }
+ 
+ export function applySurfaceUVs(THREE,mesh,kind){
+@@ -270,25 +308,25 @@
+   mesh.userData={...mesh.userData,surfaceTarget:target};
+   const assignments=scene.surfaceFinishes?.assignments||{};
+   const id=assignments[surfaceKey(target)];
+-  const resolve=id=>{
+-    const key=`${target.kind}:${id}`;
++  const resolve=(id,size=2)=>{
++    const key=size===2?`${target.kind}:${id}`:`${target.kind}:${id}:${size}`;
+     let material=cache?.get(key);
+-    if(!material){material=createSurfaceMeshMaterial(THREE,id);cache?.set(key,material);}
++    if(!material){material=createSurfaceMeshMaterial(THREE,id,undefined,{scene,tileSize:size});cache?.set(key,material);}
+     return material;
+   };
+   if(target.kind==='wall'&&WALL_SURFACE_SIDES.some(side=>Object.hasOwn(assignments,surfaceKey({...target,side})))){
+     const original=mesh.material;
+     const materials=WALL_SURFACE_SIDES.map(side=>{
+       const faceId=assignments[surfaceKey({...target,side})]??id;
+-      return findSurfaceMaterial(faceId)?resolve(faceId):original;
++      return findSurfaceMaterial(faceId,scene)?resolve(faceId,surfaceTextureSize(scene,{...target,side})):original;
+     });
+     assignWallFaceMaterials(THREE,mesh,materials);
+     applySurfaceUVs(THREE,mesh,target.kind);return;
+   }
+   // Legacy whole-wall assignments remain readable until the next face edit.
+-  if(!findSurfaceMaterial(id))return;
++  if(!findSurfaceMaterial(id,scene))return;
+   if(target.kind!=='wall'){
+     mesh.material?.map?.dispose?.();mesh.material?.bumpMap?.dispose?.();mesh.material?.dispose?.();
+   }
+-  mesh.material=resolve(id);applySurfaceUVs(THREE,mesh,target.kind);
+-}
++  mesh.material=resolve(id,surfaceTextureSize(scene,target));applySurfaceUVs(THREE,mesh,target.kind);
++}
+--- a/src/lib/surfaceMaterialInputs.mjs
++++ b/src/lib/surfaceMaterialInputs.mjs
+@@ -7,7 +7,7 @@
+     e.preventDefault();e.stopPropagation();
+     const s=getState(),hit=!s.disabled&&getRenderer()?.pickSurface?.(e);
+     const id=e.dataTransfer.getData(SURFACE_MIME)||s.materialId;
+-    const target=surfaceMaterialAllowed(id,hit)?hit:null;
++    const target=surfaceMaterialAllowed(id,hit,s.materialScene||s.scene)?hit:null;
+     e.dataTransfer.dropEffect=target?'copy':'none';onHover(target||null);
+   };
+   const leave=e=>{if(!host.contains?.(e.relatedTarget))onHover(null);};
+@@ -16,7 +16,7 @@
+     e.preventDefault();e.stopPropagation();onHover(null);
+     const s=getState();if(s.disabled)return;
+     const id=e.dataTransfer.getData(SURFACE_MIME);
+-    if(findSurfaceMaterial(id)){host.focus?.({preventScroll:true});onApply(getRenderer()?.pickSurface?.(e)||null,id);}
++    if(findSurfaceMaterial(id,s.materialScene||s.scene)){host.focus?.({preventScroll:true});onApply(getRenderer()?.pickSurface?.(e)||null,id);}
+   };
+   const down=e=>{
+     const s=getState();if(!s.paintMode||s.disabled||e.button!==0)return;
+--- a/src/lib/glbModelBounds.mjs
++++ b/src/lib/glbModelBounds.mjs
+@@ -0,0 +1,22 @@
++import {Box3,Vector3,Matrix4,Quaternion} from 'three';
++export function glbFurnitureDimensions(doc){
++ const bounds=new Box3(),visiting=new Set();let count=0;
++ const roots=doc.scenes?.[doc.scene||0]?.nodes||doc.nodes.map((_,i)=>i).filter(i=>!doc.nodes.some(n=>n.children?.includes(i)));
++ function visit(index,parent,depth=0){
++  if(depth>64||visiting.has(index)||++count>3000)throw new Error('Invalid GLB node graph.');
++  const node=doc.nodes[index];if(!node)throw new Error('Invalid GLB node.');visiting.add(index);
++  const position=node.translation||[0,0,0],rotation=node.rotation||[0,0,0,1],scale=node.scale||[1,1,1];
++  const values=node.matrix||[...position,...rotation,...scale];if(values.some(n=>!Number.isFinite(n)))throw new Error('Invalid GLB transform.');
++  const local=node.matrix?new Matrix4().fromArray(node.matrix):new Matrix4().compose(new Vector3().fromArray(position),new Quaternion().fromArray(rotation),new Vector3().fromArray(scale));
++  const world=parent.clone().multiply(local);
++  if(node.mesh!==undefined)for(const primitive of doc.meshes[node.mesh]?.primitives||[]){
++   const a=doc.accessors?.[primitive.attributes?.POSITION];if(!a?.min||!a?.max||a.min.length!==3||a.max.length!==3||[...a.min,...a.max].some(n=>!Number.isFinite(n)))throw new Error('GLB needs position bounds.');
++   for(const x of [a.min[0],a.max[0]])for(const y of [a.min[1],a.max[1]])for(const z of [a.min[2],a.max[2]])bounds.expandByPoint(new Vector3(x,y,z).applyMatrix4(world));
++  }
++  for(const child of node.children||[])visit(child,world,depth+1);visiting.delete(index);
++ }
++ for(const root of roots)visit(root,new Matrix4());
++ const size=bounds.getSize(new Vector3());if([size.x,size.y,size.z].some(n=>!Number.isFinite(n)||n<=0))throw new Error('GLB has invalid dimensions.');
++ const factor=1.5/Math.max(size.x,size.y,size.z);
++ return {width:Math.max(.05,size.x*factor),depth:Math.max(.05,size.z*factor),height:Math.max(.05,size.y*factor)};
++}
+--- a/src/lib/meshyFurniture.mjs
++++ b/src/lib/meshyFurniture.mjs
+@@ -0,0 +1,28 @@
++export const MESHY_FURNITURE_MODEL='meshy-6-lite';
++const fail=(message,status=502,code='MODEL_PROVIDER_ERROR')=>Object.assign(new Error(message),{status,code});
++export function modelGenerationConfig(env=process.env){
++ const bounded=(value,fallback,max)=>Number.isInteger(Number(value))&&Number(value)>0?Math.min(Number(value),max):fallback;
++ return {configured:!!env.MESHY_API_KEY&&env.MESHY_GENERATION_ENABLED==='true',dailyLimit:bounded(env.MESHY_DAILY_LIMIT,2,10),globalDailyLimit:bounded(env.MESHY_GLOBAL_DAILY_LIMIT,10,100),model:MESHY_FURNITURE_MODEL};
++}
++export function meshyFurnitureProvider({key,fetcher=fetch}={}){
++ async function request(path,options){
++  if(!key)throw fail('Image-to-3D is not configured. / تولید مدل از عکس هنوز تنظیم نشده است.',503,'MODEL_NOT_CONFIGURED');
++  let r;try{r=await fetcher('https://api.meshy.ai/openapi/v1/image-to-3d'+path,{...options,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},signal:AbortSignal.timeout(25000),redirect:'error'});}catch{throw fail('Provider response is uncertain. This request will not be submitted again automatically. / پاسخ سرویس نامشخص است؛ درخواست دوباره ارسال نمی‌شود.',502,'MODEL_SUBMISSION_UNKNOWN');}
++  if(!r.ok)throw fail(r.status===402?'Meshy API credit is required. / اعتبار API سرویس Meshy کافی نیست.':r.status===401?'Meshy API key is invalid. / کلید Meshy معتبر نیست.':r.status===429?'Meshy is busy. Check this request later. / سرویس موقتاً محدود است.':'The model service rejected this request. / سرویس تولید مدل درخواست را نپذیرفت.',r.status===429?429:502,'MODEL_PROVIDER_REJECTED');
++  try{return await r.json();}catch{throw fail('Provider response could not be read. / پاسخ سرویس خوانده نشد.',502,'MODEL_SUBMISSION_UNKNOWN');}
++ }
++ return {create:async imageUrl=>{
++  const result=await request('',{method:'POST',body:JSON.stringify({image_url:imageUrl,ai_model:MESHY_FURNITURE_MODEL,model_type:'standard',should_texture:true,enable_pbr:true,texture_resolution:'2k',should_remesh:true,topology:'triangle',target_polycount:15000})});
++  if(typeof result.result!=='string'||!result.result||result.result.length>200)throw fail('Provider task ID was not returned. / شناسه تولید دریافت نشد.',502,'MODEL_SUBMISSION_UNKNOWN');
++  return result.result;
++ },get:id=>request('/'+encodeURIComponent(id),{method:'GET'})};
++}
++export async function downloadMeshyGlb(url,fetcher=fetch,maxBytes=25*1024*1024){
++ let parsed;try{parsed=new URL(url);}catch{throw fail('No GLB was returned.');}
++ if(parsed.protocol!=='https:'||parsed.username||parsed.password||!(parsed.hostname==='meshy.ai'||parsed.hostname.endsWith('.meshy.ai')))throw fail('Unexpected model download host.');
++ const response=await fetcher(parsed,{signal:AbortSignal.timeout(25000),redirect:'error'});
++ if(!response.ok||Number(response.headers.get('content-length'))>maxBytes)throw fail('Model download failed or exceeds 25 MB.');
++ const reader=response.body?.getReader();if(!reader)throw fail('Empty model download.');
++ const chunks=[];let size=0;try{while(true){const{value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes)throw fail('Generated model exceeds 25 MB.');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
++ const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.byteLength;}return bytes;
++}
+--- a/src/lib/walkthroughControls.mjs
++++ b/src/lib/walkthroughControls.mjs
+@@ -0,0 +1,29 @@
++import {createWalkWorld,walkSpawn,moveWalk,WALK_EYE_HEIGHT} from './walkthrough.mjs';
++// Explicit session lifecycle; keyboard ownership stays on the canvas/controls.
++export function createWalkthrough({canvas,scene,camera,target,render,onExit=()=>{},raf=cb=>requestAnimationFrame(cb),caf=id=>cancelAnimationFrame(id)}){
++ let active=false,world,point,yaw=0,pitch=0,saved,frame=0,last=0,pointer=null,axis={forward:0,right:0},keys=new Set();const listeners=[];
++ const doc=canvas.ownerDocument,win=doc.defaultView;
++ const listen=(t,n,f,o)=>{t.addEventListener(n,f,o);listeners.push(()=>t.removeEventListener(n,f,o));};
++ const pose=()=>{camera.position.set(point.x-world.origin.x,point.y-world.origin.y,WALK_EYE_HEIGHT);camera.up.set(0,0,1);target.set(camera.position.x+Math.sin(yaw)*Math.cos(pitch),camera.position.y+Math.cos(yaw)*Math.cos(pitch),camera.position.z+Math.sin(pitch));camera.lookAt(target);render();};
++ const clear=()=>{keys.clear();axis={forward:0,right:0};if(pointer!==null){try{canvas.releasePointerCapture(pointer);}catch{}pointer=null;}};
++ function stop(){if(!active)return;active=false;caf(frame);clear();listeners.splice(0).forEach(fn=>fn());camera.position.fromArray(saved.position);camera.up.fromArray(saved.up);target.fromArray(saved.target);camera.fov=saved.fov;camera.near=saved.near;camera.updateProjectionMatrix();canvas.style.cursor=saved.cursor;render();onExit();}
++ function tick(now){if(!active)return;const dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;
++  let forward=axis.forward+(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right=axis.right+(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0);const length=Math.max(1,Math.hypot(forward,right));
++  if(keys.has('ArrowLeft'))yaw-=dt*1.5;if(keys.has('ArrowRight'))yaw+=dt*1.5;
++  if(forward||right){point=moveWalk(world,point,(Math.sin(yaw)*forward+Math.cos(yaw)*right)/length*dt*1.2,(Math.cos(yaw)*forward-Math.sin(yaw)*right)/length*dt*1.2);}
++  if(forward||right||keys.has('ArrowLeft')||keys.has('ArrowRight'))pose();frame=raf(tick);
++ }
++ function start(){if(active)return;world=createWalkWorld(scene);point=walkSpawn(world);saved={position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray(),fov:camera.fov,near:camera.near,cursor:canvas.style.cursor};active=true;yaw=0;pitch=0;last=0;
++  camera.fov=65;camera.near=.03;camera.updateProjectionMatrix();canvas.tabIndex=0;canvas.style.cursor='crosshair';canvas.focus({preventScroll:true});
++  const claimed=e=>{e.preventDefault();e.stopImmediatePropagation();};
++  listen(canvas,'keydown',e=>{if(e.code==='Escape'){claimed(e);stop();return;}if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','Equal','Minus'].includes(e.code)){claimed(e);keys.add(e.code);}},{capture:true});
++  listen(win,'keyup',e=>keys.delete(e.code));listen(canvas,'blur',clear);listen(win,'blur',clear);listen(doc,'visibilitychange',()=>{if(doc.hidden)clear();});
++  let x=0,y=0;
++  listen(canvas,'pointerdown',e=>{claimed(e);canvas.focus({preventScroll:true});if(pointer!==null||e.button>0)return;pointer=e.pointerId;x=e.clientX;y=e.clientY;try{canvas.setPointerCapture(pointer);}catch{}},{capture:true,passive:false});
++  listen(canvas,'pointermove',e=>{if(pointer!==e.pointerId)return;claimed(e);yaw+=(e.clientX-x)*.004;pitch=Math.max(-1.15,Math.min(1.15,pitch-(e.clientY-y)*.004));x=e.clientX;y=e.clientY;pose();},{capture:true,passive:false});
++  const up=e=>{if(pointer===e.pointerId){try{canvas.releasePointerCapture(pointer);}catch{}pointer=null;}};
++  listen(win,'pointerup',up);listen(canvas,'pointercancel',up);listen(canvas,'lostpointercapture',up);listen(canvas,'wheel',e=>claimed(e),{capture:true,passive:false});
++  pose();frame=raf(tick);
++ }
++ return{start,stop,dispose:stop,isActive:()=>active,setAxis:(forward=0,right=0)=>{if(active)axis={forward:Math.max(-1,Math.min(1,Number(forward)||0)),right:Math.max(-1,Math.min(1,Number(right)||0))};},turn:(yawDelta,pitchDelta=0)=>{if(active){yaw+=yawDelta;pitch=Math.max(-1.15,Math.min(1.15,pitch+pitchDelta));pose();}}};
++}
+--- a/src/lib/serverPersonalAssets.js
++++ b/src/lib/serverPersonalAssets.js
+@@ -0,0 +1,147 @@
++import 'server-only';
++import sharp from 'sharp';
++import {glbFurnitureDimensions} from './glbModelBounds.mjs';
++import {createHash} from 'node:crypto';
++import {account} from './serverBilling';
++import {commercialAdmin,commercialContext} from './serverCommercial';
++import {validProjectId} from './commercialAccess.mjs';
++import {PERSONAL_ASSET_BUCKET,validAssetId,personalDimensions,PERSONAL_FURNITURE_TYPES,validatePersonalGlb} from './personalAssets.mjs';
++import {meshyFurnitureProvider,modelGenerationConfig,downloadMeshyGlb} from './meshyFurniture.mjs';
++export const assetFailure=(message,status=503,code='PERSONAL_ASSET_ERROR')=>Object.assign(new Error(message),{status,code});
++const check=result=>{if(result.error)throw assetFailure('Personal library storage is unavailable. / ذخیره‌سازی کتابخانه در دسترس نیست.');return result.data;};
++export async function personalAssetAccount(request){return {user:await account(request),db:commercialAdmin()};}
++export async function personalProjectAccess(db,user,projectId,write=false){
++ if(!validProjectId(projectId))throw assetFailure('Invalid project.',400);
++ const project=check(await db.from('projects').select('user_id').eq('id',projectId).maybeSingle());
++ if(!project)throw assetFailure('Project access denied.',403);
++ if(project.user_id!==user.id){const member=check(await db.from('ventra_project_members').select('role').eq('project_id',projectId).eq('user_id',user.id).maybeSingle());if(!(write?['manager','supervisor']:['manager','supervisor','viewer']).includes(member?.role))throw assetFailure('Project access denied.',403);}
++}
++async function ensurePrivate(db){const bucket=check(await db.storage.getBucket(PERSONAL_ASSET_BUCKET));if(!bucket||bucket.public)throw assetFailure('Private model storage is not configured.',503,'ASSET_STORAGE_NOT_CONFIGURED');}
++export async function readAssetBody(request){
++ const raw=await request.text();if(raw.length>3*1024*1024)throw assetFailure('Upload exceeds 2 MB. / تصویر را کوچک‌تر کن.',413);
++ try{return JSON.parse(raw);}catch{throw assetFailure('Invalid upload.',400);}
++}
++export async function normalizedAssetImage(imageUrl,{material=false}={}){
++ const m=typeof imageUrl==='string'&&imageUrl.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/);
++ if(!m)throw assetFailure('Choose a PNG, JPG or WebP image. / تصویر PNG یا JPG یا WebP انتخاب کن.',400);
++ const bytes=Buffer.from(m[2],'base64');if(bytes.length>2*1024*1024)throw assetFailure('Image exceeds 2 MB.',413);
++ try{
++  const input=sharp(bytes,{limitInputPixels:24000000}),meta=await input.metadata();
++  if(!['png','jpeg','webp'].includes(meta.format)||meta.pages>1||meta.width<32||meta.height<32)throw Error();
++  const buffer=await input.rotate().resize({width:material?1024:1536,height:material?1024:1536,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'})[material?'png':'jpeg'](material?{compressionLevel:9}:{quality:88}).toBuffer();
++  return {buffer,mime:material?'image/png':'image/jpeg',dataUrl:`data:image/jpeg;base64,${buffer.toString('base64')}`};
++ }catch{throw assetFailure('Image could not be decoded. Use a still image up to 24 megapixels. / تصویر ثابت و قابل خواندن انتخاب کن.',400);}
++}
++export function assetDetails(body){
++ const name=String(body.name||'Personal model').trim().slice(0,100);if(!name)throw assetFailure('A name is required.',400);
++ const furniture_type=body.furniture_type||'sofa';if(!PERSONAL_FURNITURE_TYPES.includes(furniture_type))throw assetFailure('Invalid furniture type.',400);
++ let dims;try{dims=personalDimensions(body);}catch(e){throw assetFailure(e.message,400);}return {name,furniture_type,...dims};
++}
++async function signed(db,asset,preview=false){
++ const path=`${asset.user_id}/${asset.id}/${asset.kind==='material'?'texture.png':preview?'preview.jpg':'model.glb'}`;
++ const {data,error}=await db.storage.from(PERSONAL_ASSET_BUCKET).createSignedUrl(path,3600);
++ return error?null:data?.signedUrl;
++}
++export async function libraryList(request){
++ const {db,user}=await personalAssetAccount(request);await ensurePrivate(db);
++ const assets=check(await db.from('ventra_personal_assets').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).limit(100));
++ const jobs=check(await db.from('ventra_model_jobs').select('id,status,progress,name,error,created_at,credits').eq('user_id',user.id).in('status',['submitting','pending','unknown','failed']).order('created_at',{ascending:false}).limit(10));
++ return {assets:await Promise.all(assets.map(async row=>({...row,thumbnailUrl:await signed(db,row,true)}))),jobs,configuration:modelGenerationConfig()};
++}
++export async function libraryAsset(request,assetId,projectId){
++ if(!validAssetId(assetId))throw assetFailure('Invalid asset ID.',400);
++ const{db,user}=await personalAssetAccount(request);
++ const row=check(await db.from('ventra_personal_assets').select('*').eq('id',assetId).maybeSingle());
++ if(!row)throw assetFailure('Model not found.',404);
++ if(row.user_id!==user.id){await personalProjectAccess(db,user,projectId);const link=check(await db.from('ventra_project_asset_links').select('asset_id').eq('project_id',projectId).eq('asset_id',assetId).maybeSingle());if(!link)throw assetFailure('Asset access denied.',403);}
++ const url=await signed(db,row);if(!url)throw assetFailure('Model file is unavailable.');return {asset:row,url};
++}
++export async function linkLibraryAsset(request,body){
++ const{db,user}=await personalAssetAccount(request);await personalProjectAccess(db,user,body.projectId,true);
++ if(!validAssetId(body.assetId))throw assetFailure('Invalid asset.',400);
++ const asset=check(await db.from('ventra_personal_assets').select('id,user_id').eq('id',body.assetId).maybeSingle());
++ if(!asset||asset.user_id!==user.id)throw assetFailure('Use a model from your personal library.',403);
++ check(await db.from('ventra_project_asset_links').upsert({project_id:body.projectId,asset_id:body.assetId},{onConflict:'project_id,asset_id'}));return {success:true};
++}
++export async function uploadLibraryMaterial(request,body){
++ const{db,user}=await personalAssetAccount(request);await personalProjectAccess(db,user,body.projectId,true);await ensurePrivate(db);
++ const {name}=assetDetails(body),image=await normalizedAssetImage(body.imageUrl,{material:true}),id=crypto.randomUUID();
++ const path=`${user.id}/${id}/texture.png`;
++ check(await db.storage.from(PERSONAL_ASSET_BUCKET).upload(path,image.buffer,{contentType:'image/png',upsert:false}));
++ const row={id,user_id:user.id,kind:'material',name,mime:'image/png'};
++ try{check(await db.from('ventra_personal_assets').insert(row));}catch(e){await db.storage.from(PERSONAL_ASSET_BUCKET).remove([path]);throw e;}
++ return {asset:{...row,thumbnailUrl:await signed(db,row)}};
++}
++export async function editLibraryAsset(request,body){
++ const{db,user}=await personalAssetAccount(request);if(!validAssetId(body.assetId))throw assetFailure('Invalid asset.',400);
++ const details=assetDetails(body);const rows=check(await db.from('ventra_personal_assets').update(details).eq('id',body.assetId).eq('user_id',user.id).select('id'));
++ if(!rows?.length)throw assetFailure('Asset not found.',404);return {success:true};
++}
++export async function startFurnitureModel(request,body){
++ const user=await account(request),context=await commercialContext(request,body.projectId,user),{db}=context;
++ const config=modelGenerationConfig();if(!config.configured)throw assetFailure('Image-to-3D needs the operator’s Meshy API key and activation. / تولید مدل از عکس به کلید و فعال‌سازی Meshy نیاز دارد.',503,'MODEL_NOT_CONFIGURED');
++ await ensurePrivate(db);const image=await normalizedAssetImage(body.imageUrl),details=assetDetails(body);
++ const hash=createHash('sha256').update(config.model).update(image.buffer).digest('hex');
++ const result=await db.rpc('ventra_claim_model_job',{p_user:user.id,p_project:body.projectId,p_hash:hash,p_name:details.name,p_type:details.furniture_type,p_width:details.width,p_depth:details.depth,p_height:details.height,p_limit:config.dailyLimit,p_global_limit:config.globalDailyLimit});
++ if(result.error)throw assetFailure(result.error.code==='P0001'?result.error.message:'Model queue is unavailable.',result.error.code==='P0001'?429:503,'MODEL_QUEUE_BLOCKED');
++ const{job,created}=result.data;if(!created)return {job};
++ try{
++  check(await db.storage.from(PERSONAL_ASSET_BUCKET).upload(`${user.id}/${job.id}/preview.jpg`,image.buffer,{contentType:'image/jpeg',upsert:false}));
++ }catch(e){await db.from('ventra_model_jobs').update({status:'failed',error:'Source image could not be saved.'}).eq('id',job.id);throw e;}
++ let providerId;
++ try{providerId=await meshyFurnitureProvider({key:process.env.MESHY_API_KEY}).create(image.dataUrl);}
++ catch(e){const status=e.code==='MODEL_SUBMISSION_UNKNOWN'?'unknown':'failed';await db.from('ventra_model_jobs').update({status,error:e.message.slice(0,500)}).eq('id',job.id);throw e;}
++ // Do not retry the paid POST if this durable write or its response fails.
++ const saved=await db.from('ventra_model_jobs').update({provider_id:providerId,status:'pending'}).eq('id',job.id);
++ if(saved.error){console.error('[VENTRA MODEL RECOVERY]',{jobId:job.id,providerId});throw assetFailure('Model submitted; its queue record needs operator recovery. Do not submit again.',503,'MODEL_SUBMISSION_UNKNOWN');}
++ return {job:{...job,provider_id:undefined,status:'pending',progress:0}};
++}
++async function validateModelTextures(bytes,doc){
++ if((doc.images?.length||0)>16)throw assetFailure('Model has too many textures.',422);
++ const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),jsonLength=v.getUint32(12,true),binStart=20+jsonLength+8;
++ let pixels=0;for(const img of doc.images||[]){const b=doc.bufferViews?.[img.bufferView];if(!b)throw assetFailure('Invalid embedded texture.',422);
++ const data=bytes.subarray(binStart+(b.byteOffset||0),binStart+(b.byteOffset||0)+b.byteLength);
++ const meta=await sharp(data,{limitInputPixels:16777216}).metadata();if(!['png','jpeg','webp'].includes(meta.format)||meta.width>4096||meta.height>4096||meta.pages>1)throw assetFailure('Unsupported texture.',422);pixels+=meta.width*meta.height;
++ }if(pixels>64000000)throw assetFailure('Model textures exceed the memory budget.',422);
++}
++export async function pollFurnitureModel(request,jobId){
++ const{db,user}=await personalAssetAccount(request);if(!validAssetId(jobId))throw assetFailure('Invalid job.',400);
++ const job=check(await db.from('ventra_model_jobs').select('*').eq('id',jobId).eq('user_id',user.id).maybeSingle());if(!job)throw assetFailure('Job not found.',404);
++ if(job.status==='submitting'&&Date.now()-Date.parse(job.created_at)>90000){await db.from('ventra_model_jobs').update({status:'unknown',error:'Submission needs operator reconciliation; no automatic re-submission.'}).eq('id',job.id).eq('status','submitting');return {job:{...job,status:'unknown'}};}
++ if(job.status!=='pending'||!job.provider_id)return {job:{...job,provider_id:undefined}};
++ const task=await meshyFurnitureProvider({key:process.env.MESHY_API_KEY}).get(job.provider_id);
++ if(['FAILED','CANCELED'].includes(task.status)){check(await db.from('ventra_model_jobs').update({status:'failed',error:'Model service could not build this image.'}).eq('id',job.id));return {job:{id:job.id,name:job.name,status:'failed',error:'Model generation failed. / تولید مدل ناموفق بود.'}};}
++ if(task.status!=='SUCCEEDED'){const progress=Math.max(0,Math.min(99,Number(task.progress)||0));check(await db.from('ventra_model_jobs').update({progress}).eq('id',job.id));return {job:{id:job.id,name:job.name,status:'pending',progress}};}
++ try{
++  const bytes=await downloadMeshyGlb(task.model_urls?.glb),doc=validatePersonalGlb(bytes);await validateModelTextures(bytes,doc);
++  check(await db.storage.from(PERSONAL_ASSET_BUCKET).upload(`${user.id}/${job.id}/model.glb`,bytes,{contentType:'model/gltf-binary',upsert:true}));
++  const row={id:job.id,user_id:user.id,kind:'model',name:job.name,furniture_type:job.furniture_type,...glbFurnitureDimensions(doc),mime:'model/gltf-binary'};
++  check(await db.from('ventra_personal_assets').upsert(row,{onConflict:'id'}));
++  check(await db.from('ventra_model_jobs').update({status:'ready',progress:100,credits:Number(task.consumed_credits)||null}).eq('id',job.id));
++  return {job:{id:job.id,name:job.name,status:'ready',progress:100},asset:row};
++ }catch(e){if(e.status===422||/GLB|embedded|complex|accessor|buffer|extensions|animation/.test(e.message)){await db.from('ventra_model_jobs').update({status:'failed',error:'Generated GLB could not be safely loaded; do not generate again without review.'}).eq('id',job.id);throw assetFailure('Generated model is unsupported. / مدل تولیدشده با نمایشگر سازگار نیست.',422);}throw e;}
++}
++
++// Direct, private GLB upload: the binary bypasses serverless request-body limits.
++export async function beginLibraryGlbUpload(request,body){
++ const{db,user}=await personalAssetAccount(request);await personalProjectAccess(db,user,body.projectId,true);await ensurePrivate(db);
++ if(!Number.isSafeInteger(body.size)||body.size<20||body.size>25*1024*1024)throw assetFailure('Choose a GLB up to 25 MB. / فایل GLB تا ۲۵ مگابایت انتخاب کن.',413);
++ const owned=check(await db.from('ventra_personal_assets').select('id').eq('user_id',user.id).limit(100));if(owned.length>=100)throw assetFailure('Personal library limit reached.',429);
++ const assetId=crypto.randomUUID(),path=`${user.id}/${assetId}/model.glb`;
++ const data=check(await db.storage.from(PERSONAL_ASSET_BUCKET).createSignedUploadUrl(path,{upsert:false}));
++ if(!data?.signedUrl)throw assetFailure('Model upload could not start.');return{assetId,uploadUrl:data.signedUrl};
++}
++export async function finishLibraryGlbUpload(request,body){
++ const{db,user}=await personalAssetAccount(request);await personalProjectAccess(db,user,body.projectId,true);await ensurePrivate(db);
++ if(!validAssetId(body.assetId))throw assetFailure('Invalid upload.',400);
++ const existing=check(await db.from('ventra_personal_assets').select('*').eq('id',body.assetId).maybeSingle());
++ if(existing){if(existing.user_id!==user.id)throw assetFailure('Asset access denied.',403);return{asset:existing};}
++ const details=assetDetails({...body,furniture_type:body.furniture_type||'cabinet'}),path=`${user.id}/${body.assetId}/model.glb`;
++ const file=check(await db.storage.from(PERSONAL_ASSET_BUCKET).download(path));if(!file||file.size>25*1024*1024)throw assetFailure('Model file is missing or too large.',413);
++ let dimensions;try{const bytes=new Uint8Array(await file.arrayBuffer()),doc=validatePersonalGlb(bytes);await validateModelTextures(bytes,doc);dimensions=glbFurnitureDimensions(doc);}catch{
++  await db.storage.from(PERSONAL_ASSET_BUCKET).remove([path]);throw assetFailure('Unsupported GLB. Export a static mesh with embedded textures, without Draco compression, up to 25 MB. / فایل GLB ایستا، با بافت داخلی و بدون فشرده‌سازی Draco خروجی بگیر.',422);
++ }
++ const row={id:body.assetId,user_id:user.id,kind:'model',...details,...dimensions,mime:'model/gltf-binary'};
++ // A failed database write leaves the private file intact so finalization can be retried.
++ check(await db.from('ventra_personal_assets').upsert(row,{onConflict:'id'}));return{asset:row};
++}
+--- a/src/lib/detailedFurniture.mjs
++++ b/src/lib/detailedFurniture.mjs
+@@ -1,7 +1,9 @@
+ import * as T from 'three';
++import {validAssetId} from './personalAssets.mjs';
+ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+ 
+ export function detailedFurnitureKey(asset){
++ if(validAssetId(asset?.customModelId))return 'personal:'+asset.customModelId;
+  if(asset?.type==='plant'){
+   const key=asset.catalogId||asset.variant;
+   if(['tree-potted','tree-potted-tall','potted-tree'].includes(key))return 'potted_plant_01';
+@@ -13,8 +15,8 @@
+  if(asset?.type==='sofa'&&(!asset.variant||['classic','luxury'].includes(asset.variant)))return 'sofa_02';
+  return null;
+ }
+-export function fitDetailedFurniture(model,width,depth,height){
+- const oriented=new T.Group();oriented.add(model);oriented.rotation.set(Math.PI/2,Math.PI,0);oriented.updateMatrixWorld(true);
++export function fitDetailedFurniture(model,width,depth,height,personal=false){
++ const oriented=new T.Group();oriented.add(model);oriented.rotation.set(Math.PI/2,personal?0:Math.PI,0);oriented.updateMatrixWorld(true);
+  const bounds=new T.Box3().setFromObject(oriented),size=bounds.getSize(new T.Vector3());
+  if([size.x,size.y,size.z,width,depth,height].some(n=>!Number.isFinite(n)||n<=0))throw new Error('Invalid detailed furniture dimensions');
+  const offset=new T.Group();offset.add(oriented);offset.position.set(-(bounds.min.x+bounds.max.x)/2,-(bounds.min.y+bounds.max.y)/2,-bounds.min.z);
+@@ -27,13 +29,13 @@
+  });
+  for(const g of geometries)g.dispose();for(const m of materials)m.dispose();if(includeTextures)for(const t of textures)t.dispose();
+ }
+-export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFLoader()){
++export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFLoader(),resolvePersonalUrl=(...args)=>import('../services/personalAssetService.js').then(m=>m.getPersonalAssetUrl(...args))){
+  const assets=new Map((sceneData?.assets||[]).filter(a=>a.id).map(a=>[a.id,a]));
+  const cache=new Map(),instances=new Map(),failed=new Set();let disposed=false;
+  function load(key){
+-  if(!cache.has(key))cache.set(key,loader.loadAsync('/realistic-assets/'+key+'/model.gltf').then(gltf=>{
++  if(!cache.has(key))cache.set(key,Promise.resolve(key.startsWith('personal:')?resolvePersonalUrl(key.slice(9),sceneData?.projectId):'/realistic-assets/'+key+'/model.gltf').then(url=>loader.loadAsync(url)).then(gltf=>{
+    if(disposed){releaseModel(gltf.scene);return null;}refresh();return gltf.scene;
+-  }).catch(()=>{failed.add(key);return null;}));
++  }).catch(()=>{failed.add(key);if(key.startsWith('personal:')&&typeof window!=='undefined')window.dispatchEvent(new CustomEvent('ventra:personal-model-error',{detail:{projectId:sceneData?.projectId,assetId:key.slice(9)}}));return null;}));
+   return cache.get(key);
+  }
+  function sync(source,mirrors){
+@@ -58,13 +60,14 @@
+        pot.position.set((bounds.min.x+bounds.max.x)/2,height/2,(bounds.min.z+bounds.max.z)/2);container.add(pot);clone=container;
+       }
+       clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.userData.assetId=id;
+-       const copy=m=>{const c=m.clone();if(asset.color&&(asset.type!=='plant'||/pot/i.test(c.name)))c.color.set(asset.color);ownMaterials.push(c);return c;};
++       const copy=m=>{const c=m.clone();if(asset.color&&!asset.preserveModelColors&&(asset.type!=='plant'||/pot/i.test(c.name)))c.color.set(asset.color);ownMaterials.push(c);return c;};
+        o.material=Array.isArray(o.material)?o.material.map(copy):copy(o.material);
+       }});
+-      const root=fitDetailedFurniture(clone,Number(asset.width),Number(asset.depth),Number(asset.height));root.matrixAutoUpdate=false;
++      const root=fitDetailedFurniture(clone,Number(asset.width),Number(asset.depth),Number(asset.height),key.startsWith('personal:'));root.matrixAutoUpdate=false;
+       const first=parts[0];first.updateMatrixWorld(true);
+       const parent=new T.Matrix4().fromArray(first.parent.matrixWorld.elements);
+-      const x=Number(asset.xMeters)-Number(sceneData.width)/2,y=Number(asset.yMeters)-Number(sceneData.depth)/2,z=Number(asset.zMeters)||0;
++      const origin=key.startsWith('personal:')&&sceneData.designDefaults?.viewOriginMeters||{x:Number(sceneData.width)/2,y:Number(sceneData.depth)/2};
++      const x=Number(asset.xMeters)-origin.x,y=Number(asset.yMeters)-origin.y,z=Number(asset.zMeters)||0;
+       const base=parent.multiply(new T.Matrix4().makeTranslation(x,y,z)).multiply(new T.Matrix4().makeRotationZ((Number(asset.rotation)||0)*Math.PI/180)).multiply(new T.Matrix4().makeScale(root.scale.x,root.scale.y,root.scale.z));
+       const inverse=new T.Matrix4().fromArray(first.matrixWorld.elements).invert();
+       instances.set(id,{root,first,inverse,base,ownMaterials});scene.add(root);refresh();
+--- a/src/lib/furnitureEditor.mjs
++++ b/src/lib/furnitureEditor.mjs
+@@ -1,3 +1,4 @@
++import {personalFurnitureModel} from './personalAssets.mjs';
+ import {applyPromptActions,placementProblem} from './scenePromptActions.mjs';
+ export const FURNITURE_CATALOG=Object.freeze([
+  ['sofa-modern','sofa','Sofa · Modern','مبل مدرن','أريكة حديثة',2.2,.9,.85,'modern','#b4a28f'],
+@@ -38,6 +39,11 @@
+ ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs})));
+ export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
+ const fail=m=>{throw new Error(m);};
++export function resolveFurnitureCatalog(edit){
++ const builtIn=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);if(builtIn)return builtIn;
++ if(edit.personalModel){const m=personalFurnitureModel(edit.personalModel);if(m.id===edit.catalogId)return m;}
++ return null;
++}
+ export function furnitureRotationFromDrag(initialRotation,startX,event){
+  if(!Number.isFinite(initialRotation)||!Number.isFinite(startX)||!Number.isFinite(event?.clientX))fail('Invalid rotation gesture.');
+  let angle=initialRotation+(event.clientX-startX)*.5;
+@@ -88,7 +94,7 @@
+  return result;
+ }
+ export function furnitureDraft(scene,edit){
+- const catalog=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId),original=scene.assets.find(a=>a.id===edit.assetId);
++ const catalog=resolveFurnitureCatalog(edit),original=scene.assets.find(a=>a.id===edit.assetId);
+  if(edit.kind==='add'&&!catalog)fail('Unknown furniture model.');
+  if(edit.kind!=='add'&&!original)fail('Select a furniture object.');
+  if(edit.kind==='replace'&&!catalog)fail('Unknown furniture model.');
+@@ -131,7 +137,7 @@
+  if(edit.kind==='remove')plan={action:'remove',assetId:edit.assetId};
+  else if(edit.kind==='color')plan={action:'update',assetId:edit.assetId,color:edit.color};
+  else{
+-  candidate=furnitureDraft(scene,edit);model=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);
++  candidate=furnitureDraft(scene,edit);model=resolveFurnitureCatalog(edit);
+   if(edit.kind==='replace'&&model.type!==original.type)fail('Choose a model of the same furniture type. / مدل هم‌نوع انتخاب کن.');
+   plan={action:edit.kind==='add'?'add':'update',assetId:edit.kind==='add'?null:edit.assetId,type:candidate.type,roomId:candidate.roomId,xMeters:candidate.xMeters,yMeters:candidate.yMeters,width:candidate.width,depth:candidate.depth,height:candidate.height,rotation:candidate.rotation,color:candidate.color};
+  }
+@@ -143,8 +149,9 @@
+  const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
+  if(model){
+   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
+-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
++  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
+  }
++ if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);
+  if(edit.kind==='resize')next.assets=next.assets.map(a=>a.id===original.id?{...a,renderingBaseDimensions:original.renderingBaseDimensions||{width:original.width,depth:original.depth,height:original.height}}:a);
+  const editedIds=new Set(edit.kind==='add'?next.assets.slice(scene.assets.length).map(a=>a.id):[edit.assetId]);
+  next.assets=next.assets.map(a=>editedIds.has(a.id)?{...a,...(edit.freePlacement===true&&scene.source==='dwg-engineering-interior'?{placementReview:'unverified_dwg_wall_clearance'}:{}),placementSource:'manual_furniture_editor',provenance:'proposed',excludeFromTakeoff:true,...(['move','replace'].includes(edit.kind)?{embeddedInCounter:false}:{})}:a);
+--- a/src/lib/walkthrough.mjs
++++ b/src/lib/walkthrough.mjs
+@@ -0,0 +1,56 @@
++// Plan-space metres, Z-up camera. Read-only: never changes project geometry.
++export const WALK_RADIUS=.22, WALK_EYE_HEIGHT=1.6, WALK_BODY_HEIGHT=1.8;
++const finite=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y);
++const polygon=p=>Array.isArray(p)&&p.length>=3&&p.every(finite);
++const inside=(p,poly)=>{let yes=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)yes=!yes;}return yes;};
++const distance=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);};
++const edgeDistance=(p,poly)=>Math.min(...poly.map((a,i)=>distance(p,a,poly[(i+1)%poly.length])));
++export function createWalkWorld(scene){
++ if(!Number.isFinite(scene?.width)||!Number.isFinite(scene?.depth)||scene.width<=0||scene.depth<=0)throw Error('Walk needs valid floor geometry. / هندسه معتبر کف لازم است.');
++ const rooms=(scene.rooms||[]).filter(r=>polygon(r.polygon)),footprint=polygon(scene.footprint)?scene.footprint:null;
++ if(!footprint&&!rooms.length)throw Error('Walk needs a floor boundary. / مرز کف برای گشت مشخص نیست.');
++ const holes=(scene.holes||[]).map(h=>h.polygon||h).filter(polygon),walls=[];
++ for(const w of scene.walls||[]){
++  if(!finite(w.start)||!finite(w.end))throw Error('Wall geometry is invalid. / هندسه دیوار معتبر نیست.');
++  const length=Math.hypot(w.end.x-w.start.x,w.end.y-w.start.y);if(length<.001)continue;
++  // Match the display renderer's thickness defaults; never use a thinner collider.
++  const rendered=w.placementSource==='manual_wall_editor'&&w.thickness>0?Number(w.thickness):w.type==='external'?Math.max(.12,Number(scene.externalWallThickness)||.18):Math.max(.08,Number(scene.wallThickness)||.12);
++  const thickness=Math.max(rendered,Number(w.thickness)||0),gaps=[];
++  for(const o of scene.openings||[]){
++   if(String(o.wallId)!==String(w.id)||o.type!=='door'||!Number.isFinite(o.offset)||o.offset<0||o.offset>1||!Number.isFinite(o.width)||o.width<=WALK_RADIUS*2)continue;
++   const height=Number(o.height)||2.1,sill=Number(o.sillHeight)||0;
++   if(height<WALK_BODY_HEIGHT||sill>.05)continue;
++   gaps.push([Math.max(0,o.offset*length-o.width/2),Math.min(length,o.offset*length+o.width/2)]);
++  }
++  gaps.sort((a,b)=>a[0]-b[0]);let cursor=0;const solid=[];for(const [a,b] of gaps){if(a>cursor)solid.push([cursor,a]);cursor=Math.max(cursor,b);}if(cursor<length)solid.push([cursor,length]);
++  for(const [a,b] of solid)walls.push({a:{x:w.start.x+(w.end.x-w.start.x)*a/length,y:w.start.y+(w.end.y-w.start.y)*a/length},b:{x:w.start.x+(w.end.x-w.start.x)*b/length,y:w.start.y+(w.end.y-w.start.y)*b/length},radius:thickness/2});
++ }
++ const obstacles=(scene.assets||[]).filter(a=>!['rug','mirror','painting','wall_art','ceiling_light','pendant_light','door','window'].includes(a.type)&&(Number(a.zMeters)||0)<WALK_BODY_HEIGHT&&(Number(a.zMeters)||0)+(Number(a.height)||0)>.12).map(a=>({x:Number(a.xMeters??Number(a.x)*scene.width),y:Number(a.yMeters??Number(a.y)*scene.depth),w:Number(a.width),d:Number(a.depth),angle:(Number(a.rotation)||0)*Math.PI/180})).filter(a=>[a.x,a.y,a.w,a.d].every(Number.isFinite)&&a.w>0&&a.d>0);
++ const world={scene,rooms,footprint,holes,walls,obstacles,origin:scene.designDefaults?.viewOriginMeters||{x:scene.width/2,y:scene.depth/2}};
++ if(!finite(world.origin))throw Error('Invalid view origin.');return world;
++}
++export function walkPositionAllowed(world,p,r=WALK_RADIUS){
++ if(!finite(p))return false;
++ if(world.footprint){if(!inside(p,world.footprint)||edgeDistance(p,world.footprint)<r)return false;}
++ else{for(let i=0;i<17;i++){const q=i===16?p:{x:p.x+Math.cos(i*Math.PI/8)*r,y:p.y+Math.sin(i*Math.PI/8)*r};if(!world.rooms.some(room=>inside(q,room.polygon)))return false;}}
++ if(world.holes.some(h=>inside(p,h)||edgeDistance(p,h)<r))return false;
++ if(world.walls.some(w=>distance(p,w.a,w.b)<r+w.radius))return false;
++ for(const a of world.obstacles){const dx=p.x-a.x,dy=p.y-a.y,x=dx*Math.cos(a.angle)+dy*Math.sin(a.angle),y=-dx*Math.sin(a.angle)+dy*Math.cos(a.angle);if(Math.hypot(Math.max(0,Math.abs(x)-a.w/2),Math.max(0,Math.abs(y)-a.d/2))<r)return false;}
++ return true;
++}
++export function walkSpawn(world){
++ for(const poly of [...world.rooms.map(r=>r.polygon),...(world.footprint?[world.footprint]:[])]){
++  const center={x:poly.reduce((s,p)=>s+p.x,0)/poly.length,y:poly.reduce((s,p)=>s+p.y,0)/poly.length};if(walkPositionAllowed(world,center))return center;
++  const xs=poly.map(p=>p.x),ys=poly.map(p=>p.y),minX=Math.min(...xs),minY=Math.min(...ys),w=Math.max(...xs)-minX,h=Math.max(...ys)-minY;
++  for(let y=1;y<30;y++)for(let x=1;x<30;x++){const p={x:minX+w*x/30,y:minY+h*y/30};if(inside(p,poly)&&walkPositionAllowed(world,p))return p;}
++ }
++ throw Error('No clear walking position found. / فضای خالی و امنی برای شروع گشت پیدا نشد.');
++}
++export function moveWalk(world,p,dx,dy){
++ if(![dx,dy].every(Number.isFinite)||!walkPositionAllowed(world,p))return {...p};
++ const distance=Math.hypot(dx,dy),scale=distance>2?2/distance:1;dx*=scale;dy*=scale;
++ const steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)/.045));let next={...p};
++ for(let i=0;i<steps;i++){const both={x:next.x+dx/steps,y:next.y+dy/steps};if(walkPositionAllowed(world,both))next=both;else{
++  const x={x:next.x+dx/steps,y:next.y};if(walkPositionAllowed(world,x))next=x;const y={x:next.x,y:next.y+dy/steps};if(walkPositionAllowed(world,y))next=y;
++ }}return next;
++}
+--- a/src/lib/physicalPreview.mjs
++++ b/src/lib/physicalPreview.mjs
+@@ -39,6 +39,7 @@
+ }
+ export function createPhysicalPreview(options){
+  const renderer=new T.WebGLRenderer(options),nativeRender=renderer.render.bind(renderer);
++ renderer.supportsPersonalModels=true;
+  renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=PHYSICAL_PREVIEW_LIGHTING.exposure;
+  const scene=new T.Scene(),camera=new T.PerspectiveCamera(),objects=new Map(),geometries=new Map(),materials=new Map(),textures=new Map();
+  const room=new RoomEnvironment(),pmrem=new T.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);
+@@ -64,11 +65,12 @@
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
+  function texture(old,color){
+   if(!old?.image)return null;
+-  const cacheKey=old.uuid+':'+color;if(textures.has(cacheKey))return textures.get(cacheKey);
++  const cacheKey=old.uuid+':'+color;if(textures.has(cacheKey)){const cached=textures.get(cacheKey);if(cached.userData.ventraSourceVersion!==old.version){cached.userData.ventraSourceVersion=old.version;cached.repeat.copy(old.repeat);cached.offset.copy(old.offset);cached.needsUpdate=true;}return cached;}
+   const next=new T.Texture(old.image);next.wrapS=old.wrapS;next.wrapT=old.wrapT;
+   next.repeat.set(old.repeat?.x||1,old.repeat?.y||1);next.offset.set(old.offset?.x||0,old.offset?.y||0);
+-  next.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;next.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());next.needsUpdate=true;textures.set(cacheKey,next);return next;
++  next.userData.ventraSourceVersion=old.version;next.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;next.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());next.needsUpdate=true;textures.set(cacheKey,next);return next;
+  }
++ const basicMaterial=old=>old?.type==='MeshBasicMaterial';
+  let activeMaterials=new Set(),activeTextures=new Set();
+  function material(old){
+   if(Array.isArray(old))return old.map(material);
+@@ -84,6 +86,7 @@
+    next.map=texture(old.map,true);if(!basic){next.bumpMap=texture(old.bumpMap,false);next.bumpScale=old.bumpScale||0;}
+    materials.set(old,next);
+   }
++  if(old.map)next.map=texture(old.map,true);if(!basicMaterial(old)&&old.bumpMap)next.bumpMap=texture(old.bumpMap,false);
+   if(old.color)next.color.setRGB(old.color.r,old.color.g,old.color.b,T.SRGBColorSpace);
+   Object.assign(next,{opacity:old.opacity,transparent:old.transparent,depthWrite:old.depthWrite,depthTest:old.depthTest,side:old.side,polygonOffset:old.polygonOffset,polygonOffsetFactor:old.polygonOffsetFactor,polygonOffsetUnits:old.polygonOffsetUnits});
+   if(old.userData?.ventraMaterial==='railing_glass'){next.opacity=options.mobile?.24:1;next.transparent=true;}
+--- a/src/lib/personalAssets.mjs
++++ b/src/lib/personalAssets.mjs
+@@ -0,0 +1,41 @@
++export const PERSONAL_ASSET_BUCKET='ventra-personal-assets';
++export const MAX_PERSONAL_GLB_BYTES=25*1024*1024;
++export const PERSONAL_FURNITURE_TYPES=['sofa','chair','bed','dining_table','cabinet','plant','desk','coffee_table'];
++export const validAssetId=id=>typeof id==='string'&&/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(id);
++export function personalDimensions(value={}){
++ const result={};for(const [key,max]of [['width',6],['depth',4],['height',3]]){
++  const n=Number(value[key]??1);if(!Number.isFinite(n)||n<.05||n>max)throw new Error('Model size must be in metres: width 0.05–6, depth 0.05–4, height 0.05–3. / اندازه مدل باید برحسب متر و در محدوده مجاز باشد.');result[key]=n;
++ }return result;
++}
++export function personalFurnitureModel(row){
++ if(!validAssetId(row?.id)||row.kind!=='model'||!PERSONAL_FURNITURE_TYPES.includes(row.furniture_type))throw new Error('Invalid personal model.');
++ const name=String(row.name||'Personal model').slice(0,100);
++ return {id:`personal:${row.id}`,customModelId:row.id,type:row.furniture_type,...personalDimensions(row),en:name,fa:name,ar:name,color:'#ffffff',variant:'personal',preserveModelColors:true};
++}
++export function personalMaterial(row){
++ if(!validAssetId(row?.id)||row.kind!=='material')throw new Error('Invalid personal material.');
++ const name=String(row.name||'Personal material').slice(0,100);
++ return {id:`personal:${row.id}`,assetId:row.id,kind:'custom',en:name,fa:name,ar:name,color:'#cccccc'};
++}
++// Reject external buffers/images, decompression bombs and scripts before loading
++// a user GLB. Only embedded, bounded glTF resources are accepted.
++export function validatePersonalGlb(input){
++ const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
++ if(bytes.byteLength<20||bytes.byteLength>MAX_PERSONAL_GLB_BYTES)throw new Error('GLB exceeds 25 MB or is incomplete.');
++ const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
++ if(view.getUint32(0,true)!==0x46546c67||view.getUint32(4,true)!==2||view.getUint32(8,true)!==bytes.byteLength)throw new Error('A complete GLB 2.0 file is required.');
++ const length=view.getUint32(12,true);
++ if(view.getUint32(16,true)!==0x4e4f534a||length>bytes.byteLength-20||length>4*1024*1024)throw new Error('Invalid GLB JSON chunk.');
++ let doc;try{doc=JSON.parse(new TextDecoder().decode(bytes.subarray(20,20+length)).trim());}catch{throw new Error('Invalid GLB document.');}
++ if(doc.asset?.version!=='2.0'||!doc.meshes?.length||!doc.nodes?.length)throw new Error('GLB has no mesh.');
++ if(doc.animations?.length||doc.skins?.length)throw new Error('Use a static furniture model without animation or skinning.');
++ if(doc.extensionsRequired?.some(x=>x!=='KHR_materials_unlit'))throw new Error('Compressed or unsupported GLB extensions; export a standard embedded GLB.');
++ for(const list of [doc.buffers||[],doc.images||[]])for(const row of list)if(row.uri)throw new Error('All GLB resources must be embedded. External URLs are not accepted.');
++ if((doc.nodes?.length||0)>3000||(doc.meshes?.length||0)>1000)throw new Error('Too many objects in GLB.');
++ let vertices=0;for(const a of doc.accessors||[]){if(!Number.isSafeInteger(a.count)||a.count<0||a.count>1000000)throw new Error('GLB accessor is too large.');vertices+=a.count;}
++ if(vertices>5000000)throw new Error('GLB is too complex for the viewer.');
++ let cursor=12,binLength=0;while(cursor<bytes.byteLength){if(cursor+8>bytes.byteLength)throw new Error('Incomplete GLB chunk.');const length=view.getUint32(cursor,true),type=view.getUint32(cursor+4,true);if(length%4||cursor+8+length>bytes.byteLength)throw new Error('Invalid GLB chunk size.');if(type===0x004e4942)binLength+=length;cursor+=8+length;}
++ const buffers=doc.buffers||[];if(buffers.length!==1||buffers[0].byteLength>binLength)throw new Error('Missing embedded GLB binary data.');if(buffers.some(b=>!Number.isSafeInteger(b.byteLength)||b.byteLength<0||b.byteLength>bytes.byteLength))throw new Error('Invalid embedded GLB buffer.');
++ for(const v of doc.bufferViews||[]){const b=buffers[v.buffer];if(!b||!Number.isSafeInteger(v.byteLength)||v.byteLength<0||(v.byteOffset||0)<0||(v.byteOffset||0)+v.byteLength>b.byteLength)throw new Error('Invalid GLB buffer range.');}
++ return doc;
++}
+--- a/src/services/personalAssetService.js
++++ b/src/services/personalAssetService.js
+@@ -0,0 +1,35 @@
++import {validatePersonalGlb,MAX_PERSONAL_GLB_BYTES} from '@/lib/personalAssets.mjs';
++import {commercialHeaders} from '@/lib/commercialFetch';
++async function api(path,options={}){
++ const response=await fetch(path,{...options,headers:await commercialHeaders(options.headers)});
++ let payload;try{payload=await response.json();}catch{throw new Error('Library response could not be read. / پاسخ کتابخانه خوانده نشد.');}
++ if(!response.ok)throw Object.assign(new Error(payload.error||'Personal library is unavailable.'),{code:payload.code,status:response.status});return payload;
++}
++const send=(path,body,method='POST')=>api(path,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
++export const loadPersonalLibrary=()=>api('/api/personal-assets');
++export const createFurnitureFromPhoto=body=>send('/api/ai/furniture-model',body);
++export const pollPersonalModel=jobId=>api('/api/ai/furniture-model?jobId='+encodeURIComponent(jobId));
++export const uploadPersonalMaterial=body=>send('/api/personal-assets',body);
++export const savePersonalAssetDetails=body=>send('/api/personal-assets',body,'PATCH');
++export const linkPersonalAsset=(projectId,assetId)=>send('/api/personal-assets',{action:'link',projectId,assetId});
++export const getPersonalAssetUrl=async(assetId,projectId)=>{
++ const result=await api('/api/personal-assets?assetId='+encodeURIComponent(assetId)+(projectId?'&projectId='+encodeURIComponent(projectId):''));return result.url;
++};
++export async function preparePersonalPhoto(file){
++ if(!file||!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>12*1024*1024)throw new Error('Choose PNG, JPG or WebP up to 12 MB. / عکس PNG یا JPG یا WebP تا ۱۲ مگابایت انتخاب کن.');
++ const bitmap=await createImageBitmap(file);try{
++ if(bitmap.width*bitmap.height>24000000||bitmap.width<32||bitmap.height<32)throw new Error('Use an image between 32 pixels and 24 megapixels.');
++ const scale=Math.min(1,1536/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
++ const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas unavailable.');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
++ let result=canvas.toDataURL('image/jpeg',.88);if(result.length>2700000)result=canvas.toDataURL('image/jpeg',.65);if(result.length>2700000)throw new Error('Image is too large. / تصویر بیش از حد بزرگ است.');return result;
++ }finally{bitmap.close();}
++}
++
++export async function uploadPersonalGlb({file,projectId}){
++ if(!file||!file.name.toLowerCase().endsWith('.glb')||file.size>MAX_PERSONAL_GLB_BYTES)throw Error('Choose a GLB up to 25 MB. / فایل GLB تا ۲۵ مگابایت انتخاب کن.');
++ const bytes=await file.arrayBuffer();validatePersonalGlb(bytes);
++ const started=await send('/api/personal-assets',{action:'begin-glb',projectId,size:file.size});
++ const response=await fetch(started.uploadUrl,{method:'PUT',headers:{'Content-Type':'model/gltf-binary','cache-control':'max-age=3600'},body:bytes});
++ if(!response.ok)throw Error('GLB upload failed. / آپلود مدل ناموفق بود.');
++ return send('/api/personal-assets',{action:'finish-glb',projectId,assetId:started.assetId,name:file.name.replace(/\.glb$/i,'').slice(0,100),furniture_type:'cabinet'});
++}
+--- a/src/app/projects/[id]/PersonalModelPreview.jsx
++++ b/src/app/projects/[id]/PersonalModelPreview.jsx
+@@ -0,0 +1,29 @@
++'use client';
++import {useEffect,useRef,useState} from 'react';
++import * as T from 'three';
++import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
++import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
++import {getPersonalAssetUrl} from '@/services/personalAssetService';
++export default function PersonalModelPreview({assetId,projectId,label}){
++ const host=useRef(null),[error,setError]=useState('');
++ useEffect(()=>{
++  if(!assetId||!host.current)return;
++  let live=true,frame,renderer,controls,model;const container=host.current;setError('');
++  const release=root=>root?.traverse(o=>{o.geometry?.dispose?.();for(const m of Array.isArray(o.material)?o.material:[o.material])if(m){for(const t of Object.values(m))if(t?.isTexture)t.dispose();m.dispose();}});
++  try{
++   renderer=new T.WebGLRenderer({antialias:true,alpha:false});renderer.setSize(320,240);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setClearColor(0x18202f);renderer.outputColorSpace=T.SRGBColorSpace;container.appendChild(renderer.domElement);
++   renderer.domElement.style.width='100%';renderer.domElement.style.height='240px';renderer.domElement.style.objectFit='contain';
++   const scene=new T.Scene(),camera=new T.PerspectiveCamera(40,320/240,.01,100);camera.position.set(2.8,1.8,2.8);
++   scene.add(new T.HemisphereLight(0xffffff,0x606070,3));const light=new T.DirectionalLight(0xffffff,3);light.position.set(3,4,5);scene.add(light);
++   controls=new OrbitControls(camera,renderer.domElement);controls.enablePan=false;controls.enableDamping=true;
++   const tick=()=>{if(!live)return;controls.update();renderer.render(scene,camera);frame=requestAnimationFrame(tick);};tick();
++   getPersonalAssetUrl(assetId,projectId).then(url=>new GLTFLoader().loadAsync(url)).then(g=>{
++    if(!live){release(g.scene);return;}model=g.scene;const b=new T.Box3().setFromObject(model),size=b.getSize(new T.Vector3()),center=b.getCenter(new T.Vector3());
++    const longest=Math.max(size.x,size.y,size.z);if(!Number.isFinite(longest)||longest<=0)throw Error('Model has no visible size.');
++    model.position.sub(center);const group=new T.Group();group.add(model);group.scale.setScalar(2/longest);scene.add(group);
++   }).catch(()=>{if(live)setError('پیش‌نمایش مدل بارگذاری نشد / Model preview unavailable');});
++  }catch{setError('نمایش سه‌بعدی در این مرورگر در دسترس نیست / WebGL unavailable');}
++  return()=>{live=false;cancelAnimationFrame(frame);controls?.dispose();release(model);renderer?.dispose();renderer?.domElement.remove();};
++ },[assetId,projectId]);
++ return <div aria-label={label}><div ref={host}/>{error&&<p role="alert">{error}</p>}</div>;
++}
+--- a/src/app/projects/[id]/WalkthroughPanel.module.css
++++ b/src/app/projects/[id]/WalkthroughPanel.module.css
+@@ -0,0 +1 @@
++.panel{padding:12px;border:1px solid #46536b;border-radius:10px;background:#111827;color:#eef2f7;margin-bottom:12px;font-size:13px}.panel p{line-height:1.8}.panel button{background:#253247;color:#fff;border:1px solid #65748a;border-radius:7px;padding:9px 13px;cursor:pointer;touch-action:none}.panel>button{background:#e4c32a;color:#10151e;font-weight:700;width:100%}.panel button:disabled{opacity:.45;cursor:default}.panel button:focus-visible{outline:2px solid #e4c32a;outline-offset:3px}.pad{display:flex;flex-direction:column;align-items:center;gap:5px;margin:10px}.pad>div{display:flex;gap:5px}.pad button{min-width:48px;min-height:44px;user-select:none}.panel small{display:block;color:#bcc8da;line-height:1.7}
+--- a/src/app/projects/[id]/PersonalAssetLibrary.jsx
++++ b/src/app/projects/[id]/PersonalAssetLibrary.jsx
+@@ -0,0 +1,71 @@
++'use client';
++import {useCallback,useEffect,useRef,useState} from 'react';
++import Image from 'next/image';
++import {useLanguage} from '@/app/components/i18n/LanguageProvider';
++import {loadPersonalLibrary,createFurnitureFromPhoto,pollPersonalModel,uploadPersonalMaterial,preparePersonalPhoto,savePersonalAssetDetails,uploadPersonalGlb} from '@/services/personalAssetService';
++import {PERSONAL_FURNITURE_TYPES,personalDimensions} from '@/lib/personalAssets.mjs';
++import PersonalModelPreview from './PersonalModelPreview';
++import styles from './PersonalAssetLibrary.module.css';
++export default function PersonalAssetLibrary({kind,projectId,onChoose,disabled=false}){
++ const{language}=useLanguage(),fa=language==='fa',ar=language==='ar',text=(en,f,a)=>fa?f:ar?a:en;
++ const[assets,setAssets]=useState([]),[jobs,setJobs]=useState([]),[config,setConfig]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[selected,setSelected]=useState(null),[dimensions,setDimensions]=useState({width:1,depth:1,height:1});
++ const glbPicker=useRef(null),picker=useRef(null),active=useRef(true),working=useRef(false),polling=useRef(false);
++ const refresh=useCallback(async()=>{
++  const result=await loadPersonalLibrary();if(!active.current)return;
++  setAssets(result.assets);setJobs(result.jobs);setConfig(result.configuration);
++ },[]);
++ useEffect(()=>{active.current=true;refresh().catch(e=>{if(active.current)setMessage(e.message);});return()=>{active.current=false;};},[refresh]);
++ useEffect(()=>{
++  if(kind!=='model'||!jobs.some(j=>['submitting','pending'].includes(j.status)))return;
++  const timer=setInterval(async()=>{
++   if(polling.current)return;polling.current=true;
++   try{for(const job of jobs.filter(j=>['submitting','pending'].includes(j.status)))await pollPersonalModel(job.id);await refresh();}
++   catch(e){if(active.current)setMessage(e.message);}finally{polling.current=false;}
++  },8000);
++  return()=>clearInterval(timer);
++ },[jobs,kind,refresh]);
++ async function upload(file){
++  if(!file||working.current||disabled)return;working.current=true;setBusy(true);setMessage('');
++  try{
++   const imageUrl=await preparePersonalPhoto(file),name=file.name.replace(/\.[^.]+$/,'').slice(0,100)||'Personal asset';
++   if(kind==='model'){
++    const result=await createFurnitureFromPhoto({projectId,imageUrl,name});
++    if(result.job.status==='failed')throw new Error(result.job.error||'Previous generation failed; choose a revised photo. / تولید قبلی ناموفق بود؛ عکس اصلاح‌شده انتخاب کن.');
++    if(active.current)setMessage(result.job.status==='ready'?text('This photo is already in your library.','این عکس قبلاً به مدل تبدیل و ذخیره شده است.','هذه الصورة موجودة في مكتبتك.'):text('Model request saved. You can leave and return.','درخواست ذخیره شد؛ می‌توانی خارج شوی و بعد برگردی.','تم حفظ الطلب؛ يمكنك العودة لاحقاً.'));
++   }else{await uploadPersonalMaterial({projectId,imageUrl,name});if(active.current)setMessage(text('Material saved to your library.','متریال در کتابخانه ذخیره شد.','تم حفظ المادة.'));}
++   await refresh();
++  }catch(e){if(active.current){setMessage(e.message);await refresh().catch(()=>{});}}
++  finally{working.current=false;if(active.current)setBusy(false);}
++ }
++ async function uploadGlb(file){
++  if(!file||working.current||disabled)return;working.current=true;setBusy(true);setMessage('');
++  try{await uploadPersonalGlb({file,projectId});if(active.current)setMessage(text('GLB saved. Select it and set real dimensions.','مدل ذخیره شد؛ آن را انتخاب و ابعاد واقعی را تنظیم کن.','تم حفظ النموذج؛ اضبط أبعاده.'));await refresh();}
++  catch(e){if(active.current)setMessage(e.message);}finally{working.current=false;if(active.current)setBusy(false);}
++ }
++ function choose(row){setSelected(row);setDimensions({width:Number(row.width),depth:Number(row.depth),height:Number(row.height)});}
++ async function useSelected(){
++  if(!selected||working.current)return;working.current=true;setBusy(true);setMessage('');
++  try{
++   let row=selected;
++   if(kind==='model'){const size=personalDimensions(dimensions);row={...row,...size};await savePersonalAssetDetails({assetId:row.id,name:row.name,furniture_type:row.furniture_type,...size});}
++   await onChoose(row);
++   if(active.current)setMessage(kind==='model'?text('Now click a clear floor area to place the model.','حالا روی بخش خالی کف کلیک کن تا مدل قرار بگیرد.','اضغط على الأرضية لوضع النموذج.'):text('Now click the floor or wall face.','حالا روی کف یا وجه دیوار کلیک کن.','اضغط على الأرضية أو وجه الجدار.'));
++  }catch(e){if(active.current)setMessage(e.message);}finally{working.current=false;if(active.current)setBusy(false);}
++ }
++ const blocked=disabled||busy,visible=assets.filter(a=>a.kind===kind);
++ return <section className={styles.library} dir={fa||ar?'rtl':'ltr'}>
++  <strong>{kind==='model'?text('My photo-to-3D library','کتابخانه مدل از عکس من','مكتبتي من الصورة إلى ثلاثي الأبعاد'):text('My uploaded materials','متریال‌های آپلودشده من','موادي المرفوعة')}</strong>
++  <p>{kind==='model'?text('Upload one furniture photo. Generation uses paid Meshy credit and saves the GLB here automatically; it is not measured from the photo.','عکس یک وسیله را آپلود کن؛ تولید با اعتبار پولی Meshy انجام و GLB خودکار اینجا ذخیره می‌شود. اندازه واقعی از عکس مشخص نیست.','ارفع صورة قطعة أثاث؛ يُحفظ GLB تلقائياً باستخدام رصيد Meshy المدفوع. الأبعاد ليست قياسات الصورة.'):text('PNG / JPG / WebP textures; no AI generation fee.','بافت PNG / JPG / WebP؛ بدون هزینه تولید هوش مصنوعی.','خامات PNG / JPG / WebP دون رسوم توليد. ')}</p>
++  {kind==='model'&&config&&!config.configured&&<p role="status">{text('The operator must configure and enable Meshy first.','مدیر باید کلید Meshy را تنظیم و تولید را فعال کند.','يجب تفعيل Meshy وإعداد مفتاحه أولاً.')}</p>}
++  {kind==='model'&&config&&<p>{text('Daily generation limit per account: ','سقف تولید روزانه هر حساب: ','حد التوليد اليومي: ')}{config.dailyLimit}</p>}
++  {kind==='model'&&<><input ref={glbPicker} hidden type="file" accept=".glb,model/gltf-binary" onChange={e=>{const file=e.target.files?.[0];e.target.value='';uploadGlb(file);}}/><button type="button" disabled={blocked} onClick={()=>glbPicker.current?.click()}>{text('Upload ready GLB · no generation fee','آپلود مدل آماده GLB · بدون هزینه تولید','رفع GLB جاهز · دون رسوم توليد')}</button><p>{text('From an iPhone scanner or 3D editor. Up to 25 MB, embedded textures, static mesh, no Draco compression.','از اسکنر آیفون یا نرم‌افزار سه‌بعدی؛ تا ۲۵ مگابایت، مدل ایستا با بافت داخلی و بدون فشرده‌سازی Draco.','من ماسح الهاتف أو محرر 3D؛ حتى 25 MB مع خامات مدمجة ودون Draco.')}</p></>}
++  <input ref={picker} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const file=e.target.files?.[0];e.target.value='';upload(file);}}/>
++  <button className={styles.upload} type="button" disabled={blocked||(kind==='model'&&!config?.configured)} onClick={()=>picker.current?.click()}>{busy?text('Working…','در حال پردازش…','جارٍ التنفيذ…'):kind==='model'?text('Upload photo and generate 3D','آپلود عکس و تولید مدل سه‌بعدی','رفع صورة وتوليد نموذج'):text('Upload material image','آپلود تصویر متریال','رفع صورة مادة')}</button>
++  <button type="button" disabled={busy} onClick={()=>refresh().catch(e=>setMessage(e.message))}>{text('Refresh library','تازه‌سازی کتابخانه','تحديث المكتبة')}</button>
++  {kind==='model'&&jobs.length>0&&<div className={styles.jobs}>{jobs.map(j=><div key={j.id}><b>{j.name}</b><progress max="100" value={j.progress||0}/><p>{j.status==='failed'?text('Model generation failed. Upload a revised photo after reviewing the issue.','تولید مدل ناموفق بود؛ پس از بررسی خطا عکس اصلاح‌شده انتخاب کن.','فشل التوليد؛ راجع المشكلة ثم ارفع صورة معدلة.'):j.status==='unknown'?text('Submission needs operator reconciliation. Do not generate again.','وضعیت ارسال نیازمند بررسی مدیر است؛ دوباره تولید نکن.','تحتاج حالة الإرسال مراجعة المشغل؛ لا تعِد التوليد.'):text('Generating model…','در حال ساخت مدل…','جارٍ توليد النموذج…')} {j.progress||0}%</p></div>)}</div>}
++  <div className={styles.grid}>{visible.map(row=><button className={styles.asset} type="button" key={row.id} aria-pressed={selected?.id===row.id} onClick={()=>choose(row)} disabled={blocked}>{row.thumbnailUrl&&<Image unoptimized width={160} height={80} src={row.thumbnailUrl} alt={row.name}/>}<span>{row.name}</span></button>)}</div>
++  {selected&&<>{kind==='model'&&<><PersonalModelPreview assetId={selected.id} projectId={projectId} label={selected.name}/><p>{text('Set real dimensions in metres before placing. Initial dimensions are only a proportion-preserving proposal.','پیش از جای‌گذاری، اندازه واقعی را برحسب متر تنظیم کن؛ اندازه اولیه فقط پیشنهادی و متناسب با شکل مدل است.','اضبط الأبعاد الحقيقية بالمتر؛ الأبعاد الأولية مقترحة فقط.')}</p><div className={styles.dimensions}>{[['width','Width','عرض','العرض'],['depth','Depth','عمق','العمق'],['height','Height','ارتفاع','الارتفاع']].map(([key,en,f,a])=><label key={key}>{text(en,f,a)}<input type="number" min=".05" max={key==='width'?6:key==='depth'?4:3} step=".01" value={dimensions[key]} onChange={e=>setDimensions(v=>({...v,[key]:e.target.value}))}/></label>)}</div><label>{text('Furniture category','نوع وسیله','نوع الأثاث')}<select value={selected.furniture_type} onChange={e=>setSelected(v=>({...v,furniture_type:e.target.value}))}>{PERSONAL_FURNITURE_TYPES.map(t=><option key={t} value={t}>{({sofa:'مبل',chair:'صندلی',bed:'تخت',dining_table:'میز غذاخوری',cabinet:'کمد یا وسیله عمومی',plant:'گیاه',desk:'میز کار',coffee_table:'میز جلو مبلی'})[t]&&fa?({sofa:'مبل',chair:'صندلی',bed:'تخت',dining_table:'میز غذاخوری',cabinet:'کمد یا وسیله عمومی',plant:'گیاه',desk:'میز کار',coffee_table:'میز جلو مبلی'})[t]:t}</option>)}</select></label></>}
++   <button type="button" disabled={blocked} onClick={useSelected}>{kind==='model'?text('Place this model','جای‌گذاری این مدل','وضع هذا النموذج'):text('Use this material','استفاده از این متریال','استخدام المادة')}</button></>}
++  {message&&<p className={styles.feedback} role="status">{message}</p>}
++ </section>;
++}
+--- a/src/app/projects/[id]/SurfaceMaterialPanel.jsx
++++ b/src/app/projects/[id]/SurfaceMaterialPanel.jsx
+@@ -1,7 +1,10 @@
+ 'use client';
++import PersonalAssetLibrary from './PersonalAssetLibrary';
++import {personalMaterial} from '@/lib/personalAssets.mjs';
++import {linkPersonalAsset} from '@/services/personalAssetService';
+ import {useEffect,useRef,useState} from 'react';
+ import {useLanguage} from '@/app/components/i18n/LanguageProvider';
+-import {SURFACE_GROUPS,SURFACE_MATERIALS,SURFACE_MIME,applySurfaceMaterial,paintSurfaceSwatch,assertSurfaceOnlyEdit,surfaceMaterialAllowed} from '@/lib/surfaceMaterials.mjs';
++import {SURFACE_GROUPS,SURFACE_MATERIALS,SURFACE_MIME,applySurfaceMaterial,paintSurfaceSwatch,assertSurfaceOnlyEdit,surfaceMaterialAllowed,applySurfaceTextureSize,surfaceTextureSize} from '@/lib/surfaceMaterials.mjs';
+ import {bindSurfaceMaterialInputs,bindSurfaceMaterialUndo} from '@/lib/surfaceMaterialInputs.mjs';
+ import styles from './SurfaceMaterialPanel.module.css';
+ 
+@@ -17,30 +20,34 @@
+   </button>;
+ }
+ 
+-export default function SurfaceMaterialPanel({scene,getRenderer,getCanvasHost,onCommit,onModeChange,disabled=false}){
++export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCanvasHost,onCommit,onModeChange,disabled=false}){
+   const {language}=useLanguage(),lang=['fa','ar'].includes(language)?language:'en';
+   const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
++  const [personalMaterials,setPersonalMaterials]=useState({}),[tileSize,setTileSize]=useState(2);
+   const [group,setGroup]=useState('stone'),[selected,setSelected]=useState('stone-ivory'),[paintMode,setPaintMode]=useState(false);
+   const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[hover,setHover]=useState(null),[lastTarget,setLastTarget]=useState(null),[undoCount,setUndoCount]=useState(0);
+   const history=useRef([]),working=useRef(false),latest=useRef(null),panelRef=useRef(null);
+-  async function apply(target,id,undo=false){
++  async function apply(target,id,undo=false,size=null){
+     const state=latest.current;if(working.current||state.disabled)return;
+     if(!undo&&!target){setMessage(text('Drop onto a visible floor or wall.','روی بخش قابل‌دیدن کف یا دیوار رها کن.','أفلت على أرضية أو جدار ظاهر.'));return;}
+-    if(!undo&&id!==null&&!surfaceMaterialAllowed(id,target)){setMessage(text('Paint and wallpaper apply to walls only.','رنگ و کاغذدیواری را روی دیوار اعمال کن.','الدهان وورق الجدران للجدران فقط.'));return;}
++    if(!undo&&size===null&&id!==null&&!surfaceMaterialAllowed(id,target,state.materialScene)){setMessage(text('Paint and wallpaper apply to walls only.','رنگ و کاغذدیواری را روی دیوار اعمال کن.','الدهان وورق الجدران للجدران فقط.'));return;}
+     working.current=true;setBusy(true);setMessage('');
+     try{
+       const previous=history.current.at(-1);
+       if(undo&&(!previous||JSON.stringify(previous.after)!==JSON.stringify(state.scene.surfaceFinishes)))throw new Error(text('Materials changed; undo is no longer available.','متریال‌ها تغییر کرده‌اند؛ این مرحله قابل برگشت نیست.','تغيرت المواد؛ التراجع غير متاح.'));
+-      const next=undo?{...state.scene,surfaceFinishes:previous.before}:applySurfaceMaterial(state.scene,target,id);
++      const base=state.materialScene;
++      const next=undo?{...state.scene,surfaceFinishes:previous.before}:size!==null?applySurfaceTextureSize(base,target,size):applySurfaceMaterial(base,target,id);
++      if(!undo&&String(id).startsWith('personal:'))await linkPersonalAsset(projectId,id.slice(9));
+       assertSurfaceOnlyEdit(state.scene,next);
+       await state.onCommit(next,state.scene);
+       if(undo)history.current.pop();else{
+-        history.current.push({before:state.scene.surfaceFinishes,after:next.surfaceFinishes});if(history.current.length>20)history.current.shift();setLastTarget(target);
++        history.current.push({before:state.scene.surfaceFinishes,after:next.surfaceFinishes});if(history.current.length>20)history.current.shift();setLastTarget(target);setTileSize(surfaceTextureSize(next,target));
+       }
+       setUndoCount(history.current.length);setMessage(text('Material saved.','متریال ذخیره شد.','تم حفظ المادة.'));
+     }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
+   }
+-  latest.current={scene,materialId:selected,paintMode,disabled:disabled||busy,onCommit,apply,getRenderer,canUndo:undoCount>0};
++  const materialScene=Object.keys(personalMaterials).length?{...scene,surfaceFinishes:{...scene.surfaceFinishes,customMaterials:{...scene.surfaceFinishes?.customMaterials,...personalMaterials}}}:scene;
++  latest.current={scene,materialScene,materialId:selected,paintMode,disabled:disabled||busy,onCommit,apply,getRenderer,canUndo:undoCount>0};
+   useEffect(()=>{
+     const host=getCanvasHost();if(!host)return;
+     const originalTabIndex=host.getAttribute('tabindex');if(originalTabIndex===null)host.tabIndex=0;
+@@ -51,11 +58,18 @@
+     return ()=>{unbindInputs();unbindUndo();host.removeEventListener('pointerdown',focus,true);if(originalTabIndex===null&&host.getAttribute('tabindex')==='0')host.removeAttribute('tabindex');};
+   },[scene,disabled]);
+   useEffect(()=>{onModeChange(paintMode);return()=>onModeChange(false);},[paintMode,onModeChange]);
++  useEffect(()=>{const fail=()=>setMessage(text('Personal texture failed to load. Reopen your library and check access.','بافت شخصی بارگذاری نشد؛ دسترسی و کتابخانه را بررسی کن.','تعذر تحميل الخامة الشخصية.'));window.addEventListener('ventra:surface-resource-error',fail);return()=>window.removeEventListener('ventra:surface-resource-error',fail);},[]);
+   function choose(id){setSelected(id);setPaintMode(true);getRenderer()?.setFurnitureTool?.(null);}
+   const targetName=target=>!target?'':`${target.kind==='wall'?text('Wall face','وجه دیوار','وجه الجدار'):text('Floor','کف','أرضية')} · ${target.id}`;
+   return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('Surface materials','متریال کف و دیوار','مواد الأرضيات والجدران')}>
+     <details open><summary>{text('Floor & wall materials','متریال کف و دیوار','مواد الأرضيات والجدران')}</summary>
+       <p>{text('Drag a swatch onto a floor or one wall face. Or select a swatch, then click that face.','نمونه را روی کف یا یک وجه دیوار بکش و رها کن؛ یا نمونه را انتخاب کن و روی همان وجه بزن.','اسحب العينة إلى الأرضية أو وجه الجدار، أو اخترها ثم اضغط على الوجه المطلوب.')}</p>
++      <PersonalAssetLibrary kind="material" projectId={projectId} disabled={disabled||busy} onChoose={row=>{const m=personalMaterial(row);setPersonalMaterials(v=>({...v,[m.id]:m}));choose(m.id);}}/>
++      {lastTarget&&<div className={styles.scale}>
++        <label>{text('Width of one texture repeat (metres)','عرض یک تکرار بافت (متر)','حجم تكرار الخامة بالمتر')}<input type="number" min=".05" max="20" step=".05" value={tileSize} disabled={disabled||busy} onChange={e=>setTileSize(e.target.value)}/></label>
++        <p>{text('Smaller number = finer texture. Applies only to the last selected surface.','عدد کمتر یعنی بافت ریزتر؛ فقط روی آخرین سطح انتخاب‌شده اعمال می‌شود.','رقم أصغر يعني خامة أدق؛ للسطح المختار فقط.')}</p>
++        <button type="button" disabled={disabled||busy} onClick={()=>apply(lastTarget,scene.surfaceFinishes?.assignments?.[JSON.stringify([lastTarget.kind,String(lastTarget.id),...(lastTarget.side?[lastTarget.side]:[])])],false,Number(tileSize))}>{text('Apply texture size','اعمال اندازه بافت','تطبيق حجم الخامة')}</button>
++      </div>}
+       <div className={styles.groups} aria-label={text('Material categories','گروه متریال','فئات المواد')}>
+         {SURFACE_GROUPS.map(g=><button key={g.id} type="button" aria-pressed={group===g.id} onClick={()=>setGroup(g.id)}>{g[lang]}</button>)}
+       </div>
+--- a/src/app/projects/[id]/WalkthroughPanel.jsx
++++ b/src/app/projects/[id]/WalkthroughPanel.jsx
+@@ -0,0 +1,19 @@
++'use client';
++import {useEffect,useRef,useState} from 'react';
++import {useLanguage} from '@/app/components/i18n/LanguageProvider';
++import styles from './WalkthroughPanel.module.css';
++export default function WalkthroughPanel({projectId,scene,getRenderer,onActiveChange,disabled=false}){
++ const{language}=useLanguage(),fa=language==='fa',ar=language==='ar',text=(en,f,a)=>fa?f:ar?a:en;
++ const[active,setActive]=useState(false),[error,setError]=useState('');const session=useRef(null),change=useRef(onActiveChange);change.current=onActiveChange;
++ useEffect(()=>{setActive(false);const exit=e=>{if(e.detail?.projectId===projectId){setActive(false);session.current=null;change.current(false);}};window.addEventListener('ventra:walkthrough-exit',exit);return()=>{window.removeEventListener('ventra:walkthrough-exit',exit);session.current?.stopWalkthrough?.();session.current=null;change.current(false);};},[projectId,scene]);
++ function toggle(){setError('');if(active){session.current?.stopWalkthrough?.();return;}try{const renderer=getRenderer();if(!renderer?.startWalkthrough)throw Error(text('Open an interior floor model first.','ابتدا مدل داخلی یک طبقه را باز کن.','افتح نموذج طابق داخلي أولاً.'));renderer.startWalkthrough();session.current=renderer;setActive(true);change.current(true);}catch(e){setError(e.message);}}
++ const axis=(f,r)=>session.current?.setWalkAxis?.(f,r);
++ const hold=(f,r)=>({onPointerDown:e=>{e.preventDefault();try{e.currentTarget.setPointerCapture(e.pointerId);}catch{}axis(f,r);},onPointerUp:()=>axis(0,0),onPointerCancel:()=>axis(0,0),onLostPointerCapture:()=>axis(0,0),onBlur:()=>axis(0,0),onKeyDown:e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();axis(f,r);}},onKeyUp:()=>axis(0,0)});
++ return <section className={styles.panel} dir={fa||ar?'rtl':'ltr'} aria-label={text('Walk inside project','گشت داخل پروژه','جولة داخل المشروع')}>
++ <button type="button" disabled={disabled&&!active} aria-pressed={active} onClick={toggle}>{active?text('Exit walkthrough','خروج از گشت','إنهاء الجولة'):text('Walk inside project','گشت داخل پروژه','جولة داخل المشروع')}</button>
++ {active&&<><p>{text('Drag the scene to look. W/A/S/D to move; arrows to move/turn. Escape exits. Eye height 1.60 m.','برای نگاه‌کردن، تصویر را بکش. حرکت با W/A/S/D؛ جهت‌ها برای حرکت و چرخش. خروج با Esc. ارتفاع دید ۱٫۶ متر.','اسحب للنظر. تحرك باستخدام W/A/S/D؛ الأسهم للحركة والدوران. Esc للخروج. ارتفاع العين ١٫٦ متر.')}</p>
++ <div className={styles.pad} dir="ltr"><button type="button" aria-label="Forward / جلو" {...hold(1,0)}>↑</button><div><button type="button" aria-label="Move left / حرکت چپ" {...hold(0,-1)}>←</button><button type="button" aria-label="Backward / عقب" {...hold(-1,0)}>↓</button><button type="button" aria-label="Move right / حرکت راست" {...hold(0,1)}>→</button></div><div><button type="button" onClick={()=>session.current?.turnWalk?.(-Math.PI/8)}>↶ {text('Look left','نگاه چپ','يسار')}</button><button type="button" onClick={()=>session.current?.turnWalk?.(Math.PI/8)}>{text('Look right','نگاه راست','يمين')} ↷</button></div></div>
++ <small>{text('Single-floor preview; stairs and VR headset mode are not included. Movement follows available geometry, not verified site measurements.','گشت همین طبقه؛ پله و هدست VR در این مرحله فعال نیستند. حرکت بر اساس هندسه موجود است و تأیید اندازه‌های واقعی پروژه نیست.','جولة بطابق واحد؛ السلالم وVR غير مفعّلين. الحركة حسب الهندسة المتاحة.')}</small></>}
++ {error&&<p role="alert">{error}</p>}
++ </section>;
++}
+--- a/src/app/projects/[id]/PersonalAssetLibrary.module.css
++++ b/src/app/projects/[id]/PersonalAssetLibrary.module.css
+@@ -0,0 +1 @@
++.library{margin:12px 0;padding:12px;border:1px solid #465369;border-radius:10px;background:#111827;color:#e5e7eb;display:grid;gap:10px;min-width:0}.library p{font-size:12px;line-height:1.8;margin:0}.library label{display:grid;gap:5px;font-size:12px}.library input,.library select{width:100%;min-width:0;box-sizing:border-box;background:#0b1220;color:inherit;border:1px solid #536075;border-radius:6px;padding:7px;font:inherit}.library button{min-height:36px;border:1px solid #64748b;background:#243044;color:inherit;border-radius:6px;padding:7px;cursor:pointer;font:inherit}.library button:disabled{opacity:.45;cursor:default}.upload{background:#d9b72b!important;color:#111827!important}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:330px;overflow:auto}.asset{display:grid;gap:5px;text-align:start;font-size:12px}.asset img{width:100%;height:80px;object-fit:contain;background:#e5e7eb;border-radius:4px}.dimensions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.feedback{font-size:12px;line-height:1.8;overflow-wrap:anywhere;color:#f5d77e}.jobs{display:grid;gap:8px}.jobs progress{width:100%}.scale{display:grid;gap:8px;border-top:1px solid #465369;padding-top:10px}.scaleActions{display:flex;gap:6px;flex-wrap:wrap}
+--- a/src/app/projects/[id]/SurfaceMaterialPanel.module.css
++++ b/src/app/projects/[id]/SurfaceMaterialPanel.module.css
+@@ -12,3 +12,5 @@
+ .swatch span{font-size:12px;line-height:1.5;pointer-events:none}
+ .feedback{min-height:34px;font-size:12px;line-height:1.6;color:#efcf7d;overflow-wrap:anywhere}
+ .panel small{font-size:11px;color:#adb9c9;overflow-wrap:anywhere}
++
++.scale{display:grid;gap:8px;border-top:1px solid #465369;margin:12px 0;padding-top:10px}.scale label{display:grid;gap:5px;font-size:12px}.scale input{width:100%;min-height:34px;background:#0b1220;color:inherit;border:1px solid #536075;border-radius:6px;padding:6px;box-sizing:border-box}
+--- a/src/app/projects/[id]/Project3DViewer.jsx
++++ b/src/app/projects/[id]/Project3DViewer.jsx
+@@ -7,6 +7,8 @@
+ import {assertOpeningOnlyEdit} from '@/lib/manualOpenings.mjs';
+ import {assertWallOnlyEdit} from '@/lib/manualWalls.mjs';
+ import FurnitureEditorPanel from "./FurnitureEditorPanel";
++import WalkthroughPanel from './WalkthroughPanel';
++import {createWalkthrough} from '@/lib/walkthroughControls.mjs';
+ import SurfaceMaterialPanel from './SurfaceMaterialPanel';
+ import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit,surfaceMaterialList} from '@/lib/surfaceMaterials.mjs';
+ import {raycastVisibleMeshes} from '@/lib/raycastMeshes.mjs';
+@@ -5360,7 +5362,8 @@
+   const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
+   const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
+   const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
+-  const { assetType, w, d, h, rot, cx, cy } = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
++  const placement = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
++  const {w,d,h,rot,cx,cy}=placement;const assetType=asset.customModelId?'personal_model':placement.assetType;
+   // Tiny, deterministic surface grain adds material depth without a network asset.
+   // Textures belong to this asset and are released with its mesh materials.
+   const surfaceTexture = (kind) => {
+@@ -5468,6 +5471,8 @@
+   };
+ 
+   switch (assetType) {
++    case 'personal_model': {const m=new THREE.MeshBasicMaterial({color:0x9ca3af,wireframe:true});addBox(w,d,h,0,0,h/2,m);break;}
++
+     case 'sofa': {
+       addBox(w * 0.94, d * 0.82, 0.13, 0, 0.03 * d, 0.15, dark);
+       addCushion(w * 0.88, d * 0.64, 0.19, 0, 0.08 * d, 0.30, accent);
+@@ -7400,7 +7405,8 @@
+   return enabled=>{for(const [mat,original] of materials){Object.assign(mat,enabled?{opacity:.045,transparent:true,depthWrite:false}:original);mat.needsUpdate=true;}for(const [object,shadow] of objects)object.castShadow=enabled?false:shadow;};
+ }
+ 
+-function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState) {
++function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, initialCameraState, projectId) {
++  sceneData={...sceneData,projectId};
+   const THREE = getThree();
+   if (!container || !sceneData || !canvasElement || !THREE?.WebGLRenderer || !THREE?.PerspectiveCamera) {
+     throw new Error("Standalone schematic renderer is not available.");
+@@ -7573,6 +7579,8 @@
+     render();
+   };
+ 
++  const surfaceResource=event=>{if(event.detail?.projectId===projectId)render();};
++  window.addEventListener('ventra:surface-resource',surfaceResource);
+   setNamedView("iso");
+   if(initialCameraState){
+     camera.position.fromArray(initialCameraState.position);camera.up.fromArray(initialCameraState.up);
+@@ -7603,6 +7611,7 @@
+   };
+   const unbindFurniture=bindFurnitureInputs(renderer.domElement,{
+     getTool:()=>furnitureTool,pickPoint,
++    supportsPersonalModels:renderer.supportsPersonalModels===true,
+     pickAsset:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.assetId)?.object.userData.assetId:null,
+     clearPreview:clearFurniturePreview,
+     preview:(a,valid)=>{
+@@ -7632,7 +7641,11 @@
+     }
+   });
+ 
+-  const stopMotion=()=>{};
++  let interiorRequested=false;
++  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onExit:()=>{
++    setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
++  }});
++  const stopMotion=()=>walker.stop();
+   const unbindInputs=bindProjectCameraInputs(renderer.domElement,{
+     orbit,pan,getMode:()=>controlMode,home:()=>setNamedView('iso'),
+     zoom:factor=>{const offset=camera.position.clone().sub(target),fit=getBoundsInfo().distance;
+@@ -7655,6 +7668,11 @@
+   return {
+     model,
+     render,
++    supportsPersonalModels:renderer.supportsPersonalModels===true,
++    startWalkthrough:()=>{clearFurniturePreview();walker.start();setInteriorView(false);render();},
++    stopWalkthrough:()=>walker.stop(),
++    setWalkAxis:(forward,right)=>walker.setAxis(forward,right),
++    turnWalk:(yaw,pitch)=>walker.turn(yaw,pitch),
+     setSelectedAssetIds,
+     setWallEditMode,
+     ready:()=>renderer.readyResources?.(),
+@@ -7672,15 +7690,17 @@
+     pickWall:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
+     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
+     clearFurniturePreview,
+-    setInteriorView: enabled => {setInteriorView(enabled);render();},
++    setInteriorView: enabled => {interiorRequested=enabled;setInteriorView(walker.isActive()?false:enabled);render();},
+     fitView: () => {stopMotion();setNamedView("iso");},
+     homeView: () => {stopMotion();setNamedView("iso");},
+     setNamedView: view => {stopMotion();setNamedView(view);},
+-    setControlMode: (mode) => { controlMode = mode === "pan" ? "pan" : "orbit"; },
++    setControlMode: (mode) => { stopMotion();controlMode = mode === "pan" ? "pan" : "orbit"; },
+     orbitBy: (yaw,pitch=0) => {stopMotion();orbit(-yaw,pitch);},
+-    zoomIn: () => zoomBy(1),
+-    zoomOut: () => zoomBy(-1),
++    zoomIn: () => {stopMotion();zoomBy(1);},
++    zoomOut: () => {stopMotion();zoomBy(-1);},
+     dispose: () => {
++      walker.dispose();
++      window.removeEventListener('ventra:surface-resource',surfaceResource);
+       clearSelection();clearWallPoints();
+       unbindFurniture();
+       unbindInputs();
+@@ -8415,6 +8435,7 @@
+   const interiorModeFromEffect=useEffectEvent(()=>interiorView);
+   useEffect(()=>{schematicRendererRef.current?.setInteriorView?.(interiorView);},[interiorView,status]);
+   const [autoOrbit,setAutoOrbit] = useState(false);
++  const [walkActive,setWalkActive] = useState(false);
+ 
+   const refreshSourceFromEffect=useEffectEvent(refreshProject3DSourceFromStorage);
+   const takeoffFromEffect=useEffectEvent(getFreshProjectTakeoff);
+@@ -8545,7 +8566,8 @@
+             containerRef.current,
+             schematicScene,
+             schematicCanvasRef.current,
+-            furnitureCameraRef.current?.key===dwgInteriorCameraKey(projectId,schematicScene)?furnitureCameraRef.current.state:null
++            furnitureCameraRef.current?.key===dwgInteriorCameraKey(projectId,schematicScene)?furnitureCameraRef.current.state:null,
++            projectId
+           );
+           if (cancelled) {
+             standalone.dispose?.();
+@@ -10063,8 +10085,9 @@
+         </LocalizedElement>
+ 
+         <aside className="ventra-model-sidebar">
+-          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
+-          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
++          {schematicScene && isInteriorSource(active3DSource) && <WalkthroughPanel projectId={projectId} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} disabled={designBusy||furnitureRepairBusy||status!=='ready'} onActiveChange={value=>{setWalkActive(value);if(value)setAutoOrbit(false);}}/>}
++          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel projectId={projectId} key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} disabled={walkActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
++          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel projectId={projectId} key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={walkActive||materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
+         <ToolDrawer title="inspector">
+         <LocalizedElement as="div" className="ventra-model-inspector">
+           {schematicScene && isInteriorSource(active3DSource) ? (
+--- a/src/app/projects/[id]/FurnitureEditorPanel.jsx
++++ b/src/app/projects/[id]/FurnitureEditorPanel.jsx
+@@ -1,4 +1,7 @@
+ 'use client';
++import PersonalAssetLibrary from './PersonalAssetLibrary';
++import {personalFurnitureModel} from '@/lib/personalAssets.mjs';
++import {linkPersonalAsset} from '@/services/personalAssetService';
+ import {createPortal} from 'react-dom';
+ import {copyFurnitureSnapshot,applyFurnitureBatch,previewFurnitureBatch,toggleFurnitureSelection,keyboardFurnitureAction} from '@/lib/furnitureBatch.mjs';
+ import {useEffect,useRef,useState} from 'react';
+@@ -9,8 +12,9 @@
+ import styles from './FurnitureEditorPanel.module.css';
+ import ToolDrawer from './ToolDrawer';
+ const words={en:{title:'Furniture studio',note:'Lightweight models · Furniture edits preserve architecture; walls have a separate editor · no BOQ changes',camera:'Camera',add:'Place selected model',select:'Select / drag furniture',top:'Top view',help:'Choose a model, then tap the floor. Desktop: drag a model onto the floor. Green = valid; red = blocked. Switch to Camera to orbit.',choose:'Furniture in scene',rotate:'Rotate 15°',color:'Apply color',replace:'Replace with selected model',remove:'Delete',undo:'Undo',saved:'Furniture saved.',busy:'Saving…'},fa:{title:'پنل مبلمان',note:'مدل‌های سبک · ویرایش مبلمان جدا از ابزار دیوار است · بدون تغییر BOQ',camera:'دوربین',add:'جای‌گذاری مدل انتخاب‌شده',select:'انتخاب / کشیدن مبلمان',top:'نمای بالا',help:'مدل را انتخاب کن و روی کف بزن. روی کامپیوتر می‌توانی مدل را روی کف بکشی. سبز: مجاز؛ قرمز: مسدود. برای چرخش به حالت دوربین برو.',choose:'مبلمان داخل مدل',rotate:'چرخش ۱۵ درجه',color:'اعمال رنگ',replace:'تعویض با مدل انتخاب‌شده',remove:'حذف',undo:'برگشت',saved:'مبلمان ذخیره شد.',busy:'در حال ذخیره…'},ar:{title:'لوحة الأثاث',note:'نماذج خفيفة · تعديل الأثاث منفصل عن محرر الجدران · دون تغيير BOQ',camera:'الكاميرا',add:'وضع النموذج المختار',select:'اختيار / سحب الأثاث',top:'منظر علوي',help:'اختر نموذجاً ثم المس الأرضية. على الحاسوب اسحب النموذج إلى الأرضية. الأخضر مسموح والأحمر محظور. اختر الكاميرا للدوران.',choose:'أثاث المشهد',rotate:'دوران ١٥°',color:'تطبيق اللون',replace:'استبدال بالنموذج المختار',remove:'حذف',undo:'تراجع',saved:'تم حفظ الأثاث.',busy:'جارٍ الحفظ…'}};
+-export default function FurnitureEditorPanel({scene,getRenderer,onCommit,onCommitOpenings,onCommitWalls,getCanvasHost,onCameraMode,wallsTransparent,onToggleWalls,disabled=false}){
++export default function FurnitureEditorPanel({projectId,scene,getRenderer,onCommit,onCommitOpenings,onCommitWalls,getCanvasHost,onCameraMode,wallsTransparent,onToggleWalls,disabled=false}){
+  const {language}=useLanguage(),lang=words[language]?language:'en',t=words[lang];
++ const [personalModel,setPersonalModel]=useState(null);
+  const [open,setOpen]=useState(false),[mode,setMode]=useState('camera'),[catalogId,setCatalogId]=useState('sofa-modern'),[selected,setSelected]=useState(''),[color,setColor]=useState('#b4a28f'),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[undoCount,setUndoCount]=useState(0);
+  const [selectedIds,setSelectedIds]=useState([]),[multiSelect,setMultiSelect]=useState(false),[host,setHost]=useState(null);
+  const panelRef=useRef(null),clipboard=useRef([]);
+@@ -44,20 +48,22 @@
+  }
+  function wallMode(value){wallStart.current=null;setMode(value);getRenderer()?.setNamedView?.('top');}
+  const object=scene.assets.find(a=>a.id===selected);
+- const label=a=>FURNITURE_CATALOG.find(m=>m.id===a.catalogId||(!a.catalogId&&m.type===a.type))?.[lang]||a.type;
++ const label=a=>a.customModelName||FURNITURE_CATALOG.find(m=>m.id===a.catalogId||(!a.catalogId&&m.type===a.type))?.[lang]||a.type;
+  async function save(edit,undo=false){
+   const state=latest.current;if(working.current||state.disabled)return;
+   working.current=true;setBusy(true);setMessage('');
+   try{
+-   const next=undo?history.current.at(-1):['remove-many','copy-many'].includes(edit.kind)?applyFurnitureBatch(state.scene,{...edit,freePlacement:state.freePlacement}):applyFurnitureEdit(state.scene,{...edit,freePlacement:state.freePlacement});
++   const operation=edit&&{...edit,personalModel:state.personalModel};
++   const next=undo?history.current.at(-1):['remove-many','copy-many'].includes(edit.kind)?applyFurnitureBatch(state.scene,{...edit,freePlacement:state.freePlacement}):applyFurnitureEdit(state.scene,{...operation,freePlacement:state.freePlacement});
+    if(!next)return;
++   if(!undo&&edit?.kind==='add'&&state.personalModel&&edit.catalogId==='personal:'+state.personalModel.id)await linkPersonalAsset(projectId,state.personalModel.id);
+    await state.onCommit(next,state.scene);
+    if(undo)history.current.pop();else{history.current.push(state.scene);if(history.current.length>20)history.current.shift();}
+    setUndoCount(history.current.length);setMessage(state.t.saved);
+    const remaining=(next.furnitureEditor?.copiedIds?.length?next.furnitureEditor.copiedIds:state.selectedIds).filter(id=>next.assets.some(a=>a.id===id));setSelectedIds(remaining);setSelected(remaining[0]||'');if(edit?.kind==='copy-many')setMode('select');
+   }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
+  }
+- useEffect(()=>{latest.current={scene,disabled:disabled||busy,mode,catalogId,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
++ useEffect(()=>{latest.current={scene,personalModel,disabled:disabled||busy,mode,catalogId,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
+  useEffect(()=>{
+   const renderer=getRenderer();if(!renderer)return;
+   renderer.setWallEditMode?.(mode==='wall-add'&&!disabled&&!busy);
+@@ -66,7 +72,7 @@
+    const s=latest.current;
+    if(s.mode==='rotate')return data?{kind:'rotate',assetId:data.id,rotation:furnitureRotationFromDrag(data.rotation,data.startX,event)}:null;
+    if(s.mode==='resize')return data?{kind:'resize',assetId:data.id,size:furnitureSizeFromDrag(data.dimensions,data.startX,event)}:null;
+-   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
++   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,personalModel:s.personalModel,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
+   };
+   renderer.setFurnitureTool?.({
+    start:(id,point,event)=>{
+@@ -92,8 +98,9 @@
+    else{wallStart.current=null;setMode('camera');setSelectedIds([]);setSelected('');getRenderer()?.clearFurniturePreview?.();}
+   };document.addEventListener('keydown',handler);return()=>document.removeEventListener('keydown',handler);
+  },[host,lang]);
++ useEffect(()=>{const failed=e=>{if(e.detail?.projectId===projectId)setMessage(text('Personal model failed to load; the wireframe is only its placement bounds.','مدل شخصی بارگذاری نشد؛ کادر سیمی فقط محدوده جای‌گذاری است.','تعذر تحميل النموذج؛ الإطار يوضح الحدود فقط.'));};window.addEventListener('ventra:personal-model-error',failed);return()=>window.removeEventListener('ventra:personal-model-error',failed);},[projectId,lang]);
+  const blocked=disabled||busy;
+- const renderCatalogItem=m=>(<button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);setMode('add');}} onClick={()=>{setCatalogId(m.id);setMode('add');}}>
++ const renderCatalogItem=m=>(<button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);setMode('add');}} onClick={()=>{setPersonalModel(null);setCatalogId(m.id);setMode('add');}}>
+     <span className={styles.swatch} style={{background:m.color}} aria-hidden="true"/>{m[lang]}<small>{m.width} × {m.depth} m</small>
+    </button>);
+  return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'}>
+@@ -105,7 +112,7 @@
+   </div>
+   {mode!=='camera'&&<p role="status">{mode==='wall-add'?text('Drag from one yellow endpoint to another, or click two points. Endpoints snap automatically.','از یک نقطه زرد بکش و روی نقطه دیگر رها کن، یا دو نقطه را کلیک کن. نقطه‌ها خودکار به سر دیوار می‌چسبند.','اسحب بين نقطتين صفراوين أو اضغط نقطتين. يتم الالتقاط تلقائياً.'):mode==='wall-remove'?text('Click the wall to remove it.','روی دیوار موردنظر کلیک کن تا حذف شود.','اضغط على الجدار لحذفه.'):mode==='opening'?text('Click near the target wall.','نزدیک دیوار هدف کلیک کن.','اضغط قرب الجدار المستهدف.'):lang==='fa'?'روی وسیله کلیک کن و بکش؛ رها کردن برای ذخیره.':lang==='ar'?'اضغط على الأثاث واسحب؛ أفلت للحفظ.':'Click furniture and drag; release to save.'}</p>}
+   <button type="button" aria-expanded={open} onClick={()=>{setOpen(!open);setMode('camera');}}>{t.title} {open?'−':'+'}</button>
+-  {open&&<><p>{text('Furniture does not change walls or BOQ. Doors and windows have a separate manual design tool below.','مبلمان، دیوار و BOQ را تغییر نمی‌دهد. ابزار افزودن دستی در و پنجره پایین همین پنل است.','الأثاث لا يغير الجدران أو BOQ. أداة الأبواب والنوافذ اليدوية أدناه.')}</p>{scene.source==='dwg-engineering-interior'&&<label><input type="checkbox" disabled={blocked} checked={freePlacement} onChange={e=>setFreePlacement(e.target.checked)}/>{text('Ignore uncertain DWG wall lines for manual furniture','نادیده گرفتن خطوط دیوار نامطمئن برای چیدمان دستی','تجاهل خطوط جدران DWG غير المؤكدة للأثاث اليدوي')}</label>}{freePlacement&&<p role="status">{text('Wall and doorway clearance is unverified in this mode. Check the placement against your plan.','در این حالت فاصله از دیوار و مسیر در تأیید نمی‌شود؛ جای وسیله را با نقشه کنترل کن.','في هذا الوضع لا يتم التحقق من الجدران ومسار الأبواب؛ راجع موضع الأثاث مع المخطط.')}</p>}<div className={styles.tools}>
++  {open&&<><PersonalAssetLibrary kind="model" projectId={projectId} disabled={blocked} onChoose={row=>{if(!getRenderer()?.supportsPersonalModels)throw new Error(text('Personal GLB needs the modern 3D renderer.','مدل GLB به نمایشگر سه‌بعدی جدید نیاز دارد؛ نمایشگر جایگزین فعال است.','يتطلب GLB العارض الحديث.'));const m=personalFurnitureModel(row);setPersonalModel(row);setCatalogId(m.id);setMode('add');}}/><p>{text('Furniture does not change walls or BOQ. Doors and windows have a separate manual design tool below.','مبلمان، دیوار و BOQ را تغییر نمی‌دهد. ابزار افزودن دستی در و پنجره پایین همین پنل است.','الأثاث لا يغير الجدران أو BOQ. أداة الأبواب والنوافذ اليدوية أدناه.')}</p>{scene.source==='dwg-engineering-interior'&&<label><input type="checkbox" disabled={blocked} checked={freePlacement} onChange={e=>setFreePlacement(e.target.checked)}/>{text('Ignore uncertain DWG wall lines for manual furniture','نادیده گرفتن خطوط دیوار نامطمئن برای چیدمان دستی','تجاهل خطوط جدران DWG غير المؤكدة للأثاث اليدوي')}</label>}{freePlacement&&<p role="status">{text('Wall and doorway clearance is unverified in this mode. Check the placement against your plan.','در این حالت فاصله از دیوار و مسیر در تأیید نمی‌شود؛ جای وسیله را با نقشه کنترل کن.','في هذا الوضع لا يتم التحقق من الجدران ومسار الأبواب؛ راجع موضع الأثاث مع المخطط.')}</p>}<div className={styles.tools}>
+    <button type="button" disabled={blocked} aria-pressed={mode==='add'} onClick={()=>setMode('add')}>{t.add}</button>
+    <button type="button" disabled={blocked} onClick={()=>getRenderer()?.setNamedView?.('top')}>{t.top}</button>
+    <button type="button" disabled={blocked||!undoCount} onClick={()=>save(null,true)}>{t.undo}</button>
+--- a/src/app/api/personal-assets/route.js
++++ b/src/app/api/personal-assets/route.js
+@@ -0,0 +1,8 @@
++import {commercialError} from '@/lib/serverCommercial';
++import {libraryList,libraryAsset,linkLibraryAsset,uploadLibraryMaterial,editLibraryAsset,readAssetBody,personalAssetAccount,beginLibraryGlbUpload,finishLibraryGlbUpload} from '@/lib/serverPersonalAssets';
++export const runtime='nodejs';
++export const dynamic='force-dynamic';
++export const maxDuration=60;
++export async function GET(request){try{const q=new URL(request.url).searchParams;return Response.json(q.get('assetId')?await libraryAsset(request,q.get('assetId'),q.get('projectId')):await libraryList(request),{headers:{'Cache-Control':'no-store'}});}catch(e){return commercialError(e);}}
++export async function POST(request){try{await personalAssetAccount(request);const body=await readAssetBody(request);return Response.json(body.action==='link'?await linkLibraryAsset(request,body):body.action==='begin-glb'?await beginLibraryGlbUpload(request,body):body.action==='finish-glb'?await finishLibraryGlbUpload(request,body):await uploadLibraryMaterial(request,body));}catch(e){return commercialError(e);}}
++export async function PATCH(request){try{await personalAssetAccount(request);return Response.json(await editLibraryAsset(request,await readAssetBody(request)));}catch(e){return commercialError(e);}}
+--- a/src/app/api/ai/furniture-model/route.js
++++ b/src/app/api/ai/furniture-model/route.js
+@@ -0,0 +1,7 @@
++import {commercialError} from '@/lib/serverCommercial';
++import {startFurnitureModel,pollFurnitureModel,readAssetBody,personalAssetAccount} from '@/lib/serverPersonalAssets';
++export const runtime='nodejs';
++export const dynamic='force-dynamic';
++export const maxDuration=60;
++export async function POST(request){try{await personalAssetAccount(request);return Response.json(await startFurnitureModel(request,await readAssetBody(request)));}catch(e){return commercialError(e);}}
++export async function GET(request){try{return Response.json(await pollFurnitureModel(request,new URL(request.url).searchParams.get('jobId')),{headers:{'Cache-Control':'no-store'}});}catch(e){return commercialError(e);}}
+--- a/tests/manual-editor-ui.test.mjs
++++ b/tests/manual-editor-ui.test.mjs
+@@ -10,7 +10,7 @@
+  const states=[];let cursor=0,effects=[],tool;
+  const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return [states[i],v=>{states[i]=typeof v==='function'?v(states[i]):v;}];},useRef(initial){const i=cursor++;return states[i]||=( {current:initial});},useEffect(fn){effects.push(fn);}};
+  const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'};
+- const sandbox={document:{addEventListener(){},removeEventListener(){}},exports:{},require:id=>id==='react'?react:id==='react/jsx-runtime'?jsx:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='@/app/components/i18n/LanguageProvider'?{useLanguage:()=>({language:'en'})}:id.endsWith('.css')?{}:id==='./ToolDrawer'?{default:'drawer'}:require(id)};
++ const sandbox={window:{addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},exports:{},require:id=>id==='react'?react:id==='react/jsx-runtime'?jsx:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='@/app/components/i18n/LanguageProvider'?{useLanguage:()=>({language:'en'})}:id.endsWith('.css')?{}:id==='./ToolDrawer'?{default:'drawer'}:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:require(id)};
+  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
+  let scene={source:'dwg-engineering-interior',dwgRegion:1,width:8,depth:6,height:3.2,assets:[],openings:[],rooms:[{id:'scope',scopeOnly:true,polygon:[{x:0,y:0},{x:8,y:0},{x:8,y:6},{x:0,y:6}]}],footprint:[{x:0,y:0},{x:8,y:0},{x:8,y:6},{x:0,y:6}],walls:[{id:'w',start:{x:6,y:0},end:{x:6,y:6},thickness:.15}]};
+  const renderer={setFurnitureTool:v=>{tool=v;},setNamedView(){}};
+--- a/tests/walkthrough.test.mjs
++++ b/tests/walkthrough.test.mjs
+@@ -0,0 +1,15 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createWalkWorld,walkPositionAllowed,walkSpawn,moveWalk} from '../src/lib/walkthrough.mjs';
++const rect=(x,y,w,h)=>[{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h}];
++const scene=(extra={})=>({width:8,depth:6,height:2.8,footprint:rect(0,0,8,6),rooms:[{id:'r',polygon:rect(0,0,8,6)}],walls:[],openings:[],assets:[],...extra});
++const divider={id:'middle',start:{x:4,y:0},end:{x:4,y:6},thickness:.12};
++test('spawn fits inside the floor; source architecture and BOQ stay unchanged',()=>{const s=scene({boq:{total:517000}}),before=JSON.stringify(s),world=createWalkWorld(s),p=walkSpawn(world);assert.ok(walkPositionAllowed(world,p));assert.equal(JSON.stringify(s),before);assert.ok(!walkPositionAllowed(world,{x:.1,y:2}));assert.ok(!walkPositionAllowed(world,{x:9,y:2}));});
++test('substeps prevent a long move tunnelling through a thin wall',()=>{const w=createWalkWorld(scene({walls:[divider]}));const p=moveWalk(w,{x:3,y:2},2,0);assert.ok(p.x<3.73);assert.ok(walkPositionAllowed(w,p));});
++test('doorway passes, jambs stop movement, window and low door remain solid',()=>{for(const [type,height,pass]of[['door',2.1,true],['window',2.1,false],['door',1.5,false]]){const w=createWalkWorld(scene({walls:[divider],openings:[{wallId:'middle',offset:.5,width:1,type,height}]}));const p=moveWalk(w,{x:3,y:3},2,0);assert.equal(p.x>4,pass);assert.ok(moveWalk(w,{x:3,y:2.55},2,0).x<4);}});
++test('raised sill and missing opening geometry never create a false pass',()=>{for(const o of [{offset:.5,width:1,sillHeight:.2},{width:1},{offset:.5,width:.3}]){const w=createWalkWorld(scene({walls:[divider],openings:[{wallId:'middle',type:'door',...o}]}));assert.ok(moveWalk(w,{x:3,y:3},2,0).x<4);}});
++test('holes and outside boundary cannot be crossed or spawned inside',()=>{const w=createWalkWorld(scene({holes:[{polygon:rect(3,2,2,2)}]}));assert.ok(!walkPositionAllowed(w,{x:4,y:3}));assert.ok(!walkPositionAllowed(w,{x:2.9,y:3}));assert.ok(moveWalk(w,{x:2,y:3},2,0).x<2.8);assert.ok(walkPositionAllowed(w,walkSpawn(w)));});
++test('rotated furniture blocks the body; rug and ceiling items do not',()=>{const w=createWalkWorld(scene({assets:[{type:'cabinet',xMeters:4,yMeters:3,width:2,depth:1,height:2,rotation:45},{type:'rug',xMeters:1,yMeters:1,width:1,depth:1,height:.02},{type:'lamp',xMeters:2,yMeters:2,width:1,depth:1,height:1,zMeters:2.2}]}));assert.ok(!walkPositionAllowed(w,{x:4,y:3}));assert.ok(walkPositionAllowed(w,{x:1,y:1}));assert.ok(walkPositionAllowed(w,{x:2,y:2}));});
++test('sliding along a wall preserves clearance',()=>{const w=createWalkWorld(scene({walls:[divider]}));const p=moveWalk(w,{x:3.6,y:2},.8,1);assert.ok(p.x<3.73);assert.ok(p.y>2.9);});
++test('room union fallback permits crossing a shared seam, not the perimeter',()=>{const w=createWalkWorld(scene({footprint:undefined,rooms:[{polygon:rect(0,0,4,6)},{polygon:rect(4,0,4,6)}]}));assert.ok(walkPositionAllowed(w,{x:4,y:3}));assert.ok(!walkPositionAllowed(w,{x:0,y:3}));});
++test('non-central DWG view origin stays independent from collision coordinates',()=>{const w=createWalkWorld(scene({designDefaults:{viewOriginMeters:{x:120,y:-45}}}));assert.deepEqual(w.origin,{x:120,y:-45});assert.ok(walkPositionAllowed(w,walkSpawn(w)));});
++test('no clear position or invalid geometry fails explicitly',()=>{assert.throws(()=>createWalkWorld({width:8,depth:6}));const w=createWalkWorld(scene({assets:[{type:'cabinet',xMeters:4,yMeters:3,width:20,depth:20,height:2}]}));assert.throws(()=>walkSpawn(w),/No clear/);assert.throws(()=>createWalkWorld(scene({walls:[{start:{x:NaN,y:0},end:{x:1,y:2}}]})));assert.deepEqual(moveWalk(createWalkWorld(scene()),{x:1,y:1},NaN,0),{x:1,y:1});});
+--- a/tests/surface-materials.test.mjs
++++ b/tests/surface-materials.test.mjs
+@@ -159,7 +159,7 @@
+ test('render hooks decorate room, base plate, wall segments, window sills and door/window headers',()=>{
+   const viewer=fs.readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8');
+   for(const name of ['footprintResult.mesh','result.mesh','mesh','sillWall','headerWall','doorHeaderWall'])assert.ok(viewer.includes(`decorateSurfaceMesh(THREE,${name},`),name);
+-  assert.match(viewer,/onCommit=\{commitSurfaceScene\}/);assert.match(viewer,/disabled=\{materialToolActive\|\|designBusy/);
++  assert.match(viewer,/onCommit=\{commitSurfaceScene\}/);assert.match(viewer,/disabled=\{(?:walkActive\|\|)?materialToolActive\|\|designBusy/);
+   assert.match(viewer,/pickSurface:e=>rayFor\(e\)\?pickSurfaceHit/);
+ });
+ 
+--- a/tests/furniture-editor.test.mjs
++++ b/tests/furniture-editor.test.mjs
+@@ -82,7 +82,7 @@
+  const {transform,loadBindings}=require('next/dist/build/swc');await loadBindings();
+  const compiled=await transform(readFileSync('src/app/projects/[id]/FurnitureEditorPanel.jsx','utf8'),{filename:'FurnitureEditorPanel.jsx',jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'commonjs'}});
+  const drawer=await loadComponent('src/app/projects/[id]/ToolDrawer.jsx');
+- const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id.endsWith('.module.css')?{}:require(id)};
++ const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
+  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
+  for(const [locale,title] of [['en','Furniture studio'],['fa','پنل مبلمان'],['ar','لوحة الأثاث']])assert.ok(renderToStaticMarkup(React.createElement(language.default,{initialLanguage:locale},React.createElement(sandbox.exports.default,{scene:scene(),getRenderer:()=>null,onCommit:()=>{throw new Error('Unexpected save');}}))).includes(title));
+ });
+--- a/tests/compact-viewer-controls.test.mjs
++++ b/tests/compact-viewer-controls.test.mjs
+@@ -8,7 +8,7 @@
+  ]){
+   const source=readFileSync(`src/app/projects/[id]/${file}`,'utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']}),buttons=[];
+   function walk(node){if(!node||typeof node!=='object')return;
+-   if(node.type==='JSXOpeningElement'&&(node.name.name==='button'||node.attributes.some(a=>a.name?.name==='as'&&a.value?.value==='button'))){if(node.attributes.some(a=>a.name?.name==='data-model-tool'))return;const handler=node.attributes.find(a=>a.name?.name==='onClick');const text=handler?source.slice(handler.start,handler.end).replace(/\s/g,'').replace('onClick={()=>reconstruct3D()}','onClick={reconstruct3D}').replace('onClick={cameraMode}',"onClick={()=>setMode('camera')}").replace("onClick={()=>save({kind:'remove-many',assetIds:selectedIds})}","onClick={()=>save({kind:'remove',assetId:selected})}").replaceAll('isInteriorSource(active3DSource)','active3DSource==="schematic"'):'none';if(!text.includes('openDwgInterior')&&!text.includes('saveOpening')&&!text.includes("setMode('opening')"))buttons.push(text);}
++   if(node.type==='JSXOpeningElement'&&(node.name.name==='button'||node.attributes.some(a=>a.name?.name==='as'&&a.value?.value==='button'))){if(node.attributes.some(a=>a.name?.name==='data-model-tool'))return;const handler=node.attributes.find(a=>a.name?.name==='onClick');const text=handler?source.slice(handler.start,handler.end).replace(/\s/g,'').replace('onClick={()=>reconstruct3D()}','onClick={reconstruct3D}').replace('onClick={cameraMode}',"onClick={()=>setMode('camera')}").replace("onClick={()=>save({kind:'remove-many',assetIds:selectedIds})}","onClick={()=>save({kind:'remove',assetId:selected})}").replaceAll('setPersonalModel(null);','').replaceAll('isInteriorSource(active3DSource)','active3DSource==="schematic"'):'none';if(!text.includes('openDwgInterior')&&!text.includes('saveOpening')&&!text.includes("setMode('opening')"))buttons.push(text);}
+    for(const value of Object.values(node))if(Array.isArray(value))value.forEach(walk);else if(value&&typeof value==='object')walk(value);
+   }walk(ast);assert.equal(buttons.length,count,file);assert.equal(createHash('sha256').update(buttons.sort().join('\n')).digest('hex'),hash,file);
+  }
+--- a/tests/personal-asset-server.test.mjs
++++ b/tests/personal-asset-server.test.mjs
+@@ -0,0 +1,82 @@
++import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {build} from 'esbuild';import sharp from 'sharp';import {modelGlb} from './fixtures/personal-model-glb.mjs';
++fs.mkdirSync('tmp',{recursive:true});
++await build({entryPoints:['src/lib/serverPersonalAssets.js'],bundle:true,platform:'node',format:'esm',outfile:'tmp/personal-asset-server-tests.mjs',packages:'external',plugins:[{name:'isolated-auth',setup(b){
++ b.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'mock'}));
++ b.onResolve({filter:/serverBilling$/},()=>({path:'billing',namespace:'mock'}));b.onResolve({filter:/serverCommercial$/},()=>({path:'commercial',namespace:'mock'}));
++ b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:a.path==='billing'?`export async function account(request){const id=request.headers.get('x-user');if(!id)throw Object.assign(new Error('Sign in'),{status:401});return{id};}`:a.path==='commercial'?`export const commercialAdmin=()=>globalThis.__assetTest.db;export async function commercialContext(request,projectId,user){if(!globalThis.__assetTest.tables.projects.some(p=>p.id===projectId&&p.user_id===user.id))throw Object.assign(new Error('Denied'),{status:403});return {db:commercialAdmin()};}`:'',loader:'js'}));
++}}]});
++const server=await import('../tmp/personal-asset-server-tests.mjs');
++const user='10000000-0000-4000-8000-000000000001',foreign='10000000-0000-4000-8000-000000000002',projectId='20000000-0000-4000-8000-000000000001';
++const request=(who=user)=>new Request('https://ventra.test/api/personal-assets',{headers:who?{'x-user':who}:{}});
++let imageUrl;imageUrl='data:image/jpeg;base64,'+(await sharp({create:{width:64,height:64,channels:3,background:'#888888'}}).jpeg().toBuffer()).toString('base64');
++function setup(){
++ const tables={projects:[{id:projectId,user_id:user}],ventra_personal_assets:[],ventra_model_jobs:[],ventra_project_asset_links:[],ventra_project_members:[]},files=new Map();let posts=0,gets=0,task='PENDING',throwPost=false,glb=modelGlb(),failSave=false;
++ function from(name){let mode='select',value,filters=[],single=false,limit=Infinity,sort;
++ const q={select(){return q;},eq(k,v){filters.push(r=>r[k]===v);return q;},in(k,v){filters.push(r=>v.includes(r[k]));return q;},order(k){sort=k;return q;},limit(n){limit=n;return q;},maybeSingle(){single=true;return q;},insert(v){mode='insert';value=v;return q;},upsert(v){mode='upsert';value=v;return q;},update(v){mode='update';value=v;return q;},then(resolve,reject){try{
++ if(name==='ventra_personal_assets'&&failSave&&mode==='upsert')return resolve({error:{message:'offline'}});
++ let rows=tables[name].filter(r=>filters.every(f=>f(r)));
++ if(mode==='insert'){rows=[{created_at:new Date().toISOString(),...value}];tables[name].push(...rows);}
++ if(mode==='upsert'){const match=tables[name].find(r=>value.id?r.id===value.id:r.project_id===value.project_id&&r.asset_id===value.asset_id);if(match){Object.assign(match,value);rows=[match];}else{rows=[{created_at:new Date().toISOString(),...value}];tables[name].push(...rows);}}
++ if(mode==='update')rows.forEach(r=>Object.assign(r,value));if(sort)rows=rows.sort((a,b)=>String(b[sort]).localeCompare(String(a[sort])));rows=rows.slice(0,limit);resolve({data:single?rows[0]||null:rows,error:null});
++ }catch(e){reject(e);}}};return q;
++ }
++ const storage={createSignedUploadUrl:async path=>({data:{signedUrl:'https://storage.test/upload/'+path}}),download:async path=>files.has(path)?{data:new Blob([files.get(path)])}:{error:{message:'missing'}},upload:async(path,bytes,options)=>{if(!options.upsert&&files.has(path))return{error:{message:'exists'}};files.set(path,bytes);return{data:{path}};},createSignedUrl:async path=>({data:{signedUrl:'https://storage.test/'+path}}),remove:async paths=>{paths.forEach(p=>files.delete(p));return{data:[]};}};
++ const db={from,storage:{getBucket:async()=>({data:{public:false}}),from:()=>storage},rpc:async(name,p)=>{
++ const old=tables.ventra_model_jobs.find(j=>j.user_id===p.p_user&&j.image_hash===p.p_hash);if(old)return{data:{created:false,job:{...old}}};
++ if(tables.ventra_model_jobs.filter(j=>j.user_id===p.p_user).length>=p.p_limit||tables.ventra_model_jobs.some(j=>j.user_id===p.p_user&&['submitting','pending','unknown'].includes(j.status)))return{error:{code:'P0001',message:'Daily or pending job limit reached'}};
++ const job={id:crypto.randomUUID(),user_id:p.p_user,project_id:p.p_project,image_hash:p.p_hash,name:p.p_name,furniture_type:p.p_type,width:p.p_width,depth:p.p_depth,height:p.p_height,status:'submitting',created_at:new Date().toISOString(),progress:0};tables.ventra_model_jobs.push(job);return{data:{created:true,job:{...job}}};}};
++ const original=globalThis.fetch;globalThis.fetch=async(url,o)=>{
++ if(String(url).startsWith('https://api.meshy.ai')){if(o.method==='POST'){posts++;if(throwPost)throw Error('network');return Response.json({result:'provider-test'});}gets++;return Response.json({status:task,progress:25,model_urls:{glb:'https://assets.meshy.ai/model.glb'},consumed_credits:30});}
++ if(String(url)==='https://assets.meshy.ai/model.glb')return new Response(glb);throw Error('No external fetch is allowed in this test.');
++ };
++ globalThis.__assetTest={db,tables};process.env.MESHY_API_KEY='test-only-not-a-real-key';process.env.MESHY_GENERATION_ENABLED='true';
++ return {tables,files,get posts(){return posts;},get gets(){return gets;},set task(v){task=v;},set throwPost(v){throwPost=v;},set failSave(v){failSave=v;},set glb(v){glb=v;},restore(){globalThis.fetch=original;delete globalThis.__assetTest;delete process.env.MESHY_API_KEY;delete process.env.MESHY_GENERATION_ENABLED;}};
++}
++const body=()=>({projectId,imageUrl,name:'Photo chair',furniture_type:'chair'});
++test('photo POST → resumable polling → GLB in private library; duplicate photos never create another provider task',async()=>{
++ const h=setup();try{
++ const first=await server.startFurnitureModel(request(),body()),again=await server.startFurnitureModel(request(),body());assert.equal(first.job.id,again.job.id);assert.equal(h.posts,1);assert.equal(h.tables.ventra_model_jobs.length,1);
++ assert.equal((await server.pollFurnitureModel(request(),first.job.id)).job.progress,25);h.task='SUCCEEDED';const done=await server.pollFurnitureModel(request(),first.job.id);assert.equal(done.job.status,'ready');assert.equal(h.posts,1);assert.equal(done.asset.width,1.5);assert.equal(done.asset.depth,.75);
++ assert.ok(h.files.has(user+'/'+first.job.id+'/model.glb'));const library=await server.libraryList(request());assert.equal(library.assets.length,1);assert.ok(!JSON.stringify(h.tables).includes('https://assets.meshy.ai'));
++ const gets=h.gets;await server.pollFurnitureModel(request(),first.job.id);assert.equal(h.gets,gets);assert.equal(h.posts,1);
++ }finally{h.restore();}
++});
++test('authentication and asset ownership block foreign reads, polling, edits and project linking',async()=>{
++ const h=setup();try{
++ await assert.rejects(server.startFurnitureModel(request(null),body()),{status:401});assert.equal(h.posts,0);
++ const first=await server.startFurnitureModel(request(),body());await assert.rejects(server.pollFurnitureModel(request(foreign),first.job.id),{status:404});
++ h.task='SUCCEEDED';const {asset}=await server.pollFurnitureModel(request(),first.job.id);assert.equal((await server.libraryList(request(foreign))).assets.length,0);
++ await assert.rejects(server.libraryAsset(request(foreign),asset.id,projectId),{status:403});await assert.rejects(server.editLibraryAsset(request(foreign),{assetId:asset.id,name:'Foreign'}),{status:404});
++ await assert.rejects(server.linkLibraryAsset(request(foreign),{assetId:asset.id,projectId}),{status:403});
++ await server.linkLibraryAsset(request(),{assetId:asset.id,projectId});h.tables.ventra_project_members.push({project_id:projectId,user_id:foreign,role:'viewer'});
++ assert.ok((await server.libraryAsset(request(foreign),asset.id,projectId)).url);await assert.rejects(server.linkLibraryAsset(request(foreign),{assetId:asset.id,projectId}),{status:403});
++ }finally{h.restore();}
++});
++test('uncertain paid POST is recorded and never replayed by a duplicate upload or refresh',async()=>{
++ const h=setup();try{h.throwPost=true;await assert.rejects(server.startFurnitureModel(request(),body()),{code:'MODEL_SUBMISSION_UNKNOWN'});assert.equal(h.tables.ventra_model_jobs[0].status,'unknown');const same=await server.startFurnitureModel(request(),body());assert.equal(same.job.status,'unknown');await server.libraryList(request());assert.equal(h.posts,1);}finally{h.restore();}
++});
++test('a completed provider model survives a storage failure; polling again only retries delivery, never generation',async()=>{
++ const h=setup();try{const first=await server.startFurnitureModel(request(),body());h.task='SUCCEEDED';h.failSave=true;await assert.rejects(server.pollFurnitureModel(request(),first.job.id));assert.equal(h.tables.ventra_model_jobs[0].status,'pending');h.failSave=false;assert.equal((await server.pollFurnitureModel(request(),first.job.id)).job.status,'ready');assert.equal(h.posts,1);}finally{h.restore();}
++});
++test('invalid uploads and disabled generation stop before a paid provider call; materials use no model credits',async()=>{
++ const h=setup();try{delete process.env.MESHY_GENERATION_ENABLED;await assert.rejects(server.startFurnitureModel(request(),body()),{code:'MODEL_NOT_CONFIGURED'});assert.equal(h.posts,0);process.env.MESHY_GENERATION_ENABLED='true';await assert.rejects(server.startFurnitureModel(request(),{...body(),imageUrl:'https://private.test/image.png'}),{status:400});
++ const saved=await server.uploadLibraryMaterial(request(),body());assert.equal(saved.asset.kind,'material');assert.equal(h.posts,0);assert.equal(h.tables.ventra_model_jobs.length,0);assert.ok(h.files.has(user+'/'+saved.asset.id+'/texture.png'));
++ }finally{h.restore();}
++});
++test('unsafe generated GLB is not published or accepted as a normal model',async()=>{
++ const h=setup();try{const first=await server.startFurnitureModel(request(),body());h.task='SUCCEEDED';h.glb=modelGlb(d=>d.images=[{uri:'https://evil.test/a.png'}]);await assert.rejects(server.pollFurnitureModel(request(),first.job.id),{status:422});assert.equal(h.tables.ventra_personal_assets.length,0);assert.equal(h.tables.ventra_model_jobs[0].status,'failed');assert.equal(h.posts,1);}finally{h.restore();}
++});
++
++test('ready GLB import skips Meshy, validates file, persists proportions and deduplicates finalization',async()=>{
++ const h=setup();try{delete process.env.MESHY_API_KEY;delete process.env.MESHY_GENERATION_ENABLED;
++ const begun=await server.beginLibraryGlbUpload(request(),{projectId,size:modelGlb().length});assert.ok(begun.uploadUrl.includes(user+'/'+begun.assetId+'/model.glb'));
++ h.files.set(user+'/'+begun.assetId+'/model.glb',modelGlb());const body={projectId,assetId:begun.assetId,name:'iPhone scan',furniture_type:'cabinet'};
++ const result=await server.finishLibraryGlbUpload(request(),body);assert.equal(result.asset.kind,'model');assert.equal(result.asset.name,'iPhone scan');assert.equal(result.asset.width,1.5);assert.equal((await server.finishLibraryGlbUpload(request(),body)).asset.id,result.asset.id);assert.equal(h.tables.ventra_personal_assets.length,1);assert.equal(h.posts,0);
++ }finally{h.restore();}
++});
++test('GLB import blocks foreign projects/assets, oversized or malformed files before publication',async()=>{
++ const h=setup();try{
++ await assert.rejects(server.beginLibraryGlbUpload(request(foreign),{projectId,size:100}),{status:403});await assert.rejects(server.beginLibraryGlbUpload(request(),{projectId,size:26*1024*1024}),{status:413});
++ const begun=await server.beginLibraryGlbUpload(request(),{projectId,size:100});const path=user+'/'+begun.assetId+'/model.glb';h.files.set(path,new Uint8Array(100));await assert.rejects(server.finishLibraryGlbUpload(request(),{projectId,assetId:begun.assetId}),{status:422});assert.equal(h.files.has(path),false);assert.equal(h.tables.ventra_personal_assets.length,0);assert.equal(h.posts,0);
++ }finally{h.restore();}
++});
+--- a/tests/personal-assets.test.mjs
++++ b/tests/personal-assets.test.mjs
+@@ -0,0 +1,96 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as T from 'three';
++import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
++import {personalFurnitureModel,personalMaterial,validatePersonalGlb,personalDimensions} from '../src/lib/personalAssets.mjs';
++import {glbFurnitureDimensions} from '../src/lib/glbModelBounds.mjs';
++import {meshyFurnitureProvider,downloadMeshyGlb,modelGenerationConfig} from '../src/lib/meshyFurniture.mjs';
++import {applyFurnitureEdit} from '../src/lib/furnitureEditor.mjs';
++import {applyFurnitureBatch,copyFurnitureSnapshot} from '../src/lib/furnitureBatch.mjs';
++import {detailedFurnitureKey,createDetailedFurniture} from '../src/lib/detailedFurniture.mjs';
++import {applySurfaceMaterial,applySurfaceTextureSize,assertSurfaceOnlyEdit,surfaceTextureSize,surfaceKey,createSurfaceMeshMaterial,decorateSurfaceMesh,surfaceMaterialList} from '../src/lib/surfaceMaterials.mjs';
++import {createRequire} from 'node:module';
++const require=createRequire(import.meta.url),{createCanvas}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/@napi-rs/canvas');
++const id='10000000-0000-4000-8000-000000000001';
++import {modelGlb} from './fixtures/personal-model-glb.mjs';
++
++const scene=()=>({width:10,depth:10,height:3,rooms:[{id:'r',polygon:[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}]}],walls:[],openings:[],assets:[],footprint:[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10}],scheduled_quantities:{wall_area:120}});
++const row={id,kind:'model',name:'My chair',furniture_type:'chair',width:.5,depth:.5,height:1};
++test('static embedded GLB is accepted, parsed by the actual Three loader and scaled without guessing metres',async()=>{
++ const bytes=modelGlb(),doc=validatePersonalGlb(bytes);assert.deepEqual(glbFurnitureDimensions(doc),{width:1.5,depth:.75,height:1.5});
++ const model=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');assert.ok(model.scene.getObjectByProperty('type','Mesh'));
++});
++test('unsafe, incomplete, compressed and animated GLBs are rejected before loading',()=>{
++ for(const change of [d=>d.buffers[0].uri='https://127.0.0.1/private',d=>d.images=[{uri:'https://example.com/a.png'}],d=>d.extensionsRequired=['KHR_draco_mesh_compression'],d=>d.skins=[{}],d=>d.animations=[{}],d=>d.accessors[0].count=1e9,d=>d.bufferViews[0].byteLength=1e8])assert.throws(()=>validatePersonalGlb(modelGlb(change)));
++ const truncated=modelGlb().subarray(0,50);assert.throws(()=>validatePersonalGlb(truncated));
++ const bad=modelGlb();bad.writeUInt32LE(123,0);assert.throws(()=>validatePersonalGlb(bad));
++});
++test('GLB dimensions account for transforms and reject graph cycles and empty geometry',()=>{
++ assert.deepEqual(glbFurnitureDimensions(validatePersonalGlb(modelGlb(d=>d.nodes[0].scale=[1,2,1]))),{width:.75,depth:.375,height:1.5});
++ assert.throws(()=>glbFurnitureDimensions(validatePersonalGlb(modelGlb(d=>d.nodes[0].children=[0]))));
++ assert.throws(()=>glbFurnitureDimensions(validatePersonalGlb(modelGlb(d=>d.accessors[0].max=d.accessors[0].min))));
++});
++test('library references contain stable IDs, never provider URLs or signed credentials',()=>{
++ const m=personalFurnitureModel(row);assert.equal(m.customModelId,id);assert.equal(m.id,'personal:'+id);assert.equal(m.preserveModelColors,true);assert.equal(detailedFurnitureKey({customModelId:id,type:'chair'}),'personal:'+id);
++ assert.throws(()=>personalFurnitureModel({...row,id:'../../foreign'}));assert.throws(()=>personalDimensions({width:Infinity}));assert.throws(()=>personalDimensions({height:4}));
++ assert.equal(personalMaterial({...row,kind:'material'}).assetId,id);
++});
++test('personal model placement uses the existing room/collision checks and preserves architecture and BOQ',()=>{
++ const before=scene(),next=applyFurnitureEdit(before,{kind:'add',catalogId:'personal:'+id,personalModel:row,point:{x:2,y:2}});
++ assert.equal(next.assets[0].customModelId,id);assert.equal(next.assets[0].excludeFromTakeoff,true);assert.equal(next.assets[0].width,.5);assert.equal(next.assets[0].preserveModelColors,true);
++ for(const key of ['walls','openings','rooms','footprint','scheduled_quantities'])assert.deepEqual(next[key],before[key]);assert.equal(before.assets.length,0);
++ assert.throws(()=>applyFurnitureEdit(before,{kind:'add',catalogId:'personal:'+id,personalModel:row,point:{x:15,y:2}}));
++ const copied=applyFurnitureBatch(next,{kind:'copy-many',snapshot:copyFurnitureSnapshot(next,[next.assets[0].id]),point:{x:5,y:5}});assert.equal(copied.assets[1].customModelId,id);
++ const changed=applyFurnitureEdit(next,{kind:'replace',assetId:next.assets[0].id,catalogId:'chair'});assert.equal(changed.assets[0].customModelId,undefined);
++});
++test('personal detailed models load once per renderer and use authenticated URL resolution with project scope',async()=>{
++ const source=new T.Group(),proxy=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshBasicMaterial());proxy.userData.assetId='placed';source.add(proxy);source.updateMatrixWorld(true);
++ let calls=0,urlCalls=0;const visual=new T.Scene(),mirrors=new Map([[proxy,{visible:true}]]),data={...scene(),projectId:'project-a',assets:[{...personalFurnitureModel(row),id:'placed',xMeters:2,yMeters:3,rotation:0}]};
++ const furniture=createDetailedFurniture(visual,data,()=>{}, {loadAsync:async url=>{calls++;assert.equal(url,'https://signed.example/model');return {scene:new T.Mesh(new T.BoxGeometry(1,2,1),new T.MeshStandardMaterial({color:0xff0000}))};}},async(assetId,project)=>{urlCalls++;assert.equal(assetId,id);assert.equal(project,'project-a');return 'https://signed.example/model';});
++ furniture.sync(source,mirrors);furniture.sync(source,mirrors);await furniture.ready();await new Promise(r=>setTimeout(r,0));furniture.sync(source,mirrors);
++ assert.equal(calls,1);assert.equal(urlCalls,1);assert.equal(mirrors.get(proxy).visible,false);assert.ok(visual.children.length);furniture.dispose();assert.equal(visual.children.length,0);
++});
++test('generation is opt-in and provider POST is never automatically retried after an uncertain response',async()=>{
++ assert.equal(modelGenerationConfig({MESHY_API_KEY:'x'}).configured,false);assert.equal(modelGenerationConfig({MESHY_API_KEY:'x',MESHY_GENERATION_ENABLED:'true'}).configured,true);
++ let calls=0;const p=meshyFurnitureProvider({key:'not-a-real-key',fetcher:async()=>{calls++;throw Error('disconnect');}});
++ await assert.rejects(p.create('data:image/png;base64,AAAA'),{code:'MODEL_SUBMISSION_UNKNOWN'});assert.equal(calls,1);
++});
++test('provider request is pinned, textured and bounded; status polling is a separate GET',async()=>{
++ const seen=[];const provider=meshyFurnitureProvider({key:'test-only',fetcher:async(url,o)=>{seen.push({url,...o});return Response.json(o.method==='POST'?{result:'job-123'}:{status:'PENDING',progress:1});}});
++ assert.equal(await provider.create('data:image/jpeg;base64,AAAA'),'job-123');await provider.get('job-123');
++ const request=JSON.parse(seen[0].body);assert.equal(request.target_polycount,15000);assert.equal(request.texture_resolution,'2k');assert.equal(request.should_texture,true);assert.equal(seen[1].method,'GET');
++});
++test('provider files are limited to HTTPS Meshy hosts and a bounded stream, with no redirect following',async()=>{
++ for(const url of ['http://assets.meshy.ai/model.glb','https://127.0.0.1/private','https://assets.meshy.ai.evil.test/a'])await assert.rejects(downloadMeshyGlb(url,()=>{throw Error('must not fetch');}));
++ let calls=0;const bytes=await downloadMeshyGlb('https://assets.meshy.ai/a',async(u,o)=>{calls++;assert.equal(o.redirect,'error');return new Response(modelGlb());});assert.ok(bytes.length);assert.equal(calls,1);
++ await assert.rejects(downloadMeshyGlb('https://assets.meshy.ai/a',async()=>new Response(new Uint8Array(20)),10));
++});
++const front={kind:'wall',id:'w',side:'y+'},back={kind:'wall',id:'w',side:'y-'};
++const wallScene=()=>({...scene(),walls:[{id:'w',type:'internal'}]});
++test('texture size persists per clicked face and never changes the back wall or quantities',()=>{
++ const before=applySurfaceMaterial(applySurfaceMaterial(wallScene(),front,'brick-red'),back,'wood-oak');
++ const next=applySurfaceTextureSize(before,front,.25);assertSurfaceOnlyEdit(before,next);assert.equal(surfaceTextureSize(next,front),.25);assert.equal(surfaceTextureSize(next,back),2);
++ assert.deepEqual(next.scheduled_quantities,before.scheduled_quantities);assert.equal(JSON.parse(JSON.stringify(next)).surfaceFinishes.scales[surfaceKey(front)],.25);
++ for(const value of [0,-1,Infinity,NaN,21])assert.throws(()=>applySurfaceTextureSize(before,front,value));
++ assertSurfaceOnlyEdit(next,{...next,surfaceFinishes:before.surfaceFinishes});
++});
++test('legacy whole-wall texture size migrates without changing the other five faces; reset is local',()=>{
++ const wall={kind:'wall',id:'w'},before=applySurfaceTextureSize(applySurfaceMaterial(wallScene(),wall,'wood-oak'),wall,4);
++ const next=applySurfaceTextureSize(before,front,.5);assert.equal(surfaceTextureSize(next,back),4);assert.equal(surfaceTextureSize(next,front),.5);
++ const reset=applySurfaceMaterial(next,front,null);assert.equal(reset.surfaceFinishes.scales[surfaceKey(front)],undefined);assert.equal(surfaceTextureSize(reset,back),4);
++});
++test('smaller physical texture size increases actual UV repeat density',()=>{
++ const large=createSurfaceMeshMaterial(T,'brick-red',()=>createCanvas(256,256),{tileSize:2}),fine=createSurfaceMeshMaterial(T,'brick-red',()=>createCanvas(256,256),{tileSize:.25});
++ assert.equal(large.map.repeat.x,.5);assert.equal(fine.map.repeat.x,4);assert.equal(fine.map.repeat.y,4);large.map.dispose();fine.map.dispose();large.dispose();fine.dispose();
++});
++test('face material cache includes scale, so changing one side never mutates a shared swatch',()=>{
++ const a={name:'large'},b={name:'fine'},cache=new Map([['wall:brick-red',a],['wall:brick-red:0.25',b]]);
++ let data=applySurfaceMaterial(applySurfaceMaterial(wallScene(),front,'brick-red'),back,'brick-red');data=applySurfaceTextureSize(data,front,.25);
++ const mesh={material:{name:'original'},geometry:{faces:[{normal:{x:0,y:1,z:0}},{normal:{x:0,y:-1,z:0}}]}};
++ decorateSurfaceMesh({},mesh,{kind:'wall',id:'w'},data,cache);assert.equal(surfaceMaterialList(mesh.material)[2],b);assert.equal(surfaceMaterialList(mesh.material)[3],a);
++});
++test('personal textures save stable references, use the normal surface guard and reject injected URLs',()=>{
++ const m=personalMaterial({id,kind:'material',name:'My stone'}),before=wallScene(),base={...before,surfaceFinishes:{version:1,assignments:{},customMaterials:{[m.id]:m}}};
++ const next=applySurfaceMaterial(base,front,m.id);assertSurfaceOnlyEdit(before,next);assert.equal(next.surfaceFinishes.assignments[surfaceKey(front)],m.id);
++ assert.throws(()=>assertSurfaceOnlyEdit(before,{...next,surfaceFinishes:{...next.surfaceFinishes,customMaterials:{[m.id]:{...m,url:'https://evil.test'}}}}));
++});
+--- a/tests/fixtures/personal-model-glb.mjs
++++ b/tests/fixtures/personal-model-glb.mjs
+@@ -0,0 +1,6 @@
++export function modelGlb(change=()=>{}){
++ const positions=new Float32Array([-1,0,-.5,1,0,-.5,0,2,.5]);
++ const doc={asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{primitives:[{attributes:{POSITION:0}}]}],buffers:[{byteLength:positions.byteLength}],bufferViews:[{buffer:0,byteLength:positions.byteLength}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[-1,0,-.5],max:[1,2,.5]}]};change(doc);
++ const raw=JSON.stringify(doc),json=Buffer.from(raw+' '.repeat((4-Buffer.byteLength(raw)%4)%4)),out=Buffer.alloc(12+8+json.length+8+positions.byteLength);
++ out.writeUInt32LE(0x46546c67,0);out.writeUInt32LE(2,4);out.writeUInt32LE(out.length,8);out.writeUInt32LE(json.length,12);out.writeUInt32LE(0x4e4f534a,16);json.copy(out,20);out.writeUInt32LE(positions.byteLength,20+json.length);out.writeUInt32LE(0x004e4942,24+json.length);Buffer.from(positions.buffer).copy(out,28+json.length);return out;
++}
+--- a/database/personal-assets.sql
++++ b/database/personal-assets.sql
+@@ -0,0 +1,49 @@
++-- Additive feature only. No existing project, BOQ, price or auth policy changes.
++create table if not exists public.ventra_personal_assets (
++ id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
++ kind text not null check(kind in ('model','material')), name text not null check(length(name) between 1 and 100),
++ furniture_type text not null default 'sofa' check(furniture_type in ('sofa','chair','bed','dining_table','cabinet','plant','desk','coffee_table')),
++ width numeric not null default 1 check(width between 0.05 and 6), depth numeric not null default 1 check(depth between 0.05 and 4), height numeric not null default 1 check(height between 0.05 and 3),
++ mime text not null, created_at timestamptz not null default now()
++);
++create index if not exists ventra_personal_assets_user on public.ventra_personal_assets(user_id,created_at desc);
++create table if not exists public.ventra_model_jobs (
++ id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
++ project_id uuid not null references public.projects(id) on delete cascade, image_hash text not null,
++ name text not null, furniture_type text not null default 'sofa', width numeric not null default 1, depth numeric not null default 1, height numeric not null default 1,
++ status text not null default 'submitting' check(status in ('submitting','pending','ready','failed','unknown')),
++ provider_id text, progress integer not null default 0, error text, credits numeric, created_at timestamptz not null default now(),
++ unique(user_id,image_hash)
++);
++create index if not exists ventra_model_jobs_daily on public.ventra_model_jobs(user_id,created_at desc);
++create table if not exists public.ventra_project_asset_links (
++ project_id uuid not null references public.projects(id) on delete cascade, asset_id uuid not null references public.ventra_personal_assets(id) on delete cascade,
++ primary key(project_id,asset_id)
++);
++create index if not exists ventra_project_asset_links_asset on public.ventra_project_asset_links(asset_id);
++alter table public.ventra_personal_assets enable row level security;
++alter table public.ventra_model_jobs enable row level security;
++alter table public.ventra_project_asset_links enable row level security;
++-- All access goes through authenticated server routes with explicit owner/project checks.
++revoke all on public.ventra_personal_assets,public.ventra_model_jobs,public.ventra_project_asset_links from public,anon,authenticated;
++grant select,insert,update,delete on public.ventra_personal_assets,public.ventra_model_jobs,public.ventra_project_asset_links to service_role;
++create or replace function public.ventra_claim_model_job(p_user uuid,p_project uuid,p_hash text,p_name text,p_type text,p_width numeric,p_depth numeric,p_height numeric,p_limit integer,p_global_limit integer)
++returns jsonb language plpgsql security invoker set search_path='' as $$
++declare job public.ventra_model_jobs; used integer;
++begin
++ perform pg_catalog.pg_advisory_xact_lock(140,140);
++ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,140));
++ select * into job from public.ventra_model_jobs where user_id=p_user and image_hash=p_hash;
++ if found then return jsonb_build_object('created',false,'job',to_jsonb(job)); end if;
++ select count(*) into used from public.ventra_model_jobs where user_id=p_user and created_at>=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC';
++ if used>=least(greatest(p_limit,1),10) then raise exception 'Daily model generation limit reached.' using errcode='P0001'; end if;
++ if exists(select 1 from public.ventra_model_jobs where user_id=p_user and status in ('submitting','pending','unknown')) then raise exception 'A model request is already pending. Check its status first.' using errcode='P0001'; end if;
++ if (select count(*) from public.ventra_model_jobs where created_at>=date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')>=least(greatest(p_global_limit,1),100) then raise exception 'Site daily model limit reached.' using errcode='P0001'; end if;
++ insert into public.ventra_model_jobs(user_id,project_id,image_hash,name,furniture_type,width,depth,height) values(p_user,p_project,p_hash,p_name,p_type,p_width,p_depth,p_height) returning * into job;
++ return jsonb_build_object('created',true,'job',to_jsonb(job));
++end $$;
++revoke all on function public.ventra_claim_model_job(uuid,uuid,text,text,text,numeric,numeric,numeric,integer,integer) from public,anon,authenticated;
++grant execute on function public.ventra_claim_model_job(uuid,uuid,text,text,text,numeric,numeric,numeric,integer,integer) to service_role;
++insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
++ values('ventra-personal-assets','ventra-personal-assets',false,26214400,array['model/gltf-binary','image/png','image/jpeg','image/webp'])
++ on conflict(id) do nothing;
+--- a/.env.example
++++ b/.env.example
+@@ -11,3 +11,9 @@
+ APS_CLIENT_ID=
+ APS_CLIENT_SECRET=
+ SUPABASE_SERVICE_ROLE_KEY=
++
++# Personal photo-to-3D library (server only; separate paid Meshy account)
++MESHY_API_KEY=
++MESHY_GENERATION_ENABLED=false
++MESHY_DAILY_LIMIT=2
++MESHY_GLOBAL_DAILY_LIMIT=10

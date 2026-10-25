@@ -1,0 +1,2 @@
+Live Supabase project aomgraarcstyqbrdpbbu: additive schema installed. All 3 tables RLS=true, anon/client SELECT=false, service CRUD=true. RPC anon EXECUTE=false, service=true. Bucket private, limit 26214400 bytes. Transactional claim/deduplication test passed; rollback left 0 test rows. Advisor: new tables report INFO RLS-without-policy, intentional server-only access; no new WARN findings. Existing unrelated warnings were not modified.
+https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy

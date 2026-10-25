@@ -1,0 +1,49 @@
+{
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "pipes": [
+    {
+      "code": "PDF-WASTE_PIPE_LENGTH",
+      "metric": "waste_pipe_length",
+      "quantity": 60,
+      "unit": "m",
+      "rate": 58,
+      "amount": 3480,
+      "assumed": {
+        "pipe_material": "UPVC",
+        "diameter_mm": 110
+      },
+      "status": "provisional_estimate"
+    },
+    {
+      "code": "PDF-WATER_PIPE_LENGTH",
+      "metric": "water_pipe_length",
+      "quantity": 80,
+      "unit": "m",
+      "rate": 27,
+      "amount": 2160,
+      "assumed": {
+        "pipe_material": "PPR",
+        "diameter_mm": 20
+      },
+      "status": "provisional_estimate"
+    },
+    {
+      "code": "VNT-SCOPE-AC-PIPE",
+      "metric": "ac_pipe_length",
+      "quantity": 90,
+      "unit": "m",
+      "rate": 72.5,
+      "amount": 6525,
+      "assumed": {
+        "pipe_material": "COPPER",
+        "diameter_pair_mm": "6.35+12.7",
+        "insulation_mm": 9
+      },
+      "status": "provisional_estimate"
+    }
+  ],
+  "priced": 21,
+  "pending": 29,
+  "subtotal": 275439.75
+}

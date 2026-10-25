@@ -1,0 +1,1558 @@
+{
+  "catalogSource": "Current Supabase active rows and rules read after catalog update",
+  "activeCatalogRows": 3795,
+  "activeRules": 52,
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "priced": 51,
+  "unpricedMeasured": 0,
+  "subtotal": 494205.81,
+  "vatPercent": 5,
+  "vat": 24710.29,
+  "budgetTotal": 518916.1,
+  "rows": [
+    {
+      "code": "SITE-001",
+      "metric": "excavation_volume",
+      "quantity": 72.2,
+      "unit": "m3",
+      "rate": 39,
+      "amount": 2815.8,
+      "description": "Excavation in normal soil including loading",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: 20 foundations; Excavation pit each 1.90 x 1.90 x 1.00.. Independently calculated: add exc_pits: * 20 count [20 foundation locations on the 5 x 4 grid.] * 1.9 m [Excavation pit each: 1.90 x 1.90 x 1.00.] * 1.9 m [Excavation pit each: 1.90 x 1.90 x 1.00.] * 1 m [Excavation pit each: 1.90 x 1.90 x 1.00.] = 72.2 m3. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "CON-004",
+      "metric": "rebar_kg",
+      "quantity": 12.168138271604938,
+      "unit": "ton",
+      "rate": 3550,
+      "amount": 43196.89,
+      "description": "High yield steel reinforcement bars including cutting bending and fixing",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 8; Native complete bar table; diameter(mm)^2 /162 kg/m; no intermediate rounding: foundation bottom: 480 × 1.4 m × 12 mm squared / 162; foundation top: 480 × 1.4 m × 10 mm squared / 162; pedestal vertical: 160 × 1.2 m × 16 mm squared / 162; pedestal ties: 100 × 1.64 m × 8 mm squared / 162; column vertical: 312 × 3.7 m × 16 mm squared / 162; column ties: 780 × 0.96 m × 8 mm squared / 162; beam longitudinal incl. laps: 1 × 1044 m × 16 mm squared / 162; beam stirrups: 1185 × 1.32 m × 8 mm squared / 162; slab mats (both slabs): 1 × 7200 m × 12 mm squared / 162. No unscheduled reinforcement or wastage added. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "CON-005",
+      "metric": "foundation_formwork_area",
+      "quantity": 75.6,
+      "unit": "m2",
+      "rate": 78,
+      "amount": 5896.8,
+      "description": "Formwork to foundations including fixing and removal",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 3, 6; Page 6 A04: FORMWORK footing/pedestal sides only. Page 3 S01: footing 1.50 x 1.50 x 0.45; pedestal .45 x .45 x .60; 20 locations.. Independently calculated: add footing_sides: * 20 count [20 foundations.] * 4 scalar [Footing sides: four vertical faces.] * 1.5 m [Footing plan side 1.50 m.] * 0.45 m [Footing depth 0.45 m.]; add pedestal_sides: * 20 count [20 pedestals.] * 4 scalar [Pedestal sides: four vertical faces.] * 0.45 m [Pedestal side 0.45 m.] * 0.6 m [Pedestal height 0.60 m.] = 75.6 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "CON-006",
+      "metric": "column_formwork_area",
+      "quantity": 138.06,
+      "unit": "m2",
+      "rate": 90,
+      "amount": 12425.4,
+      "description": "Formwork to columns including fixing and removal",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 3, 6; Page 6 A04: columns full four sides at clear length 2.95. Page 3 S01: 20 GF + 19 FF column-storeys; column 0.30 x 0.30.. Independently calculated: add column_sides_all: * 39 count [20 GF + 19 FF column-storeys.] * 4 scalar [Four sides per column.] * 0.3 m [Column side 0.30 m.] * 2.95 m [Clear column length 2.95 m.] = 138.06 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "CON-007",
+      "metric": "beam_formwork_area",
+      "quantity": 118.5,
+      "unit": "m2",
+      "rate": 94,
+      "amount": 11139,
+      "description": "Formwork to beams including fixing and removal",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 3, 6; Page 6 A04: beam formwork contains ONLY two downstand sides; no duplicate beam soffit. Page 3 S01: Bill only .25 downstand; FF beams 120 m; Roof beams 117 m.. Independently calculated: add ff_beam_sides: * 120 m [First-floor beam centreline total: 120 m.] * 2 scalar [Two downstand sides.] * 0.25 m [Downstand depth 0.25 m.]; add roof_beam_sides: * 117 m [Roof beam total: 117 m.] * 2 scalar [Two downstand sides.] * 0.25 m [Downstand depth 0.25 m.] = 118.5 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "CON-008",
+      "metric": "slab_formwork_area",
+      "quantity": 360,
+      "unit": "m2",
+      "rate": 84,
+      "amount": 30240,
+      "description": "Formwork to suspended slabs including props",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 2, 3; Page 6 A04: Slab soffit includes beam undersides. Page 3 S01: First slab omit 3 x 4 stair void; Roof slab omit 3 x 4 terrace. Ground slab on grade has no soffit.. Independently calculated: add ff_slab_soffit_gross: * 16 m [Envelope 16.00 m.] * 12 m [Envelope 12.00 m.]; subtract ff_slab_soffit_void: * 3 m [Stair void 3 x 4 m.] * 4 m [Stair void 3 x 4 m.]; add roof_slab_soffit_gross: * 16 m [Envelope 16.00 m.] * 12 m [Envelope 12.00 m.]; subtract roof_slab_soffit_terrace: * 3 m [Terrace 3 x 4 m opening.] * 4 m [Terrace 3 x 4 m opening.] = 360 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-BEAM_VOLUME",
+      "metric": "beam_volume",
+      "quantity": 14.8125,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 5925,
+      "description": "Beam downstand concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "beam_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-BEAM",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "beam_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Beam downstand concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Beam concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: Beam overall .25 x .45; slab .20; bill only .25 downstand. First-floor beam length 120 m; Roof beam length 117 m.. Independently calculated: add ff_beams: * 120 m [First-floor beam centreline total: 120 m.] * 0.25 m [Beam width .25 m.] * 0.25 m [Bill ONLY .25 downstand depth (0.45-0.20).]; add roof_beams: * 117 m [Roof beam total: 117 m.] * 0.25 m [Beam width .25 m.] * 0.25 m [Bill ONLY .25 downstand depth (0.45-0.20).] = 14.8125 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Beam downstand concrete C25; rate item VNT-DEF-BEAM; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-COLUMN_VOLUME",
+      "metric": "column_volume",
+      "quantity": 10.3545,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 4141.8,
+      "description": "Column concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "column_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-COLUMN",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "column_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Column concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Column concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: Columns .30 x .30; net clear 2.95 m. 20 GF + 19 FF column-storeys (omit FF column at E1).. Independently calculated: add columns_all_storeys: * 39 count [20 GF + 19 FF column-storeys.] * 0.3 m [Columns: .30 x .30.] * 0.3 m [Columns: .30 x .30.] * 2.95 m [Columns net clear 2.95 m.] = 10.3545 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Column concrete C25; rate item VNT-DEF-COLUMN; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-FIRST_SLAB_VOLUME",
+      "metric": "first_slab_volume",
+      "quantity": 36.00000000000001,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 14400,
+      "description": "First floor slab concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "first_slab_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-FIRST-SLAB",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "first_slab_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "First floor slab concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "First floor slab concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 2, 3; Page 3 S01: First slab .20; omit 3 x 4 stair void.. Independently calculated: add ff_slab_gross: * 16 m [Envelope 16.00 m.] * 12 m [Envelope 12.00 m.] * 0.2 m [First slab: .20.]; subtract ff_slab_void: * 3 m [Stair void 3 x 4 m.] * 4 m [Stair void 3 x 4 m.] * 0.2 m [First slab: .20.] = 36.00000000000001 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): First floor slab concrete C25; rate item VNT-DEF-FIRST-SLAB; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-FOUNDATION_VOLUME",
+      "metric": "foundation_volume",
+      "quantity": 20.25,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 8100,
+      "description": "Foundation concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "foundation_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-FOUNDATION",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "foundation_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Foundation concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Foundation concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: RC footing each 1.50 x 1.50 x 0.45; 20 locations.. Independently calculated: add rc_footings: * 20 count [20 foundation locations.] * 1.5 m [RC footing each: 1.50 x 1.50 x 0.45.] * 1.5 m [RC footing each: 1.50 x 1.50 x 0.45.] * 0.45 m [RC footing each: 1.50 x 1.50 x 0.45.] = 20.25 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Foundation concrete C25; rate item VNT-DEF-FOUNDATION; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-GROUND_SLAB_VOLUME",
+      "metric": "ground_slab_volume",
+      "quantity": 28.799999999999997,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 11520,
+      "description": "Ground floor slab concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "ground_slab_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-GROUND-SLAB",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "ground_slab_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Ground floor slab concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Ground slab concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 3; Page 3 S01: GF slab .15 thick, entire 16 x 12.. Independently calculated: add gf_slab: * 1 count [Single ground floor slab.] * 16 m [Envelope 16.00 m.] * 12 m [Envelope 12.00 m.] * 0.15 m [GF slab: .15 thick.] = 28.799999999999997 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Ground floor slab concrete C25; rate item VNT-DEF-GROUND-SLAB; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-PCC_VOLUME",
+      "metric": "pcc_volume",
+      "quantity": 5.78,
+      "unit": "m3",
+      "rate": 340,
+      "amount": 1965.2,
+      "description": "Plain concrete blinding C15 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "pcc_volume",
+        "assumed": {
+          "concrete_grade": "C15"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-PCC-BLINDING",
+        "catalogUnit": "m3",
+        "catalogRate": 340,
+        "rateBasis": "Existing user catalog CON-001: 340 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "pcc_volume",
+          "specification": {
+            "concrete_grade": "C15"
+          },
+          "label": "Plain concrete blinding C15",
+          "rate_basis": "Existing user catalog CON-001: 340 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-001"
+        },
+        "originalDescription": "Concrete blinding — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: Blinding each 1.70 x 1.70 x 0.10; 20 foundations.. Independently calculated: add pcc_blinding: * 20 count [20 foundation locations.] * 1.7 m [Blinding each: 1.70 x 1.70 x 0.10.] * 1.7 m [Blinding each: 1.70 x 1.70 x 0.10.] * 0.1 m [Blinding each: 1.70 x 1.70 x 0.10.] = 5.78 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Plain concrete blinding C15; rate item VNT-DEF-PCC-BLINDING; Existing user catalog CON-001: 340 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-PEDESTAL_VOLUME",
+      "metric": "pedestal_volume",
+      "quantity": 2.4299999999999997,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 972,
+      "description": "Pedestal concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "pedestal_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-PEDESTAL",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "pedestal_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Pedestal concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Pedestal concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Page 3 S01: Pedestal each 0.45 x 0.45 x 0.60; 20 locations.. Independently calculated: add rc_pedestals: * 20 count [20 foundation locations.] * 0.45 m [Pedestal each: .45 x .45 x .60.] * 0.45 m [Pedestal each: .45 x .45 x .60.] * 0.6 m [Pedestal each: .45 x .45 x .60.] = 2.4299999999999997 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Pedestal concrete C25; rate item VNT-DEF-PEDESTAL; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "PDF-ROOF_SLAB_VOLUME",
+      "metric": "roof_slab_volume",
+      "quantity": 36.00000000000001,
+      "unit": "m3",
+      "rate": 400,
+      "amount": 14400,
+      "description": "Roof slab concrete C25 [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "roof_slab_volume",
+        "assumed": {
+          "concrete_grade": "C25"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-ROOF-SLAB",
+        "catalogUnit": "m3",
+        "catalogRate": 400,
+        "rateBasis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "roof_slab_volume",
+          "specification": {
+            "concrete_grade": "C25"
+          },
+          "label": "Roof slab concrete C25",
+          "rate_basis": "Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.",
+          "reference_item_code": "CON-002"
+        },
+        "originalDescription": "Roof slab concrete — grade requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 2, 3; Page 3 S01: Roof slab .20; omit 3 x 4 terrace.. Independently calculated: add roof_slab_gross: * 16 m [Envelope 16.00 m.] * 12 m [Envelope 12.00 m.] * 0.2 m [Roof slab: .20.]; subtract roof_slab_terrace_omit: * 3 m [Terrace opening 3 x 4 m.] * 4 m [Terrace opening 3 x 4 m.] * 0.2 m [Roof slab: .20.] = 36.00000000000001 m3. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Roof slab concrete C25; rate item VNT-DEF-ROOF-SLAB; Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation. Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed."
+    },
+    {
+      "code": "MAS-003",
+      "metric": "external_block_area",
+      "quantity": 305.7200000000001,
+      "unit": "m2",
+      "rate": 66,
+      "amount": 20177.52,
+      "description": "200mm thick concrete block wall including mortar",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Net wall face area: source lengths × heights minus each hosted opening once. Independently calculated: add floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00]; subtract floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00]; add floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00]; add floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00]; add floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40]; subtract floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00]; add floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40]; subtract floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00]; subtract floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40]; add floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00]; subtract floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00]; add floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] = 305.7200000000001 m2. Source transcription requires review. | Source specification p.1: External: 200 mm | Source specification p.2: External: 200 mm | Source specification p.6: WALLS: external 200 mm REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-INTERNAL_BLOCK_AREA",
+      "metric": "internal_block_area",
+      "quantity": 336.4500000000001,
+      "unit": "m2",
+      "rate": 53.2,
+      "amount": 17899.14,
+      "description": "120mm concrete internal blockwork including mortar [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "internal_block_area",
+        "assumed": {
+          "block_material": "concrete"
+        },
+        "sourceSpecifications": [
+          {
+            "property": "thickness_mm",
+            "value": 120,
+            "pages": [
+              1,
+              2,
+              6
+            ]
+          }
+        ],
+        "catalogItemCode": "VNT-DEF-INTERNAL-BLOCK-120",
+        "catalogUnit": "m2",
+        "catalogRate": 53.2,
+        "rateBasis": "Interpolated budget rate between existing MAS-001 100mm at 50 and MAS-002 150mm at 58: 50+(120-100)/(150-100)*(58-50)=53.20 AED/m2; not a supplier quote",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "internal_block_area",
+          "specification": {
+            "thickness_mm": 120,
+            "block_material": "concrete"
+          },
+          "label": "120mm concrete internal blockwork including mortar",
+          "rate_basis": "Interpolated budget rate between existing MAS-001 100mm at 50 and MAS-002 150mm at 58: 50+(120-100)/(150-100)*(58-50)=53.20 AED/m2; not a supplier quote",
+          "conditions": "Net measured wall area; plaster and paint excluded.",
+          "source_required": [
+            "thickness_mm"
+          ]
+        },
+        "originalDescription": "Internal blockwork — specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Net wall face area: source lengths × heights minus each hosted opening once. Independently calculated: add floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00]; add floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00]; add floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00]; subtract floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; add floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00]; add floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m]; subtract floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00]; add floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] = 336.4500000000001 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): 120mm concrete internal blockwork including mortar; rate item VNT-DEF-INTERNAL-BLOCK-120; Interpolated budget rate between existing MAS-001 100mm at 50 and MAS-002 150mm at 58: 50+(120-100)/(150-100)*(58-50)=53.20 AED/m2; not a supplier quote. Net measured wall area; plaster and paint excluded."
+    },
+    {
+      "code": "PDF-ROOF_WATERPROOFING_AREA",
+      "metric": "roof_waterproofing_area",
+      "quantity": 180,
+      "unit": "m2",
+      "rate": 46,
+      "amount": 8280,
+      "description": "Roof torch-applied bitumen waterproofing [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "roof_waterproofing_area",
+        "assumed": {
+          "waterproofing_system": "torch_bitumen"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-ROOF-WATERPROOF",
+        "catalogUnit": "m2",
+        "catalogRate": 46,
+        "rateBasis": "Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "roof_waterproofing_area",
+          "specification": {
+            "waterproofing_system": "torch_bitumen"
+          },
+          "label": "Roof torch-applied bitumen waterproofing",
+          "rate_basis": "Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.",
+          "reference_item_code": "WAT-001"
+        },
+        "originalDescription": "Roof waterproofing"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 3; Waterproof roof; terrace separate; same roof net area as slab. Independently calculated: add roof_plan: * 16 m [Envelope length 16.00] * 12 m [Envelope width 12.00]; subtract terrace_void: * 3 m [Terrace 3 m] * 4 m [Terrace 4 m] = 180 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Roof torch-applied bitumen waterproofing; rate item VNT-DEF-ROOF-WATERPROOF; Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation. Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate."
+    },
+    {
+      "code": "PDF-TERRACE_WATERPROOFING_AREA",
+      "metric": "terrace_waterproofing_area",
+      "quantity": 12,
+      "unit": "m2",
+      "rate": 46,
+      "amount": 552,
+      "description": "Terrace torch-applied bitumen waterproofing [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "terrace_waterproofing_area",
+        "assumed": {
+          "waterproofing_system": "torch_bitumen"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-TERRACE-WATERPROOF",
+        "catalogUnit": "m2",
+        "catalogRate": 46,
+        "rateBasis": "Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "terrace_waterproofing_area",
+          "specification": {
+            "waterproofing_system": "torch_bitumen"
+          },
+          "label": "Terrace torch-applied bitumen waterproofing",
+          "rate_basis": "Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.",
+          "reference_item_code": "WAT-001"
+        },
+        "originalDescription": "Terrace waterproofing"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 2; Terrace area labelled 12 m2. Independently calculated: add terrace_area: * 12 m2 [F07 Terrace 12 m2] = 12 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Terrace torch-applied bitumen waterproofing; rate item VNT-DEF-TERRACE-WATERPROOF; Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation. Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate."
+    },
+    {
+      "code": "PDF-WET_FLOOR_WATERPROOFING_AREA",
+      "metric": "wet_floor_waterproofing_area",
+      "quantity": 46,
+      "unit": "m2",
+      "rate": 33,
+      "amount": 1518,
+      "description": "Wet area floor cementitious waterproofing [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "wet_floor_waterproofing_area",
+        "assumed": {
+          "waterproofing_system": "cementitious"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-WET-FLOOR-WATERPROOF",
+        "catalogUnit": "m2",
+        "catalogRate": 33,
+        "rateBasis": "Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "wet_floor_waterproofing_area",
+          "specification": {
+            "waterproofing_system": "cementitious"
+          },
+          "label": "Wet area floor cementitious waterproofing",
+          "rate_basis": "Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.",
+          "reference_item_code": "WAT-002"
+        },
+        "originalDescription": "Wet area floor waterproofing"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 6; Project total of all wet floors. Independently calculated: add G02: * 16 m2 [G02 Laundry 16 m2]; add G03: * 12 m2 [G03 WC/Shower 12 m2]; add F09: * 6 m2 [F09 Bath 6 m2]; add F11: * 12 m2 [F11 Ensuite 12 m2] = 46 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Wet area floor cementitious waterproofing; rate item VNT-DEF-WET-FLOOR-WATERPROOF; Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation. Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate."
+    },
+    {
+      "code": "PDF-WET_WALL_WATERPROOFING_AREA",
+      "metric": "wet_wall_waterproofing_area",
+      "quantity": 97.92000000000002,
+      "unit": "m2",
+      "rate": 33,
+      "amount": 3231.36,
+      "description": "Wet area wall cementitious waterproofing [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "wet_wall_waterproofing_area",
+        "assumed": {
+          "waterproofing_system": "cementitious"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-WET-WALL-WATERPROOF",
+        "catalogUnit": "m2",
+        "catalogRate": 33,
+        "rateBasis": "Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "wet_wall_waterproofing_area",
+          "specification": {
+            "waterproofing_system": "cementitious"
+          },
+          "label": "Wet area wall cementitious waterproofing",
+          "rate_basis": "Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.",
+          "reference_item_code": "WAT-002"
+        },
+        "originalDescription": "Wet area wall waterproofing"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Wet-room perimeters × source membrane height, openings clipped to that height. Independently calculated: add floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; add floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; add floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; add floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; add floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2 m [WET ROOMS: Wall waterproofing height2.00 m]; subtract floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2}]; subtract floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}]; subtract floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 0.6000000000000001 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: Wall waterproofing height2.00 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2}] = 97.92000000000002 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Wet area wall cementitious waterproofing; rate item VNT-DEF-WET-WALL-WATERPROOF; Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation. Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate."
+    },
+    {
+      "code": "PDF-DOOR_COUNT-DOOR",
+      "metric": "door_count",
+      "quantity": 18,
+      "unit": "nr",
+      "rate": 1260,
+      "amount": 22680,
+      "description": "Standard timber door sets with frame and ironmongery [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "door_count",
+        "assumed": {
+          "door_system": "standard_timber_set"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "DOR-001",
+        "catalogUnit": "nos",
+        "catalogRate": 1260,
+        "rateBasis": "Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "door_count",
+          "specification": {
+            "door_system": "standard_timber_set"
+          },
+          "label": "Standard timber door sets with frame and ironmongery",
+          "rate_basis": "Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Material/performance is assumed; source table supplies count and dimensions.",
+          "opening_components": {
+            "door": {
+              "item_code": "DOR-001",
+              "label": "Standard timber door sets with frame and ironmongery",
+              "door_system": "standard_timber_set",
+              "rate_basis": "Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+              "conditions": "Material/performance is assumed; source table supplies count and dimensions."
+            },
+            "garage_door": {
+              "item_code": "VNT-DEF-GARAGE-COMPONENT",
+              "label": "Motorized insulated sectional garage door package",
+              "door_system": "motorized_sectional",
+              "reference_area_m2": 7.625,
+              "rate_basis": "Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated",
+              "conditions": "For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded."
+            }
+          }
+        },
+        "originalDescription": "Door sets — material and type require confirmation",
+        "openingKind": "door",
+        "sizeFactor": 1
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 4, 5; Native PDF opening table, complete source rows including garage doors: GD01 | GE-S | door | 1.20 | 2.20 | 0.00; GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00; GD03 | GE-N | door | 0.90 | 2.10 | 0.00; GD04 | GI-1 | door | 0.90 | 2.10 | 0.00; GD05 | GI-2 | door | 0.90 | 2.10 | 0.00; GD06 | GI-8 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD09 | GI-1 | door | 0.90 | 2.10 | 0.00; GD10 | GI-2 | door | 0.90 | 2.10 | 0.00; GD11 | GI-2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review. | Native PDF opening table, complete source rows including garage doors: FD01 | FI-1 | door | 0.90 | 2.10 | 0.00; FD02 | FI-1 | door | 0.90 | 2.10 | 0.00; FD03 | FI-1 | door | 0.90 | 2.10 | 0.00; FD04 | FI-2 | door | 0.90 | 2.10 | 0.00; FD05 | FI-2 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Standard timber door sets with frame and ironmongery; rate item DOR-001; Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation. Material/performance is assumed; source table supplies count and dimensions."
+    },
+    {
+      "code": "PDF-DOOR_COUNT-GARAGE_DOOR",
+      "metric": "door_count",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 5675,
+      "amount": 5675,
+      "description": "Motorized insulated sectional garage door package [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "door_count",
+        "assumed": {
+          "door_system": "motorized_sectional"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-GARAGE-COMPONENT",
+        "catalogUnit": "nr",
+        "catalogRate": 5675,
+        "rateBasis": "Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "door_count",
+          "specification": {
+            "door_system": "motorized_sectional"
+          },
+          "label": "Motorized insulated sectional garage door package",
+          "rate_basis": "Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated",
+          "conditions": "For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded.",
+          "opening_components": {
+            "door": {
+              "item_code": "DOR-001",
+              "label": "Standard timber door sets with frame and ironmongery",
+              "door_system": "standard_timber_set",
+              "rate_basis": "Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+              "conditions": "Material/performance is assumed; source table supplies count and dimensions."
+            },
+            "garage_door": {
+              "item_code": "VNT-DEF-GARAGE-COMPONENT",
+              "label": "Motorized insulated sectional garage door package",
+              "door_system": "motorized_sectional",
+              "reference_area_m2": 7.625,
+              "rate_basis": "Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated",
+              "conditions": "For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded."
+            }
+          }
+        },
+        "originalDescription": "Door sets — material and type require confirmation",
+        "openingKind": "garage_door",
+        "sizeFactor": 1
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 4, 5; Native PDF opening table, complete source rows including garage doors: GD01 | GE-S | door | 1.20 | 2.20 | 0.00; GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00; GD03 | GE-N | door | 0.90 | 2.10 | 0.00; GD04 | GI-1 | door | 0.90 | 2.10 | 0.00; GD05 | GI-2 | door | 0.90 | 2.10 | 0.00; GD06 | GI-8 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD09 | GI-1 | door | 0.90 | 2.10 | 0.00; GD10 | GI-2 | door | 0.90 | 2.10 | 0.00; GD11 | GI-2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review. | Native PDF opening table, complete source rows including garage doors: FD01 | FI-1 | door | 0.90 | 2.10 | 0.00; FD02 | FI-1 | door | 0.90 | 2.10 | 0.00; FD03 | FI-1 | door | 0.90 | 2.10 | 0.00; FD04 | FI-2 | door | 0.90 | 2.10 | 0.00; FD05 | FI-2 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00. Dimensions read from printed table and source units; specification requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Motorized insulated sectional garage door package; rate item VNT-DEF-GARAGE-COMPONENT; Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated. For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded."
+    },
+    {
+      "code": "PDF-BACKSPLASH_AREA",
+      "metric": "backsplash_area",
+      "quantity": 3,
+      "unit": "m2",
+      "rate": 78,
+      "amount": 234,
+      "description": "Ceramic kitchen backsplash including adhesive and grout [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "backsplash_area",
+        "assumed": {
+          "tile_material": "ceramic"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-BACKSPLASH",
+        "catalogUnit": "m2",
+        "catalogRate": 78,
+        "rateBasis": "Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "backsplash_area",
+          "specification": {
+            "tile_material": "ceramic"
+          },
+          "label": "Ceramic kitchen backsplash including adhesive and grout",
+          "rate_basis": "Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Standard ceramic tile assumed; waterproofing is separately measured.",
+          "reference_item_code": "FIN-004"
+        },
+        "originalDescription": "Kitchen backsplash"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 6; Kitchen backsplash height and run. Independently calculated: add kitchen_backsplash: * 5 m [Base cabinet run 5.00 m] * 0.6 m [Backsplash height 0.60 m] = 3 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Ceramic kitchen backsplash including adhesive and grout; rate item VNT-DEF-BACKSPLASH; Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation. Standard ceramic tile assumed; waterproofing is separately measured."
+    },
+    {
+      "code": "PDF-CEILING_PAINT_AREA",
+      "metric": "ceiling_paint_area",
+      "quantity": 360,
+      "unit": "m2",
+      "rate": 21,
+      "amount": 7560,
+      "description": "Two-coat standard ceiling emulsion paint [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "ceiling_paint_area",
+        "assumed": {
+          "paint_system": "two_coat_emulsion"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "PNT-010",
+        "catalogUnit": "m2",
+        "catalogRate": 21,
+        "rateBasis": "Midpoint (12+30)/2 of published ceiling painting range, treated as a budget estimate",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "ceiling_paint_area",
+          "specification": {
+            "paint_system": "two_coat_emulsion"
+          },
+          "label": "Two-coat standard ceiling emulsion paint",
+          "rate_basis": "Midpoint (12+30)/2 of published ceiling painting range, treated as a budget estimate",
+          "conditions": "Assumes normal preparation and standard emulsion; major repairs/access and specialist finishes excluded.",
+          "reference_urls": [
+            "https://renovel.ae/blog/false-ceiling-cost-dubai/"
+          ],
+          "published_range_aed": [
+            12,
+            30
+          ]
+        },
+        "originalDescription": "Ceiling paint"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 3, 4, 6, 7; Explicit paint-all-enclosed rule applied independently of gypsum exclusions. Independently calculated: add floor:0:enclosed-ceiling-paint: * 192 m2 [Audited enclosed ceiling area; CEILINGS: paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:enclosed-ceiling-paint: * 168 m2 [Audited enclosed ceiling area; CEILINGS: paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.] = 360 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Two-coat standard ceiling emulsion paint; rate item PNT-010; Midpoint (12+30)/2 of published ceiling painting range, treated as a budget estimate. Assumes normal preparation and standard emulsion; major repairs/access and specialist finishes excluded."
+    },
+    {
+      "code": "PDF-EPOXY_FLOOR_AREA",
+      "metric": "epoxy_floor_area",
+      "quantity": 28,
+      "unit": "m2",
+      "rate": 62.5,
+      "amount": 1750,
+      "description": "Standard two-coat epoxy floor coating on sound substrate [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "epoxy_floor_area",
+        "assumed": {
+          "floor_system": "two_coat_epoxy"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "PNT-008",
+        "catalogUnit": "m2",
+        "catalogRate": 62.5,
+        "rateBasis": "Midpoint (45+80)/2 of published thin epoxy floor supply/install range, not a fixed quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "epoxy_floor_area",
+          "specification": {
+            "floor_system": "two_coat_epoxy"
+          },
+          "label": "Standard two-coat epoxy floor coating on sound substrate",
+          "rate_basis": "Midpoint (45+80)/2 of published thin epoxy floor supply/install range, not a fixed quotation",
+          "conditions": "Assumes normal preparation on sound dry substrate; heavy repair, moisture mitigation and thicker resin systems excluded.",
+          "reference_urls": [
+            "https://renovel.ae/blog/epoxy-flooring-dubai/"
+          ],
+          "published_range_aed": [
+            45,
+            80
+          ]
+        },
+        "originalDescription": "Epoxy floor finish"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 4, 6, 2, 3, 7; Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Title box and outer dimensions on A01: 16.00 x 12.00. Datum: wall centrelines.; AI dimension transcription and materials require review. | Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F05, F06, F07, F02, F03, F04, F10, F11; label-only tags: F08, F09; A02 title '16.00 x 12.00 envelope' and outer dimensions. Datum: wall centrelines on A02/A04.. Inventory closure checked; unmeasured room boundaries and AI materials require review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Standard two-coat epoxy floor coating on sound substrate; rate item PNT-008; Midpoint (45+80)/2 of published thin epoxy floor supply/install range, not a fixed quotation. Assumes normal preparation on sound dry substrate; heavy repair, moisture mitigation and thicker resin systems excluded."
+    },
+    {
+      "code": "PDF-KITCHEN_CABINET_LENGTH",
+      "metric": "kitchen_cabinet_length",
+      "quantity": 5,
+      "unit": "m",
+      "rate": 952.38,
+      "amount": 4761.9,
+      "description": "Aluminium kitchen base cabinets supplied and installed — countertops excluded [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "kitchen_cabinet_length",
+        "assumed": {
+          "cabinet_material": "aluminium"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-KITCHEN-CABINET",
+        "catalogUnit": "m",
+        "catalogRate": 952.38,
+        "rateBasis": "Midpoint of published base-only 500–1500 AED/lm including 5% VAT, converted to assumed net rate: 1000/1.05",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "kitchen_cabinet_length",
+          "specification": {
+            "cabinet_material": "aluminium"
+          },
+          "label": "Aluminium kitchen base cabinets supplied and installed — countertops excluded",
+          "rate_basis": "Midpoint of published base-only 500–1500 AED/lm including 5% VAT, converted to assumed net rate: 1000/1.05",
+          "conditions": "Base cabinets only; excludes wall units, countertops, appliances, sinks and service relocation.",
+          "reference_urls": [
+            "https://aluminumglassfix.com/aluminum-kitchen-cabinet-installation/"
+          ],
+          "published_range_aed": [
+            500,
+            1500
+          ],
+          "published_vat": "included_5_percent"
+        },
+        "originalDescription": "Kitchen cabinetry — specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 6; Original PDF explicit cabinet measurement equation: base cabinet measured 3.00+2.00 =5.00 linear metres. Independently calculated: add native-cabinet-leg:1: * 3 m [base cabinet measured 3.00+2.00 =5.00 linear metres]; add native-cabinet-leg:2: * 2 m [base cabinet measured 3.00+2.00 =5.00 linear metres] = 5 m. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Aluminium kitchen base cabinets supplied and installed — countertops excluded; rate item VNT-SCOPE-KITCHEN-CABINET; Midpoint of published base-only 500–1500 AED/lm including 5% VAT, converted to assumed net rate: 1000/1.05. Base cabinets only; excludes wall units, countertops, appliances, sinks and service relocation."
+    },
+    {
+      "code": "PDF-KITCHEN_HOB_HOOD_COUNT",
+      "metric": "kitchen_hob_hood_count",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 1750.48,
+      "amount": 1750.48,
+      "description": "Built-in 60cm electric hob and 90cm hood package with fitting allowance [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "kitchen_hob_hood_count",
+        "assumed": {
+          "appliance_package": "electric_hob_60cm_hood_90cm"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-HOB-HOOD",
+        "catalogUnit": "nr",
+        "catalogRate": 1750.48,
+        "rateBasis": "Budget basket: published hob929 + hood699, assumed VAT-inclusive /1.05; fitting allowance200. Not an installed supplier package quote",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "kitchen_hob_hood_count",
+          "specification": {
+            "appliance_package": "electric_hob_60cm_hood_90cm"
+          },
+          "label": "Built-in 60cm electric hob and 90cm hood package with fitting allowance",
+          "rate_basis": "Budget basket: published hob929 + hood699, assumed VAT-inclusive /1.05; fitting allowance200. Not an installed supplier package quote",
+          "conditions": "No oven, new duct route, structural cutting or upgraded electrical circuit included. Product suitability and installation allowances editable.",
+          "reference_urls": [
+            "https://lutfihome.com/collections/hobs",
+            "https://lutfihome.com/products/nobel-range-hood-90cm-built-in-hoods-2-speed-rocker-switch-3-layer-aluminum-filter2pcs-slider-hood-ss430-galvanized-plate-box-nchp90st"
+          ],
+          "build_up": {
+            "hob_retail": 929,
+            "hood_retail": 699,
+            "assumed_retail_vat_percent": 5,
+            "fitting_allowance": 200
+          }
+        },
+        "originalDescription": "Kitchen hob and hood package — specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 6; A04 kitchen note. Independently calculated: add hob/hood package: * 1 nr [include one package] = 1 nr. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Built-in 60cm electric hob and 90cm hood package with fitting allowance; rate item VNT-SCOPE-HOB-HOOD; Budget basket: published hob929 + hood699, assumed VAT-inclusive /1.05; fitting allowance200. Not an installed supplier package quote. No oven, new duct route, structural cutting or upgraded electrical circuit included. Product suitability and installation allowances editable."
+    },
+    {
+      "code": "PDF-TERRACE_FLOOR_AREA",
+      "metric": "terrace_floor_area",
+      "quantity": 12,
+      "unit": "m2",
+      "rate": 88.55,
+      "amount": 1062.6,
+      "description": "Outdoor ceramic terrace floor tiling including adhesive and grout [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "terrace_floor_area",
+        "assumed": {},
+        "sourceSpecifications": [
+          {
+            "property": "tile_material",
+            "value": "ceramic",
+            "pages": [
+              6
+            ]
+          }
+        ],
+        "catalogItemCode": "VNT-DEF-TERRACE-TILE",
+        "catalogUnit": "m2",
+        "catalogRate": 88.55,
+        "rateBasis": "Existing user catalog FIN-003: 77 AED/m2; legacy budget rate, not a newly verified supplier quotation plus an assumed 15% outdoor installation uplift",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "terrace_floor_area",
+          "specification": {
+            "tile_material": "ceramic"
+          },
+          "label": "Outdoor ceramic terrace floor tiling including adhesive and grout",
+          "rate_basis": "Existing user catalog FIN-003: 77 AED/m2; legacy budget rate, not a newly verified supplier quotation plus an assumed 15% outdoor installation uplift",
+          "conditions": "No additional area or wastage added; slip resistance and substrate specification need review.",
+          "reference_item_code": "FIN-003",
+          "assumed_uplift_percent": 15
+        },
+        "originalDescription": "Terrace floor finish — specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 4, 6, 2, 3, 7; Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Title box and outer dimensions on A01: 16.00 x 12.00. Datum: wall centrelines.; AI dimension transcription and materials require review. | Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F05, F06, F07, F02, F03, F04, F10, F11; label-only tags: F08, F09; A02 title '16.00 x 12.00 envelope' and outer dimensions. Datum: wall centrelines on A02/A04.. Inventory closure checked; unmeasured room boundaries and AI materials require review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Outdoor ceramic terrace floor tiling including adhesive and grout; rate item VNT-DEF-TERRACE-TILE; Existing user catalog FIN-003: 77 AED/m2; legacy budget rate, not a newly verified supplier quotation plus an assumed 15% outdoor installation uplift. No additional area or wastage added; slip resistance and substrate specification need review."
+    },
+    {
+      "code": "PDF-WET_WALL_TILE_AREA",
+      "metric": "wet_wall_tile_area",
+      "quantity": 117.23999999999998,
+      "unit": "m2",
+      "rate": 78,
+      "amount": 9144.72,
+      "description": "Ceramic wet area wall tiles including adhesive and grout [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "wet_wall_tile_area",
+        "assumed": {
+          "tile_material": "ceramic"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-WET-WALL-TILE",
+        "catalogUnit": "m2",
+        "catalogRate": 78,
+        "rateBasis": "Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "wet_wall_tile_area",
+          "specification": {
+            "tile_material": "ceramic"
+          },
+          "label": "Ceramic wet area wall tiles including adhesive and grout",
+          "rate_basis": "Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Standard ceramic tile assumed; waterproofing is separately measured.",
+          "reference_item_code": "FIN-004"
+        },
+        "originalDescription": "Wet area wall tiles"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Wet-room perimeters × source tile height, openings clipped to that height. Independently calculated: add floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}] = 117.23999999999998 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Ceramic wet area wall tiles including adhesive and grout; rate item VNT-DEF-WET-WALL-TILE; Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation. Standard ceramic tile assumed; waterproofing is separately measured."
+    },
+    {
+      "code": "PDF-WOOD_FLOOR_AREA",
+      "metric": "wood_floor_area",
+      "quantity": 178,
+      "unit": "m2",
+      "rate": 160,
+      "amount": 28480,
+      "description": "Standard engineered wood/parquet floor supplied and installed [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "wood_floor_area",
+        "assumed": {
+          "floor_system": "engineered_wood"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-WOOD-FLOOR",
+        "catalogUnit": "m2",
+        "catalogRate": 160,
+        "rateBasis": "Published starting supply/install reference 160 AED/m2; treated as an indicative budget allowance",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "wood_floor_area",
+          "specification": {
+            "floor_system": "engineered_wood"
+          },
+          "label": "Standard engineered wood/parquet floor supplied and installed",
+          "rate_basis": "Published starting supply/install reference 160 AED/m2; treated as an indicative budget allowance",
+          "conditions": "Excludes subfloor levelling, removal, skirting, adhesives, profiles and special patterns; these require separate scope.",
+          "reference_urls": [
+            "https://www.swissora.ae/services/flooring-contractors-in-dubai"
+          ],
+          "published_rate_kind": "starting_price"
+        },
+        "originalDescription": "Wood floor finish"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 1, 4, 6, 2, 3, 7; Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Title box and outer dimensions on A01: 16.00 x 12.00. Datum: wall centrelines.; AI dimension transcription and materials require review. | Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F05, F06, F07, F02, F03, F04, F10, F11; label-only tags: F08, F09; A02 title '16.00 x 12.00 envelope' and outer dimensions. Datum: wall centrelines on A02/A04.. Inventory closure checked; unmeasured room boundaries and AI materials require review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Standard engineered wood/parquet floor supplied and installed; rate item VNT-SCOPE-WOOD-FLOOR; Published starting supply/install reference 160 AED/m2; treated as an indicative budget allowance. Excludes subfloor levelling, removal, skirting, adhesives, profiles and special patterns; these require separate scope."
+    },
+    {
+      "code": "WIN-001",
+      "metric": "window_area",
+      "quantity": 39.06,
+      "unit": "m2",
+      "rate": 750,
+      "amount": 29295,
+      "description": "Aluminium framed glazed window complete",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 4, 5; Native PDF opening table, complete source rows including garage doors: GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW02 | GE-W | window | 1.80 | 1.50 | 1.00; GW03 | GE-E | window | 1.80 | 1.50 | 1.00; GW04 | GE-E | window | 2.40 | 1.50 | 1.00; GW05 | GE-N | window | 2.40 | 1.50 | 1.00; GW06 | GE-N | window | 1.80 | 1.50 | 1.00. Dimensions read from printed table and source units; specification requires review. | Native PDF opening table, complete source rows including garage doors: FW01 | FE-W | window | 1.80 | 1.50 | 1.00; FW02 | FE-W | window | 1.80 | 1.50 | 1.00; FW03 | FE-W | window | 2.40 | 1.50 | 1.00; FW04 | FE-N | window | 2.40 | 1.50 | 1.00; FW05 | FE-N | window | 1.80 | 1.50 | 1.00; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW07 | FE-E | window | 1.80 | 1.50 | 1.00; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40. Dimensions read from printed table and source units; specification requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "FIN-001",
+      "metric": "plaster_area",
+      "quantity": 978.6199999999997,
+      "unit": "m2",
+      "rate": 27,
+      "amount": 26422.74,
+      "description": "Internal cement sand plaster to walls",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Source plaster face convention applied to net walls. Independently calculated: add plaster:floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.] = 978.6199999999997 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "FIN-003",
+      "metric": "ceramic_floor_area",
+      "quantity": 154,
+      "unit": "m2",
+      "rate": 77,
+      "amount": 11858,
+      "description": "Ceramic floor tiles including adhesive and grout",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 1, 4, 6, 2, 3, 7; Area computed from dimensioned, non-overlapping space polygons (wall_centerline_zones) on page 1; Title box and outer dimensions on A01: 16.00 x 12.00. Datum: wall centrelines.; AI dimension transcription and materials require review. | Partial dimensioned geometry plus printed room labels on page 2; dimensioned tags: F01, F05, F06, F07, F02, F03, F04, F10, F11; label-only tags: F08, F09; A02 title '16.00 x 12.00 envelope' and outer dimensions. Datum: wall centrelines on A02/A04.. Inventory closure checked; unmeasured room boundaries and AI materials require review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "FIN-005",
+      "metric": "gypsum_ceiling_area",
+      "quantity": 312,
+      "unit": "m2",
+      "rate": 80,
+      "amount": 24960,
+      "description": "Gypsum board suspended ceiling including framing",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 6; Audited room areas with source gypsum exclusions. Independently calculated: add floor:0:G07 Foyer:ceiling: * 12 m2 [Area of calibrated original closed wall face g07; polygon [{\"x\":13,\"y\":0},{\"x\":16,\"y\":0},{\"x\":16,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G05 Hall:ceiling: * 24 m2 [Area of calibrated original closed wall face g05; polygon [{\"x\":7,\"y\":0},{\"x\":9,\"y\":0},{\"x\":9,\"y\":4},{\"x\":9,\"y\":8},{\"x\":9,\"y\":12},{\"x\":7,\"y\":12},{\"x\":7,\"y\":8},{\"x\":7,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G02 Laundry:ceiling: * 16 m2 [Area of calibrated original closed wall face g02; polygon [{\"x\":0,\"y\":8},{\"x\":0,\"y\":4},{\"x\":4,\"y\":4},{\"x\":4,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G03 WC / Shower:ceiling: * 12 m2 [Area of calibrated original closed wall face g03; polygon [{\"x\":7,\"y\":4},{\"x\":7,\"y\":8},{\"x\":4,\"y\":8},{\"x\":4,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G08 Study:ceiling: * 28 m2 [Area of calibrated original closed wall face g08; polygon [{\"x\":16,\"y\":4},{\"x\":16,\"y\":8},{\"x\":9,\"y\":8},{\"x\":9,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G04 Kitchen / Dining:ceiling: * 28 m2 [Area of calibrated original closed wall face g04; polygon [{\"x\":7,\"y\":12},{\"x\":0,\"y\":12},{\"x\":0,\"y\":8},{\"x\":4,\"y\":8},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:0:G09 Living / TV:ceiling: * 28 m2 [Area of calibrated original closed wall face g09; polygon [{\"x\":16,\"y\":8},{\"x\":16,\"y\":12},{\"x\":9,\"y\":12},{\"x\":9,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F01 Bedroom 2:ceiling: * 28 m2 [Area of calibrated original closed wall face f01; polygon [{\"x\":0,\"y\":0},{\"x\":7,\"y\":0},{\"x\":7,\"y\":4},{\"x\":0,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F02 Bedroom 3:ceiling: * 28 m2 [Area of calibrated original closed wall face f02; polygon [{\"x\":0,\"y\":8},{\"x\":0,\"y\":4},{\"x\":7,\"y\":4},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F03 Master Bedroom:ceiling: * 28 m2 [Area of calibrated original closed wall face f03; polygon [{\"x\":7,\"y\":12},{\"x\":0,\"y\":12},{\"x\":0,\"y\":8},{\"x\":7,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F04 HALL:ceiling: * 24 m2 [Audited source room area: F04 HALL; TILE | independently dimensioned polygon: A02 tag 'F04 HALL / TILE' continuous 2 m wide strip along x=7..9.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F08 Bedroom 4 (L):ceiling: * 22 m2 [Area of calibrated original closed wall face f08; polygon [{\"x\":16,\"y\":4},{\"x\":16,\"y\":6},{\"x\":13,\"y\":6},{\"x\":13,\"y\":8},{\"x\":9,\"y\":8},{\"x\":9,\"y\":4},{\"x\":13,\"y\":4}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F09 BATH:ceiling: * 6 m2 [Area of calibrated original closed wall face f09; polygon [{\"x\":16,\"y\":6},{\"x\":16,\"y\":8},{\"x\":13,\"y\":8},{\"x\":13,\"y\":6}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F10 Family Lounge:ceiling: * 16 m2 [Area of calibrated original closed wall face f10; polygon [{\"x\":13,\"y\":12},{\"x\":9,\"y\":12},{\"x\":9,\"y\":8},{\"x\":13,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.]; add floor:1:F11 Ensuite:ceiling: * 12 m2 [Area of calibrated original closed wall face f11; polygon [{\"x\":16,\"y\":8},{\"x\":16,\"y\":12},{\"x\":13,\"y\":12},{\"x\":13,\"y\":8}]; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.; paint all enclosed areas. Gypsum ceiling excludes GF garage, GF stairs and FF stair landing. Upper VOID has no floor finish; terrace is outdoor tile and has no internal ceiling.] = 312 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-KITCHEN_SINK_COUNT",
+      "metric": "kitchen_sink_count",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 1151.43,
+      "amount": 1151.43,
+      "description": "Kitchen single-bowl stainless sink with mixer, trap and installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "kitchen_sink_count",
+        "assumed": {
+          "fixture_system": "single_stainless_sink_mixer_trap"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-KITCHEN-SINK",
+        "catalogUnit": "nr",
+        "catalogRate": 1151.43,
+        "rateBasis": "Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "kitchen_sink_count",
+          "specification": {
+            "fixture_system": "single_stainless_sink_mixer_trap"
+          },
+          "label": "Kitchen single-bowl stainless sink with mixer, trap and installation",
+          "rate_basis": "Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set",
+          "conditions": "Material dimensions/brand and VAT normalization are estimating assumptions. Connections to measured service points; new pipe runs remain separate.",
+          "reference_urls": [
+            "https://www.aceuae.com/en/products/bold-stainless-steel-single-bowl-kitchen-sink-60-x-45-x-21-cm/2253922",
+            "https://www.aceuae.com/en/category/home-living/kitchen-taps-sinks/kitchen-tap",
+            "https://plumberdubai.com/our-services/plumbing-installation/"
+          ],
+          "build_up": {
+            "sink_retail": 399,
+            "mixer_retail": 285,
+            "assumed_retail_vat_percent": 5,
+            "trap_allowance": 50,
+            "installation_midpoint": 450
+          }
+        },
+        "originalDescription": "Kitchen sinks"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 sanitary fixtures. Independently calculated: add G04 kitchen sink: * 1 nr [separate kitchen sink] = 1 nr. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Kitchen single-bowl stainless sink with mixer, trap and installation; rate item VNT-SCOPE-KITCHEN-SINK; Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set. Material dimensions/brand and VAT normalization are estimating assumptions. Connections to measured service points; new pipe runs remain separate."
+    },
+    {
+      "code": "PDF-LAUNDRY_SINK_COUNT",
+      "metric": "laundry_sink_count",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 1151.43,
+      "amount": 1151.43,
+      "description": "Laundry single-bowl stainless sink with mixer, trap and installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "laundry_sink_count",
+        "assumed": {
+          "fixture_system": "single_stainless_sink_mixer_trap"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-LAUNDRY-SINK",
+        "catalogUnit": "nr",
+        "catalogRate": 1151.43,
+        "rateBasis": "Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "laundry_sink_count",
+          "specification": {
+            "fixture_system": "single_stainless_sink_mixer_trap"
+          },
+          "label": "Laundry single-bowl stainless sink with mixer, trap and installation",
+          "rate_basis": "Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set",
+          "conditions": "Material dimensions/brand and VAT normalization are estimating assumptions. Connections to measured service points; new pipe runs remain separate.",
+          "reference_urls": [
+            "https://www.aceuae.com/en/products/bold-stainless-steel-single-bowl-kitchen-sink-60-x-45-x-21-cm/2253922",
+            "https://www.aceuae.com/en/category/home-living/kitchen-taps-sinks/kitchen-tap",
+            "https://plumberdubai.com/our-services/plumbing-installation/"
+          ],
+          "build_up": {
+            "sink_retail": 399,
+            "mixer_retail": 285,
+            "assumed_retail_vat_percent": 5,
+            "trap_allowance": 50,
+            "installation_midpoint": 450
+          }
+        },
+        "originalDescription": "Laundry sinks"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 sanitary fixtures. Independently calculated: add G02 laundry sink: * 1 nr [separate laundry sink] = 1 nr. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Laundry single-bowl stainless sink with mixer, trap and installation; rate item VNT-SCOPE-LAUNDRY-SINK; Budget build-up: sink retail399 + mixer retail285, both assumed VAT-inclusive /1.05; trap allowance50; installation450 (midpoint published300–600). Total1151.43 AED/set. Material dimensions/brand and VAT normalization are estimating assumptions. Connections to measured service points; new pipe runs remain separate."
+    },
+    {
+      "code": "PDF-SHOWER_COUNT",
+      "metric": "shower_count",
+      "quantity": 3,
+      "unit": "nr",
+      "rate": 650,
+      "amount": 1950,
+      "description": "Standard exposed shower mixer, handset and rail with installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "shower_count",
+        "assumed": {
+          "fixture_system": "exposed_mixer_handset_rail"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-SHOWER",
+        "catalogUnit": "nr",
+        "catalogRate": 650,
+        "rateBasis": "Ventra provisional build-up: material allowance450 plus installation allowance200 AED/set; not a supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "shower_count",
+          "specification": {
+            "fixture_system": "exposed_mixer_handset_rail"
+          },
+          "label": "Standard exposed shower mixer, handset and rail with installation",
+          "rate_basis": "Ventra provisional build-up: material allowance450 plus installation allowance200 AED/set; not a supplier quotation",
+          "conditions": "Standalone shower package; excludes basin mixer, tray, screen and concealed pipe relocation. Allowances editable.",
+          "rate_kind": "analyst_allowance",
+          "reference_urls": [
+            "https://revivehub.ae/bathroom-renovation-company-dubai/",
+            "https://plumberdubai.com/our-services/plumbing-installation/"
+          ],
+          "build_up": {
+            "material_allowance": 450,
+            "installation_allowance": 200
+          }
+        },
+        "originalDescription": "Showers"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 sanitary fixtures. Independently calculated: add G03 shower: * 1 nr [one shower in G03] = 1 nr. Source transcription requires review. | M01 sanitary fixtures. Independently calculated: add F09+F11 showers: * 2 nr [one each in F09,F11] = 2 nr. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Standard exposed shower mixer, handset and rail with installation; rate item VNT-SCOPE-SHOWER; Ventra provisional build-up: material allowance450 plus installation allowance200 AED/set; not a supplier quotation. Standalone shower package; excludes basin mixer, tray, screen and concealed pipe relocation. Allowances editable."
+    },
+    {
+      "code": "PDF-WASTE_PIPE_LENGTH",
+      "metric": "waste_pipe_length",
+      "quantity": 60,
+      "unit": "m",
+      "rate": 58,
+      "amount": 3480,
+      "description": "Waste/drainage pipe UPVC 110mm including fittings and installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "waste_pipe_length",
+        "assumed": {
+          "pipe_material": "UPVC",
+          "diameter_mm": 110
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "PLB-004",
+        "catalogUnit": "m",
+        "catalogRate": 58,
+        "rateBasis": "Existing PLB-004 budget rate; independent supplier verification pending",
+        "policy": {
+          "batch": "ventra-v131-default-specifications",
+          "kind": "pricing_default",
+          "enabled": true,
+          "metric": "waste_pipe_length",
+          "specification": {
+            "pipe_material": "UPVC",
+            "diameter_mm": 110
+          },
+          "label": "Waste/drainage pipe UPVC 110mm including fittings and installation",
+          "rate_basis": "Existing PLB-004 budget rate; independent supplier verification pending",
+          "conditions": "One provisional aggregate diameter; mixed measured pipe sizes require separate quantities."
+        },
+        "originalDescription": "Waste pipe — diameter and material require confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Waste pipes; Ground: 35 m. Material, diameter and capacity are separate source requirements. | Native source table: Waste pipes; First: 25 m. Material, diameter and capacity are separate source requirements..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Waste/drainage pipe UPVC 110mm including fittings and installation; rate item PLB-004; Existing PLB-004 budget rate; independent supplier verification pending. One provisional aggregate diameter; mixed measured pipe sizes require separate quantities."
+    },
+    {
+      "code": "PDF-WATER_PIPE_LENGTH",
+      "metric": "water_pipe_length",
+      "quantity": 80,
+      "unit": "m",
+      "rate": 27,
+      "amount": 2160,
+      "description": "Water supply pipe PPR 20mm including fittings and installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "water_pipe_length",
+        "assumed": {
+          "pipe_material": "PPR",
+          "diameter_mm": 20
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "PLB-001",
+        "catalogUnit": "m",
+        "catalogRate": 27,
+        "rateBasis": "Existing PLB-001 budget rate; independent supplier verification pending",
+        "policy": {
+          "batch": "ventra-v131-default-specifications",
+          "kind": "pricing_default",
+          "enabled": true,
+          "metric": "water_pipe_length",
+          "specification": {
+            "pipe_material": "PPR",
+            "diameter_mm": 20
+          },
+          "label": "Water supply pipe PPR 20mm including fittings and installation",
+          "rate_basis": "Existing PLB-001 budget rate; independent supplier verification pending",
+          "conditions": "Assumed diameter/material only where absent from drawing; edit for mains, branches and project requirements."
+        },
+        "originalDescription": "Water pipe — diameter and material require confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Water supply pipes; Ground: 45 m. Material, diameter and capacity are separate source requirements. | Native source table: Water supply pipes; First: 35 m. Material, diameter and capacity are separate source requirements..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Water supply pipe PPR 20mm including fittings and installation; rate item PLB-001; Existing PLB-001 budget rate; independent supplier verification pending. Assumed diameter/material only where absent from drawing; edit for mains, branches and project requirements."
+    },
+    {
+      "code": "PNT-001",
+      "metric": "paint_area",
+      "quantity": 858.3799999999994,
+      "unit": "m2",
+      "rate": 20,
+      "amount": 17167.6,
+      "description": "Internal wall emulsion paint including primer and putty",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 1, 2, 4, 5, 6; Explicit source paint face and exclusion convention. Independently calculated: add plaster:floor:0:GI-1:gross: * 12 m [Original vector wall GI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD04:opening: * 0.9 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD04 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD08:opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD09:opening: * 0.9 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD09 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-2:gross: * 12 m [Original vector wall GI-2: {\"x\":9,\"y\":0} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD05:opening: * 0.9 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD05 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD10:opening: * 0.9 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD10 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD11:opening: * 0.9 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD11 | GI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-3:gross: * 7 m [Original vector wall GI-3: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD07:opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:4:9:16:gross: * 7 m [Original vector wall native:h:4:9:16: {\"x\":9,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:native:v:4:4:8:gross: * 4 m [Original vector wall native:v:4:4:8: {\"x\":4,\"y\":4} to {\"x\":4,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GI-8:gross: * 4 m [Original vector wall GI-8: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD06:opening: * 0.9 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD06 | GI-8 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-1:gross: * 12 m [Original vector wall FI-1: {\"x\":7,\"y\":0} to {\"x\":7,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD01:opening: * 0.9 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD01 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD02:opening: * 0.9 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD02 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD03:opening: * 0.9 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD03 | FI-1 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-2:gross: * 8 m [Original vector wall FI-2: {\"x\":9,\"y\":4} to {\"x\":9,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD04:opening: * 0.9 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD04 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD05:opening: * 0.9 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD05 | FI-2 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:0:7:gross: * 7 m [Original vector wall native:h:4:0:7: {\"x\":0,\"y\":4} to {\"x\":7,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:4:9:13:gross: * 4 m [Original vector wall native:h:4:9:13: {\"x\":9,\"y\":4} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:0:7:gross: * 7 m [Original vector wall native:h:8:0:7: {\"x\":0,\"y\":8} to {\"x\":7,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:8:9:16:gross: * 7 m [Original vector wall native:h:8:9:16: {\"x\":9,\"y\":8} to {\"x\":16,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-7:gross: * 2 m [Original vector wall FI-7: {\"x\":13,\"y\":6} to {\"x\":13,\"y\":8}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD06:opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FI-9:gross: * 4 m [Original vector wall FI-9: {\"x\":13,\"y\":8} to {\"x\":13,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD07:opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:6:13:16:gross: * 3 m [Original vector wall native:h:6:13:16: {\"x\":13,\"y\":6} to {\"x\":16,\"y\":6}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 2 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-S:gross: * 16 m [Original vector wall GE-S: {\"x\":0,\"y\":0} to {\"x\":16,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD01:opening: * 1.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 2.2 m [GD01 | GE-S | door | 1.20 | 2.20 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD02:opening: * 3 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 2.4 m [GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-E:gross: * 12 m [Original vector wall GE-E: {\"x\":16,\"y\":0} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW03:opening: * 1.8 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW03 | GE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW04:opening: * 2.4 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW04 | GE-E | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-N:gross: * 16 m [Original vector wall GE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GD03:opening: * 0.9 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD03 | GE-N | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW05:opening: * 2.4 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [GW05 | GE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW06:opening: * 1.8 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW06 | GE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:0:GE-W:gross: * 12 m [Original vector wall GE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW01:opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:0:GW02:opening: * 1.8 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [GW02 | GE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:h:0:0:13:gross: * 13 m [Original vector wall native:h:0:0:13: {\"x\":0,\"y\":0} to {\"x\":13,\"y\":0}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-E:gross: * 8 m [Original vector wall FE-E: {\"x\":16,\"y\":4} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW07:opening: * 1.8 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW07 | FE-E | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW08:opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW09:opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-N:gross: * 16 m [Original vector wall FE-N: {\"x\":0,\"y\":12} to {\"x\":16,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW04:opening: * 2.4 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW04 | FE-N | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW05:opening: * 1.8 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW05 | FE-N | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW06:opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-W:gross: * 12 m [Original vector wall FE-W: {\"x\":0,\"y\":0} to {\"x\":0,\"y\":12}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW01:opening: * 1.8 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW01 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW02:opening: * 1.8 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1.5 m [FW02 | FE-W | window | 1.80 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FW03:opening: * 2.4 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1.5 m [FW03 | FE-W | window | 2.40 | 1.50 | 1.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:native:v:13:0:4:gross: * 4 m [Original vector wall native:v:13:0:4: {\"x\":13,\"y\":0} to {\"x\":13,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; add plaster:floor:1:FE-T2:gross: * 3 m [Original vector wall FE-T2: {\"x\":13,\"y\":4} to {\"x\":16,\"y\":4}; calibrated using printed envelope] * 3.2 m [WALLS: clear height 3.20 m] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract plaster:floor:1:FD08:opening: * 0.9 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00] * 1 count [both faces of internal walls plus inner face of external walls. Exterior render/paint not in this benchmark. Interior paint excludes wet wall tiles and kitchen backsplash.]; subtract paint-exclude:floor:0:G02:wet-side-0: * 4 m [Closed native wall face G02, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-1: * 4 m [Closed native wall face G02, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-2: * 4 m [Closed native wall face G02, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G02:wet-side-3: * 4 m [Closed native wall face G02, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:0:G02:GD07:wet-opening: * 0.9 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; GD07 | GI-3 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:0:G02:GW01:wet-opening: * 1.2 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40] * 1 m [GW01 | GE-W | window | 1.20 | 1.20 | 1.40; GW01 | GE-W | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:0:G03:wet-side-0: * 4 m [Closed native wall face G03, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-1: * 3 m [Closed native wall face G03, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-2: * 4 m [Closed native wall face G03, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:0:G03:wet-side-3: * 3 m [Closed native wall face G03, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:0:G03:GD08:wet-opening: * 0.9 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00] * 2.1 m [GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; GD08 | GI-1 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:1:F09:wet-side-0: * 2 m [Closed native wall face F09, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-1: * 3 m [Closed native wall face F09, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-2: * 2 m [Closed native wall face F09, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F09:wet-side-3: * 3 m [Closed native wall face F09, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:1:F09:FD06:wet-opening: * 0.9 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; FD06 | FI-7 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F09:FW08:wet-opening: * 1.2 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW08 | FE-E | window | 1.20 | 1.20 | 1.40; FW08 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:floor:1:F11:wet-side-0: * 4 m [Closed native wall face F11, side 1; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-1: * 3 m [Closed native wall face F11, side 2; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-2: * 4 m [Closed native wall face F11, side 3; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; subtract paint-exclude:floor:1:F11:wet-side-3: * 3 m [Closed native wall face F11, side 4; G02 laundry, G03 WC/shower, F09 shared bath, F11 ensuite. Waterproof entire floor. Wall waterproofing height2.00 m; tile height2.40 m. Deduct only the opening portion within these heights. Four wet windows are 1.20 x 1.20 at sill1.40 m: GW01, FW06, FW08, FW09. Four wet-room doors are GD07, GD08, FD06, FD07.] * 2.4 m [WET ROOMS: tile height2.40 m]; add paint-exclude:floor:1:F11:FD07:wet-opening: * 0.9 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00] * 2.1 m [FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; FD07 | FI-9 | door | 0.90 | 2.10 | 0.00; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":2.1,\"sill_m\":0,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F11:FW06:wet-opening: * 1.2 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40] * 1 m [FW06 | FE-N | window | 1.20 | 1.20 | 1.40; FW06 | FE-N | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; add paint-exclude:floor:1:F11:FW09:wet-opening: * 1.2 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40] * 1 m [FW09 | FE-E | window | 1.20 | 1.20 | 1.40; FW09 | FE-E | window | 1.20 | 1.20 | 1.40; WET ROOMS: tile height2.40 m; clip {\"opening_height_m\":1.2,\"sill_m\":1.4,\"finish_height_m\":2.4}]; subtract paint-exclude:backsplash: * 5 m [KITCHEN: Backsplash is 0.60 high along5.00 m] * 0.6 m [L base cabinet measured 3.00+2.00 =5.00 linear metres, no double-counted corner. Backsplash is 0.60 high along5.00 m. Include one hob/hood package.] = 858.3799999999994 m2. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-AC_COUNT",
+      "metric": "ac_count",
+      "quantity": 9,
+      "unit": "nr",
+      "rate": 3250,
+      "amount": 29250,
+      "description": "Wall-mounted split air conditioner 1.5 TR — equipment and mounting allowance [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "ac_count",
+        "assumed": {
+          "capacity_tr": 1.5
+        },
+        "sourceSpecifications": [
+          {
+            "property": "unit_system",
+            "value": "split",
+            "pages": [
+              7
+            ]
+          }
+        ],
+        "catalogItemCode": "VNT-DEF-SPLIT-AC",
+        "catalogUnit": "nr",
+        "catalogRate": 3250,
+        "rateBasis": "Existing user catalog HVC-001: 3250 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "ac_count",
+          "specification": {
+            "capacity_tr": 1.5,
+            "unit_system": "split"
+          },
+          "label": "Wall-mounted split air conditioner 1.5 TR — equipment and mounting allowance",
+          "rate_basis": "Existing user catalog HVC-001: 3250 AED/nos; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Capacity/mounting are budget assumptions, not a cooling-load design. Copper piping is separately measured; this allowance assumes no included pipe length.",
+          "reference_item_code": "HVC-001"
+        },
+        "originalDescription": "Air conditioning units — capacities require confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Split AC units; Ground: 4 nr. Material, diameter and capacity are separate source requirements. | Native source table: Split AC units; First: 5 nr. Material, diameter and capacity are separate source requirements..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Wall-mounted split air conditioner 1.5 TR — equipment and mounting allowance; rate item VNT-DEF-SPLIT-AC; Existing user catalog HVC-001: 3250 AED/nos; legacy budget rate, not a newly verified supplier quotation. Capacity/mounting are budget assumptions, not a cooling-load design. Copper piping is separately measured; this allowance assumes no included pipe length."
+    },
+    {
+      "code": "PLB-005",
+      "metric": "toilet_count",
+      "quantity": 3,
+      "unit": "nos",
+      "rate": 920,
+      "amount": 2760,
+      "description": "European type water closet complete with fittings",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 sanitary fixtures. Independently calculated: add G03 toilet: * 1 nr [one toilet in G03] = 1 nr. Source transcription requires review. | M01 sanitary fixtures. Independently calculated: add F09+F11 toilets: * 2 nr [one each in F09,F11] = 2 nr. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PLB-006",
+      "metric": "basin_count",
+      "quantity": 3,
+      "unit": "nos",
+      "rate": 730,
+      "amount": 2190,
+      "description": "Wash basin complete with mixer and fittings",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 sanitary fixtures. Independently calculated: add G03 basin: * 1 nr [one basin in G03] = 1 nr. Source transcription requires review. | M01 sanitary fixtures. Independently calculated: add F09+F11 basins: * 2 nr [one each in F09,F11] = 2 nr. Source transcription requires review. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "ELE-001",
+      "metric": "light_count",
+      "quantity": 60,
+      "unit": "point",
+      "rate": 120,
+      "amount": 7200,
+      "description": "Lighting point including wiring conduit and accessories",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Light points; Ground: 28 nr. Material, diameter and capacity are separate source requirements. | Native source table: Light points; First: 32 nr. Material, diameter and capacity are separate source requirements. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "ELE-002",
+      "metric": "socket_count",
+      "quantity": 70,
+      "unit": "point",
+      "rate": 145,
+      "amount": 10150,
+      "description": "13A switched socket outlet including wiring and accessories",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Socket points; Ground: 34 nr. Material, diameter and capacity are separate source requirements. | Native source table: Socket points; First: 36 nr. Material, diameter and capacity are separate source requirements. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "ELE-004",
+      "metric": "distribution_board_count",
+      "quantity": 2,
+      "unit": "nos",
+      "rate": 1450,
+      "amount": 2900,
+      "description": "Single phase distribution board complete with breakers",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Distribution boards; Ground: 1 nr. Material, diameter and capacity are separate source requirements. | Native source table: Distribution boards; First: 1 nr. Material, diameter and capacity are separate source requirements. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-DRIVEWAY_AREA",
+      "metric": "driveway_area",
+      "quantity": 40,
+      "unit": "m2",
+      "rate": 75,
+      "amount": 3000,
+      "description": "Concrete interlock driveway paving including sand bed and installation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "driveway_area",
+        "assumed": {
+          "paving_system": "concrete_interlock"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-DRIVEWAY",
+        "catalogUnit": "m2",
+        "catalogRate": 75,
+        "rateBasis": "Existing user catalog EXT-001: 75 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "driveway_area",
+          "specification": {
+            "paving_system": "concrete_interlock"
+          },
+          "label": "Concrete interlock driveway paving including sand bed and installation",
+          "rate_basis": "Existing user catalog EXT-001: 75 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Interlock assumed instead of asphalt; sub-base depth, drainage and kerbs require separate scope confirmation.",
+          "reference_item_code": "EXT-001"
+        },
+        "originalDescription": "Driveway — paving specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 external works. Independently calculated: add driveway 10x4: * 10 m [length] * 4 m [width] = 40 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Concrete interlock driveway paving including sand bed and installation; rate item VNT-DEF-DRIVEWAY; Existing user catalog EXT-001: 75 AED/m2; legacy budget rate, not a newly verified supplier quotation. Interlock assumed instead of asphalt; sub-base depth, drainage and kerbs require separate scope confirmation."
+    },
+    {
+      "code": "PDF-TERRACE_RAILING_LENGTH",
+      "metric": "terrace_railing_length",
+      "quantity": 7,
+      "unit": "m",
+      "rate": 500,
+      "amount": 3500,
+      "description": "Stainless steel and glass infill terrace railing supplied and installed [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "terrace_railing_length",
+        "assumed": {
+          "railing_system": "ss316_glass_infill"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-SCOPE-RAILING",
+        "catalogUnit": "m",
+        "catalogRate": 500,
+        "rateBasis": "Midpoint (350+650)/2 of published glass-infill balustrade range; indicative allowance",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "terrace_railing_length",
+          "specification": {
+            "railing_system": "ss316_glass_infill"
+          },
+          "label": "Stainless steel and glass infill terrace railing supplied and installed",
+          "rate_basis": "Midpoint (350+650)/2 of published glass-infill balustrade range; indicative allowance",
+          "conditions": "Assumes normal residential terrace access and standard height. VAT treatment assumed excluded; structural design and fixing details need confirmation.",
+          "reference_urls": [
+            "https://blackgoldsteelandaluminium.com/sharjah/"
+          ],
+          "published_range_aed": [
+            350,
+            650
+          ],
+          "published_vat": "not_stated_assumed_excluded"
+        },
+        "originalDescription": "Terrace railing — specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 external works. Independently calculated: add south edge: * 3 m [south 3 m]; add east edge: * 4 m [east 4 m] = 7 m. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Stainless steel and glass infill terrace railing supplied and installed; rate item VNT-SCOPE-RAILING; Midpoint (350+650)/2 of published glass-infill balustrade range; indicative allowance. Assumes normal residential terrace access and standard height. VAT treatment assumed excluded; structural design and fixing details need confirmation."
+    },
+    {
+      "code": "VNT-SCOPE-AC-PIPE",
+      "metric": "ac_pipe_length",
+      "quantity": 90,
+      "unit": "m",
+      "rate": 72.5,
+      "amount": 6525,
+      "description": "AC copper pipe pair 1/4 and 1/2 inch with 9mm insulation [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "ac_pipe_length",
+        "assumed": {
+          "pipe_material": "COPPER",
+          "diameter_pair_mm": "6.35+12.7",
+          "insulation_mm": 9
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-EST-AC-PIPE-PAIR",
+        "catalogUnit": "m",
+        "catalogRate": 72.5,
+        "rateBasis": "Assumed budget allowance 72.50 AED per route metre; midpoint of published 60–85 AED/m installed insulated copper piping range, not a supplier quote for this exact diameter pair",
+        "policy": {
+          "batch": "ventra-v131-default-specifications",
+          "kind": "pricing_default",
+          "enabled": true,
+          "metric": "ac_pipe_length",
+          "specification": {
+            "pipe_material": "COPPER",
+            "diameter_pair_mm": "6.35+12.7",
+            "insulation_mm": 9
+          },
+          "label": "AC copper pipe pair 1/4 and 1/2 inch with 9mm insulation",
+          "rate_basis": "Assumed budget allowance 72.50 AED per route metre; midpoint of published 60–85 AED/m installed insulated copper piping range, not a supplier quote for this exact diameter pair",
+          "conditions": "One pair per measured route metre assumed. Assumes AC equipment rates exclude piping; review included lengths to avoid double counting. Exact sizes/insulation, VAT and access require confirmation.",
+          "reference_url": "https://atdoorstep.ae/dubai/ac-installation",
+          "observed_on": "2026-10-15",
+          "reference_range_aed": [
+            60,
+            85
+          ],
+          "rate_kind": "indicative_midpoint"
+        },
+        "originalDescription": "AC insulated pipework"
+      },
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Insulated AC pipes; Ground: 40 m. Material, diameter and capacity are separate source requirements. | Native source table: Insulated AC pipes; First: 50 m. Material, diameter and capacity are separate source requirements. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): AC copper pipe pair 1/4 and 1/2 inch with 9mm insulation; rate item VNT-EST-AC-PIPE-PAIR; Assumed budget allowance 72.50 AED per route metre; midpoint of published 60–85 AED/m installed insulated copper piping range, not a supplier quote for this exact diameter pair. One pair per measured route metre assumed. Assumes AC equipment rates exclude piping; review included lengths to avoid double counting. Exact sizes/insulation, VAT and access require confirmation."
+    },
+    {
+      "code": "FIR-002",
+      "metric": "smoke_detector_count",
+      "quantity": 8,
+      "unit": "point",
+      "rate": 310,
+      "amount": 2480,
+      "description": "Addressable smoke detector including wiring and installation",
+      "notes": "Quantity transcribed from PDF evidence; scope, specification and rate require review. PDF SCHEDULE EVIDENCE (AI; REVIEW REQUIRED): pages 7; Native source table: Smoke detectors; Ground: 4 nr. Material, diameter and capacity are separate source requirements. | Native source table: Smoke detectors; First: 4 nr. Material, diameter and capacity are separate source requirements. REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description."
+    },
+    {
+      "code": "PDF-LANDSCAPE_AREA",
+      "metric": "landscape_area",
+      "quantity": 60,
+      "unit": "m2",
+      "rate": 46,
+      "amount": 2760,
+      "description": "Natural grass soft landscaping including soil preparation and laying [assumed specification — editable]",
+      "assumption": {
+        "status": "applied",
+        "metric": "landscape_area",
+        "assumed": {
+          "landscape_system": "natural_grass"
+        },
+        "sourceSpecifications": [],
+        "catalogItemCode": "VNT-DEF-LANDSCAPE",
+        "catalogUnit": "m2",
+        "catalogRate": 46,
+        "rateBasis": "Existing user catalog LAN-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+        "policy": {
+          "batch": "ventra-v132-complete-measured-pricing",
+          "kind": "pricing_default",
+          "fallback_only": true,
+          "enabled": true,
+          "metric": "landscape_area",
+          "specification": {
+            "landscape_system": "natural_grass"
+          },
+          "label": "Natural grass soft landscaping including soil preparation and laying",
+          "rate_basis": "Existing user catalog LAN-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation",
+          "conditions": "Groundcover allowance only; trees, irrigation and furniture excluded unless separately measured.",
+          "reference_item_code": "LAN-001"
+        },
+        "originalDescription": "Landscaping — planting specification requires confirmation"
+      },
+      "notes": "PDF EVIDENCE (AI; REVIEW REQUIRED): pages 7; M01 external works. Independently calculated: add landscaping 10x6: * 10 m [length] * 6 m [width] = 60 m2. Source transcription requires review..  REVIEW REQUIRED: Confirm drawing scope, specification, quantity/unit and applicable rate. Geometry alone does not confirm the catalog description. PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): Natural grass soft landscaping including soil preparation and laying; rate item VNT-DEF-LANDSCAPE; Existing user catalog LAN-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation. Groundcover allowance only; trees, irrigation and furniture excluded unless separately measured."
+    }
+  ]
+}

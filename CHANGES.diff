@@ -1,0 +1,290 @@
+--- before/src/lib/pdfDefaultSpecifications.mjs
++++ after/src/lib/pdfDefaultSpecifications.mjs
+@@ -1,49 +1,101 @@
+ import {readPdfSourceSpecifications,resolvedPdfSpecifications,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
+ import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
++import {PDF_METRIC_UNITS,normalizePdfScope} from './pdfTakeoffEvidence.mjs';
++import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
++import {clearBoqGapNote} from './boqPriceSelection.mjs';
+ 
+-// Defaults are pricing assumptions, never drawing evidence. They are configured
+-// on their own catalog rate item and apply only to unpriced measured pipe rows.
+-const allowed={water_pipe_length:['pipe_material','diameter_mm'],waste_pipe_length:['pipe_material','diameter_mm'],ac_pipe_length:['pipe_material','diameter_pair_mm','insulation_mm']};
++// Catalog-configured assumptions never become drawing evidence or quantities.
++const allowed={
++ water_pipe_length:['pipe_material','diameter_mm'],waste_pipe_length:['pipe_material','diameter_mm'],ac_pipe_length:['pipe_material','diameter_pair_mm','insulation_mm'],
++ internal_block_area:['thickness_mm','block_material'],external_block_area:['thickness_mm','block_material'],
++ wood_floor_area:['floor_system'],epoxy_floor_area:['floor_system'],terrace_floor_area:['tile_material'],
++ wet_wall_tile_area:['tile_material'],backsplash_area:['tile_material'],ceiling_paint_area:['paint_system'],
++ roof_waterproofing_area:['waterproofing_system'],terrace_waterproofing_area:['waterproofing_system'],wet_floor_waterproofing_area:['waterproofing_system'],wet_wall_waterproofing_area:['waterproofing_system'],
++ door_count:['door_system'],internal_door_count:['door_system'],service_door_count:['door_system'],entrance_door_count:['door_system'],garage_door_count:['door_system'],
++ ac_count:['capacity_tr','unit_system'],kitchen_cabinet_length:['cabinet_material'],kitchen_hob_hood_count:['appliance_package'],
++ kitchen_sink_count:['fixture_system'],laundry_sink_count:['fixture_system'],shower_count:['fixture_system'],
++ terrace_railing_length:['railing_system'],driveway_area:['paving_system'],landscape_area:['landscape_system'],
++};
++for(const key of ['pcc_volume','foundation_volume','pedestal_volume','column_volume','beam_volume','ground_slab_volume','first_slab_volume','roof_slab_volume'])allowed[key]=['concrete_grade'];
++const unit=s=>({nos:'nr',no:'nr',each:'nr',ea:'nr',set:'nr',sqm:'m2',cum:'m3',lm:'m'})[String(s||'').toLowerCase()]||String(s||'').toLowerCase().replace('²','2').replace('³','3');
++function metadata(item){try{return typeof item?.source_reference==='string'?JSON.parse(item.source_reference):item?.source_reference;}catch{return null;}}
++export function isPdfDefaultOnlyPrice(item){return metadata(item)?.fallback_only===true;}
+ function policy(item){
+-  if(item?.is_active===false)return null;
+-  let p;try{p=typeof item.source_reference==='string'?JSON.parse(item.source_reference):item.source_reference;}catch{return null;}
+-  if(p?.kind!=='pricing_default'||p.enabled!==true||!allowed[p.metric]||item.unit!=='m'||item.currency&&item.currency!=='AED'||typeof p.label!=='string'||!p.label.trim())return null;
+-  const spec=p.specification;
+-  if(!spec||allowed[p.metric].some(k=>spec[k]===undefined)||Object.keys(spec).some(k=>!allowed[p.metric].includes(k)))return null;
+-  if(typeof spec.pipe_material!=='string'||!spec.pipe_material.trim())return null;
+-  if(p.metric==='ac_pipe_length'){
+-    const pair=String(spec.diameter_pair_mm).split('+').map(Number);
+-    if(pair.length!==2||pair.some(v=>!Number.isFinite(v)||v<=0)||!(Number(spec.insulation_mm)>0))return null;
+-  }else if(!Number.isFinite(spec.diameter_mm)||spec.diameter_mm<=0)return null;
+-  if(typeof p.rate_basis!=='string'||!p.rate_basis.trim()||p.conditions!==undefined&&typeof p.conditions!=='string')return null;
+-  return p;
++ if(item?.is_active===false)return null;
++ const p=metadata(item),keys=Object.hasOwn(allowed,p?.metric)?allowed[p.metric]:null;
++ if(p?.kind!=='pricing_default'||p.enabled!==true||!keys||unit(item.unit)!==PDF_METRIC_UNITS[p.metric]||item.currency&&item.currency!=='AED'||typeof p.label!=='string'||!p.label.trim())return null;
++ const spec=p.specification;
++ if(!spec||keys.some(k=>spec[k]===undefined)||Object.keys(spec).some(k=>!keys.includes(k)))return null;
++ if(Object.values(spec).some(v=>typeof v==='string'?!v.trim():typeof v!=='number'||!Number.isFinite(v)||v<=0))return null;
++ if(p.metric==='ac_pipe_length'){
++  const pair=String(spec.diameter_pair_mm).split('+').map(Number);
++  if(pair.length!==2||pair.some(v=>!Number.isFinite(v)||v<=0)||!(Number(spec.insulation_mm)>0))return null;
++ }
++ if(typeof p.rate_basis!=='string'||!p.rate_basis.trim()||p.conditions!==undefined&&typeof p.conditions!=='string')return null;
++ if(p.source_required!==undefined&&(!Array.isArray(p.source_required)||p.source_required.some(k=>!keys.includes(k))))return null;
++ return p;
++}
++function pricedRow(item,p,rateItem,resolution,known,extra={}){
++ const quantity=Number(item.quantity),assumed=Object.fromEntries(Object.entries(p.specification).filter(([property])=>!known.some(k=>k.property===property)));
++ const disclosure=`PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): ${p.label}; rate item ${rateItem.item_code}; ${p.rate_basis}.${p.conditions?' '+p.conditions:''}`;
++ return {...item,description:`${p.label} [assumed specification — editable]`,rate:resolution.rate,referenceRate:resolution.rate,
++  amount:Math.round((quantity*resolution.rate+Number.EPSILON)*100)/100,rateMissing:false,rateSource:`Assumed specification; catalog ${rateItem.item_code}; ${resolution.source}`,
++  source:'PDF measured quantity + editable catalog specification assumption',status:'provisional_estimate',verification:'provisional',specificationVerification:'assumed',reviewRequired:true,includeInCommercialTotal:false,
++  defaultSpecification:{status:'applied',metric:item.pdfEvidence.metricKey,assumed,sourceSpecifications:known,catalogItemCode:rateItem.item_code,catalogUnit:rateItem.unit,catalogRate:resolution.rate,rateBasis:p.rate_basis,policy:p,originalDescription:item.description,...extra},
++  completion:{code:'assumed_specification_review_required',required_information:['Confirm or edit the assumed specification and its budget rate.']},
++  notes:[clearBoqGapNote(item.notes),disclosure].filter(Boolean).join(' ')};
++}
++function doorParts(item,takeoff,p,catalog,priceLevel){
++ if(!p.opening_components)return null;
++ const native=nativeOpeningEvidence(takeoff.page_results||[],normalizePdfScope);
++ const rows=native.schedules.filter(s=>s.status==='read').flatMap(s=>s.rows.filter(r=>['door','garage_door'].includes(r.kind)));
++ const count=native.claims.filter(c=>c.key==='door_count').reduce((n,c)=>n+c.value,0);
++ if(!native.claims.length||native.schedules.some(s=>s.status!=='read')||count!==Number(item.quantity)||rows.length!==count)return null;
++ const grouped=new Map();for(const row of rows){const list=grouped.get(row.kind)||[];list.push(row);grouped.set(row.kind,list);}
++ const result=[];
++ for(const [kind,group] of grouped){
++  const config=p.opening_components[kind],matches=catalog.filter(c=>c.item_code===config?.item_code&&c.is_active!==false);
++  if(!config||matches.length!==1||unit(matches[0].unit)!=='nr')return null;
++  const rateItem=matches[0],rate=resolvePdfCatalogRate(rateItem,priceLevel);if(rate.missingRate)return null;
++  const pages=[...new Set(group.flatMap(r=>r.dimension_pages||[r.page]))];
++  const basis=`Source opening table ${kind}: ${group.map(r=>r.source_row).join('; ')}. Count allocated from complete source table, not a pricing assumption.`;
++  const child={...item,id:`${item.id||item.itemCode}:${kind}`,itemCode:`${item.itemCode}-${kind.toUpperCase()}`,quantity:group.length,
++   pdfEvidence:{...item.pdfEvidence,pages,basis,sourceAllocation:{kind,count:group.length,parentQuantity:count,tags:group.map(r=>r.id)}}};
++  const partPolicy={...p,label:config.label,specification:{door_system:config.door_system},rate_basis:config.rate_basis||p.rate_basis,conditions:config.conditions||p.conditions};
++  // A published package size is a cost driver; oversize scaling is explicitly
++  // an estimate. It never changes the measured opening count.
++  const scaled=group.map(r=>Math.max(1,config.reference_area_m2>0?r.width*r.height/config.reference_area_m2:1));
++  if(new Set(scaled.map(v=>v.toFixed(6))).size>1){
++   for(let i=0;i<group.length;i++){
++    const single={...child,id:child.id+':'+group[i].id,itemCode:child.itemCode+'-'+group[i].id,quantity:1,pdfEvidence:{...child.pdfEvidence,sourceAllocation:{kind,count:1,parentQuantity:count,tags:[group[i].id]}}};
++    result.push(pricedRow(single,partPolicy,rateItem,{...rate,rate:Math.round(rate.rate*scaled[i]*100)/100},[],{openingKind:kind,sizeFactor:scaled[i]}));
++   }
++  }else result.push(pricedRow(child,partPolicy,rateItem,{...rate,rate:Math.round(rate.rate*scaled[0]*100)/100},[],{openingKind:kind,sizeFactor:scaled[0]}));
++ }
++ return result;
+ }
+ export function applyPdfDefaultSpecifications(items,takeoff,catalog=[],priceLevel='standard'){
+-  if(!takeoff?.pdf_analysis)return items;
+-  const facts=readPdfSourceSpecifications(takeoff),conflicts=pdfSpecificationConflicts(facts),byMetric=new Map();
+-  for(const rateItem of catalog){const p=policy(rateItem);if(!p)continue;const entries=byMetric.get(p.metric)||[];entries.push({p,rateItem});byMetric.set(p.metric,entries);}
+-  return items.map(item=>{
+-    const key=item.pdfEvidence?.metricKey,policies=byMetric.get(key)||[];
+-    if(policies.length!==1||item.review?.confirmed||item.source==='manual'||!(Number(item.quantity)>0)||item.unit!=='m'||Number(item.rate)>0)return item;
+-    // Do not assume a split for mixed source specifications, a partially scoped
+-    // detail, duplicate billed operations, or a source property we cannot price.
+-    if(items.filter(i=>i.quantity>0&&(i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).includes(key)).length!==1||conflicts.some(f=>f.metric===key))return item;
+-    const {p,rateItem}=policies[0],source=facts.filter(f=>f.metric===key),known=resolvedPdfSpecifications(takeoff,key,facts);
+-    if(source.some(f=>!known.some(k=>k.property===f.property))||known.some(k=>p.specification[k.property]!==k.value))return item;
+-    const rate=resolvePdfCatalogRate(rateItem,priceLevel);if(rate.missingRate)return item;
+-    const claims=takeoff.pdf_analysis.quantity_evidence?.[key],quantity=Number(item.quantity);
+-    if(!claims?.length||claims.some(c=>c.key!==key||c.unit!=='m'||!Number.isFinite(c.value)||c.value<0||!c.evidence?.trim()||!c.pages?.length)||Math.abs(claims.reduce((n,c)=>n+c.value,0)-quantity)>.001)return item;
+-    // Detailed extracted notes without reparsable source facts must not be
+-    // silently replaced by a default (for example, a scanned DN25 schedule).
+-    if(!source.length&&claims.some(c=>/\b(?:dn|dia(?:meter)?)\s*[:=]?\s*\d+|\b(?:ppr|u?pvc|cpvc|hdpe|copper|steel|pex)\b|\d\s*mm|[øØ⌀]|\d\s*\/\s*\d/i.test(c.evidence)))return item;
+-    const assumed=Object.fromEntries(Object.entries(p.specification).filter(([property])=>!known.some(k=>k.property===property)));
+-    const notes=String(item.notes||'').replace(/\s*\[BOQ GAP\][\s\S]*?\[\/BOQ GAP\]/g,'').trim();
+-    const disclosure=`PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): ${p.label}; rate item ${rateItem.item_code}; ${p.rate_basis}.${p.conditions?' '+p.conditions:''}`;
+-    return {...item,description:`${p.label} [assumed specification — editable]`,rate:rate.rate,referenceRate:rate.rate,
+-      amount:Math.round((quantity*rate.rate+Number.EPSILON)*100)/100,rateMissing:false,rateSource:`Assumed specification; catalog ${rateItem.item_code}; ${rate.source}`,
+-      source:'PDF measured quantity + editable catalog specification assumption',status:'provisional_estimate',verification:'provisional',specificationVerification:'assumed',reviewRequired:true,includeInCommercialTotal:false,
+-      defaultSpecification:{status:'applied',metric:key,assumed,sourceSpecifications:known,catalogItemCode:rateItem.item_code,catalogUnit:rateItem.unit,catalogRate:rate.rate,rateBasis:p.rate_basis,policy:p,originalDescription:item.description},
+-      completion:{code:'assumed_specification_review_required',required_information:['Confirm or edit the assumed specification and its budget rate.']},
+-      notes:[notes,disclosure].filter(Boolean).join(' ')};
+-  });
++ if(!takeoff?.pdf_analysis)return items;
++ const facts=readPdfSourceSpecifications(takeoff),conflicts=pdfSpecificationConflicts(facts),byMetric=new Map();
++ for(const rateItem of catalog){const p=policy(rateItem);if(!p)continue;const entries=byMetric.get(p.metric)||[];entries.push({p,rateItem});byMetric.set(p.metric,entries);}
++ return items.flatMap(item=>{
++  const key=item.pdfEvidence?.metricKey;
++  if(item.review?.confirmed||item.source==='manual'||item.defaultSpecification?.rateOverridden||item.defaultSpecification?.status&&item.defaultSpecification.status!=='applied'||!(Number(item.quantity)>0)||Number(item.rate)>0||unit(item.unit)!==PDF_METRIC_UNITS[key])return [item];
++  if(items.filter(i=>i.quantity>0&&(i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).includes(key)).length!==1||conflicts.some(f=>f.metric===key))return [item];
++  const source=facts.filter(f=>f.metric===key),known=resolvedPdfSpecifications(takeoff,key,facts);
++  const policies=(byMetric.get(key)||[]).filter(({p})=>!source.some(f=>!known.some(k=>k.property===f.property))&&!known.some(k=>p.specification[k.property]!==k.value)&&!(p.source_required||[]).some(prop=>!known.some(k=>k.property===prop)));
++  if(policies.length!==1)return [item];
++  const {p,rateItem}=policies[0],rate=resolvePdfCatalogRate(rateItem,priceLevel);if(rate.missingRate)return [item];
++  const claims=takeoff.pdf_analysis.quantity_evidence?.[key],quantity=Number(item.quantity),expected=PDF_METRIC_UNITS[key];
++  if(!claims?.length||claims.some(c=>c.key!==key||c.unit!==expected||!Number.isFinite(c.value)||c.value<0||!c.evidence?.trim()||!c.pages?.length)||Math.abs(claims.reduce((n,c)=>n+c.value,0)-quantity)>.001)return [item];
++  if(expected==='nr'&&!Number.isInteger(quantity))return [item];
++  if(['water_pipe_length','waste_pipe_length','ac_pipe_length'].includes(key)&&!source.length&&claims.some(c=>/\b(?:dn|dia(?:meter)?)\s*[:=]?\s*\d+|\b(?:ppr|u?pvc|cpvc|hdpe|copper|steel|pex)\b|\d\s*mm|[øØ⌀]|\d\s*\/\s*\d/i.test(c.evidence)))return [item];
++  if(key==='door_count'&&p.opening_components){
++   const parts=doorParts(item,takeoff,p,catalog,priceLevel);if(parts)return parts;
++   // Do not turn a known garage opening into an ordinary timber door merely
++   // because a complete readable opening table is unavailable.
++   if(claims.some(c=>/garage[_ ]door|roller shutter|overhead door/i.test(c.evidence)))return [item];
++  }
++  return [pricedRow(item,p,rateItem,rate,known)];
++ });
+ }
+--- before/src/lib/pdfBoqCoverage.mjs
++++ after/src/lib/pdfBoqCoverage.mjs
+@@ -1,6 +1,7 @@
+ import {PDF_METRIC_UNITS, pdfScheduledRule} from './pdfTakeoffEvidence.mjs';
+ import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
+ import {readPdfSourceSpecifications} from './pdfSourceSpecifications.mjs';
++import {isPdfDefaultOnlyPrice} from './pdfDefaultSpecifications.mjs';
+ export {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
+ 
+ // A quantity must not be repeated across competing catalog variants. There is
+@@ -10,7 +11,7 @@
+   const specificationFacts=readPdfSourceSpecifications(takeoff);
+   const signatures = new Map(), conflictingCodes = new Set();
+   for (const item of candidates || []) {
+-    if (!item || item.is_active === false) continue;
++    if (!item || item.is_active === false || isPdfDefaultOnlyPrice(item)) continue;
+     const code = String(item.item_code || item.itemCode || '').trim().toUpperCase();
+     if (!code) continue;
+     const signature=JSON.stringify([String(item.description||'').trim().toLowerCase(),String(item.unit||'').trim().toLowerCase()]);
+@@ -45,7 +46,8 @@
+   // shadow genuine items, and do not manufacture rates for them. Configured
+   // zero-rate variants DO still participate, so price alone never resolves
+   // competing specifications.
+-  const active=(candidates||[]).filter(i=>i&&i.is_active!==false);
++  const allActive=(candidates||[]).filter(i=>i&&i.is_active!==false);
++  const active=allActive.filter(i=>!isPdfDefaultOnlyPrice(i));
+   const configuredCodes=new Set(active.filter(i=>{
+     const code=String(i.item_code||i.itemCode||'').trim().toUpperCase();
+     const section=String(i.section_code||'').trim();
+@@ -64,7 +66,7 @@
+       rule_name:'PDF evidence: existing catalog item',notes:'Explicit PDF operation matched to a unique existing catalog item; review required.'});
+     codes.add(code);
+   }
+-  return {...plan,rules:next,catalogAudit:{activeEntries:active.length,commercialCandidates:eligible.length,unconfiguredEntries:ignored}};
++  return {...plan,rules:next,catalogAudit:{activeEntries:allActive.length,defaultOnlyEntries:allActive.length-active.length,commercialCandidates:eligible.length,unconfiguredEntries:ignored}};
+ }
+ 
+ // Aggregate room/floor/wall summaries are diagnostic, not extra billable work.
+--- before/src/lib/pdfBoqCompletion.mjs
++++ after/src/lib/pdfBoqCompletion.mjs
+@@ -1,7 +1,7 @@
+ import {pdfRuleMetric} from './pdfTakeoffEvidence.mjs';
+ import {readPdfSourceSpecifications,resolvedPdfSpecifications,pdfSpecificationConflicts} from './pdfSourceSpecifications.mjs';
+ import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
+-import {applyPdfDefaultSpecifications} from './pdfDefaultSpecifications.mjs';
++import {applyPdfDefaultSpecifications,isPdfDefaultOnlyPrice} from './pdfDefaultSpecifications.mjs';
+ 
+ const requirements={
+   internal_block_area:['Block thickness/material matching the drawing','An own catalog or project rate for that specification'],
+@@ -25,7 +25,7 @@
+   const specificationFacts=readPdfSourceSpecifications(takeoff);
+   const specificationConflicts=pdfSpecificationConflicts(specificationFacts);
+   for(const p of catalog){
+-    if(p?.is_active===false)continue;
++    if(p?.is_active===false||isPdfDefaultOnlyPrice(p))continue;
+     const m=pdfRuleMetric(p?.description,p?.unit,takeoff,specificationFacts);if(!m)continue;
+     const rows=candidates.get(m.key)||[];
+     rows.push({code:p.item_code||p.itemCode,unit:p.unit,rateAvailable:!resolvePdfCatalogRate(p).missingRate});candidates.set(m.key,rows);
+--- before/src/lib/pdfSourceSpecifications.mjs
++++ after/src/lib/pdfSourceSpecifications.mjs
+@@ -13,9 +13,10 @@
+   const add=(metric,property,values)=>{for(const value of unique(values))facts.push({metric,property,value,page,scope_id:scopeId,quote,source:'native_pdf_text'});};
+   if(/\b(?:not|unless|option|optional|alternative|except|excluding)\b/.test(d))continue;
+   for(const [word,key] of [['external','external_block_area'],['exterior','external_block_area'],['internal','internal_block_area'],['interior','internal_block_area']]){
+-   const pattern=new RegExp(`\\b${word}\\s*(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`,'g');
++   const material='(?:autoclaved aerated concrete|hollow concrete|solid concrete|aac|concrete|clay|brick)';
++   const pattern=new RegExp(`\\b${word}\\s*(?:${material}\\s+)?(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(?:${material}\\s+)?(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`,'g');
+    add(key,'thickness_mm',[...d.matchAll(pattern)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]])));
+-   const reversed=new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\s+(?:thick\\s+)?${word}\\s+(?:walls?|partitions?|blockwork|masonry)\\b`,'g');
++   const reversed=new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\s+(?:thick\\s+)?${word}\\s+(?:${material}\\s+)?(?:walls?|partitions?|blockwork|masonry)\\b`,'g');
+    add(key,'thickness_mm',[...d.matchAll(reversed)].map(m=>Number(m[1])*({mm:1,cm:10,m:1000}[m[2]])));
+   }
+   const grades=[...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map(m=>`C${m[1]}${m[2]?'/'+m[2]:''}`);
+@@ -38,6 +39,28 @@
+    if(/\b(?:dn|diameter|dia|od)\b|\d\s*mm|[øØ]/.test(detail))add('ac_pipe_length','unparsed_pipe_detail',['present']);
+   }
+   if(/\b(?:ac|air conditioning|air conditioner|split)\b/.test(d))add('ac_count','capacity_tr',[...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/g)].map(m=>Number(m[1])));
++  // Recognize explicit material/system choices independently of pricing
++  // defaults. Generic words such as "wood" do not imply engineered timber.
++  for(const [key,re] of [['internal_block_area',/\b(?:internal|interior|partition)\b/],['external_block_area',/\b(?:external|exterior)\b/]])if(re.test(d)&&/\b(?:blockwork|blocks?|masonry|walls?)\b/.test(d)){
++   const material=/\b(?:aac|autoclaved)\b/.test(d)?'aac':/\b(?:clay|brick)\b/.test(d)?'clay':/\bconcrete\b/.test(d)?'concrete':null;
++   if(material)add(key,'block_material',[material]);
++  }
++  if(/\b(?:wood(?:en)?|timber|parquet)\b/.test(d)&&/\bfloor/.test(d)){
++   const system=/\bengineered\b/.test(d)?'engineered_wood':/\bsolid\b/.test(d)?'solid_wood':/\blaminate\b/.test(d)?'laminate':null;
++   if(system)add('wood_floor_area','floor_system',[system]);
++  }
++  for(const [key,re] of [['terrace_floor_area',/\bterrace\b/],['wet_wall_tile_area',/\bwet\s+(?:area\s+)?wall\b/],['backsplash_area',/\bbacksplash\b/]])if(re.test(d)&&/\b(?:tile|tiling|ceramic|porcelain|marble|granite)\b/.test(d)){
++   const material=['porcelain','marble','granite','ceramic'].find(s=>new RegExp('\\b'+s+'\\b').test(d));if(material)add(key,'tile_material',[material]);
++  }
++  for(const [key,re] of [['roof_waterproofing_area',/\broof\b/],['terrace_waterproofing_area',/\bterrace\b/],['wet_floor_waterproofing_area',/\bwet\s+(?:area\s+)?floor\b/],['wet_wall_waterproofing_area',/\bwet\s+(?:area\s+)?wall\b/]])if(re.test(d)&&/\b(?:waterproof|membrane)/.test(d)){
++   const system=/\b(?:polyurethane|pu)\b/.test(d)?'polyurethane':/\bcementitious\b/.test(d)?'cementitious':/\b(?:torch|bitumen|bituminous)\b/.test(d)?'torch_bitumen':null;if(system)add(key,'waterproofing_system',[system]);
++  }
++  if(/\bkitchen\b/.test(d)&&/\bcabinet/.test(d)){
++   const material=/\balumini?um\b/.test(d)?'aluminium':/\bmdf\b/.test(d)?'mdf':/\bplywood\b/.test(d)?'plywood':null;if(material)add('kitchen_cabinet_length','cabinet_material',[material]);
++  }
++  if(/\b(?:ac|air conditioning|air conditioner)\b/.test(d)){
++   const system=/\bvrf\b/.test(d)?'vrf':/\bducted\s+split\b/.test(d)?'ducted_split':/\bsplit\b/.test(d)?'split':null;if(system)add('ac_count','unit_system',[system]);
++  }
+  }
+  return facts.filter(f=>typeof f.value!=='number'||Number.isFinite(f.value)&&f.value>0&&f.value<1e6);
+ }
+--- before/src/lib/boqPriceSelection.mjs
++++ after/src/lib/boqPriceSelection.mjs
+@@ -15,7 +15,10 @@
+   if(a===b)return 1;
+   const x=units[a],y=units[b];return x&&y&&x[0]===y[0]?x[1]/y[1]:null;
+ }
+-export function clearBoqGapNote(notes){return String(notes||'').replace(/\s*\[BOQ GAP\][\s\S]*?\[\/BOQ GAP\]/g,'').trim();}
++export function clearBoqGapNote(notes){return String(notes||'').replace(/\s*\[BOQ GAP\][\s\S]*?\[\/BOQ GAP\]/g,'')
++ .replace(/The matched catalog item has no own rate\. Quantity retained; no peer or median rate borrowed\./g,'')
++ .replace(/Quantity retained without assuming a catalog specification or rate\. Not included in tender or priced budget\./g,'').trim();}
++function supersededDefaultNotes(item){return clearBoqGapNote(item.notes).replace(/PRICING ASSUMPTION \(EDITABLE;/g,'PREVIOUS PRICING ASSUMPTION (SUPERSEDED;');}
+ export function catalogPriceEntries(catalog,priceLevel='standard'){
+   if(!catalog||!Array.isArray(catalog.sections))throw Error('Invalid price catalog response.');
+   const entries=[],seen=new Map();
+@@ -54,7 +57,7 @@
+     quantity:before.quantity*factor,unit:entry.unit,rate,referenceRate:rate,rateSource:`Catalog ${entry.itemCode||entry.id}: ${entry.rateSource}`,
+     catalogSelection:{itemCode:entry.itemCode||entry.id,rateSource:entry.rateSource,sourceName:entry.sourceName||'',selectedUnit:entry.unit,selectedRate:rate,
+       originalQuantity:before.quantity,originalUnit:before.unit,originalDescription:item.description,quantityFactor:factor},
+-    notes:[clearBoqGapNote(item.notes),`PROJECT CATALOG SELECTION: ${entry.itemCode||entry.id}; ${before.quantity} ${before.unit} × ${factor} = ${before.quantity*factor} ${entry.unit}; own catalog rate ${rate}. Scope/specification and rate require review.`].filter(Boolean).join(' ')});
++    notes:[item.defaultSpecification?supersededDefaultNotes(item):clearBoqGapNote(item.notes),`PROJECT CATALOG SELECTION: ${entry.itemCode||entry.id}; ${before.quantity} ${before.unit} × ${factor} = ${before.quantity*factor} ${entry.unit}; own catalog rate ${rate}. Scope/specification and rate require review.`].filter(Boolean).join(' ')});
+ }
+ export function editPdfBoqItem(item,field,value){
+   const next={...invalidateBoqReview(item)};
+@@ -80,7 +83,7 @@
+     if(field==='description'&&item.defaultSpecification?.status==='applied'&&value!==item.description){
+       next.rate=0;next.referenceRate=0;next.rateSource='Specification edited — select a matching catalog rate or enter a project rate';
+       next.defaultSpecification={...item.defaultSpecification,status:'specification_edited'};
+-      next.notes=[clearBoqGapNote(item.notes),'SPECIFICATION EDITED: the previous default rate was cleared; select a matching catalog item or enter a rate.'].filter(Boolean).join(' ');
++      next.notes=[supersededDefaultNotes(item),'SPECIFICATION EDITED: the previous default rate was cleared; select a matching catalog item or enter a rate.'].filter(Boolean).join(' ');
+     }
+   }
+   return pendingState(next);
+--- before/src/lib/serverBoqAnalysis.js
++++ after/src/lib/serverBoqAnalysis.js
+@@ -136,6 +136,7 @@
+   return {
+     pdf_analysis:takeoff.pdf_analysis||(/pdf/i.test(takeoff.document_type||'')||/\.pdf$/i.test(takeoff.document_name||'')?{version:0,requiresReanalysis:true,quantity_evidence:{}}:null),
+     scheduled_quantities:takeoff.scheduled_quantities||{},
++    page_results:takeoff.pdf_analysis&&Array.isArray(takeoff.page_results)?takeoff.page_results:[],
+     rooms: toNumber(
+       takeoff.rooms ??
+         takeoff.room_count ??

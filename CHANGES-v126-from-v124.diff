@@ -1,0 +1,739 @@
+--- /dev/null
++++ b/src/lib/pdfCatalogScope.mjs
+@@ -0,0 +1,60 @@
++// Catalog language is independent of a drawing's quantities and item codes.
++// Only explicit operation/location combinations are recognized here. A price
++// description is never a source for a missing drawing measurement.
++export function pdfCatalogScope(description) {
++  const d=String(description||'').toLowerCase().replace(/[-‐‑–—]/g,' ').replace(/\s+/g,' ').trim();
++  if(/\b(?:disposal|haul|backfill|pool|tank|raft|pile|stairs?|staircase)\b/.test(d))return null;
++  const match=(key,unit,extra={})=>({key,unit,...extra});
++  if(/\bformwork\b/.test(d)){
++    if(/\bslabs?\b/.test(d)&&(!/\bbeams?\b/.test(d)||/\bsoffit\b/.test(d)))return match('slab_formwork_area','m2');
++    if(/\bbeams?\b/.test(d)&&!/\b(?:slabs?|soffits?|undersides?|bottoms?)\b/.test(d))return match('beam_formwork_area','m2');
++    if(/\bcolumns?\b/.test(d)&&!/\b(?:beam|slab|footing|pedestal)\b/.test(d))return match('column_formwork_area','m2');
++    // The existing foundation metric covers footing AND pedestal sides.
++    // A footing-only or pedestal-only item cannot consume that combined area.
++    if(/\bfootings?\b/.test(d)&&/\bpedestals?\b/.test(d)&&!/\b(?:column|beam|slab)\b/.test(d))return match('foundation_formwork_area','m2');
++    return null;
++  }
++  if(/\b(?:rc|reinforced concrete)\b/.test(d)&&!/\bc\s*\d|\bmpa\b|\bgrade\b|\b(?:precast|prestressed|post tensioned)\b/.test(d)){
++    const members=[[/\bfootings?\b/,'foundation_volume'],[/\bpedestals?\b/,'pedestal_volume'],[/\bcolumns?\b/,'column_volume'],[/\bbeam downstands?\b/,'beam_volume'],[/\bground (?:floor )?slabs?\b/,'ground_slab_volume'],[/\bfirst (?:floor )?slabs?\b/,'first_slab_volume'],[/\broof slabs?\b/,'roof_slab_volume']].filter(([re])=>re.test(d));
++    if(members.length===1){
++      const thickness=d.match(/\b(\d+(?:\.\d+)?)\s*mm\b/);
++      return match(members[0][1],'m3',thickness?{sourceThicknessM:Number(thickness[1])/1000}:{});
++    }
++  }
++  if(/^excavat(?:e|ion|ing)\b/.test(d)&&!/\b(?:rock|trench|strip)\b/.test(d))return match('excavation_volume','m3');
++  if(/^rebar\b/.test(d)&&!/\b(?:footing|slab|beam|column|pedestal|mesh)\b/.test(d))return match('rebar_kg','kg');
++  if(/\bterrace\b/.test(d)&&/\bceramic\b/.test(d)&&!/\b(?:wall|walls|balcony)\b/.test(d))return match('terrace_floor_area','m2');
++  if(/^roof (?:waterproofing|membrane)$/.test(d))return match('roof_waterproofing_area','m2');
++  if(/^terrace (?:floor )?(?:waterproofing|membrane)$/.test(d))return match('terrace_waterproofing_area','m2');
++  if(/^wc pans?(?: complete)?$/.test(d))return match('toilet_count','nr');
++  if(/^(?:water supply|water) pipes?(?: complete)?$/.test(d))return match('water_pipe_length','m');
++  if(/^waste pipes?(?: complete)?$/.test(d))return match('waste_pipe_length','m');
++  if(/^split (?:ac|air conditioning) units?(?: complete)?$/.test(d))return match('ac_count','nr');
++  if(/^ac insulated pipe(?:work|s)?$/.test(d))return match('ac_pipe_length','m');
++  if(/^kitchen and laundry sink sets?(?: complete)?$/.test(d))return match('kitchen_sink_count+laundry_sink_count','nr',{keys:['kitchen_sink_count','laundry_sink_count']});
++  if(/^kitchen sink sets?(?: complete)?$/.test(d))return match('kitchen_sink_count','nr');
++  if(/^laundry sink sets?(?: complete)?$/.test(d))return match('laundry_sink_count','nr');
++  if(/^kitchen (?:hob and hood|hob hood) package$/.test(d))return match('kitchen_hob_hood_count','nr');
++  if(/^(?:glass and metal )?terrace railing$/.test(d))return match('terrace_railing_length','m');
++  if(/^driveway paving$/.test(d))return match('driveway_area','m2');
++  if(/^soft landscaping$/.test(d))return match('landscape_area','m2');
++  return null;
++}
++
++// A stated catalog thickness is a restriction, not a way to set the source
++// thickness. Accept only explicit calculated thickness operands for that exact
++// measured operation. Missing or conflicting source operands keep it unbound.
++export function pdfCatalogThicknessMatches(metric,rows){
++  if(metric.sourceThicknessM===undefined)return true;
++  const values=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[[^\]]*\bthickness\b[^\]]*\]/gi)].map(m=>Number(m[1])));
++  return values.length>0&&values.every(v=>Math.abs(v-metric.sourceThicknessM)<1e-9);
++}
++
++export function pdfCatalogHeightMatches(metric,rows,description){
++  if(!['wet_wall_tile_area','wet_wall_waterproofing_area'].includes(metric.key))return true;
++  const text=String(description||'').toLowerCase(),dimension=text.match(/\b(\d+(?:\.\d+)?)\s*(mm|m)\b/);
++  if(!dimension)return true;
++  const height=Number(dimension[1])*(dimension[2]==='mm'?.001:1),kind=metric.key==='wet_wall_tile_area'?'tile':'waterproofing';
++  const operands=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[WET ROOMS:\s*([^\]]*height[^\]]*)\]/gi)].filter(m=>m[2].toLowerCase().includes(kind)).map(m=>Number(m[1])));
++  return operands.length>0&&operands.every(v=>Math.abs(v-height)<1e-9);
++}
+--- a/src/lib/pdfTakeoffEvidence.mjs
++++ b/src/lib/pdfTakeoffEvidence.mjs
+@@ -3,6 +3,7 @@
+ import {applyPdfDocumentReview,PDF_AREA_KEYS} from './pdfMeasurementCalculations.mjs';
+ import {PDF_SOURCE_MEASUREMENT_KEYS} from './pdfSourceMeasurements.mjs';
+ import {nativeOpeningEvidence} from './pdfNativeSchedules.mjs';
++import {pdfCatalogScope,pdfCatalogThicknessMatches,pdfCatalogHeightMatches} from './pdfCatalogScope.mjs';
+ // PDF quantities require explicit page roles/scopes. No project-specific totals.
+ export const PDF_METRIC_UNITS=Object.freeze({rooms:'nr',door_count:'nr',window_count:'nr',door_area:'m2',window_area:'m2',wall_length:'m',wall_area:'m2',floor_area:'m2',ceiling_area:'m2',roof_area:'m2',pcc_volume:'m3',foundation_volume:'m3',pedestal_volume:'m3',column_volume:'m3',beam_volume:'m3',ground_slab_volume:'m3',first_slab_volume:'m3',roof_slab_volume:'m3',rebar_kg:'kg',foundation_formwork_area:'m2',column_formwork_area:'m2',beam_formwork_area:'m2',slab_formwork_area:'m2',external_block_area:'m2',internal_block_area:'m2',wood_floor_area:'m2',ceramic_floor_area:'m2',epoxy_floor_area:'m2',terrace_floor_area:'m2',wet_floor_area:'m2',wet_wall_area:'m2',plaster_area:'m2',paint_area:'m2',gypsum_ceiling_area:'m2',excavation_volume:'m3',toilet_count:'nr',basin_count:'nr',shower_count:'nr',socket_count:'nr',light_count:'nr',distribution_board_count:'nr',ac_count:'nr',smoke_detector_count:'nr',water_pipe_length:'m',waste_pipe_length:'m',ac_pipe_length:'m',kitchen_cabinet_length:'m',terrace_railing_length:'m',roof_waterproofing_area:'m2',terrace_waterproofing_area:'m2',wet_floor_waterproofing_area:'m2',wet_wall_waterproofing_area:'m2',wet_wall_tile_area:'m2',ceiling_paint_area:'m2',backsplash_area:'m2',driveway_area:'m2',landscape_area:'m2',kitchen_sink_count:'nr',laundry_sink_count:'nr',internal_wall_length:'m',external_wall_length:'m',internal_door_count:'nr',service_door_count:'nr',entrance_door_count:'nr',garage_door_count:'nr',kitchen_hob_hood_count:'nr'});
+ export function normalizePdfScope(s){const v=String(s||'').toLowerCase().trim().replace(/[ _-]+/g,' ');if(['gf','ground','ground floor','floor 0','همکف','الطابق الأرضي'].includes(v))return 'floor:0';if(['ff','first','first floor','floor 1','طبقه اول','الطابق الأول'].includes(v))return 'floor:1';if(['project','whole project','all floors','total'].includes(v))return 'project';return v;}
+@@ -101,10 +102,18 @@
+  return {...fields,confidence:floors.length?Math.round(floors.reduce((s,p)=>s+(p.confidence||0),0)/floors.length*10)/10:0,wall_height:sourcedHeight?nativeHeight.value:3.2,wall_length_estimated:false,wall_area_estimated:false,wall_length_source:'pdf_scoped_floor_plan',wall_area_source:'pdf_scoped_floor_plan',wall_height_source:sourcedHeight?'pdf_native_source_rule':'project_default',total_pages:total,analyzed_pages:pages.length,failed_pages:failed,page_results:pages,detected_items:floors.flatMap(p=>(p.detected_items||[]).map(i=>({...i,pages:[p.pageNumber]}))),scheduled_quantities:resolved,pdf_analysis:report,notes:`PDF reconciled by page role and floor scope. ${floors.length} distinct floor plans selected. Schedules override matching scope instead of adding duplicates. AI extraction requires review. ${warnings.join('; ')}`};
+ }
+ export function pdfRuleMetric(description,unit){
+- const d=String(description||'').toLowerCase(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
++ const d=String(description||'').toLowerCase().replace(/[-‐‑–—]/g,' ').replace(/\s+/g,' ').trim(),rawUnit=String(unit||'').toLowerCase().trim().replace('²','2').replace('³','3');
+  const u=({'sqm':'m2','sq.m':'m2','sq m':'m2','cum':'m3','cu.m':'m3','cu m':'m3','lm':'m','lin.m':'m','linear metre':'m','linear meter':'m','no.':'nr','nos.':'nr','each':'nr','ea':'nr','set':'nr'})[rawUnit]||rawUnit;
+  // Similar words do not establish the same operation or fixture specification.
+  if(/disposal|cart\s*away|haul|backfill|downlight|luminaire|light fixture|\bled\b/.test(d))return null;
++ // Beam sides and beam undersides are different operations. The latter is
++ // already part of slab/beam soffit scope, never an extra beam-side quantity.
++ if(/\bformwork\b/.test(d)&&/\bbeams?\b/.test(d)&&/\b(?:soffits?|undersides?|bottoms?)\b/.test(d)&&!/\bslabs?\b/.test(d))return null;
++ if(/\bformwork\b/.test(d)){
++  const groups=[/\b(?:foundations?|footings?|pedestals?)\b/,/\bcolumns?\b/,/\bbeams?\b/,/\bslabs?\b/].filter(re=>re.test(d));
++  const slabBeamSoffit=groups.length===2&&/\bslabs?\b/.test(d)&&/\bbeams?\b/.test(d)&&/\bsoffit\b/.test(d);
++  if(groups.length>1&&!slabBeamSoffit)return null;
++ }
+  // plaster_area is the interior plaster operation. An exterior render or a
+  // plaster ceiling must not receive it or compete with an interior wall item.
+  // An unspecified plaster location is not enough to select the operation.
+@@ -121,6 +130,13 @@
+  // rule; they cannot consume only one part of the package by keyword order.
+  if(/\b(?:wall|walls)\b/.test(d)&&/\b(?:floor|floors|ceiling|ceilings)\b/.test(d))return null;
+  for(const [pattern,key,expected] of specific)if(pattern.test(d))return u===expected?{key,factor:1}:null;
++ const operation=pdfCatalogScope(d);
++ if(operation){
++  const {unit:expected,...metric}=operation;
++  if(expected==='kg'&&['ton','tonne','t'].includes(u))return {...metric,factor:.001};
++  if(u===expected||expected==='nr'&&['nos','no','number','nr'].includes(u))return {...metric,factor:1};
++  return null;
++ }
+  const rules=[[/blinding/,'pcc_volume','m3'],[/\bexcavation\b/,'excavation_volume','m3'],[/formwork.*found/,'foundation_formwork_area','m2'],[/formwork.*column/,'column_formwork_area','m2'],[/formwork.*beam/,'beam_formwork_area','m2'],[/formwork.*slab/,'slab_formwork_area','m2'],[/reinforcement|reinforcing steel/,'rebar_kg','kg'],[/200.*block|block.*200/,'external_block_area','m2'],[/120.*block|block.*120/,'internal_block_area','m2'],[/wood.*floor|parquet/,'wood_floor_area','m2'],[/ceramic.*floor/,'ceramic_floor_area','m2'],[/epoxy.*floor|garage.*epoxy/,'epoxy_floor_area','m2'],[/plaster/,'plaster_area','m2'],[/internal wall.*paint|wall emulsion/,'paint_area','m2'],[/gypsum.*ceiling/,'gypsum_ceiling_area','m2'],[/glazed window|aluminium.*window/,'window_area','m2'],[/water closet|toilet pan/,'toilet_count','nr'],[/wash\s*basin/,'basin_count','nr'],[/shower/,'shower_count','nr'],[/socket/,'socket_count','nr'],[/lighting?\s+point|light\s+point/,'light_count','nr'],[/distribution board/,'distribution_board_count','nr'],[/smoke detector/,'smoke_detector_count','nr']];
+  for(const [pattern,key,expected] of rules)if(pattern.test(d)){
+   if(expected==='kg'&&['ton','tonne','t'].includes(u))return {key,factor:.001};
+@@ -131,8 +147,13 @@
+ }
+ export function pdfScheduledRule(takeoff,description,unit){
+  const metric=pdfRuleMetric(description,unit);if(!metric)return null;
+- const rows=takeoff.pdf_analysis?.quantity_evidence?.[metric.key];if(!rows?.length)return null;
+- if(rows.some(r=>r.key!==metric.key||r.unit!==PDF_METRIC_UNITS[metric.key]||!valid(r.value)||!String(r.evidence||'').trim()||!Array.isArray(r.pages)||!r.pages.length))return null;
+- if(Math.abs(rows.reduce((n,r)=>n+r.value,0)-takeoff.scheduled_quantities?.[metric.key])>.001)return null;
+- const value=takeoff.scheduled_quantities?.[metric.key];return valid(value)?{quantity:value*metric.factor,metricKey:metric.key,source:'pdf_schedule_evidence',measured:true,pages:[...new Set(rows.flatMap(r=>r.pages))],evidence:rows.map(r=>r.evidence).join(' | ')}:null;
++ const keys=metric.keys||[metric.key],rows=[];let value=0;
++ for(const key of keys){
++  const claims=takeoff.pdf_analysis?.quantity_evidence?.[key],quantity=takeoff.scheduled_quantities?.[key];
++  if(!claims?.length||!valid(quantity)||claims.some(r=>r.key!==key||r.unit!==PDF_METRIC_UNITS[key]||!valid(r.value)||(r.unit==='nr'&&!Number.isInteger(r.value))||!String(r.evidence||'').trim()||!Array.isArray(r.pages)||!r.pages.length))return null;
++  if(Math.abs(claims.reduce((n,r)=>n+r.value,0)-quantity)>.001)return null;
++  rows.push(...claims);value+=quantity;
++ }
++ if(!pdfCatalogThicknessMatches(metric,rows)||!pdfCatalogHeightMatches(metric,rows,description))return null;
++ return {quantity:value*metric.factor,metricKey:metric.key,...(metric.keys?{metricKeys:keys}:{}),source:'pdf_schedule_evidence',measured:true,pages:[...new Set(rows.flatMap(r=>r.pages))],evidence:rows.map(r=>r.evidence).join(' | ')};
+ }
+--- a/src/lib/pdfBoqCoverage.mjs
++++ b/src/lib/pdfBoqCoverage.mjs
+@@ -5,7 +5,7 @@
+ // A quantity must not be repeated across competing catalog variants. There is
+ // no basis for selecting a grade, diameter, capacity or finish from price alone.
+ export function planPdfCatalogBindings(takeoff, candidates) {
+-  const byMetric = new Map();
++  const byMetric = new Map(),byCode=new Map();
+   const signatures = new Map(), conflictingCodes = new Set();
+   for (const item of candidates || []) {
+     if (!item || item.is_active === false) continue;
+@@ -16,19 +16,18 @@
+     signatures.set(code,signature);
+     const evidence = pdfScheduledRule(takeoff, item.description, item.unit);
+     if (!evidence || evidence.quantity <= 0) continue;
+-    const group = byMetric.get(evidence.metricKey) || new Map();
+-    group.set(code, evidence);
+-    byMetric.set(evidence.metricKey, group);
++    byCode.set(code,evidence);
++    for(const key of evidence.metricKeys||[evidence.metricKey]){
++      const group=byMetric.get(key)||new Map();group.set(code,evidence);byMetric.set(key,group);
++    }
+   }
+   const bindings = new Map(), warnings = [];
+   for (const [metric, group] of byMetric) {
+-    if (group.size === 1 && !conflictingCodes.has([...group.keys()][0])) {
+-      const [code, quantity] = [...group][0];
+-      bindings.set(code, quantity);
+-    } else {
++    if (group.size !== 1 || conflictingCodes.has([...group.keys()][0])) {
+       warnings.push(`PDF quantity ${metric} has ${group.size===1?'inconsistent definitions for catalog code':'competing catalog items'} (${[...group.keys()].join(', ')}). Specification selection required; quantity was not repeated across them.`);
+     }
+   }
++  for(const [code,evidence] of byCode)if(!conflictingCodes.has(code)&&(evidence.metricKeys||[evidence.metricKey]).every(k=>byMetric.get(k)?.size===1))bindings.set(code,evidence);
+   return {bindings, warnings};
+ }
+ 
+@@ -132,7 +131,7 @@
+   const doorKeys=['internal_door_count','service_door_count','entrance_door_count','garage_door_count'];
+   const doorBreakdown=doorKeys.filter(k=>Number.isFinite(takeoff.scheduled_quantities?.[k]));
+   const completeDoors=doorBreakdown.length>0&&Math.abs(doorBreakdown.reduce((n,k)=>n+takeoff.scheduled_quantities[k],0)-(takeoff.scheduled_quantities?.door_count ?? -1))<.001;
+-  const bound = new Set(items.filter(i => i.quantity > 0).map(i => i.pdfEvidence?.metricKey).filter(Boolean));
++  const bound = new Set(items.filter(i => i.quantity > 0).flatMap(i => i.pdfEvidence?.metricKeys||[i.pdfEvidence?.metricKey]).filter(Boolean));
+   for (const [key, [sectionCode, section, description]] of Object.entries(operations)) {
+     if(key==='door_count'&&completeDoors)continue;
+     if(doorKeys.includes(key)&&!completeDoors)continue;
+--- a/src/lib/serverBoqAnalysis.js
++++ b/src/lib/serverBoqAnalysis.js
+@@ -6318,7 +6318,7 @@
+ 
+         measuredFromApsStructure:
+           isMeasuredDerivedRule && !pdfQuantity,
+-        pdfEvidence:pdfQuantity?{metricKey:pdfQuantity.metricKey,pages:pdfQuantity.pages,basis:pdfQuantity.evidence}:null,
++        pdfEvidence:pdfQuantity?{metricKey:pdfQuantity.metricKey,...(pdfQuantity.metricKeys?{metricKeys:pdfQuantity.metricKeys}:{}),pages:pdfQuantity.pages,basis:pdfQuantity.evidence}:null,
+ 
+         confidence:
+           isEstimatedRule
+--- /dev/null
++++ b/src/lib/boqRateCsv.mjs
+@@ -0,0 +1,35 @@
++// Pure local CSV parsing. Rate rows never supply drawing quantities.
++export function parseCsv(text){
++  const rows=[];let row=[],cell='',quoted=false,closed=false;
++  text=String(text).replace(/^\uFEFF/,'');
++  if(text.length>4*1024*1024)throw Error('CSV exceeds 4 MiB.');
++  for(let i=0;i<text.length;i++){
++    const c=text[i];
++    if(quoted){if(c==='"'){if(text[i+1]==='"'){cell+='"';i++;}else{quoted=false;closed=true;}}else cell+=c;continue;}
++    if(c==='"'){if(cell||closed)throw Error('Invalid CSV quote.');quoted=true;continue;}
++    if(c===','||c==='\n'||c==='\r'){
++      row.push(cell);cell='';closed=false;
++      if(c!==','){if(c==='\r'&&text[i+1]==='\n')i++;if(row.some(v=>v.trim()))rows.push(row);row=[];}
++    }else{if(closed)throw Error('Unexpected text after a CSV quote.');cell+=c;}
++  }
++  if(quoted)throw Error('Unclosed CSV quote.');
++  if(cell||closed||row.length){row.push(cell);if(row.some(v=>v.trim()))rows.push(row);}
++  if(rows.length<2||rows.length>10001)throw Error('CSV requires headers and 1–10000 rows.');
++  const headers=rows.shift().map(s=>s.trim());
++  if(new Set(headers).size!==headers.length)throw Error('Duplicate CSV header.');
++  return rows.map(r=>{if(r.length!==headers.length)throw Error('CSV row/header column count mismatch.');return Object.fromEntries(headers.map((h,i)=>[h,r[i]]));});
++}
++
++export function rateCatalogFromCsv(text){
++  const seen=new Set();
++  return parseCsv(text).map((row,i)=>{
++    if(Object.keys(row).some(k=>!['code','description_en','unit','rate_aed'].includes(k)))throw Error('Use a rate-only CSV with code, description_en, unit, rate_aed. Quantity/answer files are not rate inputs.');
++    for(const key of ['code','description_en','unit','rate_aed'])if(!String(row[key]??'').trim())throw Error(`Rate CSV row ${i+2}: ${key} required.`);
++    const code=row.code.trim().toUpperCase();if(seen.has(code))throw Error(`Duplicate rate code: ${code}`);seen.add(code);
++    if(!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(row.rate_aed.trim()))throw Error(`Invalid rate for ${code}.`);
++    const rate=Number(row.rate_aed);if(!Number.isFinite(rate)||rate>1e12)throw Error(`Invalid rate for ${code}.`);
++    return {item_code:code,description:row.description_en.trim(),unit:row.unit.trim(),standard_rate:rate,
++      section_code:'PROJECT-CSV',source_name:'User-supplied project CSV',is_active:true};
++  });
++}
++
+--- /dev/null
++++ b/src/lib/boqProjectRates.mjs
+@@ -0,0 +1,75 @@
++import {rateCatalogFromCsv} from './boqRateCsv.mjs';
++import {planPdfCatalogBindings} from './pdfBoqCoverage.mjs';
++import {boqUnitFactor,clearBoqGapNote} from './boqPriceSelection.mjs';
++import {invalidateBoqReview,requireBoqReview} from './boqEvidence.mjs';
++import {PDF_METRIC_UNITS} from './pdfTakeoffEvidence.mjs';
++
++const metricKeys=row=>row.pdfEvidence?.metricKeys||[row.pdfEvidence?.metricKey].filter(Boolean);
++const close=(a,b)=>Math.abs(a-b)<=Math.max(1e-7,Math.abs(b)*1e-9);
++const clearImportNote=s=>clearBoqGapNote(s).replace(/\s*\[PROJECT CSV\][\s\S]*?\[\/PROJECT CSV\]/g,'').trim();
++function sourceUnit(row){
++  const keys=metricKeys(row);
++  // The earlier PDF builder displayed these explicit count schedules with a
++  // catalog "point" unit. Recover their retained SOURCE unit, with the count
++  // checked below. This is not a general point-to-device unit conversion.
++  return String(row.unit).toLowerCase()==='point'&&row.quantityBasis==='pdf_schedule_evidence'&&keys.length===1&&
++    ['light_count','socket_count','smoke_detector_count'].includes(keys[0])?'nr':row.unit;
++}
++
++// Apply explicit rates to existing, source-backed PDF rows in memory. This
++// function cannot read/write a database or call a model. Unknown scopes stay
++// unchanged, and quantities never come from the CSV or its reference answers.
++export function applyProjectRateCsv(items,takeoff,csvText,{fileName='project-rates.csv',appliedAt=new Date().toISOString()}={}){
++  if(!takeoff?.pdf_analysis?.quantity_evidence)throw Error('A PDF takeoff with retained source evidence is required.');
++  if(!Array.isArray(items)||!items.length)throw Error('Generate the PDF BOQ before applying project rates.');
++  const catalog=rateCatalogFromCsv(csvText),plan=planPdfCatalogBindings(takeoff,catalog);
++  const positive=items.filter(i=>Number(i.quantity)>0),edits=new Map(),removed=new Set(),skipped=[];
++  const filename=String(fileName).replace(/[\r\n]/g,' ').slice(0,200);
++  for(const candidate of catalog){
++    const binding=plan.bindings.get(candidate.item_code);if(!binding)continue;
++    const keys=binding.metricKeys||[binding.metricKey],keySet=new Set(keys);
++    const rows=positive.filter(i=>metricKeys(i).some(k=>keySet.has(k)));
++    const seen=rows.flatMap(metricKeys);
++    if(!rows.length||seen.length!==keys.length||new Set(seen).size!==seen.length||keys.some(k=>!seen.includes(k))){skipped.push(`${candidate.item_code}: current BOQ has missing, duplicated or overlapping quantity rows.`);continue;}
++    if(rows.some(i=>i.quantitySource==='manual'||i.quantityBasis==='manual_quantity_override'||i.source==='manual'||i.status==='manual')){
++      skipped.push(`${candidate.item_code}: manual quantity retained; project rates were not applied to it.`);continue;
++    }
++    // Check each existing measured row, not merely a coincidentally matching
++    // composite total. A changed room/fixture count cannot hide in a pair sum.
++    let supported=true;
++    for(const row of rows){
++      const atomic=metricKeys(row),unit=PDF_METRIC_UNITS[atomic[0]],factor=boqUnitFactor(sourceUnit(row),unit);
++      const expected=atomic.reduce((n,k)=>n+Number(takeoff.scheduled_quantities?.[k]),0);
++      if(atomic.some(k=>PDF_METRIC_UNITS[k]!==unit)||factor===null||!Number.isFinite(expected)||!close(Number(row.quantity)*factor,expected))supported=false;
++    }
++    const first=rows[0],factor=boqUnitFactor(sourceUnit(first),candidate.unit);
++    const quantity=rows.reduce((n,row)=>{const f=boqUnitFactor(sourceUnit(row),candidate.unit);return f===null?NaN:n+Number(row.quantity)*f;},0);
++    if(!supported||factor===null||!Number.isFinite(quantity)||!close(quantity,binding.quantity)){
++      skipped.push(`${candidate.item_code}: current BOQ quantities/units differ from the retained source; no quantity was overwritten.`);continue;
++    }
++    const rate=candidate.standard_rate;
++    const previous=rows.map(row=>({id:row.id,itemCode:row.itemCode,description:row.description,quantity:row.quantity,unit:row.unit,rate:row.rate,rateSource:row.rateSource}));
++    const recoveredUnit=rows.some(row=>sourceUnit(row)!==row.unit);
++    const note=`[PROJECT CSV] ${filename}; ${candidate.item_code}: ${candidate.description}; ${rate} AED/${candidate.unit}. Source-backed quantity preserved with compatible unit conversion.${recoveredUnit?' Earlier catalog point unit replaced with the explicit source schedule count unit; count checked against source.':''} Imported rates and specifications require review; this is not tender approval. [/PROJECT CSV]`;
++    const notes=[...new Set(rows.map(i=>clearImportNote(i.notes)).filter(Boolean)),note].join(' ');
++    const updated=requireBoqReview({...invalidateBoqReview(first),description:candidate.description,quantity,unit:candidate.unit,rate,referenceRate:rate,
++      amount:quantity*rate,rateMissing:!(rate>0),status:rate>0?'provisional_estimate':'measured_rate_pending',verification:rate>0?'provisional':'pending',
++      includeInCommercialTotal:false,reviewRequired:true,specificationVerification:'unconfirmed',source:'PDF evidence / project rate CSV',
++      materialRate:0,laborRate:0,equipmentRate:0,transportRate:0,
++      pdfEvidence:{...first.pdfEvidence,metricKey:binding.metricKey,...(binding.metricKeys?{metricKeys:binding.metricKeys}:{}),pages:binding.pages,basis:binding.evidence},
++      rateSource:`Project CSV ${filename}: ${candidate.item_code} (${rate} AED/${candidate.unit})`,
++      projectRateSelection:{fileName:filename,itemCode:candidate.item_code,description:candidate.description,unit:candidate.unit,rate,appliedAt,metricKeys:keys,previousRows:previous,sourceCountUnitRecovered:recoveredUnit},
++      completion:{code:rate>0?'line_review_required':'project_rate_missing',required_information:[rate>0?'Review source quantity, applicable specification and imported project rate.':'A positive applicable project rate is required.']},notes});
++    // A previous global catalog choice is historical, not the active rate.
++    if(updated.catalogSelection){updated.previousCatalogSelection=updated.catalogSelection;delete updated.catalogSelection;}
++    edits.set(first,updated);for(const row of rows.slice(1))removed.add(row);
++  }
++  if(!edits.size)throw Error('No project rates could be applied. Check CSV scopes/units and the current source-backed PDF BOQ.');
++  const next=items.filter(i=>!removed.has(i)).map(i=>edits.get(i)||i);
++  const appliedCodes=[...edits.values()].map(i=>i.projectRateSelection.itemCode);
++  return {items:next,summary:{fileName:filename,appliedAt,catalogRows:catalog.length,appliedRows:edits.size,
++    unboundCodes:catalog.filter(i=>!appliedCodes.includes(i.item_code)).map(i=>i.item_code),
++    zeroRateRows:[...edits.values()].filter(i=>i.rate===0).length,mergedRows:removed.size,
++    otherPricedRowsRetained:positive.filter(i=>!edits.has(i)&&!removed.has(i)&&Number(i.rate)>0).length,
++    warnings:[...plan.warnings,...skipped],productionCatalogChanged:false}};
++}
+--- a/src/app/projects/[id]/ProjectBOQ.jsx
++++ b/src/app/projects/[id]/ProjectBOQ.jsx
+@@ -41,6 +41,7 @@
+ import { calculateBoqBudget } from "@/lib/boqBudget.mjs";
+ import { buildBoqExport } from "@/lib/boqExport.mjs";
+ import {catalogPriceEntries,boqUnitFactor,applyBoqCatalogSelection,editPdfBoqItem} from '@/lib/boqPriceSelection.mjs';
++import {applyProjectRateCsv} from '@/lib/boqProjectRates.mjs';
+ 
+ 
+ const SECTION_OPTIONS = [
+@@ -213,6 +214,11 @@
+   const [priceLibraryItemId, setPriceLibraryItemId] = useState(null);
+   const [priceSearch, setPriceSearch] = useState("");
+   const [priceLibraryEntries,setPriceLibraryEntries]=useState([]);
++  const [projectRateImport,setProjectRateImport]=useState(null);
++  const [applyingProjectRates,setApplyingProjectRates]=useState(false);
++  const projectRateInputRef=useRef(null),projectRateRequestRef=useRef(0),projectRateContextRef=useRef(null);
++  projectRateContextRef.current={projectId,takeoff,items,loadedBoqProject,loadingTakeoff,generating,vatPercentage,overheadPercentage,profitPercentage,discountPercentage,warnings,assumptions};
++  useEffect(()=>{setApplyingProjectRates(false);return ()=>{projectRateRequestRef.current++;};},[projectId,takeoff?.document_id,takeoff?.analyzed_at]);
+   const priceLibraryRequestRef=useRef(0);
+   useEffect(()=>{priceLibraryRequestRef.current++;setPriceLibraryEntries([]);setPriceLibraryItemId(null);},[projectId,takeoff?.document_id,takeoff?.analyzed_at,!!takeoff?.pdf_analysis]);
+   const [measurementInfo, setMeasurementInfo] = useState(null);
+@@ -317,20 +323,27 @@
+         }
+       );
+ 
+-      const generatedItems = normalizeItems(boq.items, sourceTakeoff);
++      let generatedItems = normalizeItems(boq.items, sourceTakeoff);
++      let nextProjectRateImport=null;
++      if(projectRateImport?.csvText&&projectRateImport.projectId===projectId&&projectRateImport.documentId&&projectRateImport.documentId===sourceTakeoff.document_id){
++        const imported=applyProjectRateCsv(generatedItems,sourceTakeoff,projectRateImport.csvText,{fileName:projectRateImport.fileName});
++        nextProjectRateImport={...imported.summary,projectId,documentId:sourceTakeoff.document_id,analyzedAt:sourceTakeoff.analyzed_at,csvText:projectRateImport.csvText,beforeItems:generatedItems};
++        generatedItems=normalizeItems(imported.items,sourceTakeoff);
++      }
+       // Commit the complete result before a tab switch can unmount this panel.
+       saveReadyBoq(window.localStorage, projectId, {
+         projectName, currency: "AED", vatPercentage, overheadPercentage,
+         profitPercentage, discountPercentage, items: generatedItems,
+         warnings: Array.isArray(boq.warnings) ? boq.warnings : [],
+         assumptions: Array.isArray(boq.assumptions) ? boq.assumptions : [],
+-        takeoff: sourceTakeoff, updatedAt: new Date().toISOString(),
++        takeoff: sourceTakeoff, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
+       }, { loadedProject: projectId, loading: false, generating: false });
+       setTakeoff(sourceTakeoff);
+       setItems(generatedItems);
++      setProjectRateImport(nextProjectRateImport);
+       setWarnings(Array.isArray(boq.warnings) ? boq.warnings : []);
+       setAssumptions(Array.isArray(boq.assumptions) ? boq.assumptions : []);
+-      setMessage("BOQ generated successfully from the latest Quantity Takeoff.");
++      setMessage(nextProjectRateImport?`BOQ rebuilt; ${nextProjectRateImport.appliedRows} project CSV rates reapplied. Unmatched scopes remain unresolved.`:"BOQ generated successfully from the latest Quantity Takeoff.");
+       return true;
+     } catch (error) {
+       console.error("Generate BOQ error:", error);
+@@ -352,6 +365,7 @@
+     async function loadTakeoff() {
+       setLoadedBoqProject(null);
+       setItems([]);
++      setProjectRateImport(null);
+       setTakeoff(null);
+       setWarnings([]);
+       setAssumptions([]);
+@@ -383,6 +397,8 @@
+ 
+         if (storedBoq) {
+           const parsedBoq = JSON.parse(storedBoq);
++          const savedRates=parsedBoq?.projectRateImport;
++          setProjectRateImport(savedRates?.projectId===projectId&&savedRates?.documentId&&savedRates.documentId===latestTakeoff?.document_id&&savedRates.analyzedAt===latestTakeoff?.analyzed_at&&typeof savedRates?.csvText==='string'&&savedRates.csvText.length<=4*1024*1024&&Array.isArray(savedRates.beforeItems)?savedRates:null);
+           storedItems = normalizeItems(parsedBoq?.items || [], latestTakeoff);
+           setItems(storedItems);
+           setWarnings(
+@@ -483,9 +499,57 @@
+         warnings,
+         assumptions,
+         takeoff,
++        projectRateImport,
+         updatedAt: new Date().toISOString(),
+-      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating });
+-  }, [projectId, loadedBoqProject, loadingTakeoff, generating, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff]);
++      }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||applyingProjectRates });
++  }, [projectId, loadedBoqProject, loadingTakeoff, generating, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, projectRateImport]);
++
++  function saveProjectRateDraft(nextItems,nextImport) {
++    const saved=saveReadyBoq(window.localStorage,projectId,{
++      projectName,currency:'AED',vatPercentage,overheadPercentage,profitPercentage,discountPercentage,
++      items:nextItems,warnings,assumptions,takeoff,projectRateImport:nextImport,updatedAt:new Date().toISOString(),
++    },{loadedProject:loadedBoqProject,loading:loadingTakeoff,generating});
++    if(!saved)throw Error('BOQ is still loading or generating. Wait before applying project rates.');
++  }
++
++  async function importProjectRateCsv(event) {
++    const file=event.target.files?.[0];event.target.value='';if(!file)return;
++    if(!takeoff?.pdf_analysis||loadingTakeoff||generating||applyingProjectRates||loadedBoqProject!==projectId){setErrorMessage('Wait for the PDF BOQ to finish loading.');return;}
++    if(!takeoff.document_id){setErrorMessage('The PDF document reference is missing. Reopen its saved BOQ before importing rates.');return;}
++    if(file.size>4*1024*1024){setErrorMessage('Choose a project rate CSV smaller than 4 MB.');return;}
++    const token=beginDrawingWorkflow(projectId,'boq');if(!token){setErrorMessage('Wait for drawing analysis or BOQ generation to finish.');return;}
++    const request=++projectRateRequestRef.current,snapshot=projectRateContextRef.current;
++    const current=()=>request===projectRateRequestRef.current&&projectRateContextRef.current?.projectId===snapshot.projectId;
++    let succeeded=false;setApplyingProjectRates(true);setErrorMessage('');
++    try{
++      const text=await file.text();if(!current())return;
++      const latest=projectRateContextRef.current;
++      if(['takeoff','items','loadedBoqProject','vatPercentage','overheadPercentage','profitPercentage','discountPercentage','warnings','assumptions'].some(k=>latest[k]!==snapshot[k]))throw Error('BOQ or drawing changed while reading the CSV. Select the file again for the current BOQ.');
++      const imported=applyProjectRateCsv(items,takeoff,text,{fileName:file.name});
++      const nextItems=normalizeItems(imported.items,takeoff);
++      const nextImport={...imported.summary,projectId,documentId:takeoff.document_id,analyzedAt:takeoff.analyzed_at,csvText:text,beforeItems:items};
++      // Persist the entire draft and restore point before publishing UI state.
++      // A quota/disk failure leaves the current BOQ untouched.
++      saveProjectRateDraft(nextItems,nextImport);
++      setItems(nextItems);setProjectRateImport(nextImport);setPriceLibraryItemId(null);
++      setMessage(`${imported.summary.appliedRows} project CSV rates applied and saved; ${imported.summary.unboundCodes.length} CSV rows were not applied. No AI analysis was run.`);
++      succeeded=true;
++    }catch(error){if(current())setErrorMessage(error.message||'Project rate CSV could not be applied.');}
++    finally{finishDrawingWorkflow(projectId,token,succeeded);if(current())setApplyingProjectRates(false);}
++  }
++
++  function restoreBeforeProjectRates() {
++    if(!projectRateImport||projectRateImport.projectId!==projectId||projectRateImport.documentId!==takeoff?.document_id)return;
++    if(projectRateImport.analyzedAt!==takeoff?.analyzed_at){setErrorMessage('The PDF analysis has changed. Its earlier BOQ rows cannot be restored to this analysis.');return;}
++    const token=beginDrawingWorkflow(projectId,'boq');if(!token){setErrorMessage('Wait for drawing analysis or BOQ generation to finish.');return;}
++    let succeeded=false;
++    try{
++      const restored=normalizeItems(projectRateImport.beforeItems,takeoff);
++      saveProjectRateDraft(restored,null);setItems(restored);setProjectRateImport(null);setErrorMessage('');
++      setMessage('BOQ rows restored to the saved state before the latest CSV import.');succeeded=true;
++    }catch(error){setErrorMessage(error.message||'The saved BOQ could not be restored.');}
++    finally{finishDrawingWorkflow(projectId,token,succeeded);}
++  }
+ 
+   function updateItem(id, field, value) {
+     if(takeoff?.pdf_analysis){
+@@ -1076,6 +1140,17 @@
+           <LocalizedElement as="div" className="boq-modal boq-price-modal" role="dialog" aria-modal="true" aria-label="UAE Price Library" onMouseDown={(event) => event.stopPropagation()}>
+             <LocalizedElement as="div" className="boq-modal-header"><LocalizedElement as="div"><LocalizedElement as="span">UAE 2026</LocalizedElement><LocalizedElement as="h3">Ventra Price Library</LocalizedElement></LocalizedElement><LocalizedElement as="button" type="button" onClick={() => setPriceLibraryItemId(null)}><X size={18}/></LocalizedElement></LocalizedElement>
+             <LocalizedElement as="input" className="boq-library-search" autoFocus placeholder="Search item, section or unit..." value={priceSearch} onChange={(event) => setPriceSearch(event.target.value)} />
++            {takeoff?.pdf_analysis&&<>
++              <LocalizedElement as="button" type="button" className="boq-secondary" disabled={applyingProjectRates||generating||loadingTakeoff||!!drawingWorkflow.active||drawingWorkflow.analysisFailed} onClick={()=>projectRateInputRef.current?.click()}>{applyingProjectRates?'Applying CSV…':'Apply project rate CSV to this BOQ'}</LocalizedElement>
++              <input ref={projectRateInputRef} type="file" accept=".csv,text/csv" hidden onChange={importProjectRateCsv} />
++              <LocalizedElement as="p" className="boq-library-note">CSV columns: code, description_en, unit, rate_aed. Applies matching rates to this BOQ only. Unmatched rows stay unchanged. No AI analysis is used.</LocalizedElement>
++              {projectRateImport&&<>
++                <LocalizedElement as="p" className="boq-library-note">Project CSV: {projectRateImport.fileName}; {projectRateImport.appliedRows} rates applied. Not applied: {projectRateImport.unboundCodes?.join(', ')||'none'}. Other priced rows retained: {projectRateImport.otherPricedRowsRetained}.</LocalizedElement>
++                {!!projectRateImport.warnings?.length&&<LocalizedElement as="p" className="boq-library-note">{projectRateImport.warnings.join(' ')}</LocalizedElement>}
++                <LocalizedElement as="button" type="button" className="boq-secondary" disabled={applyingProjectRates||generating||loadingTakeoff||!!drawingWorkflow.active} onClick={restoreBeforeProjectRates}>Restore BOQ before latest CSV</LocalizedElement>
++                <LocalizedElement as="p" className="boq-library-note">Restore replaces current rows, including later edits, with the saved rows before the latest import.</LocalizedElement>
++              </>}
++            </>}
+             <LocalizedElement as="div" className="boq-library-list">
+               {priceLibraryEntries.filter((entry) => (!takeoff?.pdf_analysis||boqUnitFactor(items.find(item=>item.id===priceLibraryItemId)?.unit,entry.unit)!==null)&&`${entry.itemCode||''} ${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).slice(0,100).map((entry) => (
+                 <LocalizedElement as="button" type="button" key={entry.id} disabled={!!takeoff?.pdf_analysis&&entry.rateMissing} onClick={() => applyLibraryRate(entry)}>
+--- /dev/null
++++ b/tools/check-pdf-rate-catalog.mjs
+@@ -0,0 +1,69 @@
++// Read-only, offline exercise of the actual server BOQ path. No dependencies,
++// database connection, model, browser state, or catalog updates are used.
++import {readFileSync,writeFileSync} from 'node:fs';
++import {resolve} from 'node:path';
++import {pathToFileURL} from 'node:url';
++import vm from 'node:vm';
++import {mergePdfEvidence} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {annotatePdfBoqCompletion} from '../src/lib/pdfBoqCompletion.mjs';
++import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
++import {classifyEstimateItem} from '../src/lib/estimateClassification.mjs';
++
++export {parseCsv,rateCatalogFromCsv} from '../src/lib/boqRateCsv.mjs';
++import {parseCsv,rateCatalogFromCsv} from '../src/lib/boqRateCsv.mjs';
++
++export async function runOfflinePdfCatalogCheck(takeoff,rateCsv){
++  if(!takeoff?.pdf_analysis?.quantity_evidence)throw Error('A PDF report with source quantity evidence is required.');
++  const prices=rateCatalogFromCsv(rateCsv),tables={price_items:structuredClone(prices),boq_rules:[],boq_sections:[]};
++  let reads=0,modelAttempts=0,databaseWrites=0;
++  const forbidden=()=>{throw Error('Offline check forbids model calls and database writes.');};
++  const forbiddenModel=()=>{modelAttempts++;return forbidden();},forbiddenWrite=()=>{databaseWrites++;return forbidden();};
++  const db={from(name){
++    if(!Object.hasOwn(tables,name))throw Error(`Unexpected database access: ${name}`);reads++;
++    const q={select(){return q;},eq(){return q;},order(){return q;},
++      range(a,b){return Promise.resolve({data:tables[name].slice(a,b+1),error:null});},
++      then(ok,fail){return Promise.resolve({data:tables[name],error:null}).then(ok,fail);},insert:forbiddenWrite,update:forbiddenWrite,upsert:forbiddenWrite,delete:forbiddenWrite};return q;
++  }};
++  const context=vm.createContext({planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
++    process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-placeholder',VENTRA_DISABLE_BOQ_AI:'true'}},
++    createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
++    getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty inventory'}),
++    getDrawingEvidence:()=>null,applyDwgScheduleToBoq:items=>({items,warnings:[]}),
++    buildLocalBoq:forbidden,inferConstructionScopes:forbiddenModel,shortlistPriceCatalog:forbiddenModel,matchScopesToCatalog:forbiddenModel,resolveAiQuantity:forbiddenModel});
++  const source=readFileSync(new URL('../src/lib/serverBoqAnalysis.js',import.meta.url),'utf8');
++  vm.runInContext(source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/export /g,'')+'\nthis.handle=handleCommercialRequest;',context);
++  const response=await context.handle({json:async()=>({takeoff:structuredClone(takeoff),priceLevel:'standard',vatPercentage:0})});
++  const result=await response.json();
++  if(response.status!==200||!result.success)throw Error(result.error||'Offline server BOQ failed.');
++  if(modelAttempts||databaseWrites)throw Error('Offline-only invariant failed: model/write path was attempted.');
++  return {mode:'offline_supplied_rate_catalog_only',productionCatalogChanged:false,modelCalls:0,databaseWrites,mockedTableReads:reads,
++    rateRows:prices.length,boq:result.boq};
++}
++
++export function compareExpectedRows(result,expectedCsv){
++  // The oracle is used only AFTER generating the BOQ. It never supplies a
++  // quantity, material, mapping, rate, or missing opening classification.
++  const expected=parseCsv(expectedCsv),items=result.boq.items||[];
++  const comparisons=expected.map(ref=>{
++    const row=items.find(i=>i.itemCode===ref.code&&i.quantity>0);
++    if(!row)return {code:ref.code,description:ref.description_en,status:'unbound',expectedQuantity:Number(ref.quantity),expectedUnit:ref.unit};
++    const quantityDelta=Number(row.quantity)-Number(ref.quantity),amountDelta=Number(row.amount)-Number(ref.amount_aed);
++    const quantityMatches=Math.abs(quantityDelta)<=.001,rateMatches=Math.abs(Number(row.rate)-Number(ref.rate_aed))<=.01,unitMatches=row.unit===ref.unit;
++    return {code:ref.code,description:ref.description_en,quantity:row.quantity,unit:row.unit,rate:row.rate,amount:row.amount,
++      quantityMatches,rateMatches,unitMatches,quantityDelta,amountDelta,
++      status:quantityMatches&&rateMatches&&unitMatches&&Math.abs(amountDelta)<=.01?'pass':'difference',metricKey:row.pdfEvidence?.metricKey};
++  });
++  return {expectedRows:expected.length,matchedQuantityRows:comparisons.filter(r=>r.quantityMatches&&r.unitMatches).length,
++    passedRows:comparisons.filter(r=>r.status==='pass').length,differenceRows:comparisons.filter(r=>r.status==='difference').length,
++    unboundRows:comparisons.filter(r=>r.status==='unbound').length,comparisons};
++}
++
++if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
++  const [reportPath,ratesPath,expectedPath,outputPath]=process.argv.slice(2);
++  if(!reportPath||!ratesPath)throw Error('Usage: node tools/check-pdf-rate-catalog.mjs report.json rates.csv [expected-boq.csv] [output.json]');
++  const reportText=readFileSync(reportPath,'utf8');if(reportText.length>20*1024*1024)throw Error('Report exceeds 20 MiB.');
++  const result=await runOfflinePdfCatalogCheck(JSON.parse(reportText),readFileSync(ratesPath,'utf8'));
++  if(expectedPath)result.comparison=compareExpectedRows(result,readFileSync(expectedPath,'utf8'));
++  const text=JSON.stringify(result,null,2)+'\n';if(outputPath)writeFileSync(outputPath,text);else process.stdout.write(text);
++}
+--- /dev/null
++++ b/tests/boq-project-rate-import.test.mjs
+@@ -0,0 +1,139 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import vm from 'node:vm';
++import {applyProjectRateCsv} from '../src/lib/boqProjectRates.mjs';
++import {planPdfCatalogRules,retainUnboundPdfQuantities,resolvePdfCatalogRate} from '../src/lib/pdfBoqCoverage.mjs';
++import {requireBoqReview} from '../src/lib/boqEvidence.mjs';
++import {saveReadyBoq} from '../src/lib/boqDraftPersistence.mjs';
++import {buildBoqExport} from '../src/lib/boqExport.mjs';
++import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '../src/lib/drawingWorkflowGate.mjs';
++const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
++const takeoff={...JSON.parse(read('./fixtures/pdf-observed-catalog-recovery.json')),document_id:'source-pdf',analyzed_at:'2026-10-15T10:28:37.784Z'};
++const catalog=JSON.parse(read('./fixtures/pdf-observed-price-catalog.json')).catalog;
++const rates=read('./fixtures/pdf-villa02-test-rates.csv');
++const source=read('../src/app/projects/[id]/ProjectBOQ.jsx');
++const prices=catalog.sections.flatMap(s=>s.items.map(i=>({item_code:i.itemCode,description:i.description,unit:i.unit,section_code:s.sectionCode==='UNASSIGNED'?null:s.sectionCode,
++  source_name:i.sourceName,standard_rate:i.standardRate,economy_rate:i.economyRate,premium_rate:i.premiumRate})));
++function baseline(){
++  const plan=planPdfCatalogRules(takeoff,[],prices);
++  const priced=[...plan.bindings].map(([code,q])=>{
++    const p=prices.find(p=>p.item_code===code),rate=resolvePdfCatalogRate(p).rate;
++    return requireBoqReview({id:code,itemCode:code,description:p.description,section:'Existing section',unit:p.unit,quantity:q.quantity,rate,rateMissing:false,
++      status:'measured',verification:'verified',includeInCommercialTotal:false,quantityLocked:true,quantityBasis:'pdf_schedule_evidence',notes:q.evidence,pdfEvidence:{metricKey:q.metricKey,pages:q.pages,basis:q.evidence}});
++  });
++  const rows=retainUnboundPdfQuantities(priced,takeoff).items.map((r,i)=>({...r,id:r.id||`source-${i}`,itemNumber:String(i+1),quantityLocked:true}));
++  return [...rows,...Array.from({length:33},(_,i)=>({id:`option-${i}`,itemCode:`OPTION-${i}`,description:'Existing catalog option',quantity:0,rate:0,unit:'m2',status:'quantity_pending'}))];
++}
++const slice=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b));
++let serial=0;
++function context(){
++  const state={projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,
++    loadedBoqProject:null,loadingTakeoff:false,generating:false,applyingProjectRates:false,vatPercentage:5,overheadPercentage:0,profitPercentage:0,discountPercentage:0,
++    warnings:[],assumptions:[],projectRateRequestRef:{current:0},projectRateContextRef:{current:null},error:'',message:'',writes:0,fetches:0,
++    projectRateImportCalls:0,beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,applyProjectRateCsv,requireBoqReview,saveReadyBoq,
++    commercialFetch(){state.fetches++;throw Error('Network calls forbidden.');},generateBoq:async()=>({items:baseline(),warnings:[],assumptions:[]}),
++    console:{log(){},error(){},warn(){}},Date,Map,Set};
++  state.loadedBoqProject=state.projectId;
++  const store=new Map();state.window={localStorage:{setItem(k,v){state.writes++;store.set(k,v);},getItem(k){return store.get(k)||null;}}};state.store=store;
++  state.refresh=()=>state.projectRateContextRef.current={...Object.fromEntries(['projectId','takeoff','items','loadedBoqProject','loadingTakeoff','generating','vatPercentage','overheadPercentage','profitPercentage','discountPercentage','warnings','assumptions'].map(k=>[k,state[k]]))};
++  for(const [setter,key] of [['setItems','items'],['setProjectRateImport','projectRateImport'],['setApplyingProjectRates','applyingProjectRates'],['setErrorMessage','error'],['setMessage','message'],['setWarnings','warnings'],['setAssumptions','assumptions'],['setGenerating','generating'],['setTakeoff','takeoff']])state[setter]=v=>{state[key]=v;state.refresh();};
++  state.setPriceLibraryItemId=()=>{};state.refresh();vm.createContext(state);
++  vm.runInContext(slice('function normalizeSection(', '\nfunction escapeCsv(')+slice('  function saveProjectRateDraft(', '\n  function updateItem(')+
++    slice('  async function generateFromTakeoff(', '\n  const generateBoqFromEffect=')+
++    '\nthis.importCsv=importProjectRateCsv;this.restore=restoreBeforeProjectRates;this.normalize=normalizeItems;this.generate=generateFromTakeoff;',state);
++  state.event=(text=rates)=>({target:{files:[{name:'test-rates.csv',size:text.length,text:async()=>text}],value:'chosen'}});
++  return state;
++}
++const summary=items=>buildBoqExport(items,{vatPercentage:5});
++
++test('project CSV applies all 48 rate matches to the observed BOQ, converts tonnes and merges source sinks without changing source data',()=>{
++  const items=baseline(),before=structuredClone(items),original=structuredClone(takeoff),result=applyProjectRateCsv(items,takeoff,rates,{fileName:'test-rates.csv'});
++  assert.equal(items.length,83);assert.equal(result.items.length,82);assert.equal(result.summary.appliedRows,48);assert.equal(result.summary.mergedRows,1);
++  assert.deepEqual(result.summary.unboundCodes,['DOR-01','DOR-02','DOR-03','DOR-04']);assert.equal(result.summary.otherPricedRowsRetained,0);
++  assert.equal(result.items.filter(i=>i.quantity>0&&i.rate>0).length,48);assert.equal(result.items.filter(i=>i.quantity>0&&!i.rate).length,1);
++  const steel=result.items.find(i=>i.projectRateSelection?.itemCode==='REB-01');assert.equal(steel.unit,'kg');assert.ok(Math.abs(steel.quantity-takeoff.rebar_kg)<1e-7);assert.equal(steel.rate,4.5);
++  assert.equal(steel.projectRateSelection.previousRows[0].unit,'ton');
++  const sinks=result.items.filter(i=>i.pdfEvidence?.metricKeys?.includes('kitchen_sink_count'));assert.equal(sinks.length,1);assert.equal(sinks[0].quantity,2);
++  assert.deepEqual(sinks[0].pdfEvidence.metricKeys,['kitchen_sink_count','laundry_sink_count']);
++  assert.equal(summary(result.items).sums.provisional.toFixed(2),'492535.51');assert.equal(summary(result.items).sums.verified,0);
++  assert.equal(summary(result.items).summary.find(r=>r[0].startsWith('BOQ budget total'))[1],'517162.29');
++  assert.ok(result.items.filter(i=>i.projectRateSelection).every(i=>i.reviewRequired&&!i.includeInCommercialTotal&&i.rateSource.includes('Project CSV')&&i.notes.includes('test-rates.csv')));
++  assert.deepEqual(items,before);assert.deepEqual(takeoff,original);
++});
++test('actual UI import saves the complete draft and restore point without a fetch, survives normalization, and restores pre-import rows',async()=>{
++  const s=context(),before=structuredClone(s.items),event=s.event();await s.importCsv(event);
++  assert.equal(s.error,'');assert.equal(s.fetches,0);assert.equal(event.target.value,'');assert.equal(s.applyingProjectRates,false);
++  const stored=JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`));assert.equal(stored.items.length,82);assert.equal(stored.projectRateImport.appliedRows,48);
++  assert.equal(stored.projectRateImport.csvText,rates);assert.equal(stored.projectRateImport.beforeItems.length,83);assert.equal(stored.vatPercentage,5);
++  const reopened=s.normalize(stored.items),steel=reopened.find(i=>i.projectRateSelection?.itemCode==='REB-01');assert.equal(steel.rate,4.5);assert.equal(steel.unit,'kg');
++  assert.equal(summary(reopened).sums.provisional.toFixed(2),'492535.51');
++  s.projectRateImport=stored.projectRateImport;s.items=reopened;s.refresh();s.restore();
++  assert.equal(s.projectRateImport,null);assert.equal(s.items.length,before.length);assert.equal(summary(s.items).sums.provisional.toFixed(2),'265239.95');
++  assert.equal(JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`)).projectRateImport,null);assert.equal(drawingWorkflowState(s.projectId).active,null);
++});
++test('actual Generate BOQ handler reapplies the project CSV for the same PDF, with a fresh restore point',async()=>{
++  const s=context();await s.importCsv(s.event());await s.generate(s.takeoff);
++  assert.equal(s.error,'');assert.equal(summary(s.items).sums.provisional.toFixed(2),'492535.51');assert.equal(s.projectRateImport.beforeItems.length,83);
++  assert.equal(s.projectRateImport.appliedRows,48);assert.ok(s.message.includes('reapplied'));assert.equal(s.fetches,0);
++  const saved=JSON.parse(s.store.get(`ventra:project-boq:${s.projectId}`));assert.equal(saved.projectRateImport.documentId,takeoff.document_id);
++});
++test('project CSV cannot silently overwrite manual/changed quantities or duplicated scope rows',()=>{
++  for(const change of [rows=>{const row=rows.find(i=>i.pdfEvidence?.metricKey==='foundation_volume');row.quantity=21;row.quantityBasis='manual_quantity_override';},
++    rows=>{rows.find(i=>i.pdfEvidence?.metricKey==='foundation_volume').quantity=21;},
++    rows=>{rows.push({...rows.find(i=>i.pdfEvidence?.metricKey==='foundation_volume'),id:'duplicate'});}]){
++    const rows=baseline();change(rows);const before=structuredClone(rows),result=applyProjectRateCsv(rows,takeoff,rates);
++    assert.equal(result.summary.appliedRows,47);assert.ok(result.summary.unboundCodes.includes('CON-02'));
++    assert.ok(result.items.filter(i=>i.pdfEvidence?.metricKey==='foundation_volume').every(i=>!i.projectRateSelection));assert.deepEqual(rows,before);
++  }
++});
++test('partial CSV keeps unrelated prices visible, zero means rate pending, and competing/answer files cannot fabricate priced scope',()=>{
++  const rows=baseline(),csv='code,description_en,unit,rate_aed\nPL,Internal plaster,m2,0';
++  const result=applyProjectRateCsv(rows,takeoff,csv);assert.equal(result.summary.appliedRows,1);assert.equal(result.summary.otherPricedRowsRetained,18);
++  const plaster=result.items.find(i=>i.projectRateSelection);assert.equal(plaster.quantity,978.6199999999997);assert.equal(plaster.rate,0);assert.equal(plaster.status,'measured_rate_pending');
++  assert.throws(()=>applyProjectRateCsv(rows,takeoff,'code,description_en,unit,rate_aed,quantity\nPL,Internal plaster,m2,30,999'));
++  assert.throws(()=>applyProjectRateCsv(rows,takeoff,'code,description_en,unit,rate_aed\nA,Internal plaster,m2,30\nB,Internal plaster,m2,40'));
++  assert.throws(()=>applyProjectRateCsv(rows,{},csv));
++});
++test('reapplying a CSV is financially idempotent and cannot duplicate the composite sink operation',()=>{
++  const first=applyProjectRateCsv(baseline(),takeoff,rates),again=applyProjectRateCsv(first.items,takeoff,rates);
++  assert.equal(again.summary.appliedRows,48);assert.equal(again.items.length,first.items.length);assert.equal(again.summary.mergedRows,0);
++  assert.equal(summary(again.items).sums.provisional,summary(first.items).sums.provisional);
++  assert.equal(again.items.filter(i=>i.projectRateSelection?.itemCode==='PLB-04').length,1);
++});
++test('actual import refuses invalid, oversized or answer-key files atomically, and never enters a model path',async()=>{
++  for(const event of [()=>({target:{files:[{size:5*1024*1024,name:'large.csv',text:()=>{throw Error('must not read');}}]}}),
++    s=>s.event('code,description_en,unit,rate_aed\nA,Unknown scope,m2,10'),s=>s.event('code,description_en,unit,rate_aed\nA,Internal plaster,m2,-30'),
++    s=>s.event('code,description_en,unit,rate_aed,quantity\nA,Internal plaster,m2,30,999')]){
++    const s=context(),before=structuredClone(s.items);await s.importCsv(event(s));assert.ok(s.error);assert.equal(s.writes,0);assert.deepEqual(s.items,before);assert.equal(s.fetches,0);assert.equal(drawingWorkflowState(s.projectId).active,null);
++  }
++});
++test('storage quota failures do not publish unsaved rates or lose the original BOQ',async()=>{
++  const s=context(),before=structuredClone(s.items);s.window.localStorage.setItem=()=>{throw Error('QuotaExceededError');};
++  await s.importCsv(s.event());assert.ok(s.error.includes('Quota'));assert.deepEqual(s.items,before);assert.equal(s.projectRateImport,null);assert.equal(s.applyingProjectRates,false);assert.equal(drawingWorkflowState(s.projectId).active,null);
++});
++test('late file reads cannot cross project, document, edit or unmount boundaries',async()=>{
++  for(const kind of ['project','document','edit','unmount']){
++    const s=context(),before=structuredClone(s.items);let done;
++    const event=s.event();event.target.files[0].text=()=>new Promise(resolve=>done=resolve);const pending=s.importCsv(event);
++    if(kind==='project'){s.projectId='different-project';s.projectRateRequestRef.current++;}
++    if(kind==='document')s.takeoff={...s.takeoff,document_id:'different-document'};
++    if(kind==='edit')s.items=[...s.items,{id:'manual-edit',source:'manual',quantity:1,rate:10}];
++    if(kind==='unmount')s.projectRateRequestRef.current++;
++    s.refresh();done(rates);await pending;
++    assert.equal(s.writes,0);assert.equal(s.projectRateImport,null);assert.equal(s.items.length,before.length+(kind==='edit'?1:0));
++  }
++});
++test('active drawing work blocks import, and undo cannot restore quantities from an older PDF analysis',async()=>{
++  const s=context(),token=beginDrawingWorkflow(s.projectId,'analysis');await s.importCsv(s.event());assert.equal(s.writes,0);finishDrawingWorkflow(s.projectId,token,true);
++  await s.importCsv(s.event());const before=structuredClone(s.items);s.takeoff={...s.takeoff,analyzed_at:'new-analysis'};s.refresh();s.restore();
++  assert.ok(s.error.includes('analysis has changed'));assert.equal(JSON.stringify(s.items),JSON.stringify(before));
++});
++test('legacy PDF point display units are corrected only from explicit schedule counts, while unrelated point units remain incompatible',()=>{
++  const rows=baseline(),result=applyProjectRateCsv(rows,takeoff,rates);
++  for(const code of ['ELE-01','ELE-02','FIR-01']){
++    const row=result.items.find(i=>i.projectRateSelection?.itemCode===code);assert.equal(row.unit,'nr');assert.equal(row.projectRateSelection.sourceCountUnitRecovered,true);
++  }
++  const light=rows.find(i=>i.pdfEvidence?.metricKey==='light_count');light.quantityBasis='manual_point_quantity';
++  const held=applyProjectRateCsv(rows,takeoff,rates);assert.ok(held.summary.unboundCodes.includes('ELE-01'));assert.equal(held.items.find(i=>i===light).unit,'point');
++});
+--- /dev/null
++++ b/tests/pdf-rate-catalog-benchmark.test.mjs
+@@ -0,0 +1,76 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import {pdfRuleMetric,pdfScheduledRule} from '../src/lib/pdfTakeoffEvidence.mjs';
++import {planPdfCatalogBindings,retainUnboundPdfQuantities} from '../src/lib/pdfBoqCoverage.mjs';
++import {parseCsv,rateCatalogFromCsv,runOfflinePdfCatalogCheck,compareExpectedRows} from '../tools/check-pdf-rate-catalog.mjs';
++const observed=JSON.parse(readFileSync(new URL('./fixtures/pdf-observed-catalog-recovery.json',import.meta.url),'utf8'));
++const rateCsv=readFileSync(new URL('./fixtures/pdf-villa02-test-rates.csv',import.meta.url),'utf8');
++const price=(code,description,unit)=>({item_code:code,description,unit,is_active:true});
++
++test('actual 52-row supplied rate CSV connects 48 explicit operations without reading the answer key',async()=>{
++  const input=structuredClone(observed),prices=rateCatalogFromCsv(rateCsv),plan=planPdfCatalogBindings(observed,prices);
++  assert.equal(prices.length,52);assert.equal(plan.bindings.size,48);
++  assert.deepEqual(prices.filter(p=>!plan.bindings.has(p.item_code)).map(p=>p.item_code),['DOR-01','DOR-02','DOR-03','DOR-04']);
++  const result=await runOfflinePdfCatalogCheck(observed,rateCsv);
++  assert.equal(result.modelCalls,0);assert.equal(result.databaseWrites,0);assert.equal(result.productionCatalogChanged,false);
++  assert.equal(result.boq.summary.provisionalItems,48);assert.equal(result.boq.summary.pendingItems,1);
++  assert.equal(result.boq.summary.provisionalSubtotal,492535.51);assert.equal(result.boq.summary.verifiedSubtotal,0);
++  assert.deepEqual(observed,input);assert.ok(result.boq.items.every(i=>!i.includeInCommercialTotal));
++  const sinks=result.boq.items.find(i=>i.itemCode==='PLB-04');assert.equal(sinks.quantity,2);assert.deepEqual(sinks.pdfEvidence.metricKeys,['kitchen_sink_count','laundry_sink_count']);
++  assert.ok(!result.boq.items.some(i=>/^PDF-(KITCHEN|LAUNDRY)_SINK_COUNT$/.test(i.itemCode)));
++});
++test('matching uses equivalent scope words rather than benchmark codes, rates, counts or quantities',()=>{
++  const variants=[['Column side formwork','Formwork to columns','m2','column_formwork_area'],
++    ['Beam downstand side formwork','Formwork to beam sides','m2','beam_formwork_area'],
++    ['Footing and pedestal side formwork','Formwork to footing and pedestal sides','m2','foundation_formwork_area'],
++    ['Wet-room wall tiles','Wet room wall tiles','m2','wet_wall_tile_area'],
++    ['Wet-room floor waterproofing','Wet area floor waterproofing','m2','wet_floor_waterproofing_area']];
++  for(const [a,b,u,key] of variants){assert.equal(pdfRuleMetric(a,u)?.key,key);assert.equal(pdfRuleMetric(b,u)?.key,key);}
++  const modified=structuredClone(observed);
++  modified.scheduled_quantities.column_volume=7.25;modified.pdf_analysis.quantity_evidence.column_volume=[{key:'column_volume',value:7.25,unit:'m3',pages:[2],evidence:'Different source project, column calculation'}];
++  const plan=planPdfCatalogBindings(modified,[price('UNRELATED-CODE','RC columns, net clear length','m3')]);assert.equal(plan.bindings.get('UNRELATED-CODE').quantity,7.25);
++});
++test('beam soffit-only and combined unrelated formwork packages cannot consume side-only or single-member quantities',()=>{
++  for(const d of ['Beam soffit formwork','Formwork to beam undersides','Column and beam formwork','Slab and column formwork','Formwork to columns and slabs','Formwork to beam sides and slabs'])assert.equal(pdfRuleMetric(d,'m2'),null,d);
++  assert.equal(pdfRuleMetric('Slab and beam soffit formwork','m2').key,'slab_formwork_area');
++  assert.equal(pdfRuleMetric('Beam downstand side formwork','m3'),null);
++});
++test('new generic descriptions never select unknown grades, pipe diameters, AC capacities or opening materials',()=>{
++  for(const [d,u] of [['RC columns C30','m3'],['RC first-floor slab grade C25','m3'],['RC isolated footings and pedestals','m3'],
++    ['Water supply pipes 20mm','m'],['Waste pipes UPVC','m'],['Split AC units 2 ton','nr'],['AC insulated pipework 16mm','m'],
++    ['Internal timber door sets 900 x 2100','nr'],['Main entrance door set 1200 x 2200','nr'],
++    ['Excavate swimming pool','m3'],['Terrace ceramic wall tiles','m2']])assert.equal(pdfScheduledRule(observed,d,u),null,d);
++});
++test('catalog thickness and wet-wall finish heights are checked against source operands, not copied into the measurement',()=>{
++  assert.equal(pdfScheduledRule(observed,'RC ground slab, 150 mm','m3').quantity,observed.ground_slab_volume);
++  assert.equal(pdfScheduledRule(observed,'RC ground slab, 200 mm','m3'),null);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall tiles, 2.40 m high','m2').quantity,observed.wet_wall_tile_area);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall tiles, 3.00 m high','m2'),null);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall waterproofing to 2.0 m','m2').quantity,observed.wet_wall_waterproofing_area);
++  assert.equal(pdfScheduledRule(observed,'Wet-room wall waterproofing to 2.4 m','m2'),null);
++  const noOperands=structuredClone(observed);noOperands.pdf_analysis.quantity_evidence.ground_slab_volume[0].evidence='Summary volume only';
++  assert.equal(pdfScheduledRule(noOperands,'RC ground slab, 150 mm','m3'),null);
++});
++test('combined sink scope requires both source claims and cannot be repeated in separate catalog rows or retained quantities',()=>{
++  const combined=price('PAIR','Kitchen and laundry sink sets','nr'),kitchen=price('K','Kitchen sink sets','nr');
++  const binding=planPdfCatalogBindings(observed,[combined]);assert.equal(binding.bindings.get('PAIR').quantity,2);
++  const row={quantity:2,pdfEvidence:{metricKey:'kitchen_sink_count+laundry_sink_count',metricKeys:['kitchen_sink_count','laundry_sink_count']}};
++  const retained=retainUnboundPdfQuantities([row],observed).items;
++  assert.ok(!retained.some(i=>['kitchen_sink_count','laundry_sink_count'].includes(i.pdfEvidence?.metricKey)));
++  assert.equal(planPdfCatalogBindings(observed,[combined,kitchen]).bindings.size,0);
++  const partial=structuredClone(observed);delete partial.pdf_analysis.quantity_evidence.laundry_sink_count;
++  assert.equal(pdfScheduledRule(partial,combined.description,combined.unit),null);
++});
++test('CSV parsing handles quoted commas/newlines, BOM and escaped quotes and rejects malformed or contradictory rates',()=>{
++  assert.deepEqual(parseCsv('\uFEFFcode,description_en\r\nA,"First, second\nthird ""quoted"""\r\n'),[{code:'A',description_en:'First, second\nthird "quoted"'}]);
++  for(const text of ['code,code\nA,B','code,description_en\nA,"unfinished','code,description_en\nA,"finished"x','a,b\n1,2,3'])assert.throws(()=>parseCsv(text));
++  const header='code,description_en,unit,rate_aed\n';
++  for(const rows of ['A,Test,m,NaN','A,Test,m,-10','A,Test,m,0x20','A,Test,m,1\na,Test,m,1','A,Test,m,'])assert.throws(()=>rateCatalogFromCsv(header+rows));
++  assert.equal(rateCatalogFromCsv(header+'A,Test,m,0')[0].standard_rate,0);
++});
++test('answer-key comparison cannot alter an already generated quantity/rate and reports partial rows honestly',()=>{
++  const result={boq:{items:[{itemCode:'A',quantity:10.3545,unit:'m3',rate:400,amount:4141.8}]}};
++  const before=structuredClone(result),check=compareExpectedRows(result,'code,description_en,unit,quantity,rate_aed,amount_aed\nA,Column,m3,10.355,400,4142.00\nB,Missing,nr,2,5,10\n');
++  assert.equal(check.matchedQuantityRows,1);assert.equal(check.differenceRows,1);assert.equal(check.unboundRows,1);assert.deepEqual(result,before);
++});

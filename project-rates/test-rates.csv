@@ -1,0 +1,53 @@
+﻿code,description_en,unit,rate_aed
+EAR-01,Excavate 20 isolated footing pits,m3,45
+CON-01,"PCC blinding, 100 mm",m3,300
+CON-02,RC isolated footings,m3,400
+CON-03,RC pedestals,m3,400
+FRM-01,Footing and pedestal side formwork,m2,65
+CON-04,"RC ground slab, 150 mm",m3,400
+CON-05,"RC first-floor slab, 200 mm",m3,400
+CON-06,"RC roof slab, 200 mm",m3,400
+CON-07,"RC columns, net clear length",m3,400
+CON-08,RC beam downstands,m3,400
+FRM-02,Column side formwork,m2,65
+FRM-03,Beam downstand side formwork,m2,65
+FRM-04,Slab and beam soffit formwork,m2,65
+REB-01,Rebar from declared BBS,kg,4.5
+MAS-01,"External 200 mm blockwork, net face",m2,110
+MAS-02,"Internal 120 mm blockwork, net face",m2,85
+FIN-01,Wood flooring,m2,120
+FIN-02,Internal ceramic floor finish,m2,95
+FIN-03,Garage epoxy finish,m2,65
+FIN-04,Terrace outdoor ceramic,m2,110
+FIN-05,"Wet-room wall tiles, 2.40 m high",m2,100
+FIN-06,"Kitchen backsplash, 600 mm high",m2,100
+FIN-07,"Internal plaster, net",m2,30
+FIN-08,"Internal wall paint, net",m2,18
+FIN-09,Internal ceiling paint,m2,18
+FIN-10,Gypsum suspended ceilings,m2,90
+WAT-01,Wet-room floor waterproofing,m2,40
+WAT-02,Wet-room wall waterproofing to 2.0 m,m2,40
+WAT-03,Roof membrane,m2,55
+WAT-04,Terrace floor membrane,m2,55
+DOR-01,Internal timber door sets 900 x 2100,nr,950
+DOR-02,External service door sets 900 x 2100,nr,1500
+DOR-03,Main entrance door set 1200 x 2200,nr,3200
+DOR-04,Garage door set 3000 x 2400,nr,4500
+WIN-01,Glazed aluminium windows,m2,650
+PLB-01,WC pans complete,nr,900
+PLB-02,Wash basins complete,nr,700
+PLB-03,Shower sets complete,nr,1200
+PLB-04,Kitchen and laundry sink sets,nr,800
+PLB-05,Water supply pipes,m,45
+PLB-06,Waste pipes,m,55
+ELE-01,"Light points, complete",nr,180
+ELE-02,"Socket points, complete",nr,150
+ELE-03,Distribution boards,nr,1800
+HVC-01,Split AC units,nr,2500
+HVC-02,AC insulated pipework,m,65
+FIR-01,Smoke detectors,nr,180
+KIT-01,L-shaped base kitchen cabinets,m,800
+KIT-02,Kitchen hob and hood package,set,2500
+EXT-01,Glass-and-metal terrace railing,m,1200
+EXT-02,Driveway paving,m2,95
+EXT-03,Soft landscaping,m2,60

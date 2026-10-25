@@ -1,0 +1,113 @@
+--- a/src/app/projects/[id]/Project3DViewer.jsx
++++ b/src/app/projects/[id]/Project3DViewer.jsx
+@@ -7,6 +7,8 @@
+ import {assertOpeningOnlyEdit} from '@/lib/manualOpenings.mjs';
+ import {assertWallOnlyEdit} from '@/lib/manualWalls.mjs';
+ import FurnitureEditorPanel from "./FurnitureEditorPanel";
++import SurfaceMaterialPanel from './SurfaceMaterialPanel';
++import {decorateSurfaceMesh,pickSurfaceHit,assertSurfaceOnlyEdit} from '@/lib/surfaceMaterials.mjs';
+ import {bindFurnitureInputs} from '@/lib/furnitureInputs.mjs';
+ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
+ import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
+@@ -6453,6 +6455,7 @@
+ }
+ 
+ function renderStructuredSchematicScene(viewer, scene) {
++  const surfaceMaterialCache=new Map();
+   // Display the accepted scene verbatim: geometry repair belongs to analysis, never rendering.
+   const THREE = getThree();
+   if (!viewer || !scene || !THREE) {
+@@ -6590,6 +6593,7 @@
+         ventraType: 'schematic_footprint_floor_v36',
+         schematic: true,
+       };
++      decorateSurfaceMesh(THREE,footprintResult.mesh,{kind:'floor-base',id:'footprint'},scene,surfaceMaterialCache);
+       add(footprintResult.mesh);
+     }
+ 
+@@ -6720,9 +6724,10 @@
+         schematic: true,
+       };
+ 
++      decorateSurfaceMesh(THREE,result.mesh,{kind:'floor',id:String(room.id)},scene,surfaceMaterialCache);
+       add(result.mesh);
+ 
+-      if (!material.map) ventraAddVisibleFloorPattern({
++      if (!result.mesh.material.map) ventraAddVisibleFloorPattern({
+         THREE,
+         root:
+           schematicRoot,
+@@ -6896,6 +6901,7 @@
+         wallKind: wallType,
+         schematic: true,
+       };
++      decorateSurfaceMesh(THREE,mesh,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);
+       add(mesh);
+       wallPieceCount += 1;
+     }
+@@ -6917,6 +6923,7 @@
+           zBase: 0,
+           material: wallType === 'external' ? externalWallMat : wallMat,
+         });
++        if(sillWall){sillWall.userData={...sillWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,sillWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
+         add(sillWall);
+ 
+         const headerWall = buildHeaderWallMesh({
+@@ -6927,6 +6934,7 @@
+           zBase: 0,
+           material: wallType === 'external' ? externalWallMat : wallMat,
+         });
++        if(headerWall){headerWall.userData={...headerWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,headerWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
+         add(headerWall);
+ 
+         const windowAssembly = opening.cutOnly ? null : ventraCreateWindowVisual({
+@@ -6948,6 +6956,7 @@
+           zBase: 0,
+           material: wallType === 'external' ? externalWallMat : wallMat,
+         });
++        if(doorHeaderWall){doorHeaderWall.userData={...doorHeaderWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,doorHeaderWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
+         add(doorHeaderWall);
+ 
+         const doorLeaf = opening.cutOnly||opening.variant==='passage' ? null : ventraCreateDoorLeafVisual({
+@@ -7649,6 +7658,7 @@
+       }finally{if(scale>1){renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);}selectionGroup.visible=selectedVisible;wallPointsGroup.visible=wallPointsVisible;render();}
+     },
+     getCameraState:()=>({position:camera.position.toArray(),up:camera.up.toArray(),target:target.toArray()}),
++    pickSurface:e=>rayFor(e)?pickSurfaceHit(raycaster.intersectObjects(threeScene.children,true)):null,
+     pickWall:e=>rayFor(e)?raycaster.intersectObjects(threeScene.children,true).find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
+     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
+     clearFurniturePreview,
+@@ -8262,6 +8272,7 @@
+   const [furnitureRepairBusy, setFurnitureRepairBusy] = useState(false);
+   const [promptUndoScene, setPromptUndoScene] = useState(null);
+   const currentPromptSceneRef = useRef(null);
++  const [materialToolActive,setMaterialToolActive]=useState(false);
+   const furnitureImageInput = useRef(null);
+   const [schematicModel, setSchematicModel] = useState(null);
+   const [active3DSource, setActive3DSource] = useState("aps");
+@@ -8846,6 +8857,15 @@
+   async function commitFurnitureScene(nextScene, expectedScene) {
+     if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current scene. / نقشه تغییر کرد؛ دوباره امتحان کن.');
+     for(const key of LOCKED_ARCHITECTURE)if(JSON.stringify(nextScene[key])!==JSON.stringify(expectedScene[key]))throw new Error(`Architecture is locked: ${key}`);
++    setDesignBusy(true);
++    try{await persistSchematicScene(nextScene,{preserveBase:true});rebuildStandaloneScene(nextScene);}
++    finally{setDesignBusy(false);}
++  }
++
++  async function commitSurfaceScene(nextScene,expectedScene){
++    if(currentPromptSceneRef.current?.scene!==expectedScene||!isInteriorSource(currentPromptSceneRef.current?.source)||!currentSceneMatches(expectedScene))throw new Error('The drawing changed. Retry on the current scene.');
++    assertSurfaceOnlyEdit(expectedScene,nextScene);
++    furnitureCameraRef.current={key:dwgInteriorCameraKey(projectId,expectedScene),state:schematicRendererRef.current?.getCameraState?.()};
+     setDesignBusy(true);
+     try{await persistSchematicScene(nextScene,{preserveBase:true});rebuildStandaloneScene(nextScene);}
+     finally{setDesignBusy(false);}
+@@ -10028,7 +10048,8 @@
+         </LocalizedElement>
+ 
+         <aside className="ventra-model-sidebar">
+-          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
++          {schematicScene && isInteriorSource(active3DSource) && <SurfaceMaterialPanel key={`materials:${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} getCanvasHost={()=>containerRef.current} onCommit={commitSurfaceScene} onModeChange={setMaterialToolActive} disabled={designBusy||furnitureRepairBusy||status!=='ready'}/>}
++          {schematicScene && isInteriorSource(active3DSource) && <FurnitureEditorPanel key={`${projectId}:${schematicScene.documentId}:${schematicScene.dwgRegion??"image"}:${active3DSource}`} scene={schematicScene} getRenderer={()=>schematicRendererRef.current} onCommit={commitFurnitureScene} onCommitOpenings={commitOpeningScene} onCommitWalls={commitWallScene} getCanvasHost={()=>containerRef.current} wallsTransparent={interiorView} onToggleWalls={()=>setInteriorView(value=>!value)} onCameraMode={()=>setSchematicNavMode('orbit')} disabled={materialToolActive||designBusy||furnitureRepairBusy||status!=='ready'}/>}
+         <ToolDrawer title="inspector">
+         <LocalizedElement as="div" className="ventra-model-inspector">
+           {schematicScene && isInteriorSource(active3DSource) ? (

@@ -1,0 +1,60 @@
+{
+  "status": "passed",
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "pricedRowsBefore": 18,
+  "pricedRowsAfter": 18,
+  "netBefore": 263274.75,
+  "netAfter": 263274.75,
+  "scopeRows": [
+    {
+      "code": "VNT-SCOPE-RAILING",
+      "quantity": 7,
+      "unit": "m",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-HOB-HOOD",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-KITCHEN-CABINET",
+      "quantity": 5,
+      "unit": "m",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-WOOD-FLOOR",
+      "quantity": 178,
+      "unit": "m2",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-KITCHEN-SINK",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-LAUNDRY-SINK",
+      "quantity": 1,
+      "unit": "nr",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-SHOWER",
+      "quantity": 3,
+      "unit": "nr",
+      "rate": 0
+    },
+    {
+      "code": "VNT-SCOPE-AC-PIPE",
+      "quantity": 90,
+      "unit": "m",
+      "rate": 0
+    }
+  ],
+  "referenceItemsExcluded": true
+}

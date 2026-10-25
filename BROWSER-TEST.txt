@@ -1,0 +1,1 @@
+PASS actual React material panel: Ctrl+Z after save/canvas recreation/body focus; Ctrl+Z after Camera mode; Cmd+physical KeyZ Persian layout; no undo interception in another tool or number input; toolbar Undo preserved. Mock scene persistence, no API calls.

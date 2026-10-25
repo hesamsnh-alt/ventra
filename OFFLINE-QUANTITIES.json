@@ -1,0 +1,282 @@
+{
+  "type": "offline_source_measurement_check",
+  "is_live_application_result": false,
+  "api_calls": 0,
+  "inputs": {
+    "pdf": "Project-Complete-Input(1).pdf",
+    "pdf_sha256": "e5a5aac8927a5ac6f43e43fef93cc8d08fd3e59f4ccf3f7d526035f11084f33d",
+    "report": "ventra-pdf-analysis-report (1).json",
+    "report_sha256": "dc18da691dd9507469672331da6e64a3fe344a29be5201b0ceeb5a846ff15f74"
+  },
+  "quantities": {
+    "doors": 19,
+    "door_area": 41.97,
+    "windows": 15,
+    "window_area": 39.06,
+    "floor_area": 372,
+    "ceiling_area": 360,
+    "internal_wall_length": 114,
+    "external_wall_length": 112,
+    "wall_length": 226,
+    "internal_block_area": 336.45,
+    "external_block_area": 305.72,
+    "plaster_area": 978.62,
+    "paint_area": 858.38,
+    "wet_wall_tile_area": 117.24,
+    "wet_wall_waterproofing_area": 97.92,
+    "ceiling_paint_area": 360,
+    "gypsum_ceiling_area": 312,
+    "slab_formwork_area": 360,
+    "kitchen_cabinet_length": 5
+  },
+  "status": "provisional_source_review_required",
+  "measurement_completion": {
+    "status": "incomplete",
+    "unmeasured_metrics": [
+      "wet_wall_area",
+      "service_door_count",
+      "entrance_door_count"
+    ],
+    "withheld_metrics": [],
+    "reason": "AI-extracted evidence requires source review; completed requests do not establish a complete or approved BOQ."
+  },
+  "geometry_audit": [
+    {
+      "page": 1,
+      "status": "provisional",
+      "method": "calibrated_centreline_graph",
+      "warnings": [],
+      "calibration": {
+        "width_m": 16,
+        "height_m": 12,
+        "points_per_m": 45,
+        "origin": {
+          "x": 118,
+          "y": 142
+        }
+      },
+      "wall_styles": {
+        "external": 5,
+        "internal": 3
+      },
+      "discarded_annotations": [
+        {
+          "a": {
+            "x": 14.4,
+            "y": 11.5
+          },
+          "b": {
+            "x": 15.5,
+            "y": 11.5
+          },
+          "source_label": "TV",
+          "reason": "Isolated annotated TV object; requires source review",
+          "room_tag": "G09"
+        }
+      ],
+      "opening_bindings": [
+        {
+          "id": "GD01",
+          "host": "GE-S",
+          "gap_width_m": 1.1999999999999993
+        },
+        {
+          "id": "GD02",
+          "host": "GE-S",
+          "gap_width_m": 3
+        },
+        {
+          "id": "GD03",
+          "host": "GE-N",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "GD04",
+          "host": "GI-1",
+          "gap_width_m": 0.9000000000000001
+        },
+        {
+          "id": "GD05",
+          "host": "GI-2",
+          "gap_width_m": 0.9000000000000001
+        },
+        {
+          "id": "GD06",
+          "host": "GI-8",
+          "gap_width_m": 0.9000000000000001
+        },
+        {
+          "id": "GD07",
+          "host": "GI-3",
+          "gap_width_m": 0.9000000000000001
+        },
+        {
+          "id": "GD08",
+          "host": "GI-1",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "GD09",
+          "host": "GI-1",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "GD10",
+          "host": "GI-2",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "GD11",
+          "host": "GI-2",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "GW01",
+          "host": "GE-W",
+          "gap_width_m": 1.1999999999999993
+        },
+        {
+          "id": "GW02",
+          "host": "GE-W",
+          "gap_width_m": 1.8000000000000007
+        },
+        {
+          "id": "GW03",
+          "host": "GE-E",
+          "gap_width_m": 1.8000000000000007
+        },
+        {
+          "id": "GW04",
+          "host": "GE-E",
+          "gap_width_m": 2.3999999999999986
+        },
+        {
+          "id": "GW05",
+          "host": "GE-N",
+          "gap_width_m": 2.3999999999999986
+        },
+        {
+          "id": "GW06",
+          "host": "GE-N",
+          "gap_width_m": 1.8000000000000007
+        }
+      ],
+      "wall_count": 12,
+      "requires_review": true
+    },
+    {
+      "page": 2,
+      "status": "provisional",
+      "method": "calibrated_centreline_graph",
+      "warnings": [],
+      "calibration": {
+        "width_m": 16,
+        "height_m": 12,
+        "points_per_m": 45,
+        "origin": {
+          "x": 118,
+          "y": 142
+        }
+      },
+      "wall_styles": {
+        "external": 5,
+        "internal": 3
+      },
+      "discarded_annotations": [],
+      "opening_bindings": [
+        {
+          "id": "FD01",
+          "host": "FI-1",
+          "gap_width_m": 0.9000000000000001
+        },
+        {
+          "id": "FD02",
+          "host": "FI-1",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "FD03",
+          "host": "FI-1",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "FD04",
+          "host": "FI-2",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "FD05",
+          "host": "FI-2",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "FD06",
+          "host": "FI-7",
+          "gap_width_m": 0.9000000000000004
+        },
+        {
+          "id": "FD07",
+          "host": "FI-9",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "FD08",
+          "host": "FE-T2",
+          "gap_width_m": 0.8999999999999986
+        },
+        {
+          "id": "FW01",
+          "host": "FE-W",
+          "gap_width_m": 1.7999999999999998
+        },
+        {
+          "id": "FW02",
+          "host": "FE-W",
+          "gap_width_m": 1.8000000000000007
+        },
+        {
+          "id": "FW03",
+          "host": "FE-W",
+          "gap_width_m": 2.3999999999999986
+        },
+        {
+          "id": "FW04",
+          "host": "FE-N",
+          "gap_width_m": 2.4000000000000004
+        },
+        {
+          "id": "FW05",
+          "host": "FE-N",
+          "gap_width_m": 1.8000000000000007
+        },
+        {
+          "id": "FW06",
+          "host": "FE-N",
+          "gap_width_m": 1.1999999999999993
+        },
+        {
+          "id": "FW07",
+          "host": "FE-E",
+          "gap_width_m": 1.8000000000000007
+        },
+        {
+          "id": "FW08",
+          "host": "FE-E",
+          "gap_width_m": 1.1999999999999993
+        },
+        {
+          "id": "FW09",
+          "host": "FE-E",
+          "gap_width_m": 1.1999999999999993
+        }
+      ],
+      "wall_count": 15,
+      "requires_review": true
+    }
+  ],
+  "notes": [
+    "This is offline validation, not a new analysis on the user Windows server.",
+    "Class and annotation interpretation remain provisional. Unknown source scope/rates were not invented.",
+    "Values are rounded for display only; calculation terms retain full precision."
+  ]
+}

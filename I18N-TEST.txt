@@ -1,0 +1,12 @@
+✔ Persian and Arabic use RTL; unknown locale falls back to English (1.298471ms)
+✔ Translated select labels retain original workflow values and form data stays intact (31.696995ms)
+✔ Self-closing controlled textareas in 3D prompts and quotations do not crash in any language (2.220458ms)
+✔ Protected native tags accept absent, null, numeric and element children (2.250323ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 141.700902

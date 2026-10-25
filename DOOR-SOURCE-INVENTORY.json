@@ -1,0 +1,257 @@
+[
+  {
+    "scope": "floor:0",
+    "tag": "GD01",
+    "source_type": "door",
+    "width_m": 1.2,
+    "height_m": 2.2,
+    "source_row": "GD01 | GE-S | door | 1.20 | 2.20 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "external",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD02",
+    "source_type": "garage_door",
+    "width_m": 3,
+    "height_m": 2.4,
+    "source_row": "GD02 | GE-S | garage_door | 3.00 | 2.40 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "external",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD03",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD03 | GE-N | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "external",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD04",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD04 | GI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD05",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD05 | GI-2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD06",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD06 | GI-8 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD07",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD07 | GI-3 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD08",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD08 | GI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD09",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD09 | GI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD10",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD10 | GI-2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:0",
+    "tag": "GD11",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "GD11 | GI-2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD01",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD01 | FI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD02",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD02 | FI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD03",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD03 | FI-1 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD04",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD04 | FI-2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD05",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD05 | FI-2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD06",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD06 | FI-7 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD07",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD07 | FI-9 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "internal",
+    "source_material": null
+  },
+  {
+    "scope": "floor:1",
+    "tag": "FD08",
+    "source_type": "door",
+    "width_m": 0.9,
+    "height_m": 2.1,
+    "source_row": "FD08 | FE-T2 | door | 0.90 | 2.10 | 0.00",
+    "source_pages": [
+      4,
+      5
+    ],
+    "host_class": "external",
+    "source_material": null
+  }
+]

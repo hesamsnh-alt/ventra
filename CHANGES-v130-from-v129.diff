@@ -1,0 +1,137 @@
+--- /dev/null
++++ b/src/lib/pdfNativeRoomInventory.mjs
+@@ -0,0 +1,43 @@
++const tagOf=value=>String(value||'').trim().match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
++const finishOf=value=>{
++ const text=String(value||'').toUpperCase(),values=new Set([...text.matchAll(/(?:^|\||\/|M(?:2|²)\s+)\s*(WOOD|TILE|EPOXY|OUTDOOR|VOID)\b/g)].map(m=>m[1].toLowerCase()));
++ if(/\bVOID\s*$/.test(text))values.add('void');
++ return values.size===1?[...values][0]:null;
++};
++const printedArea=value=>String(value||'').match(/(?:^|\s|\|)(\d+(?:\.\d+)?)\s*m(?:2|²)(?=\s|$|\|)/i);
++
++// Repair an omitted room inventory from positioned source labels. This never
++// constructs a polygon, infers a missing area, or uses an expected BOQ value.
++// Unmeasured labels remain subject to the existing full-envelope audit.
++export function recoverNativeRoomInventory(page,validatedSpaces){
++ const original=page.detected_items||[],native=page.native_plan_text;
++ if(native?.status!=='readable'||!Array.isArray(native.spans)||native.spans.length>3000)return {items:original,recovered:[]};
++ const shapes=new Map(validatedSpaces.map(s=>[tagOf(s.tag),s])),captions=new Map(),recovered=[];
++ for(const span of native.spans){
++  const tag=tagOf(span.text);
++  if(!tag||!/^\S+\s+\S/.test(span.text))continue;
++  const list=captions.get(tag)||[];list.push(span);captions.set(tag,list);
++ }
++ const items=[...original];
++ for(const [tag,rows] of captions){
++  if(rows.length!==1||original.some(i=>tagOf(i.name)===tag&&['m2','m²'].includes(String(i.unit).toLowerCase())))continue;
++  const caption=rows[0],shape=shapes.get(tag),inline=printedArea(caption.text);
++  const neighbours=native.spans.filter(s=>Math.abs(caption.angle||0)<.001&&s!==caption&&Math.abs(s.angle||0)<.001&&s.y<caption.y&&caption.y-s.y<=2.5*caption.height&&
++   Math.abs(s.x-caption.x)<=Math.max(20,4*caption.height)&&printedArea(s.text)&&finishOf(s.text));
++  if(!inline&&neighbours.length>1)continue;
++  const areaLine=inline?caption:neighbours.length===1?neighbours[0]:null;
++  const finish=finishOf(caption.text)||finishOf(areaLine?.text);
++  if(!finish)continue;
++  if(finishOf(caption.text)&&finishOf(areaLine?.text)&&finishOf(caption.text)!==finishOf(areaLine.text))continue;
++  const match=areaLine&&printedArea(areaLine.text),labelArea=match?Number(match[1]):null;
++  const quantity=labelArea??shape?.quantity;
++  if(!Number.isFinite(quantity)||quantity<=0||quantity>1e6)continue;
++  if(shape&&(finish==='void'?shape.kind!=='void':finish==='outdoor'?shape.kind!=='outdoor':shape.kind!=='enclosed')||shape&&finish!=='void'&&shape.finish!==finish)continue;
++  const evidence=labelArea!==null?`printed source label: ${caption.text}; ${areaLine.text}`:
++   `independently dimensioned polygon for source label ${caption.text}; ${shape.evidence}`;
++  const name=caption.text.trim().replace(/\s*\|.*$/,'').replace(/\s*\/\s*(?:WOOD|TILE|EPOXY|OUTDOOR|VOID)\s*$/i,'');
++  items.push({name,unit:'m2',quantity,description:`${finish.toUpperCase()} | ${evidence}`});
++  recovered.push({tag,page:page.pageNumber,basis:labelArea!==null?'native_printed_area':'existing_validated_polygon',source_label:caption.text});
++ }
++ return {items,recovered};
++}
+--- a/src/lib/pdfAreaGeometry.mjs
++++ b/src/lib/pdfAreaGeometry.mjs
+@@ -1,3 +1,4 @@
++import {recoverNativeRoomInventory} from './pdfNativeRoomInventory.mjs';
+ const EPS=1e-8;
+ const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+ const signed=p=>p.reduce((s,a,i)=>{const b=p[(i+1)%p.length];return s+a.x*b.y-b.x*a.y;},0)/2;
+@@ -59,7 +60,8 @@
+  if(geometry.basis!=='wall_centerline_zones')throw Error('Partial clear-area geometry cannot resolve missing wall footprints');
+  const inventory=new Map(),polygons=new Map(),corrections=[],labels=[],unresolved=[];
+  for(const r of spaces){const tag=roomTag(r.tag);if(!tag||polygons.has(tag))throw Error('Partial geometry requires unique printed room tags');polygons.set(tag,r);}
+- for(const item of page.detected_items||[]){
++ const nativeInventory=recoverNativeRoomInventory(page,spaces);
++ for(const item of nativeInventory.items){
+   if(!['m2','m²'].includes(String(item.unit).toLowerCase()))continue;
+   const tag=roomTag(item.name);if(!tag)continue;
+   if(inventory.has(tag))throw Error(`Duplicate area inventory tag ${tag}`);
+@@ -84,8 +86,8 @@
+  const quantities=(page.page_evidence.quantities||[]).filter(q=>!metricKeys.includes(q.key));
+  const basis=`Partial dimensioned geometry plus printed room labels on page ${page.pageNumber}; dimensioned tags: ${[...polygons.keys()].join(', ')}; label-only tags: ${labels.join(', ')}; ${geometry.envelope_evidence}. Inventory closure checked; unmeasured room boundaries and AI materials require review.`;
+  for(const [key,value]of Object.entries(dimensions))quantities.push({key,value,unit:'m2',scope_id:page.page_evidence.scope_id,evidence:basis});
+- const updated={...page,...dimensions,__areaGeometryValidated:true,page_evidence:{...page.page_evidence,quantities},detected_items:(page.detected_items||[]).map(r=>inventory.has(roomTag(r.name))&&['m2','m²'].includes(String(r.unit).toLowerCase())?Object.fromEntries(Object.entries(inventory.get(roomTag(r.name))).filter(([k])=>k!=='finish')):r)};
+- return {page:updated,audit:{page:page.pageNumber,status:'partial_geometry_with_printed_labels',basis:geometry.basis,envelope_area:envelopeArea,covered_area:spaces.reduce((s,r)=>s+r.quantity,0),dimensioned_tags:[...polygons.keys()],label_only_tags:labels,corrections,withheld_metrics:[]},warnings:[`PDF page ${page.pageNumber}: partial area geometry; printed room labels retained provisionally, full room boundaries are not verified.`]};
++ const updated={...page,...dimensions,__areaGeometryValidated:true,page_evidence:{...page.page_evidence,quantities},detected_items:nativeInventory.items.map(r=>inventory.has(roomTag(r.name))&&['m2','m²'].includes(String(r.unit).toLowerCase())?Object.fromEntries(Object.entries(inventory.get(roomTag(r.name))).filter(([k])=>k!=='finish')):r)};
++ return {page:updated,audit:{page:page.pageNumber,status:'partial_geometry_with_printed_labels',basis:geometry.basis,envelope_area:envelopeArea,covered_area:spaces.reduce((s,r)=>s+r.quantity,0),dimensioned_tags:[...polygons.keys()],label_only_tags:labels,corrections,native_inventory_recovery:nativeInventory.recovered,withheld_metrics:[]},warnings:[`PDF page ${page.pageNumber}: partial area geometry; printed room labels retained provisionally, full room boundaries are not verified.`]};
+ }
+ 
+ function withheld(page,keys,reason){
+--- a/src/lib/pdfMeasurementCalculations.mjs
++++ b/src/lib/pdfMeasurementCalculations.mjs
+@@ -2,6 +2,8 @@
+ // AI supplies operands and provenance; this module computes and checks units.
+ import {calculatePdfSourceMeasurements} from './pdfSourceMeasurements.mjs';
+ import {nativePdfDocumentCalculations} from './pdfNativeDocumentCalculations.mjs';
++import {auditPdfAreaGeometry} from './pdfAreaGeometry.mjs';
++import {buildNativePdfSourceBasis} from './pdfNativeSourceBasis.mjs';
+ const units = {
+   scalar: [1, 0, 0], count: [1, 0, 0], nr: [1, 0, 0],
+   m: [1, 1, 0], mm: [.001, 1, 0], m2: [1, 2, 0], m3: [1, 3, 0],
+@@ -158,10 +160,21 @@
+     delete p.__areaGeometryValidated;
+     revised.push({page: r.pageNumber, source_pages: r.source_pages, evidence: r.evidence});
+   }
++  // Source measurement arithmetic needs the validated room inventory too.
++  // A review response can contain usable polygons but omit its room rows.
++  // Recover only source-labelled rows before deriving ceilings/finish rules.
++  for(const p of pages)if(p.page_evidence?.kind==='floor_plan'&&p.native_plan_text?.status==='readable'){
++    const checked=auditPdfAreaGeometry(p);
++    if(checked.audit?.status!=='withheld')Object.assign(p,checked.page);
++  }
++  const nativeFresh=host.native_measurement_basis&&pages.some(p=>p.native_graphics?.status==='readable')?
++    buildNativePdfSourceBasis(pages,normalizeScope):null;
++  if(nativeFresh){const target=pages.find(p=>p.pageNumber===host.pageNumber);target.native_measurement_basis=nativeFresh.basis;target.native_source_status={source_pages:nativeFresh.source_pages,geometry:nativeFresh.geometry};}
+   const sourceAvailable=new Set((host.source_measurement_status?.source_pages||[]).filter(p=>available.has(p)));
+   const sourceResult=review.measurement_basis?calculatePdfSourceMeasurements(review.measurement_basis,pages,metricUnits,sourceAvailable):null;
+-  const nativeAvailable=new Set((host.native_source_status?.source_pages||[]).filter(p=>available.has(p)));
+-  const nativeResult=host.native_measurement_basis?calculatePdfSourceMeasurements(host.native_measurement_basis,pages,metricUnits,nativeAvailable):null;
++  const nativeAvailable=new Set((nativeFresh?.source_pages||host.native_source_status?.source_pages||[]).filter(p=>available.has(p)));
++  const nativeBasis=nativeFresh?.basis||host.native_measurement_basis;
++  const nativeResult=nativeBasis?calculatePdfSourceMeasurements(nativeBasis,pages,metricUnits,nativeAvailable):null;
+   const nativeDocument=nativePdfDocumentCalculations(pages,review,c=>calculatePdfMeasurement(c,metricUnits,available));
+   const nativeKeys=new Set([...(nativeResult?.calculations.map(c=>c.key)||[]),...nativeDocument.calculations.map(c=>c.key)]);
+   const derivedKeys=new Set([...(sourceResult?.calculations.map(c=>c.key)||[]),...nativeKeys]);
+--- a/src/lib/pdfNativeSourceBasis.mjs
++++ b/src/lib/pdfNativeSourceBasis.mjs
+@@ -58,5 +58,5 @@
+  // Every declared wet-room tag must resolve on exactly one plan and one face.
+  const wetResolved=basis.floors.flatMap(f=>f.wet_rooms.map(r=>r.id.toLowerCase()));
+  if(wetNames.some(tag=>wetResolved.filter(t=>t===tag.toLowerCase()).length!==1))basis.floors.forEach(f=>f.wet_rooms_complete=false);
+- return {basis,source_pages:[...new Set([...floors.map(p=>p.pageNumber),...native.schedules.flatMap(s=>s.dimension_basis?.pages||[]),...[...sections.values()].flatMap(a=>a.map(r=>r.page))])],geometry};
++ return {basis,source_pages:[...new Set([...floors.flatMap(p=>[p.pageNumber,...(p.document_area_source_pages||[])]),...native.schedules.flatMap(s=>s.dimension_basis?.pages||[]),...[...sections.values()].flatMap(a=>a.map(r=>r.page))])],geometry};
+ }
+--- a/src/lib/pdfCatalogScope.mjs
++++ b/src/lib/pdfCatalogScope.mjs
+@@ -46,7 +46,15 @@
+ // measured operation. Missing or conflicting source operands keep it unbound.
+ export function pdfCatalogThicknessMatches(metric,rows){
+   if(metric.sourceThicknessM===undefined)return true;
+-  const values=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[[^\]]*\bthickness\b[^\]]*\]/gi)].map(m=>Number(m[1])));
++  const labels={ground_slab_volume:'(?:gf|ground(?: floor)?)',first_slab_volume:'(?:ff|first(?: floor)?)',roof_slab_volume:'roof'};
++  const slab=labels[metric.key]?new RegExp(`^${labels[metric.key]}\\s+slab:\\s*(\\d*\\.\\d+|\\d+)\\.?$`,'i'):null;
++  const values=rows.flatMap(r=>[...String(r.evidence||'').matchAll(/\*\s*(\d+(?:\.\d+)?)\s+(m|mm)\s*\[([^\]]*)\]/gi)].flatMap(m=>{
++    const raw=Number(m[1]),source=m[3].trim(),explicit=slab?.exec(source);
++    // Accept an explicit "thick" operand or a single named slab-thickness
++    // field, never an envelope length, area, or a multi-dimension expression.
++    if(!/\bthick(?:ness)?\b/i.test(source)&&!(explicit&&Math.abs(Number(explicit[1])-raw)<1e-9))return [];
++    return [raw*(m[2].toLowerCase()==='mm'?.001:1)];
++  }));
+   return values.length>0&&values.every(v=>Math.abs(v-metric.sourceThicknessM)<1e-9);
+ }
+ 

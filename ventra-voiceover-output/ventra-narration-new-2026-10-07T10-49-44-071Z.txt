@@ -1,0 +1,39 @@
+Every construction project starts with a vision. Turning that vision into a finished building means bringing drawings, quantities, budgets, people, and deadlines together.
+
+Meet Ventra. Your connected workspace for construction planning, estimating, and project records.
+
+Start with your dashboard. Create a project, add its client, location, budget, and planned dates. Keep drawings, documents, costs, and updates within reach.
+
+In the Drawing Center, upload your source files. Supported image plans and engineering files use their appropriate workflows. Review extracted information against the original drawing before relying on it.
+
+Explore an interactive three-dimensional preview. Rotate the space, inspect walls and openings, review furniture and finishes, and export a view for your client. For supported engineering files, inspect the source through the engineering viewer. Always verify construction dimensions against the original plans.
+
+Move into the Bill of Quantities. Review quantities and units, edit descriptions, and refine the scope. In Estimate, check the cost breakdown and adjust rates for your suppliers and contractors. Shape your commercial offer with the available overhead, profit, discount, and tax controls.
+
+Prepare your Quotation. Review line items and totals, add your company identity and logo, and create a professional proposal.
+
+Now connect your quantities to your execution plan with the new BOQ Schedule.
+
+Load the project's BOQ and review its activity sections, from preparation and structural work to electrical, plumbing, mechanical installations, and finishes.
+
+Choose an execution method for each activity. Compare options such as pumped or manual concrete placement. Use an available reference rate as a starting point, or enter your contractor's production rate where a rate is missing.
+
+Set the number of crews, working hours, breaks, and productive time. Select working days, add holidays, and include required waiting periods. Ventra calculates proposed durations and dates from these inputs.
+
+Review the activity order. The current schedule uses a conservative sequential work plan. Check it against your site's requirements, then save a shared baseline for your team.
+
+As work progresses, update the checklist. Tick Done for completed activities, or save a partial completion percentage for work still underway.
+
+The schedule summary weights progress by estimated work effort. Compare reported completion with the baseline. Behind-schedule and overdue activities appear in red. Completed work appears in green. Keep baseline dates fixed so delays remain visible.
+
+In Team and Contract, organise access and record the agreement's payment stages. Define advance payments, milestone percentages, and final settlement. Schedule progress supports review; it does not automatically approve payments.
+
+Use Tasks to track responsibilities and status. Capture daily reports, organise site photos and supporting documents, and review project activity. Site evidence supports your team's assessment; a photograph alone does not prove completion.
+
+Invite project members with appropriate access. Authorised members can update the shared schedule. Viewers can follow it without changing the plan.
+
+Explore the engineering tools for supporting calculations and conversions. Manage your account and subscription through Profile and Billing, and reach Support when you need assistance.
+
+See the design. Review the quantities. Build the budget. Plan the work. Track the progress.
+
+Ventra. Bring your construction project into focus.

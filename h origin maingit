@@ -1,0 +1,16 @@
+ src/app/projects/[id]/FurnitureEditorPanel.jsx     | 89 [32m++++++++++++++++++[m[31m----[m
+ .../projects/[id]/FurnitureEditorPanel.module.css  |  3 [32m+[m
+ src/app/projects/[id]/Project3DViewer.jsx          | 54 [32m++++++++++[m[31m---[m
+ src/lib/dwgInterior.mjs                            |  1 [32m+[m
+ src/lib/furnitureBatch.mjs                         | 46 [32m+++++++++++[m
+ src/lib/furnitureEditor.mjs                        | 32 [32m+++++++[m[31m-[m
+ src/lib/furnitureInputs.mjs                        |  2 [32m+[m[31m-[m
+ src/lib/manualWalls.mjs                            | 64 [32m++++++++++++++++[m
+ src/lib/physicalPreview.mjs                        |  2 [32m+[m[31m-[m
+ src/lib/scenePromptActions.mjs                     | 27 [32m+++++[m[31m--[m
+ tests/compact-viewer-controls.test.mjs             |  2 [32m+[m[31m-[m
+ tests/furniture-batch.test.mjs                     | 18 [32m+++++[m
+ tests/furniture-editor.test.mjs                    | 40 [32m+++++++++[m[31m-[m
+ tests/manual-editor-ui.test.mjs                    | 31 [32m+++++++[m[31m-[m
+ tests/manual-walls.test.mjs                        | 41 [32m++++++++++[m
+ 15 files changed, 410 insertions(+), 42 deletions(-)

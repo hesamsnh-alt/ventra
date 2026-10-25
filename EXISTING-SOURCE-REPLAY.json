@@ -1,0 +1,107 @@
+{
+  "mode": "offline_existing_report_and_existing_catalog_no_csv",
+  "modelCalls": 0,
+  "databaseWrites": 0,
+  "quantityDifferences": [],
+  "sourceSpecificationFacts": [
+    {
+      "metric": "external_block_area",
+      "property": "thickness_mm",
+      "value": 200,
+      "page": 1,
+      "scope_id": "floor:0",
+      "quote": "External: 200 mm",
+      "source": "native_pdf_text"
+    },
+    {
+      "metric": "internal_block_area",
+      "property": "thickness_mm",
+      "value": 120,
+      "page": 1,
+      "scope_id": "floor:0",
+      "quote": "Internal: 120 mm",
+      "source": "native_pdf_text"
+    },
+    {
+      "metric": "external_block_area",
+      "property": "thickness_mm",
+      "value": 200,
+      "page": 2,
+      "scope_id": "floor:1",
+      "quote": "External: 200 mm",
+      "source": "native_pdf_text"
+    },
+    {
+      "metric": "internal_block_area",
+      "property": "thickness_mm",
+      "value": 120,
+      "page": 2,
+      "scope_id": "floor:1",
+      "quote": "Internal: 120 mm",
+      "source": "native_pdf_text"
+    },
+    {
+      "metric": "external_block_area",
+      "property": "thickness_mm",
+      "value": 200,
+      "page": 6,
+      "scope_id": "project",
+      "quote": "WALLS: external 200 mm",
+      "source": "native_pdf_text"
+    },
+    {
+      "metric": "internal_block_area",
+      "property": "thickness_mm",
+      "value": 120,
+      "page": 6,
+      "scope_id": "project",
+      "quote": "internal 120 mm",
+      "source": "native_pdf_text"
+    }
+  ],
+  "summary": {
+    "totalItems": 50,
+    "verifiedItems": 0,
+    "provisionalItems": 18,
+    "pendingItems": 32,
+    "verifiedSubtotal": 0,
+    "provisionalSubtotal": 263274.75,
+    "subtotal": 0,
+    "vatPercentage": 0,
+    "vatAmount": 0,
+    "grandTotal": 0,
+    "commercialSafe": false,
+    "evidencePolicyVersion": 37,
+    "scopeCoverage": "unconfirmed",
+    "reviewRequiredItems": 50
+  },
+  "catalogAudit": {
+    "activeEntries": 3762,
+    "commercialCandidates": 52,
+    "unconfiguredEntries": 3710
+  },
+  "completion": {
+    "pricedMeasuredOperations": 18,
+    "unpricedMeasuredOperations": 32,
+    "catalogOptionsWithoutQuantity": 0,
+    "unmeasuredCatalogRowsAreNotMissingProjectScope": true,
+    "completePricedBudget": false,
+    "knownMeasuredOperationsHaveRates": false
+  },
+  "pcc": [
+    {
+      "description": "Concrete blinding — grade requires confirmation",
+      "quantity": 5.78,
+      "rate": 0,
+      "completion": {
+        "code": "specification_or_catalog_match_required",
+        "metric": "pcc_volume",
+        "required_information": [
+          "Concrete grade/specification for this element",
+          "Applicable own catalog or project rate"
+        ],
+        "candidate_codes": []
+      }
+    }
+  ]
+}

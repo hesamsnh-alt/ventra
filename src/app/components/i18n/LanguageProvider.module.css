@@ -53,3 +53,15 @@
 @media print {
   .switcher { display: none !important; }
 }
+
+@media (max-width: 600px) {
+  :global(body:has(.hero)) .switcher {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    inset-inline-start: 12px; padding: 4px 8px; gap: 0;
+    max-width: calc(100vw - 92px); min-height: 44px; font-size: 12px;
+  }
+  :global(body:has(.hero)) .switcher label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+  :global(body:has(.hero)) .switcher select { min-height: 34px; max-width: 105px; font-size: 12px; }
+}

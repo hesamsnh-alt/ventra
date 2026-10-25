@@ -1,0 +1,14 @@
+✔ photo POST → resumable polling → GLB in private library; duplicate photos never create another provider task (37.719723ms)
+✔ authentication and asset ownership block foreign reads, polling, edits and project linking (20.502492ms)
+✔ uncertain paid POST is recorded and never replayed by a duplicate upload or refresh (10.039556ms)
+✔ a completed provider model survives a storage failure; polling again only retries delivery, never generation (10.066922ms)
+✔ invalid uploads and disabled generation stop before a paid provider call; materials use no model credits (6.796762ms)
+✔ unsafe generated GLB is not published or accepted as a normal model (7.282662ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 830.397101

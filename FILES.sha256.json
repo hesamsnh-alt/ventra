@@ -1,0 +1,17 @@
+{
+  "README-FA.txt": "43a86891b4308f01d6208b56a42d1a04b89a10f0dce155e3f632c1658cd873a2",
+  "VALIDATION.txt": "831dce4efd5bea0c86807f5780550bc9261435a6cb652d2992bd85098c4cf952",
+  "CHANGES-FROM-v137.patch": "f6b231df018c47de1a91fe3b08e6114d01b0c935989595e4c8d2daf974bd34a8",
+  "tests/wall-face-materials.test.mjs": "0aa8d7a4bb8b15ae44b7eee93f8fda8daf0fd98edc72cfbeb8bfcb9076a6ea2d",
+  "tests/surface-materials.test.mjs": "dc458ce12087646c9db802decee00c5ee66e988ad22921a89d0075c3656bb264",
+  "rollback/src/lib/surfaceMaterials.mjs": "45f98124c6a472fbe7b20fa829cd9c9a556ffa0d1c3b303921cf7d27b2cb2f9a",
+  "rollback/src/app/projects/[id]/SurfaceMaterialPanel.jsx": "72e1f0b59c2d5f0aec877f5a59d2f00efe050e41333814884b1bd567d85f5043",
+  "rollback/src/app/projects/[id]/Project3DViewer.jsx": "8496ccc205d1f9f45b9905694742abe00f95471025510ff4711c174daa28fdd3",
+  "src/lib/surfaceMaterials.mjs": "831922fa9df5bc7cc96b174cf185765918a6013b599b5fcb6bc3d0005e6592eb",
+  "src/lib/surfaceMaterialInputs.mjs": "f3bace7c8e290d4de58e4e3fd166174772ef21fbc8cb7d16f98f268bbea090d8",
+  "src/lib/floorDepthLayers.mjs": "43cadaafae66acdff660eae96e9a49d9239e17ef4d3d16b3287f809641fae54a",
+  "src/lib/raycastMeshes.mjs": "6a528fd1eb5b84b42e6b0d687a29dd765bfa19352c5b76c0fba3986d40a5a83b",
+  "src/app/projects/[id]/SurfaceMaterialPanel.module.css": "cd0b1e7a8c83fc21d48f84a6cf3381fb298e9f6affcedafd0b0d8b6c249a41e7",
+  "src/app/projects/[id]/SurfaceMaterialPanel.jsx": "5366a5067d1c02d0459c4f4e569e03cabeb69923806bdd1d9c2cef7c239452b7",
+  "src/app/projects/[id]/Project3DViewer.jsx": "fcd7344361d15d98c4ac6a855c7d2123f6f6d2fe0d706924903aae931eddcc06"
+}

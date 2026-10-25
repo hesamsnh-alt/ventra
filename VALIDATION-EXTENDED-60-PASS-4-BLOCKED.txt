@@ -1,0 +1,159 @@
+✔ cloud state denies another owner before reading or writing storage (22.301534ms)
+✔ cloud state derives the storage path on the server and permits an empty project (11.931642ms)
+✔ project viewers can restore but cannot replace shared model state (6.324026ms)
+✔ project managers save into the project owner storage namespace (2.752835ms)
+✔ DWG interior source selection is authenticated and restored using the existing engineering state (8.603885ms)
+✔ fixed repair restores whole bed and preserves all architectural fields and input (5.107101ms)
+✔ unknown IDs and invalid boxes cannot introduce guessed objects (0.558339ms)
+✔ source stored scene can be processed without altering architecture (13.305755ms)
+✔ unknown or legacy zero heights use labelled visual defaults, not 0.5m doors (1.879268ms)
+✔ explicit low windows and flush sills are preserved; window tops stay below the wall (0.372154ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'three' imported from /workspace/scratch/028741fa83e2/ventra/src/lib/physicalPreview.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ tests/physical-preview.test.mjs (220.926467ms)
+✔ synchronous localhost result remains unchanged (14.863079ms)
+✔ queued job survives transient outage and returns the original scene (7.671622ms)
+✔ retry resumes a pending job without submitting or charging again (0.466143ms)
+✔ worker persists result and clears request after one atomic claim (15.745788ms)
+✔ worker retry cannot run an already claimed job (3.877916ms)
+✔ worker refuses actor mismatch before calling commercial analysis (6.4961ms)
+✔ polling endpoint scopes jobs to authenticated actor and queue uses project access (0.596595ms)
+✖ background job SQL installs twice and prevents direct browser access (1.509725ms)
+✔ completed source result is recovered before enqueueing a paid analysis (2.373258ms)
+✔ source wall axis keeps entry on its supporting wall at a corner (2.44648ms)
+✔ vertical kitchen appliances remain aligned with the real counter wall (7.991147ms)
+✔ open-plan room boundaries do not become imaginary kitchen backing walls (1.942195ms)
+✔ legacy openings without an axis remain accepted and strict schema is complete (2.512449ms)
+✔ floor finish boundaries in open zones do not fabricate walls across circulation (2.038985ms)
+✔ compact scene restores every field, orientation, source label and unknown dimension exactly (30.906601ms)
+✔ observed 8000-token truncated response is classified before parsing, including valid but incomplete JSON (6.475371ms)
+✔ malformed completed coordinates, missing fields and out-of-contract enums cannot enter the renderer (6.696095ms)
+✔ actual handler rejects the uploaded-log failure: one request, no normalization, no furniture review or scene (63.246958ms)
+✔ actual handler decodes before existing normalization, retains separate review and caches only successful scenes (15.767891ms)
+✔ incomplete furniture review preserves the complete architecture and first furniture trace (7.808277ms)
+✔ explicit reasoning override remains respected; invalid token configuration has a finite capped fallback (12.164409ms)
+✔ image analysis POST is never replayed automatically after an unknown transport outcome (1.68456ms)
+✔ consistent printed dimensions correct the shared grid exactly without changing the overall extent (6.655616ms)
+✔ conflicting, absent or rotated dimensions do not force a new layout (4.040619ms)
+✔ actual route aligns architecture and both furniture passes with the same map, retaining all openings (63.76841ms)
+✔ styles visibly differ in rendered palette and asset model variant while architecture and placement stay exact (4.007289ms)
+✔ source selection prefers saved engineering geometry after image input (1.069769ms)
+✔ same DWG full extraction wins over translation placeholders and compact pointers (1.395734ms)
+✔ equally complete extracts select newer analysis without merging different geometry (0.599609ms)
+✔ partial outdoor edges split without changing indoor walls or opening coordinates (4.968553ms)
+✔ Arabic outdoor label and shared indoor edge are handled independently of room order (1.154555ms)
+✔ door hinge follows image-side evidence even when wall direction reverses; Y reflection reverses swing (0.563212ms)
+✔ laundry semantics and source washing machine work in all three languages (1.582432ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@babel/parser' imported from /workspace/scratch/028741fa83e2/ventra/tests/schematic-display.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ tests/schematic-display.test.mjs (268.796277ms)
+node:internal/modules/package_json_reader:301
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fake-indexeddb' imported from /workspace/scratch/028741fa83e2/ventra/tests/schematic-storage.test.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:859:18)
+    at defaultResolve (node:internal/modules/esm/resolve:992:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:163:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.19.0
+✖ tests/schematic-storage.test.mjs (157.557855ms)
+✔ furniture review retains touching L legs, bed headboard direction and washer without altering architecture (8.358761ms)
+✔ unconfirmed laundry appliance is reported rather than invented (0.66308ms)
+✔ oriented furniture outside its assigned room and missing confidence are rejected (0.410765ms)
+✔ actual route keeps adjacent L legs and does not replace an invalid source bed with a default (19.263251ms)
+✔ connectivity never invents bedroom doors and multiple observed access doors survive (8.720357ms)
+✔ observed rectangles retain centre and orientation; fixtures face their access side (2.810831ms)
+✔ L-shaped groups remain separate legs and source dining/rug are retained (0.634048ms)
+✔ uncertain and outside furniture is rejected with a reason, never replaced by guesses (0.361411ms)
+✔ route preserves unlabeled/same-name rooms and requests source furniture; viewer bypasses repositioning (5.249013ms)
+✔ solid overlaps are reported while a source sink may be embedded in a counter (0.864954ms)
+✔ actual route projects observations once, preserves same-name unlabeled rooms and marks source mode (36.708097ms)
+✔ reversed back endpoints retain identical placement and facing for every orientation (1.185983ms)
+✔ sideways front point is still rejected (0.168974ms)
+✔ uploaded scene restores six tucked chairs without changing geometry or observations (26.589997ms)
+✔ chair deep inside a table remains rejected (0.364889ms)
+✔ an observed gap gets support; a relationship alone never creates a door or wall (1.931197ms)
+✔ binding is independent of drawing language and rotation, including reversed edges (0.522909ms)
+✔ actual route retains all eight source doors and four windows without moving their centers (41.133201ms)
+ℹ tests 64
+ℹ suites 0
+ℹ pass 60
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 942.656793
+
+✖ failing tests:
+
+test at tests/physical-preview.test.mjs:1:1
+✖ tests/physical-preview.test.mjs (220.926467ms)
+  'test failed'
+
+test at tests/preview-background.test.mjs:39:1
+✖ background job SQL installs twice and prevents direct browser access (1.509725ms)
+  Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@electric-sql/pglite' imported from /workspace/scratch/028741fa83e2/ventra/tests/preview-background.test.mjs
+      at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+      at packageResolve (node:internal/modules/esm/resolve:768:81)
+      at moduleResolve (node:internal/modules/esm/resolve:859:18)
+      at defaultResolve (node:internal/modules/esm/resolve:992:11)
+      at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+      at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+      at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+      at #resolve (node:internal/modules/esm/loader:683:17)
+      at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+      at node:internal/modules/esm/loader:632:32 {
+    code: 'ERR_MODULE_NOT_FOUND'
+  }
+
+test at tests/schematic-display.test.mjs:1:1
+✖ tests/schematic-display.test.mjs (268.796277ms)
+  'test failed'
+
+test at tests/schematic-storage.test.mjs:1:1
+✖ tests/schematic-storage.test.mjs (157.557855ms)
+  'test failed'

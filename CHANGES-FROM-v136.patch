@@ -1,0 +1,245 @@
+--- a/src/lib/surfaceMaterials.mjs
++++ b/src/lib/surfaceMaterials.mjs
+@@ -6,6 +6,8 @@
+   {id:'sand',en:'Sand',fa:'شن',ar:'رمل'},
+   {id:'cement',en:'Cement',fa:'سیمان',ar:'أسمنت'},
+   {id:'wood',en:'Wood',fa:'چوب',ar:'خشب'},
++  {id:'paint',en:'Paint',fa:'رنگ',ar:'دهان'},
++  {id:'wallpaper',en:'Wallpaper',fa:'کاغذدیواری',ar:'ورق جدران'},
+ ]);
+ export const SURFACE_MATERIALS = Object.freeze([
+   ['stone-ivory','stone','Ivory','سفید عاجی','عاجي','#e7e2d7'],
+@@ -28,8 +30,26 @@
+   ['wood-walnut','wood','Walnut','گردویی','جوز','#825b40'],
+   ['wood-ash','wood','Ash','چوب خاکستری','خشب رمادي','#b4ada1'],
+   ['wood-ebony','wood','Ebony','آبنوس تیره','أبنوس','#51463d'],
+-].map(([id,kind,en,fa,ar,color])=>Object.freeze({id,kind,en,fa,ar,color})));
++  ['paint-white','paint','White','سفید','أبيض','#f2f1eb'],
++  ['paint-ivory','paint','Ivory','کرم روشن','عاجي','#e8ddc7'],
++  ['paint-grey','paint','Warm grey','طوسی گرم','رمادي دافئ','#bcb7af'],
++  ['paint-charcoal','paint','Charcoal','ذغالی','فحمي','#505559'],
++  ['paint-sage','paint','Sage green','سبز ملایم','أخضر مريمي','#a6b29b'],
++  ['paint-blue','paint','Dusty blue','آبی ملایم','أزرق هادئ','#9bafbe'],
++  ['paint-terracotta','paint','Terracotta','سفالی','فخاري','#c68f77'],
++  ['paint-rose','paint','Dusty rose','صورتی چرک','وردي هادئ','#c6a3a0'],
++  ['wallpaper-stripe-cream','wallpaper','Cream stripes','راه‌راه کرم','مخطط كريمي','#eee5d4','stripe','#cdbb9a'],
++  ['wallpaper-stripe-blue','wallpaper','Blue stripes','راه‌راه آبی','مخطط أزرق','#e5edf1','stripe','#95acbe'],
++  ['wallpaper-geo-greige','wallpaper','Geometric beige','هندسی بژ','هندسي بيج','#e8e2d9','geometric','#ac9a87'],
++  ['wallpaper-geo-sage','wallpaper','Geometric sage','هندسی سبز','هندسي أخضر','#e5e9df','geometric','#a0ad94'],
++  ['wallpaper-damask-gold','wallpaper','Gold damask','داماسک طلایی','دمشقي ذهبي','#eee4d2','damask','#c8ab75'],
++  ['wallpaper-damask-navy','wallpaper','Navy damask','داماسک سرمه‌ای','دمشقي كحلي','#334961','damask','#97aabe'],
++  ['wallpaper-leaf-ivory','wallpaper','Ivory botanical','برگ‌دار روشن','نباتي عاجي','#eeeadf','botanical','#899a7d'],
++  ['wallpaper-leaf-olive','wallpaper','Olive botanical','برگ‌دار زیتونی','نباتي زيتوني','#65735b','botanical','#bbc5a6'],
++].map(([id,kind,en,fa,ar,color,pattern,accent])=>Object.freeze({id,kind,en,fa,ar,color,
++  ...(pattern?{pattern,accent}:{}),...(['paint','wallpaper'].includes(kind)?{wallOnly:true}:{})})));
+ export const findSurfaceMaterial=id=>SURFACE_MATERIALS.find(m=>m.id===id)||null;
++export const surfaceMaterialAllowed=(id,target)=>!!target&&!!findSurfaceMaterial(id)&&(!findSurfaceMaterial(id).wallOnly||target.kind==='wall');
+ export const surfaceKey=target=>JSON.stringify([target.kind,String(target.id)]);
+ export function validSurfaceTarget(scene,target){
+   if(!target||typeof target.id!=='string'||!target.id)return false;
+@@ -41,6 +61,7 @@
+ export function applySurfaceMaterial(scene,target,materialId){
+   if(!validSurfaceTarget(scene,target))throw new Error('The floor or wall is no longer available.');
+   if(materialId!==null&&!findSurfaceMaterial(materialId))throw new Error('Unknown surface material.');
++  if(materialId!==null&&!surfaceMaterialAllowed(materialId,target))throw new Error('Paint and wallpaper apply to walls only.');
+   const assignments={...(scene.surfaceFinishes?.assignments||{})};
+   const key=surfaceKey(target);
+   if(materialId===null)delete assignments[key];else assignments[key]=materialId;
+@@ -58,7 +79,7 @@
+     // Old, orphaned assignments may remain after a wall edit, but cannot be
+     // introduced by this editor. This avoids destroying unrelated saved work.
+     const target=Array.isArray(parts)&&parts.length===2?{kind:parts[0],id:parts[1]}:null;
+-    if(!findSurfaceMaterial(id)||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.assignments?.[key]!==id))throw new Error('Invalid surface material or target.');
++    if(!surfaceMaterialAllowed(id,target)||(!validSurfaceTarget(after,target)&&before.surfaceFinishes?.assignments?.[key]!==id))throw new Error('Invalid surface material or target.');
+   }
+ }
+ 
+@@ -83,14 +104,44 @@
+   const s=canvas.width;canvas.height=s;
+   let seed=21731;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+   c.fillStyle=material.color;c.fillRect(0,0,s,s);
++  if(material.kind==='paint')return; // clean matte paint, not gritty masonry
+   const rgb=material.color.match(/\w\w/g).map(v=>parseInt(v,16));
+   const tint=(delta,alpha=1)=>`rgba(${rgb.map(v=>Math.max(0,Math.min(255,Math.round(v+delta)))).join(',')},${alpha})`;
+   for(let i=0;i<9000;i++){
+     const x=rand()*s,y=rand()*s,r=material.kind==='sand'?1+rand()*2:.5+rand();
+-    c.fillStyle=tint((rand()-.5)*(material.kind==='cement'?20:50),.45);
++    c.fillStyle=tint((rand()-.5)*(material.kind==='cement'?20:material.kind==='wallpaper'?12:50),.45);
+     c.fillRect(x,y,r,r);
+   }
+-  if(material.kind==='wood'){
++  if(material.kind==='wallpaper'){
++    c.strokeStyle=material.accent;c.fillStyle=material.accent;c.lineWidth=s/170;
++    if(material.pattern==='stripe'){
++      for(let x=0;x<s;x+=s/8)c.fillRect(x,0,s/16,s);
++    }else{
++      const tile=s/4;
++      for(let row=0;row<4;row++)for(let col=0;col<4;col++){
++        const x=(col+.5)*tile,y=(row+.5)*tile;
++        c.beginPath();
++        if(material.pattern==='geometric'){
++          c.moveTo(x,y-tile/2);c.lineTo(x+tile/2,y);c.lineTo(x,y+tile/2);c.lineTo(x-tile/2,y);c.closePath();c.stroke();
++          c.strokeRect(x-tile*.12,y-tile*.12,tile*.24,tile*.24);
++        }else if(material.pattern==='damask'){
++          for(let petal=0;petal<4;petal++){
++            const angle=petal*Math.PI/2,dx=Math.cos(angle),dy=Math.sin(angle),px=-dy,py=dx;
++            c.moveTo(x,y);
++            c.bezierCurveTo(x+dx*tile*.48+px*tile*.24,y+dy*tile*.48+py*tile*.24,x+dx*tile*.48-px*tile*.24,y+dy*tile*.48-py*tile*.24,x,y);
++          }
++          c.stroke();c.beginPath();c.arc(x,y,tile*.055,0,Math.PI*2);c.fill();
++        }else if(material.pattern==='botanical'){
++          c.moveTo(x-tile*.1,y+tile*.4);c.bezierCurveTo(x-tile*.14,y,x+tile*.14,y,x+tile*.1,y-tile*.4);c.stroke();
++          for(let leaf=0;leaf<4;leaf++){
++            const yy=y-tile*.27+leaf*tile*.18,sign=leaf%2?1:-1;
++            c.beginPath();c.moveTo(x,yy+tile*.08);
++            c.bezierCurveTo(x+sign*tile*.38,yy+tile*.12,x+sign*tile*.38,yy-tile*.15,x,yy+tile*.08);c.fill();
++          }
++        }
++      }
++    }
++  }else if(material.kind==='wood'){
+     const board=s/6;
+     for(let i=0;i<6;i++){
+       c.fillStyle=tint((rand()-.5)*24,.5);c.fillRect(i*board,0,board,s);
+@@ -134,13 +185,17 @@
+   const Material=THREE.MeshPhongMaterial||THREE.MeshLambertMaterial;
+   const material=new Material({color:0xffffff,map:texture,side:THREE.DoubleSide,
+     shininess:item.kind==='stone'?34:item.kind==='wood'?12:2});
+-  material.bumpMap=texture;material.bumpScale=item.kind==='brick'?.008:item.kind==='sand'?.012:.002;
++  if(item.kind!=='paint'){
++    material.bumpMap=texture;material.bumpScale=item.kind==='brick'?.008:item.kind==='sand'?.012:item.kind==='wallpaper'?.0005:.002;
++  }
+   material.userData={ventraSurfaceMaterial:id};return material;
+ }
+ 
+ export function applySurfaceUVs(THREE,mesh,kind){
+   const g=mesh.geometry,wall=kind==='wall',z=mesh.position?.z||0;
+-  const uv=(v,n)=>wall?(Math.abs(n.z)>.7?[v.x,v.y]:Math.abs(n.x)>.7?[v.y,v.z+z]:[v.x,v.z+z]):[v.x,v.y];
++  const angle=mesh.rotation?.z||0;
++  const along=(mesh.position?.x||0)*Math.cos(angle)+(mesh.position?.y||0)*Math.sin(angle);
++  const uv=(v,n)=>wall?(Math.abs(n.z)>.7?[v.x,v.y]:Math.abs(n.x)>.7?[v.y,v.z+z]:[v.x+along,v.z+z]):[v.x,v.y];
+   if(g?.vertices&&g.faces){
+     g.faceVertexUvs[0]=g.faces.map(f=>[f.a,f.b,f.c].map(i=>new THREE.Vector2(...uv(g.vertices[i],f.normal||{}))));g.uvsNeedUpdate=true;
+   }else if(g?.attributes?.position&&THREE.Float32BufferAttribute){
+--- a/src/lib/surfaceMaterialInputs.mjs
++++ b/src/lib/surfaceMaterialInputs.mjs
+@@ -1,11 +1,13 @@
+-import {SURFACE_MIME,findSurfaceMaterial} from './surfaceMaterials.mjs';
++import {SURFACE_MIME,findSurfaceMaterial,surfaceMaterialAllowed} from './surfaceMaterials.mjs';
+ 
+ export function bindSurfaceMaterialInputs(host,{getState,getRenderer,onApply,onHover=()=>{}}){
+   const owns=e=>Array.from(e.dataTransfer?.types||[]).includes(SURFACE_MIME);
+   const over=e=>{
+     if(!owns(e))return;
+     e.preventDefault();e.stopPropagation();
+-    const s=getState(),target=!s.disabled&&getRenderer()?.pickSurface?.(e);
++    const s=getState(),hit=!s.disabled&&getRenderer()?.pickSurface?.(e);
++    const id=e.dataTransfer.getData(SURFACE_MIME)||s.materialId;
++    const target=surfaceMaterialAllowed(id,hit)?hit:null;
+     e.dataTransfer.dropEffect=target?'copy':'none';onHover(target||null);
+   };
+   const leave=e=>{if(!host.contains?.(e.relatedTarget))onHover(null);};
+@@ -14,11 +16,12 @@
+     e.preventDefault();e.stopPropagation();onHover(null);
+     const s=getState();if(s.disabled)return;
+     const id=e.dataTransfer.getData(SURFACE_MIME);
+-    if(findSurfaceMaterial(id))onApply(getRenderer()?.pickSurface?.(e)||null,id);
++    if(findSurfaceMaterial(id)){host.focus?.({preventScroll:true});onApply(getRenderer()?.pickSurface?.(e)||null,id);}
+   };
+   const down=e=>{
+     const s=getState();if(!s.paintMode||s.disabled||e.button!==0)return;
+     e.preventDefault();e.stopImmediatePropagation();
++    host.focus?.({preventScroll:true});
+     onApply(getRenderer()?.pickSurface?.(e)||null,s.materialId);
+   };
+   host.addEventListener('dragover',over,true);host.addEventListener('dragleave',leave,true);
+@@ -26,3 +29,18 @@
+   return ()=>{host.removeEventListener('dragover',over,true);host.removeEventListener('dragleave',leave,true);
+     host.removeEventListener('drop',drop,true);host.removeEventListener('pointerdown',down,true);onHover(null);};
+ }
++
++export function bindSurfaceMaterialUndo(host,panel,getState,onUndo,eventTarget=globalThis.document){
++  if(!eventTarget)return ()=>{};
++  const handler=event=>{
++    const target=event.target,state=getState();
++    const editable=target?.isContentEditable||target?.closest?.('input,textarea,select,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"],[role="textbox"]');
++    if(editable||event.defaultPrevented||event.isComposing||event.repeat||event.shiftKey||event.altKey||
++      !(event.ctrlKey||event.metaKey)||!(event.code==='KeyZ'||String(event.key).toLowerCase()==='z'))return;
++    const inScope=panel?.contains(target)||(state.paintMode&&host.contains(target));
++    if(!inScope||state.disabled||!state.canUndo)return;
++    event.preventDefault();event.stopImmediatePropagation();onUndo();
++  };
++  eventTarget.addEventListener('keydown',handler,true);
++  return ()=>eventTarget.removeEventListener('keydown',handler,true);
++}
+--- a/src/app/projects/[id]/SurfaceMaterialPanel.jsx
++++ b/src/app/projects/[id]/SurfaceMaterialPanel.jsx
+@@ -1,8 +1,8 @@
+ 'use client';
+ import {useEffect,useRef,useState} from 'react';
+ import {useLanguage} from '@/app/components/i18n/LanguageProvider';
+-import {SURFACE_GROUPS,SURFACE_MATERIALS,SURFACE_MIME,applySurfaceMaterial,paintSurfaceSwatch,assertSurfaceOnlyEdit} from '@/lib/surfaceMaterials.mjs';
+-import {bindSurfaceMaterialInputs} from '@/lib/surfaceMaterialInputs.mjs';
++import {SURFACE_GROUPS,SURFACE_MATERIALS,SURFACE_MIME,applySurfaceMaterial,paintSurfaceSwatch,assertSurfaceOnlyEdit,surfaceMaterialAllowed} from '@/lib/surfaceMaterials.mjs';
++import {bindSurfaceMaterialInputs,bindSurfaceMaterialUndo} from '@/lib/surfaceMaterialInputs.mjs';
+ import styles from './SurfaceMaterialPanel.module.css';
+ 
+ function Swatch({material,label,selected,disabled,onChoose}){
+@@ -11,7 +11,7 @@
+   return <button type="button" className={styles.swatch} draggable={!disabled} disabled={disabled}
+     aria-pressed={selected} aria-label={label} title={label}
+     onClick={()=>onChoose(material.id)}
+-    onDragStart={e=>{if(disabled){e.preventDefault();return;}e.dataTransfer.setData(SURFACE_MIME,material.id);e.dataTransfer.effectAllowed='copy';}}>
++    onDragStart={e=>{if(disabled){e.preventDefault();return;}onChoose(material.id);e.dataTransfer.setData(SURFACE_MIME,material.id);e.dataTransfer.effectAllowed='copy';}}>
+     <canvas ref={canvas} width={128} height={128} aria-hidden="true" />
+     <span>{label}</span>
+   </button>;
+@@ -22,10 +22,11 @@
+   const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
+   const [group,setGroup]=useState('stone'),[selected,setSelected]=useState('stone-ivory'),[paintMode,setPaintMode]=useState(false);
+   const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[hover,setHover]=useState(null),[lastTarget,setLastTarget]=useState(null),[undoCount,setUndoCount]=useState(0);
+-  const history=useRef([]),working=useRef(false),latest=useRef(null);
++  const history=useRef([]),working=useRef(false),latest=useRef(null),panelRef=useRef(null);
+   async function apply(target,id,undo=false){
+     const state=latest.current;if(working.current||state.disabled)return;
+     if(!undo&&!target){setMessage(text('Drop onto a visible floor or wall.','روی بخش قابل‌دیدن کف یا دیوار رها کن.','أفلت على أرضية أو جدار ظاهر.'));return;}
++    if(!undo&&id!==null&&!surfaceMaterialAllowed(id,target)){setMessage(text('Paint and wallpaper apply to walls only.','رنگ و کاغذدیواری را روی دیوار اعمال کن.','الدهان وورق الجدران للجدران فقط.'));return;}
+     working.current=true;setBusy(true);setMessage('');
+     try{
+       const previous=history.current.at(-1);
+@@ -39,16 +40,20 @@
+       setUndoCount(history.current.length);setMessage(text('Material saved.','متریال ذخیره شد.','تم حفظ المادة.'));
+     }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
+   }
+-  latest.current={scene,materialId:selected,paintMode,disabled:disabled||busy,onCommit,apply,getRenderer};
++  latest.current={scene,materialId:selected,paintMode,disabled:disabled||busy,onCommit,apply,getRenderer,canUndo:undoCount>0};
+   useEffect(()=>{
+     const host=getCanvasHost();if(!host)return;
+-    return bindSurfaceMaterialInputs(host,{getState:()=>latest.current,getRenderer:()=>latest.current.getRenderer(),
++    const originalTabIndex=host.getAttribute('tabindex');if(originalTabIndex===null)host.tabIndex=0;
++    const focus=()=>host.focus({preventScroll:true});host.addEventListener('pointerdown',focus,true);
++    const unbindInputs=bindSurfaceMaterialInputs(host,{getState:()=>latest.current,getRenderer:()=>latest.current.getRenderer(),
+       onApply:(target,id)=>latest.current.apply(target,id),onHover:setHover});
++    const unbindUndo=bindSurfaceMaterialUndo(host,panelRef.current,()=>latest.current,()=>latest.current.apply(null,null,true));
++    return ()=>{unbindInputs();unbindUndo();host.removeEventListener('pointerdown',focus,true);if(originalTabIndex===null&&host.getAttribute('tabindex')==='0')host.removeAttribute('tabindex');};
+   },[scene,disabled]);
+   useEffect(()=>{onModeChange(paintMode);return()=>onModeChange(false);},[paintMode,onModeChange]);
+   function choose(id){setSelected(id);setPaintMode(true);getRenderer()?.setFurnitureTool?.(null);}
+   const targetName=target=>!target?'':`${target.kind==='wall'?text('Wall','دیوار','جدار'):text('Floor','کف','أرضية')} · ${target.id}`;
+-  return <section className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('Surface materials','متریال کف و دیوار','مواد الأرضيات والجدران')}>
++  return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('Surface materials','متریال کف و دیوار','مواد الأرضيات والجدران')}>
+     <details open><summary>{text('Floor & wall materials','متریال کف و دیوار','مواد الأرضيات والجدران')}</summary>
+       <p>{text('Drag a swatch onto a floor or wall. Or select a swatch, then click the surface.','نمونه را روی کف یا دیوار بکش و رها کن؛ یا نمونه را انتخاب کن و روی سطح بزن.','اسحب العينة إلى الأرضية أو الجدار، أو اخترها ثم اضغط على السطح.')}</p>
+       <div className={styles.groups} aria-label={text('Material categories','گروه متریال','فئات المواد')}>
+@@ -57,9 +62,10 @@
+       <div className={styles.grid}>
+         {SURFACE_MATERIALS.filter(m=>m.kind===group).map(m=><Swatch key={m.id} material={m} label={m[lang]} selected={selected===m.id} disabled={disabled||busy} onChoose={choose}/>)}
+       </div>
++      {['paint','wallpaper'].includes(group)&&<p>{text('For walls only.','مخصوص دیوار.','للجدران فقط.')}</p>}
+       <div className={styles.actions}>
+         <button type="button" aria-pressed={!paintMode} onClick={()=>setPaintMode(false)}>{text('Camera','حرکت دوربین','الكاميرا')}</button>
+-        <button type="button" disabled={disabled||busy||!undoCount} onClick={()=>apply(null,null,true)}>{text('Undo','برگشت','تراجع')}</button>
++        <button type="button" title="Ctrl+Z / Cmd+Z" disabled={disabled||busy||!undoCount} onClick={()=>apply(null,null,true)}>{text('Undo · Ctrl+Z','برگشت · Ctrl+Z','تراجع · Ctrl+Z')}</button>
+         <button type="button" disabled={disabled||busy||!lastTarget} onClick={()=>apply(lastTarget,null)}>{text('Original surface','متریال اولیه سطح','المادة الأصلية')}</button>
+       </div>
+       <div className={styles.feedback} role="status" aria-live="polite">{busy?text('Saving…','در حال ذخیره…','جارٍ الحفظ…'):hover?targetName(hover):message|| (paintMode?text('Click a floor or wall to apply.','برای اعمال، روی کف یا دیوار بزن.','اضغط على أرضية أو جدار للتطبيق.'):text('Drag a swatch to begin.','یک نمونه را روی سطح بکش.','اسحب عينة للبدء.'))}</div>

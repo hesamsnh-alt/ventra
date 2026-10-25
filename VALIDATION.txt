@@ -1,0 +1,6 @@
+14 unit checks passed (walk geometry plus mobile touch lifecycle).
+Browser fixture: real WalkthroughPanel, walkthrough controller, camera input binding, Three camera and shipped CSS; no paid API calls.
+Native touch events injected through Chromium CDP: 390x844 and 844x390.
+Verified four walking directions, release stops motion, dead zone, simultaneous two-finger movement/look, cancellation, blur, no orbit interference, mobile direction and camera buttons hidden during walk, fullscreen fallback, exit restores camera.
+Desktop: 1024x768 and 1440x900; mouse drag changes look only, arrow movement and direction buttons preserved.
+Production build passes. This is browser emulation, not a physical iPhone/Safari test or a full authenticated project walkthrough.

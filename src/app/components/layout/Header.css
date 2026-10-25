@@ -696,3 +696,17 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* Compact home header; the existing side menu retains account actions. */
+@media (max-width: 600px) {
+  body:has(.hero) .vt-header,
+  body:has(.hero) .vt-header--scrolled { top: 10px; width: calc(100% - 24px); }
+  body:has(.hero) .vt-header__bar,
+  body:has(.hero) .vt-header--scrolled .vt-header__bar {
+    min-height: 58px; padding: 0 12px; gap: 12px; border-radius: 16px;
+  }
+  body:has(.hero) .vt-header__mark,
+  body:has(.hero) .vt-header--scrolled .vt-header__mark { width: 34px; height: 34px; font-size: 18px; border-radius: 10px; }
+  body:has(.hero) .vt-header__name,
+  body:has(.hero) .vt-header--scrolled .vt-header__name { font-size: 20px; }
+  body:has(.hero) .vt-header__actions > span { display: none !important; }
+}
