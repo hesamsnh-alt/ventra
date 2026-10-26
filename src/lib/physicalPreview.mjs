@@ -1,4 +1,5 @@
-import {INTERIOR_LIGHTING,surfacePhysicalSettings,createSurfaceRelief} from './interiorRenderQuality.mjs';
+import {createReferenceLighting,interiorShadowCaster,REFERENCE_LIGHTING} from './referenceLighting.mjs';
+import {surfacePhysicalSettings,createSurfaceRelief} from './interiorRenderQuality.mjs';
 import {syncTextureSource,textureSourceStamp,textureSourceResized} from './textureBridge.mjs';
 import * as T from 'three';
 import {createDetailedSurfaces} from './detailedSurfaces.mjs';
@@ -9,7 +10,7 @@ import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
-export const PHYSICAL_PREVIEW_LIGHTING=Object.freeze({exposure:.78,environment:.38,key:1.65,fill:.30});
+export const PHYSICAL_PREVIEW_LIGHTING=REFERENCE_LIGHTING.overview;
 
 // A render-only bridge. APS geometry and editor raycasting remain authoritative.
 export function physicalGeometry(source){
@@ -40,29 +41,31 @@ export function physicalMaterialSettings(source){
  const shininess=Number(source.shininess)||0;
  return {roughness:Math.max(.22,Math.min(.94,Math.sqrt(2/(shininess+2)))),metalness:shininess>=100?.72:0};
 }
+// This exact bump scale identifies the procedural fabric already produced by the viewer.
+// Keep paint, wood and user-supplied photo materials out of textile shading.
+export function textilePhysicalSettings(source){
+ const scale=Number(source?.bumpScale);
+ if(!source?.bumpMap||!Number.isFinite(scale)||Math.abs(scale-.0005)>1e-9||surfacePhysicalSettings(source))return null;
+ return {roughness:.84,metalness:0,sheen:.32,sheenRoughness:.85,sheenColor:0xffffff};
+}
 export function createPhysicalPreview(options){
  const renderer=new T.WebGLRenderer(options),nativeRender=renderer.render.bind(renderer);
- renderer.supportsPersonalModels=true;
+ renderer.supportsPersonalModels=true;renderer.ventraLightingVersion='warm-interior-v1';
  renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=PHYSICAL_PREVIEW_LIGHTING.exposure;
  const scene=new T.Scene(),camera=new T.PerspectiveCamera(),objects=new Map(),geometries=new Map(),materials=new Map(),textures=new Map();
  const room=new RoomEnvironment(),pmrem=new T.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);
  scene.environment=environment.texture;scene.environmentIntensity=PHYSICAL_PREVIEW_LIGHTING.environment;room.dispose();pmrem.dispose();
  const anisotropy=Math.min(options.mobile?4:8,renderer.capabilities.getMaxAnisotropy());
  const relief=createSurfaceRelief(anisotropy);
- const bounce=new T.HemisphereLight(0xe9f1ff,0xb7a38a,.18);bounce.position.set(0,0,1);scene.add(bounce);
- renderer.setWalkthroughActive=active=>{renderer.toneMappingExposure=active?INTERIOR_LIGHTING.exposure:PHYSICAL_PREVIEW_LIGHTING.exposure;scene.environmentIntensity=active?INTERIOR_LIGHTING.environment:PHYSICAL_PREVIEW_LIGHTING.environment;bounce.intensity=active?INTERIOR_LIGHTING.bounce:.18;};
- const span=options.span||15;
- const key=new T.DirectionalLight(0xfff1df,PHYSICAL_PREVIEW_LIGHTING.key);key.position.set(span*.45,-span*.6,span);key.castShadow=true;
- const extent=span*.75+2;Object.assign(key.shadow.camera,{left:-extent,right:extent,top:extent,bottom:-extent,near:.1,far:span*5});
- key.shadow.mapSize.set(options.mobile?1024:2048,options.mobile?1024:2048);key.shadow.bias=-.00008;key.shadow.normalBias=.008;key.shadow.radius=2;scene.add(key);
- const fill=new T.DirectionalLight(0xddeaff,PHYSICAL_PREVIEW_LIGHTING.fill);fill.position.set(-span,span,span*.7);scene.add(fill);
+ const lighting=createReferenceLighting(scene,renderer,options);
+ renderer.setWalkthroughActive=active=>lighting.setInterior(active);
  // Screen-space occlusion gives corners, joints and furniture contact depth.
  // Mobile keeps a single-pass PBR renderer to bound memory and GPU use.
  let composer=null,occlusion=null,output=null;
  if(!options.mobile){
   const target=new T.WebGLRenderTarget(1,1,{type:T.HalfFloatType,samples:4});
   composer=new EffectComposer(renderer,target);occlusion=new SSAOPass(scene,camera,1,1,16);
-  occlusion.kernelRadius=.22;occlusion.minDistance=.001;occlusion.maxDistance=.12;
+  occlusion.kernelRadius=.18;occlusion.minDistance=.001;occlusion.maxDistance=.055;
   output=new OutputPass();composer.addPass(new RenderPass(scene,camera));composer.addPass(occlusion);composer.addPass(output);
  }
  const nativeSize=renderer.setSize.bind(renderer);
@@ -88,8 +91,8 @@ export function createPhysicalPreview(options){
   if(old.bumpMap)activeTextures.add(old.bumpMap.uuid+':false');
   let next=materials.get(old);
   if(!next){
-   const basic=old.type==='MeshBasicMaterial';
-   next=old.userData?.ventraMaterial==='railing_glass'?new T.MeshPhysicalMaterial({roughness:.07,metalness:0,transmission:options.mobile?0:.88,thickness:.012,ior:1.5}):basic?new T.MeshBasicMaterial():new T.MeshStandardMaterial(physicalMaterialSettings(old));
+   const basic=old.type==='MeshBasicMaterial',textile=options.mobile?null:textilePhysicalSettings(old);
+   next=old.userData?.ventraMaterial==='railing_glass'?new T.MeshPhysicalMaterial({roughness:.07,metalness:0,transmission:options.mobile?0:.88,thickness:.012,ior:1.5}):basic?new T.MeshBasicMaterial():textile?new T.MeshPhysicalMaterial(textile):new T.MeshStandardMaterial(physicalMaterialSettings(old));
    next.map=texture(old.map,true);if(!basic){next.bumpMap=texture(old.bumpMap,false);next.bumpScale=old.bumpScale||0;}
    materials.set(old,next);
   }
@@ -115,7 +118,7 @@ export function createPhysicalPreview(options){
    if(!mesh){let g=geometries.get(old.geometry);if(!g){g=physicalGeometry(old.geometry);geometries.set(old.geometry,g);}mesh=old.type==='Line'?new (old.mode===1?T.LineSegments:T.Line)(g,new T.LineBasicMaterial({color:old.material.color?.getHex?.()||0x444444})):new T.Mesh(g,material(old.material));mesh.matrixAutoUpdate=false;objects.set(old,mesh);scene.add(mesh);}
    if(old.type!=='Line')mesh.material=material(old.material);mesh.matrix.fromArray(old.matrixWorld.elements);mesh.matrixWorldNeedsUpdate=true;
    let visible=true;for(let parent=old;parent;parent=parent.parent)if(!parent.visible){visible=false;break;}
-   mesh.visible=visible;mesh.castShadow=old.castShadow;mesh.receiveShadow=old.receiveShadow;
+   mesh.visible=visible;mesh.castShadow=interiorShadowCaster(old,lighting.isInterior());mesh.receiveShadow=old.receiveShadow;
   });
   for(const [old,mesh] of objects)if(!active.has(old)){scene.remove(mesh);if(old.type==='Line')mesh.material.dispose();objects.delete(old);}
   for(const [old,g] of geometries)if(!activeGeometry.has(old)){g.dispose();geometries.delete(old);}
@@ -128,6 +131,6 @@ export function createPhysicalPreview(options){
   camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(composer)composer.render();else nativeRender(scene,camera);
  };
  const nativeDispose=renderer.dispose.bind(renderer);
- renderer.dispose=()=>{lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();key.shadow.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
+ renderer.dispose=()=>{lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
  return renderer;
 }
