@@ -20,7 +20,7 @@ function setup(){
     analyzeProjectDrawing:async()=>{state.apiCalls++;return pending;},persistTakeoff:async()=>{state.persistCalls++;return saving;},
     setAnalyzing:v=>state.analyzing=v,setGeneratingBoq:v=>state.generatingBoq=v,setTakeoffResult:v=>state.takeoffResult=v,
     setSelectedDocumentId:v=>state.selectedDocumentId=v,setMessage:v=>state.messages.push(v),setErrorMessage:v=>state.errors.push(v),
-    commercialFetch:async(url,options)=>{state.boqCalls.push(JSON.parse(options.body));return {ok:true,text:async()=>JSON.stringify({success:true,boq:{items:[]}})};},
+    generateBoq:async(input)=>{state.boqCalls.push(input);return {items:[]};},
     importAiBoq(){},localStorage:{setItem(){}},onOpenBoq(){},
   };
   vm.createContext(state);
@@ -39,6 +39,27 @@ test('PNG Analyze saves a quantity takeoff without making a 3D request',async()=
   resolveSave();await work;
   assert.equal(s.persistCalls,1);assert.equal(s.takeoffResult.document_id,'png');
   assert.equal(s.takeoffResult.floor_area,46.5225);assert.equal(previewCalls,0);
+});
+test('Drawing Center waits for the shared BOQ job and preserves all PNG measurement evidence',async()=>{
+ const {state:s}=setup();let done,imports=0;
+ const input={document_id:'png',document_name:'plan.png',rooms:1,floor_area:20,window_area:1.44,
+  page_evidence:{kind:'floor_plan',quantities:[{key:'paint_area',value:50.67}]},raw_result:{redundant:true}};
+ s.takeoffResult=input;s.selectedDrawingSync=()=> 'png';
+ s.generateBoq=async request=>{s.boqCalls.push(request);return new Promise(r=>done=r);};
+ s.importAiBoq=()=>imports++;
+ const task=s.generate();assert.equal(imports,0);assert.equal(s.generatingBoq,true);
+ await s.generate();assert.equal(s.boqCalls.length,1);
+ assert.equal(s.boqCalls[0].takeoff.window_area,1.44);assert.equal(s.boqCalls[0].takeoff.page_evidence.quantities[0].value,50.67);
+ assert.equal(s.boqCalls[0].takeoff.raw_result,undefined);
+ done({items:[{quantity:20,rate:77}]});await task;assert.equal(imports,1);assert.equal(s.errors.length,0);
+ assert.equal(s.generatingBoq,false);
+});
+test('a drawing selection changed during a queued BOQ never imports the old result',async()=>{
+ const {state:s}=setup();let done,imports=0,selected='first';
+ s.takeoffResult={document_id:'first',floor_area:20};s.selectedDrawingSync=()=>selected;
+ s.generateBoq=()=>new Promise(r=>done=r);s.importAiBoq=()=>imports++;
+ const task=s.generate();selected='second';done({items:[{quantity:20,rate:77}]});await task;
+ assert.equal(imports,0);assert.equal(s.errors.length,1);
 });
 test('explicit image 3D preview preserves its workflow without a second paid quantity request',async()=>{
   const {state:s}=setup();let previewCalls=0;

@@ -1,4 +1,5 @@
 import {planPdfCatalogRules, resolvePdfCatalogRate, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
+import {isRasterTakeoff,buildRasterBoq} from '@/lib/rasterBoqEvidence.mjs';
 import {annotatePdfBoqCompletion} from '@/lib/pdfBoqCompletion.mjs';
 import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
 import { classifyEstimateItem } from '@/lib/estimateClassification.mjs';
@@ -5788,6 +5789,11 @@ console.log("=============================");
 
     const rules = rulesResult.data || [];
     const prices = pricesResult.data || [];
+
+    if (isRasterTakeoff(rawTakeoff)) {
+      const boq=buildRasterBoq({takeoff:rawTakeoff,prices,rules,projectId,projectName,priceLevel,vatPercentage});
+      return NextResponse.json({success:true,boq});
+    }
 
     if (prices.length === 0 || (!takeoff.pdf_analysis && rules.length === 0)) {
       const fallbackBoq = takeoff.pdf_analysis ? {items:[],warnings:[]} : buildLocalBoq({

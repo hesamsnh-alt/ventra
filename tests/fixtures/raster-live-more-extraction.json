@@ -1,0 +1,477 @@
+[
+  {
+    "case": "QA-04",
+    "takeoff": {
+      "doors": 3,
+      "notes": "Architectural floor plan with clear internal dimensions. Internal heights = 2.80 m, wall thickness = 0.15 m. Floor/ceiling areas are the sum of the three rooms (walkable only). Wall_length measured on wall centre-lines: external rectangle CL = 2*((9.00+0.15)+(4.00+0.15)) and two 4.00 m partitions. Wall_area is NET internal wall paint area using internal face perimeter 26.00 m + both faces of two 4.00 m partitions, all x 2.80 m, minus openings (internal doors deducted on both faces; external door and all windows deducted once). Window and door areas use printed opening sizes only. Geometry coverage set to partial because wall footprint strips are not drawn; spaces are fully dimensioned. Quantities should be reviewed by a QS.",
+      "rooms": 3,
+      "windows": 3,
+      "door_area": 5.04,
+      "wall_area": 82.87,
+      "confidence": 92,
+      "floor_area": 36,
+      "wall_length": 34.6,
+      "window_area": 4.14,
+      "ceiling_area": 36,
+      "area_geometry": {
+        "basis": "clear_internal",
+        "spaces": [
+          {
+            "tag": "ROOM A",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 4,
+                "y": 0
+              },
+              {
+                "x": 4,
+                "y": 4
+              },
+              {
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "evidence": "4.00 x 4.00 m clear",
+            "reported_area": 16
+          },
+          {
+            "tag": "ROOM B",
+            "kind": "enclosed",
+            "finish": "wood",
+            "polygon": [
+              {
+                "x": 4,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 4,
+                "y": 4
+              }
+            ],
+            "evidence": "3.00 x 4.00 m clear",
+            "reported_area": 12
+          },
+          {
+            "tag": "ROOM C",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 0
+              },
+              {
+                "x": 9,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 4
+              }
+            ],
+            "evidence": "2.00 x 4.00 m clear",
+            "reported_area": 8
+          }
+        ],
+        "coverage": "partial",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "envelope_evidence": "Clear internal overall = width 4+3+2 = 9.00 m; depth = 4.00 m."
+      },
+      "page_evidence": {
+        "kind": "floor_plan",
+        "revision": null,
+        "scope_id": null,
+        "drawing_id": "QA-04",
+        "quantities": [
+          {
+            "key": "rooms",
+            "unit": "nr",
+            "value": 3,
+            "evidence": "Three labelled rooms A/B/C with printed clear sizes.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "door_count",
+            "unit": "nr",
+            "value": 3,
+            "evidence": "D0, D1, D2 shown and dimensioned.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "window_count",
+            "unit": "nr",
+            "value": 3,
+            "evidence": "W1, W2, W3 shown and dimensioned.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "door_area",
+            "unit": "m2",
+            "value": 5.04,
+            "evidence": "D0 0.90x2.10=1.89; D1 0.80x2.10=1.68; D2 0.70x2.10=1.47; total=5.04 m2.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "window_area",
+            "unit": "m2",
+            "value": 4.14,
+            "evidence": "W1 1.80x1.20=2.16; W2 1.20x1.20=1.44; W3 0.60x0.90=0.54; total=4.14 m2.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "internal_wall_length",
+            "unit": "m",
+            "value": 8,
+            "evidence": "Two partitions, each 4.00 m clear length.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "external_wall_length",
+            "unit": "m",
+            "value": 26.6,
+            "evidence": "External CL perimeter = 2*((9.00+0.15)+(4.00+0.15)) = 26.60 m.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "wood_floor_area",
+            "unit": "m2",
+            "value": 12,
+            "evidence": "ROOM B 3.00 x 4.00 m = 12.00 m2 (WOOD FLOOR).",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "ceramic_floor_area",
+            "unit": "m2",
+            "value": 24,
+            "evidence": "ROOM A 4.00 x 4.00 = 16.00 m2; ROOM C 2.00 x 4.00 = 8.00 m2; total=24.00 m2.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "paint_area",
+            "unit": "m2",
+            "value": 82.87,
+            "evidence": "Internal faces: external perimeter 26.00 m + two partitions both faces 2x4.00 m = 34.00 m; area gross = 34.00 x 2.80 = 95.20 m2; deductions: D1 2x(0.80x2.10)=3.36, D2 2x(0.70x2.10)=2.94, D0 0.90x2.10=1.89, windows 2.16+1.44+0.54=4.14; net = 95.20-3.36-2.94-1.89-4.14 = 82.87 m2.",
+            "scope_id": "QA-04"
+          },
+          {
+            "key": "ceiling_paint_area",
+            "unit": "m2",
+            "value": 36,
+            "evidence": "Sum of room clear areas: 16+12+8 = 36 m2; all enclosed flat ceilings to be painted.",
+            "scope_id": "QA-04"
+          }
+        ]
+      },
+      "detected_items": [
+        {
+          "name": "ROOM A",
+          "unit": "m2",
+          "quantity": 16,
+          "description": "CERAMIC FLOOR | 4.00 x 4.00 m"
+        },
+        {
+          "name": "ROOM B",
+          "unit": "m2",
+          "quantity": 12,
+          "description": "WOOD FLOOR | 3.00 x 4.00 m"
+        },
+        {
+          "name": "ROOM C",
+          "unit": "m2",
+          "quantity": 8,
+          "description": "CERAMIC FLOOR | 2.00 x 4.00 m"
+        },
+        {
+          "name": "Door D0",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "External door 0.90 x 2.10 m (area 1.89 m2)"
+        },
+        {
+          "name": "Door D1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Internal door between A/B 0.80 x 2.10 m (area 1.68 m2)"
+        },
+        {
+          "name": "Door D2",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Internal door between B/C 0.70 x 2.10 m (area 1.47 m2)"
+        },
+        {
+          "name": "Window W1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "External window 1.80 x 1.20 m (area 2.16 m2)"
+        },
+        {
+          "name": "Window W2",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "External window 1.20 x 1.20 m (area 1.44 m2)"
+        },
+        {
+          "name": "Window W3",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "External window 0.60 x 0.90 m (area 0.54 m2)"
+        }
+      ],
+      "document_name": "QA-04-three-rooms.png"
+    }
+  },
+  {
+    "case": "QA-05",
+    "takeoff": {
+      "doors": 3,
+      "notes": "Architectural floor plan with clear internal dimensions: Living 5.00x4.00 m, Wet Utility 2.00x4.00 m, Open Terrace 3.00x4.00 m. Enclosed height 3.00 m; partitions 0.15 m. Floor area includes terrace; ceiling area excludes terrace per note. Wall_length is the unique wall perimeter of the enclosed block (7x4 m = 22 m) plus the internal partition between Living and Utility (4 m) = 26 m; not reduced for openings. Wall_area is gross internal wall surface of Living + Utility at 3.00 m height (no opening deductions) = 3.00*(18+12)=90 m2. Door and window areas use printed sizes. Paint areas, ceramic floors and utility waterproofing are computed and reported under page_evidence.quantities with explicit formulas. Minor uncertainty: exact location of D0 on Living perimeter does not change totals; wall finish conventions for opening deductions are assumed net for paint. No ceiling/paint/waterproofing/railing for terrace as stated. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.",
+      "rooms": 2,
+      "windows": 2,
+      "door_area": 5.67,
+      "wall_area": 90,
+      "confidence": 93,
+      "floor_area": 40,
+      "wall_length": 26,
+      "window_area": 2.76,
+      "ceiling_area": 28,
+      "area_geometry": {
+        "basis": "clear_internal",
+        "spaces": [
+          {
+            "tag": "LIVING",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 5,
+                "y": 0
+              },
+              {
+                "x": 5,
+                "y": 4
+              },
+              {
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "evidence": "Printed: LIVING 5.00 x 4.00 m",
+            "reported_area": 20
+          },
+          {
+            "tag": "WET UTILITY",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 5,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 7,
+                "y": 4
+              },
+              {
+                "x": 5,
+                "y": 4
+              }
+            ],
+            "evidence": "Printed: WET UTILITY 2.00 x 4.00 m",
+            "reported_area": 8
+          },
+          {
+            "tag": "OPEN TERRACE",
+            "kind": "outdoor",
+            "finish": "outdoor",
+            "polygon": [
+              {
+                "x": 7,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 4
+              },
+              {
+                "x": 7,
+                "y": 4
+              }
+            ],
+            "evidence": "Printed: OPEN TERRACE 3.00 x 4.00 m",
+            "reported_area": 12
+          }
+        ],
+        "coverage": "complete",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "envelope_evidence": "Overall clear width = 5.00 + 2.00 + 3.00 = 10.00 m; height = 4.00 m (printed room sizes)."
+      },
+      "page_evidence": {
+        "kind": "floor_plan",
+        "revision": null,
+        "scope_id": null,
+        "drawing_id": null,
+        "quantities": [
+          {
+            "key": "ceramic_floor_area",
+            "unit": "m2",
+            "value": 28,
+            "evidence": "Living 5.00x4.00 (20 m2) + Wet Utility 2.00x4.00 (8 m2) labelled CERAMIC.",
+            "scope_id": "unknown_level"
+          },
+          {
+            "key": "terrace_floor_area",
+            "unit": "m2",
+            "value": 12,
+            "evidence": "OPEN TERRACE 3.00x4.00 m, CEMENT PAVERS, open to sky.",
+            "scope_id": "unknown_level"
+          },
+          {
+            "key": "paint_area",
+            "unit": "m2",
+            "value": 79.89,
+            "evidence": "Walls of LIVING and WET UTILITY only, net of openings: 3.00 m x (perimeters 18 m + 12 m) - [D0 1.00x2.10 + D1 0.80x2.10 (both sides) + D2 0.90x2.10 + W1 2.00x1.20 + W2 0.60x0.60] = 90.00 - 10.11 = 79.89 m2.",
+            "scope_id": "unknown_level"
+          },
+          {
+            "key": "ceiling_paint_area",
+            "unit": "m2",
+            "value": 28,
+            "evidence": "Flat ceilings of LIVING and WET UTILITY only: 20 + 8 m2.",
+            "scope_id": "unknown_level"
+          },
+          {
+            "key": "wet_floor_waterproofing_area",
+            "unit": "m2",
+            "value": 8,
+            "evidence": "WET UTILITY floor waterproofing equals its clear area 2.00x4.00 = 8.00 m2.",
+            "scope_id": "unknown_level"
+          },
+          {
+            "key": "wet_wall_waterproofing_area",
+            "unit": "m2",
+            "value": 1.545,
+            "evidence": "0.15 m upstand around WET UTILITY clear perimeter (2x(2+4)=12 m) excluding D1 (0.80 m) and D2 (0.90 m): 0.15 x (12 - 0.80 - 0.90) = 1.545 m2.",
+            "scope_id": "unknown_level"
+          }
+        ]
+      },
+      "detected_items": [
+        {
+          "name": "LIVING",
+          "unit": "m2",
+          "quantity": 20,
+          "description": "TILE - CERAMIC FLOOR. Clear area 5.00 x 4.00 m"
+        },
+        {
+          "name": "WET UTILITY",
+          "unit": "m2",
+          "quantity": 8,
+          "description": "TILE - CERAMIC. Clear area 2.00 x 4.00 m"
+        },
+        {
+          "name": "OPEN TERRACE",
+          "unit": "m2",
+          "quantity": 12,
+          "description": "OUTDOOR - CEMENT PAVERS, OPEN TO SKY. Clear area 3.00 x 4.00 m"
+        },
+        {
+          "name": "Door D0",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "External/Living door 1.00 x 2.10 m"
+        },
+        {
+          "name": "Door D1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Living/Utility door 0.80 x 2.10 m"
+        },
+        {
+          "name": "Door D2",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Utility/Terrace door 0.90 x 2.10 m"
+        },
+        {
+          "name": "Window W1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Living window 2.00 x 1.20 m"
+        },
+        {
+          "name": "Window W2",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Utility window 0.60 x 0.60 m"
+        }
+      ],
+      "document_name": "QA-05-terrace-wet-room.jpg"
+    }
+  }
+]

@@ -1,3 +1,4 @@
+import {isRasterTakeoff,buildRasterBoq} from '../src/lib/rasterBoqEvidence.mjs';
 // Read-only, offline exercise of the actual server BOQ path. No dependencies,
 // database connection, model, browser state, or catalog updates are used.
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -28,7 +29,7 @@ export async function runOfflinePdfCatalog(takeoff,prices,{rules=[],sections=[]}
       range(a,b){return Promise.resolve({data:tables[name].slice(a,b+1),error:null});},
       then(ok,fail){return Promise.resolve({data:tables[name],error:null}).then(ok,fail);},insert:forbiddenWrite,update:forbiddenWrite,upsert:forbiddenWrite,delete:forbiddenWrite};return q;
   }};
-  const context=vm.createContext({planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
+  const context=vm.createContext({isRasterTakeoff,buildRasterBoq,planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
     process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-placeholder',VENTRA_DISABLE_BOQ_AI:'true'}},
     createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
     getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty inventory'}),

@@ -1,6 +1,7 @@
 import {localizeBoqText} from './boqLocalization.mjs';
 import { classifyEstimateItem } from './estimateClassification.mjs';
-import { calculateBoqBudget } from './boqBudget.mjs';
+import { calculateBoqBudget, boqLineAmount } from './boqBudget.mjs';
+import {currencySum} from './commercialDocument.mjs';
 
 export const BOQ_EXPORT_HEADERS = ['Item No.', 'Section', 'Description', 'Unit', 'Quantity', 'Rate (AED)', 'Amount (AED)', 'Quantity status', 'Included in tender subtotal', 'Source', 'Quantity basis', 'Rate source', 'Notes'];
 
@@ -10,10 +11,11 @@ export function buildBoqExport(items = [], commercial = {}, {language="en",trans
   const tr=text=>localizeBoqText(text,language,translations);
   const sums = { verified: 0, provisional: 0, pending: 0 };
   const rows = items.map(item => {
-    const status = classifyEstimateItem(item);
-    const amount = Number(item.quantity) * Number(item.rate);
+    const validLine=[item.quantity,item.rate].every(v=>v!==null&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0);
+    const status = validLine ? classifyEstimateItem(item) : 'pending';
+    const amount = boqLineAmount(item);
     const finiteAmount = Number.isFinite(amount) ? amount : 0;
-    sums[status] += finiteAmount;
+    sums[status] = currencySum([sums[status],finiteAmount]);
     return [item.itemNumber, tr(item.section), tr(item.description), tr(item.unit),
       item.quantity, item.rate, Number.isFinite(amount) ? amount.toFixed(2) : '',
       tr(item.status === 'measured_rate_pending' && Number(item.quantity) > 0

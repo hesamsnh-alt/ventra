@@ -1,3 +1,4 @@
+import {boqLineAmount} from './boqBudget.mjs';
 import {resolvePdfCatalogRate} from './boqCatalogRate.mjs';
 import {invalidateBoqReview,requireBoqReview} from './boqEvidence.mjs';
 
@@ -39,7 +40,7 @@ export function catalogPriceEntries(catalog,priceLevel='standard'){
 }
 function pendingState(item){
   const quantity=Number(item.quantity),rate=Number(item.rate);
-  return requireBoqReview({...item,amount:quantity*rate,rateMissing:!(rate>0),
+  return requireBoqReview({...item,amount:boqLineAmount({quantity,rate}),rateMissing:!(rate>0),
     status:quantity>0?(rate>0?'provisional_estimate':'measured_rate_pending'):'quantity_pending',
     verification:quantity>0&&rate>0?'provisional':'pending',includeInCommercialTotal:false,
     completion:quantity>0&&rate>0?{code:'line_review_required',required_information:['Review scope, quantity/unit and applicable rate.']}:item.completion});

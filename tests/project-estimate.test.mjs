@@ -14,7 +14,7 @@ test('floor-area estimate stays independent from BOQ, with a signed reconciliati
   close(result.expectedDirectCost,526470);
   close(result.coveredBoqCost,325178.55);
   close(result.benchmarkDifference,201291.45);
-  close(result.finalTender,665563.374);
+  close(result.finalTender,665563.37);
   const lower=estimate({items,floorArea:1,ratePerSqm:100});
   assert.equal(lower.expectedDirectCost,100);
   assert.ok(lower.benchmarkDifference<0); // no hidden max(BOQ, benchmark)

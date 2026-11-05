@@ -38,7 +38,7 @@ export function detectDrawingDiscipline(takeoff={},fileName='') {
 }
 export function boqItemTrade(item={}) {
  if(BOQ_TRADES.includes(item.boqTrade))return item.boqTrade;
- const key=String(item.pdfEvidence?.metricKey||item.scopeDefault?.metric||'').toLowerCase();
+ const key=String(item.imageEvidence?.metricKey||item.pdfEvidence?.metricKey||item.scopeDefault?.metric||'').toLowerCase();
  // Semantic extraction keys take precedence over incidental material words.
  const keyTrades=[['metalwork',/^(terrace_railing|handrail|guardrail)_/],['external',/^(landscape|driveway|external_paving)_/],['earthworks',/^(excavation|backfill)/],['roofing',/^(roof_waterproofing|roof_slope)/],['structure',/^(pcc|foundation|pedestal|column|beam|ground_slab|first_slab|roof_slab|slab_formwork|rebar)_/],['masonry',/^(internal_block|external_block)_/],['openings',/^(door|internal_door|entrance_door|service_door|garage_door|window)_/],['hvac',/^(ac_|duct_|fcu_|chilled_water)/],['electrical',/^(light|socket|switch|distribution_board|smoke_detector|cable|conduit)_/],['plumbing',/^(water_pipe|waste_pipe|toilet|basin|shower|kitchen_sink|laundry_sink|kitchen_tap|floor_drain)_/],['furniture',/^(kitchen_cabinet|furniture)_/],['finishes',/^(floor_area|ceiling_area|plaster_area|paint_area|ceiling_paint|gypsum_ceiling|wet_|ceramic_floor|wood_floor|stone_floor|cement_floor|epoxy_floor|terrace_floor|screed|skirting|unallocated_floor)/]];
  for(const [trade,pattern] of keyTrades)if(pattern.test(key))return trade;
@@ -67,7 +67,7 @@ export function activeBoqTrades(config) {
  throw Object.assign(new Error('Confirm one drawing discipline before selecting “only this discipline”.'),{code:'BOQ_DISCIPLINE_REQUIRED'});
 }
 export function scopeMetric(item={}) {
- const key=item.scopeDefault?.metric||item.pdfEvidence?.metricKey||'';
+ const key=item.scopeDefault?.metric||item.imageEvidence?.metricKey||item.pdfEvidence?.metricKey||'';
  const op=item.pdfEvidence?.operation, text=String(op?.sourceDescription||item.description||'').toLowerCase();
  if(op?.family==='floor')return /wood|lvt|spc|parquet/.test(text)?'wood_floor_area':/stone|marble|granite|terrazzo/.test(text)?'stone_floor_area':/epoxy|resin/.test(text)?'epoxy_floor_area':/ceramic|porcelain|tile/.test(text)?'ceramic_floor_area':key;
  if(op?.family==='door-set')return 'door_count';
@@ -122,7 +122,10 @@ function defaultOperations(items,takeoff,c,active) {
   else add('unallocated_floor_finish_area','finishes',unallocated,'m²',`${c.floorFinish} floor finish for unallocated area [assumed]`,`${floor} m² recorded floor minus ${finished} m² assigned finishes; no replacement of known finishes`);
  }
  // Plaster / paint derive only from an existing wall surface or a known wall length plus disclosed height.
- const wallSurface=quantity('plaster_area')||quantity('paint_area')||number(takeoff.wall_area)||number(takeoff.wall_length)*c.wallHeight;
+ // Scope defaults cannot revive a measurement already rejected by the audit,
+ // including plaster inferred from the same contradictory wall-area summary.
+ const wallConflict=items.some(i=>i.measurementIssue?.metricKey==='paint_area'&&i.status==='quantity_pending');
+ const wallSurface=wallConflict?0:quantity('plaster_area')||quantity('paint_area')||number(takeoff.wall_area)||number(takeoff.wall_length)*c.wallHeight;
  if(c.wallFinish!=='none'){
   add('plaster_area','finishes',wallSurface,'m²','Internal wall plaster [assumed]',`Recorded wall surface, or recorded wall length × editable height ${c.wallHeight} m; sides and deductions require review`);
   if(c.wallFinish==='paint')add('paint_area','finishes',Math.max(0,wallSurface-quantity('wet_wall_tile_area')),'m²','Internal wall paint [assumed]','Recorded plaster/wall surface less known wet wall tile area');

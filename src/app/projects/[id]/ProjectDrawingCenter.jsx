@@ -2,6 +2,7 @@
 import DrawingAnalysisProgress from "./DrawingAnalysisProgress";
 import {readDrawingProgress,updateDrawingProgress,subscribeDrawingProgress} from "@/lib/drawingProgressSession.mjs";
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '@/lib/drawingWorkflowGate.mjs';
+import {generateBoq} from '@/services/boqService';
 import {assertTakeoffSource} from '@/lib/takeoffSource.mjs';
 import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
@@ -2183,7 +2184,7 @@ export default function ProjectDrawingCenter({
         // V53: upload only establishes the source/preview. Do NOT launch a second paid
         // schematic request in the background. The Analyze action owns 3D generation.
         // This prevents upload + Analyze + remount from racing three identical requests.
-        setMessage(`${file.name} uploaded successfully. Click Analyze to build the AI 3D scene.`);
+        setMessage(`${file.name} uploaded successfully. Click Analyze for quantity takeoff, then generate BOQ. The 3D preview is a separate action.`);
       }
     } catch (error) {
       setErrorMessage(
@@ -5257,368 +5258,27 @@ async function handleApsGeometryExtracted(analysis) {
       "Generating BOQ from validated takeoff..."
     );
 
-    const response = await commercialFetch(
-      "/api/ai/generate-boq",
-      {
-        method: "POST",
+    const boq = await generateBoq({
+      projectId,
+      projectName: takeoffResult.document_name || "Untitled Project",
+      priceLevel: "standard",
+      vatPercentage: 5,
+      // Preserve source identity, opening dimensions and operation evidence for
+      // every format. A scalar-only payload loses the image measurements.
+      takeoff: {...takeoffResult, raw_result: undefined},
+    });
+    assertTakeoffSource(takeoffResult, selectedDrawingSync(projectId), projectId);
 
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-          projectId,
-
-          projectName:
-            takeoffResult.document_name ||
-            "Untitled Project",
-
-          currency: "AED",
-
-          vatPercentage: 5,
-
-          takeoff: {
-            ...(takeoffResult.pdf_analysis ? {...takeoffResult,raw_result:undefined} : {}),
-            rooms:
-              Number(
-                takeoffResult.rooms
-              ) || 0,
-
-            doors:
-              Number(
-                takeoffResult.doors
-              ) || 0,
-
-            windows:
-              Number(
-                takeoffResult.windows
-              ) || 0,
-
-            walls:
-              Number(
-                takeoffResult.walls
-              ) || 0,
-
-            floors:
-              Number(
-                takeoffResult.floors
-              ) || 0,
-
-            slabs:
-              Number(
-                takeoffResult.slabs
-              ) || 0,
-
-            ceilings:
-              Number(
-                takeoffResult.ceilings
-              ) || 0,
-
-            columns:
-              Number(
-                takeoffResult.columns
-              ) || 0,
-
-            beams:
-              Number(
-                takeoffResult.beams
-              ) || 0,
-
-            foundations:
-              Number(
-                takeoffResult.foundations
-              ) || 0,
-
-            stairs:
-              Number(
-                takeoffResult.stairs
-              ) || 0,
-
-            ramps:
-              Number(
-                takeoffResult.ramps
-              ) || 0,
-
-            roofs:
-              Number(
-                takeoffResult.roofs
-              ) || 0,
-
-            pipes:
-              Number(
-                takeoffResult.pipes
-              ) || 0,
-
-            ducts:
-              Number(
-                takeoffResult.ducts
-              ) || 0,
-
-            electrical_items:
-              Number(
-                takeoffResult
-                  .electrical_items
-              ) || 0,
-
-            lighting_points:
-              Number(
-                takeoffResult
-                  .lighting_points ??
-                takeoffResult
-                  ?.advanced_takeoff
-                  ?.lighting_points
-              ) || 0,
-
-            socket_points:
-              Number(
-                takeoffResult
-                  .socket_points ??
-                takeoffResult
-                  ?.advanced_takeoff
-                  ?.socket_points
-              ) || 0,
-
-            switches:
-              Number(
-                takeoffResult
-                  .switches ??
-                takeoffResult
-                  ?.advanced_takeoff
-                  ?.switches
-              ) || 0,
-
-            distribution_boards:
-              Number(
-                takeoffResult
-                  .distribution_boards ??
-                takeoffResult
-                  ?.advanced_takeoff
-                  ?.distribution_boards
-              ) || 0,
-
-            other_electrical:
-              Number(
-                takeoffResult
-                  .other_electrical ??
-                takeoffResult
-                  ?.advanced_takeoff
-                  ?.other_electrical
-              ) || 0,
-
-            wall_length:
-              Number(
-                takeoffResult.wall_length
-              ) || 0,
-
-            wall_area:
-              Number(
-                takeoffResult.wall_area
-              ) || 0,
-
-            wall_volume:
-              Number(
-                takeoffResult.wall_volume
-              ) || 0,
-
-            room_area:
-              effectiveRoomArea,
-
-            floor_area:
-              Number(
-                takeoffResult.floor_area
-              ) || 0,
-
-            wet_floor_area:
-              Number(takeoffResult.wet_floor_area) || 0,
-            wet_room_perimeter:
-              Number(takeoffResult.wet_room_perimeter) || 0,
-            bathroom_floor_area:
-              Number(takeoffResult.bathroom_floor_area) || 0,
-            bathroom_perimeter:
-              Number(takeoffResult.bathroom_perimeter) || 0,
-            toilet_floor_area:
-              Number(takeoffResult.toilet_floor_area) || 0,
-            toilet_perimeter:
-              Number(takeoffResult.toilet_perimeter) || 0,
-            kitchen_floor_area:
-              Number(takeoffResult.kitchen_floor_area) || 0,
-            kitchen_perimeter:
-              Number(takeoffResult.kitchen_perimeter) || 0,
-            laundry_floor_area:
-              Number(takeoffResult.laundry_floor_area) || 0,
-            laundry_perimeter:
-              Number(takeoffResult.laundry_perimeter) || 0,
-            balcony_floor_area:
-              Number(takeoffResult.balcony_floor_area) || 0,
-            balcony_perimeter:
-              Number(takeoffResult.balcony_perimeter) || 0,
-
-            slab_area:
-              Number(
-                takeoffResult.slab_area
-              ) || 0,
-
-            slab_volume:
-              Number(
-                takeoffResult.slab_volume
-              ) || 0,
-
-            ceiling_area:
-              Number(
-                takeoffResult.ceiling_area
-              ) || 0,
-
-            column_volume:
-              Number(
-                takeoffResult
-                  .column_volume
-              ) || 0,
-
-            beam_volume:
-              Number(
-                takeoffResult.beam_volume
-              ) || 0,
-
-            foundation_volume:
-              Number(
-                takeoffResult
-                  .foundation_volume
-              ) || 0,
-
-            column_formwork_area:
-              Number(
-                takeoffResult
-                  .column_formwork_area
-              ) || 0,
-
-            beam_formwork_area:
-              Number(
-                takeoffResult
-                  .beam_formwork_area
-              ) || 0,
-
-            foundation_formwork_area:
-              Number(
-                takeoffResult
-                  .foundation_formwork_area
-              ) || 0,
-
-            slab_formwork_area:
-              Number(
-                takeoffResult
-                  .slab_formwork_area
-              ) || 0,
-
-            structural_measurement_status:
-              takeoffResult
-                .structural_measurement_status ||
-              null,
-
-            roof_area:
-              Number(
-                takeoffResult.roof_area
-              ) || 0,
-
-            pipe_length:
-              Number(
-                takeoffResult.pipe_length
-              ) || 0,
-
-            duct_length:
-              Number(
-                takeoffResult.duct_length
-              ) || 0,
-
-            model_unit:
-              takeoffResult.model_unit ||
-              "model units",
-
-            meter_factor:
-              takeoffResult.meter_factor ??
-              null,
-
-            levels:
-              takeoffResult.levels || {},
-
-            materials:
-              takeoffResult.materials ||
-              {},
-
-            classifications:
-              takeoffResult
-                .classifications || {},
-
-            object_details:
-              takeoffResult.object_details ||
-              {},
-
-            statistics:
-              takeoffResult
-                .takeoff_statistics || {},
-
-            confidence:
-              Number(
-                takeoffResult.confidence
-              ) || 0,
-
-            notes:
-              takeoffResult.notes || "",
-          },
-        }),
-      }
-    );
-
-    const responseText =
-      await response.text();
-
-    let result = {};
-
-    try {
-      result = responseText
-        ? JSON.parse(responseText)
-        : {};
-    } catch {
-      console.error(
-        "[Generate BOQ] Non-JSON response:",
-        {
-          status: response.status,
-          responseText,
-        }
-      );
-
-      throw new Error(
-        `BOQ API returned invalid JSON. HTTP ${response.status}`
-      );
-    }
-
-    if (
-      !response.ok ||
-      result.success === false
-    ) {
-      throw new Error(
-        result.error ||
-          result.message ||
-          `BOQ generation failed. HTTP ${response.status}`
-      );
-    }
-
-    if (!result.boq) {
-      throw new Error(
-        "BOQ API did not return a BOQ."
-      );
-    }
-
-    importAiBoq(result.boq, {
+    importAiBoq(boq, {
       replace: true,
     });
 
     localStorage.setItem(
       `ventra:project-boq:${projectId}`,
-      JSON.stringify(result.boq)
+      JSON.stringify(boq)
     );
 
-    onOpenBoq?.(result.boq);
+    onOpenBoq?.(boq);
 
     setMessage(
       "Advanced BOQ generated successfully."

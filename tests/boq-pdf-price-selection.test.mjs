@@ -23,7 +23,7 @@ test('PDF picker uses all actual catalog entries and their own rates, without th
 });
 test('catalog selection converts a measured kg quantity to tonnes and preserves original evidence without tender approval',()=>{
  const before=structuredClone(measured),selected=applyBoqCatalogSelection(measured,steel);
- close(selected.quantity,12.168138);assert.equal(selected.unit,'ton');assert.equal(selected.rate,3550);close(selected.amount,12.168138*3550);
+ close(selected.quantity,12.168138);assert.equal(selected.unit,'ton');assert.equal(selected.rate,3550);assert.equal(selected.amount,43196.89);
  assert.deepEqual(selected.pdfEvidence,measured.pdfEvidence);assert.equal(selected.quantityLocked,true);assert.equal(selected.catalogSelection.originalUnit,'kg');assert.equal(selected.catalogSelection.quantityFactor,.001);
  assert.equal(selected.status,'provisional_estimate');assert.equal(selected.includeInCommercialTotal,false);assert.equal(selected.reviewRequired,true);assert.equal(selected.rateMissing,false);assert.ok(!selected.notes.includes('[BOQ GAP]'));assert.deepEqual(measured,before);
  const out=buildBoqExport([selected]);assert.equal(out.sums.verified,0);close(out.sums.provisional,selected.amount);
@@ -45,7 +45,7 @@ test('manual completion changes pending rows into provisional budget rows, retai
  const selected=applyBoqCatalogSelection(pending,concrete);assert.equal(selected.quantity,0);assert.equal(selected.status,'quantity_pending');assert.equal(selected.rate,400);
  assert.ok(selected.description.startsWith('Foundation concrete — '));assert.ok(selected.description.includes('C25'));assert.equal(selected.catalogSelection.originalDescription,pending.description);
  const completed=editPdfBoqItem(selected,'quantity',20.25);assert.equal(completed.quantity,20.25);assert.equal(completed.status,'provisional_estimate');assert.equal(completed.quantitySource,'manual');assert.equal(completed.quantityBasis,'manual_quantity_override');assert.equal(completed.originalMeasurement.quantity,0);assert.equal(completed.includeInCommercialTotal,false);
- const rated=editPdfBoqItem(measured,'rate',3.55);assert.equal(rated.status,'provisional_estimate');assert.equal(rated.rateMissing,false);close(rated.amount,measured.quantity*3.55);
+ const rated=editPdfBoqItem(measured,'rate',3.55);assert.equal(rated.status,'provisional_estimate');assert.equal(rated.rateMissing,false);assert.equal(rated.amount,43196.89);
  const cleared=editPdfBoqItem(rated,'rate',0);assert.equal(cleared.status,'measured_rate_pending');assert.equal(cleared.rateMissing,true);
  const noQuantity=editPdfBoqItem(completed,'quantity',0);assert.equal(noQuantity.status,'quantity_pending');assert.equal(buildBoqExport([noQuantity]).sums.provisional,0);
 });
@@ -64,6 +64,19 @@ function clientContext(items=[measured]){
 test('actual existing picker handler performs only the catalog GET and applies compatible selected rates',async()=>{
  const s=clientContext();await s.open(s.items[0]);assert.equal(s.fetches.length,1);assert.equal(s.fetches[0].url,'/api/boq/catalog');assert.equal(s.fetches[0].options.method,'GET');assert.equal(s.priceLibraryEntries.length,3762);
  s.apply(s.priceLibraryEntries.find(e=>e.itemCode==='CON-004'));close(s.items[0].quantity,12.168138);assert.equal(s.items[0].rate,3550);assert.equal(s.error,'');assert.equal(s.priceLibraryItemId,null);
+});
+test('actual image BOQ picker loads the complete existing catalog and retains measured square metres',async()=>{
+ const imageRow={...measured,id:'image-window',unit:'m2',quantity:1.44,imageEvidence:{metricKey:'window_area'}};
+ const s=clientContext([imageRow]);s.takeoff={page_evidence:{kind:'floor_plan'}};
+ await s.open(s.items[0]);assert.equal(s.priceLibraryEntries.length,3762);
+ assert.equal(s.fetches.length,1);assert.equal(s.fetches[0].options.method,'GET');
+ const original=structuredClone(s.items[0]);
+ s.apply(s.priceLibraryEntries.find(e=>e.itemCode==='CON-004'));
+ assert.deepEqual(s.items[0],original);assert.ok(s.error.includes('Cannot apply'));
+ s.apply(s.priceLibraryEntries.find(e=>e.itemCode==='WIN-001'));
+ assert.equal(s.items[0].quantity,1.44);assert.equal(s.items[0].amount,1080);
+ assert.equal(s.items[0].rate,750);assert.equal(s.items[0].reviewRequired,true);
+ assert.equal(s.items[0].includeInCommercialTotal,false);
 });
 test('actual picker refuses incompatible selections and late catalog results cannot cross a project reset',async()=>{
  const s=clientContext();s.apply(entries.find(e=>e.itemCode==='WIN-001'));assert.ok(s.error.includes('compatible'));assert.equal(s.items[0].quantity,measured.quantity);assert.equal(s.items[0].rate,0);

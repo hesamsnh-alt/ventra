@@ -1,3 +1,4 @@
+import {quotationLineAmount,currencySum,currencyPercentage} from '../../../lib/commercialDocument.mjs';
 const round = (value, decimals = 2) => {
   const number = Number(value);
 
@@ -9,7 +10,7 @@ const round = (value, decimals = 2) => {
 };
 
 export function calculateRowTotal(quantity, unitRate) {
-  return round(quantity * unitRate);
+  return quotationLineAmount({quantity:Math.max(0,Number(quantity)||0),rate:Math.max(0,Number(unitRate)||0)});
 }
 
 export function calculateRow(row) {
@@ -25,13 +26,12 @@ export function calculateRow(row) {
 }
 
 export function calculateSubtotal(rows = []) {
-  return round(
-    rows.reduce((sum, row) => sum + Number(row.total || 0), 0)
-  );
+  return currencySum(rows.map(row=>row.quantity===undefined&&row.unitRate===undefined
+    ? Math.max(0,Number(row.total)||0):calculateRowTotal(row.quantity,row.unitRate)));
 }
 
 export function calculateVAT(subtotal, vatRate = 5) {
-  return round((subtotal * vatRate) / 100);
+  return currencyPercentage(subtotal,vatRate);
 }
 
 export function calculateGrandTotal(rows = [], vatRate = 5) {
@@ -41,7 +41,7 @@ export function calculateGrandTotal(rows = [], vatRate = 5) {
   return {
     subtotal,
     vat,
-    grandTotal: round(subtotal + vat),
+    grandTotal: currencySum([subtotal,vat]),
   };
 }
 

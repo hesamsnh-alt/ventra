@@ -1,3 +1,5 @@
+import {boqLineAmount} from './boqBudget.mjs';
+import {currencySum} from './commercialDocument.mjs';
 // Eight planning headings, independent of any example drawing.
 export const ESTIMATE_SECTIONS = Object.freeze([
  {id:'site',name:'Site preparation and earthworks',share:5},
@@ -27,7 +29,7 @@ export function eightSectionEstimate(calculation,shares=defaultEstimateShares())
  for(const [kind,items] of Object.entries(calculation.groups))for(const item of items){
   const row=rows.find(s=>s.id===estimateSection(item));row.count++;
   if(kind==='pending')row.pending++;
-  else row[kind]+=Number(item.quantity)*Number(item.rate);
+  else row[kind]=currencySum([row[kind],boqLineAmount(item)]);
  }
  const valid=rows.every(r=>Number.isFinite(r.share)&&r.share>=0&&r.share<=100)&&Math.abs(rows.reduce((sum,r)=>sum+r.share,0)-100)<1e-8;
  const totalCents=Math.round(calculation.expectedDirectCost*100);

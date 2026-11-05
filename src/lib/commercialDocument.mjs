@@ -31,6 +31,14 @@ function lineCents(item) {
 export function quotationLineAmount(item) {
   return moneyFromCents(lineCents(item));
 }
+export function currencyPercentage(amount, percentage) {
+  const cents = lineCents({quantity: amount, rate: 1});
+  const pct = decimal(percentage, 'Percentage must be finite and non-negative.');
+  return moneyFromCents(roundedDivision(cents * pct.digits, 100n * 10n ** BigInt(pct.scale)));
+}
+export function currencySum(values) {
+  return moneyFromCents(values.reduce((sum, value) => sum + lineCents({quantity:value, rate:1}), 0n));
+}
 export function quotationTotals(items, vatPct) {
   const message = "VAT must be between 0 and 100.";
   const percentage = decimal(vatPct, message);

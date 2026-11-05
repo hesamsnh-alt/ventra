@@ -1,0 +1,586 @@
+[
+  {
+    "case": "QA-01",
+    "takeoff": {
+      "doors": 1,
+      "notes": "Architectural floor plan with clear internal dimensions 4.00 m x 5.00 m, wall height 3.00 m and wall thickness 0.15 m. Quantities use clear-internal convention. Wall_length is internal perimeter (2*(4+5)=18 m). Wall_area is gross internal wall surface area (perimeter x height = 18 x 3 = 54 m²), no deductions for openings; door_area and window_area are provided separately. Floor and ceiling areas are 20 m² each. One door and one window are explicitly stated in the OPENINGS note. Geometry coverage set to partial because wall footprints are not modeled as separate polygons even though all room dimensions are printed. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.",
+      "rooms": 1,
+      "windows": 1,
+      "door_area": 1.89,
+      "wall_area": 54,
+      "confidence": 95,
+      "floor_area": 20,
+      "wall_length": 18,
+      "window_area": 1.44,
+      "ceiling_area": 20,
+      "area_geometry": {
+        "basis": "clear_internal",
+        "spaces": [
+          {
+            "tag": "ROOM A",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 4,
+                "y": 0
+              },
+              {
+                "x": 4,
+                "y": 5
+              },
+              {
+                "x": 0,
+                "y": 5
+              }
+            ],
+            "evidence": "ROOM A 4.00 x 5.00 m; finishes: ceramic floor; painted walls; flat ceiling",
+            "reported_area": null
+          }
+        ],
+        "coverage": "partial",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 5
+          }
+        ],
+        "envelope_evidence": "Rectangular room 4.00 m x 5.00 m (clear dimensions)"
+      },
+      "page_evidence": {
+        "kind": "floor_plan",
+        "revision": null,
+        "scope_id": null,
+        "drawing_id": "QA-01",
+        "quantities": [
+          {
+            "key": "rooms",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "ROOM A label on plan",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "door_count",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "OPENINGS: D1 = 0.90 x 2.10 m (one)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "window_count",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "OPENINGS: W1 = 1.20 x 1.20 m (one)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "door_area",
+            "unit": "m2",
+            "value": 1.89,
+            "evidence": "0.90 m x 2.10 m = 1.89 m² (D1)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "window_area",
+            "unit": "m2",
+            "value": 1.44,
+            "evidence": "1.20 m x 1.20 m = 1.44 m² (W1)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "wall_length",
+            "unit": "m",
+            "value": 18,
+            "evidence": "Perimeter = 2*(4.00 + 5.00) m = 18.00 m (clear internal)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "wall_area",
+            "unit": "m2",
+            "value": 54,
+            "evidence": "Wall surface (internal, gross) = perimeter 18.00 m x height 3.00 m = 54.00 m²",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "floor_area",
+            "unit": "m2",
+            "value": 20,
+            "evidence": "4.00 m x 5.00 m = 20.00 m² (clear internal)",
+            "scope_id": "QA-01"
+          },
+          {
+            "key": "ceiling_area",
+            "unit": "m2",
+            "value": 20,
+            "evidence": "Same as floor area for enclosed flat ceiling = 20.00 m²",
+            "scope_id": "QA-01"
+          }
+        ]
+      },
+      "detected_items": [
+        {
+          "name": "ROOM A",
+          "unit": "m2",
+          "quantity": 20,
+          "description": "TILE; painted walls and flat ceiling; area = 4.00 m x 5.00 m clear internal"
+        },
+        {
+          "name": "Door D1 0.90 x 2.10 m",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Single internal door; area = 1.89 m2"
+        },
+        {
+          "name": "Window W1 1.20 x 1.20 m",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Single window; sill 0.90 m; area = 1.44 m2"
+        }
+      ],
+      "document_name": "QA-01-room-4x5.png"
+    }
+  },
+  {
+    "case": "QA-02",
+    "takeoff": {
+      "doors": 2,
+      "notes": "Architectural floor plan with clear internal dimensions. Measurement basis: clear internal; wall height 3.00 m; wall thickness 0.15 m. Wall_length is total unique wall centerline length (external CL = 20.60 m, internal partition CL = 4.15 m). Top-level wall_area is gross internal wall faces without opening deductions: perimeter faces 20.00 m × 3.00 m = 60.00 m2 plus both sides of the 4.00 m partition (2 × 4.00 × 3.00 = 24.00 m2) = 84.00 m2. Door_area (3.78 m2) and window_area (2.88 m2) are provided separately; not deducted from the top-level wall_area. A net paint_area using deductions is included in page_evidence.quantities for reference. Ceiling area taken equal to internal floor area per note “flat ceiling; no suspended ceiling.” Scope label not printed; treated as null. Quantities rely solely on printed sizes; no hidden services/structure. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.",
+      "rooms": 2,
+      "windows": 2,
+      "door_area": 3.78,
+      "wall_area": 84,
+      "confidence": 96,
+      "floor_area": 24,
+      "wall_length": 24.75,
+      "window_area": 2.88,
+      "ceiling_area": 24,
+      "area_geometry": {
+        "basis": "clear_internal",
+        "spaces": [
+          {
+            "tag": "A",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 3,
+                "y": 0
+              },
+              {
+                "x": 3,
+                "y": 4
+              },
+              {
+                "x": 0,
+                "y": 4
+              }
+            ],
+            "evidence": "Printed: A 3.00 x 4.00 m",
+            "reported_area": 12
+          },
+          {
+            "tag": "Partition",
+            "kind": "wall",
+            "finish": "unknown",
+            "polygon": [
+              {
+                "x": 3,
+                "y": 0
+              },
+              {
+                "x": 3.15,
+                "y": 0
+              },
+              {
+                "x": 3.15,
+                "y": 4
+              },
+              {
+                "x": 3,
+                "y": 4
+              }
+            ],
+            "evidence": "Shared partition thickness 0.15 m",
+            "reported_area": null
+          },
+          {
+            "tag": "B",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 3.15,
+                "y": 0
+              },
+              {
+                "x": 6.15,
+                "y": 0
+              },
+              {
+                "x": 6.15,
+                "y": 4
+              },
+              {
+                "x": 3.15,
+                "y": 4
+              }
+            ],
+            "evidence": "Printed: B 3.00 x 4.00 m",
+            "reported_area": 12
+          }
+        ],
+        "coverage": "complete",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 6.15,
+            "y": 0
+          },
+          {
+            "x": 6.15,
+            "y": 4
+          },
+          {
+            "x": 0,
+            "y": 4
+          }
+        ],
+        "envelope_evidence": "Overall internal width = 3.00 + 0.15(partition) + 3.00 = 6.15 m; height = 4.00 m. Wall thickness 0.15 m printed."
+      },
+      "page_evidence": {
+        "kind": "floor_plan",
+        "revision": null,
+        "scope_id": null,
+        "drawing_id": "QA-02",
+        "quantities": [
+          {
+            "key": "rooms",
+            "unit": "nr",
+            "value": 2,
+            "evidence": "Two tagged rooms A and B on plan",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "door_count",
+            "unit": "nr",
+            "value": 2,
+            "evidence": "OPENINGS: D0 external + D1 internal = two total",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "window_count",
+            "unit": "nr",
+            "value": 2,
+            "evidence": "OPENINGS: W1 + W2 = two total",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "door_area",
+            "unit": "m2",
+            "value": 3.78,
+            "evidence": "Two doors 0.90 x 2.10 m each: 2 × 1.89 = 3.78 m2",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "window_area",
+            "unit": "m2",
+            "value": 2.88,
+            "evidence": "Two windows 1.20 x 1.20 m each: 2 × 1.44 = 2.88 m2",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "external_wall_length",
+            "unit": "m",
+            "value": 20.6,
+            "evidence": "Centerline: 2×(6.00+0.15) + 2×(4.00+0.15) = 20.60 m",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "internal_wall_length",
+            "unit": "m",
+            "value": 4.15,
+            "evidence": "Partition centerline: 4.00 + 0.15 = 4.15 m",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "wall_length",
+            "unit": "m",
+            "value": 24.75,
+            "evidence": "Sum of CL lengths: external 20.60 + internal 4.15 = 24.75 m",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "floor_area",
+            "unit": "m2",
+            "value": 24,
+            "evidence": "A 3.00×4.00 = 12.00 m2, B 3.00×4.00 = 12.00 m2; total 24.00 m2",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "ceiling_area",
+            "unit": "m2",
+            "value": 24,
+            "evidence": "Flat ceiling; no suspended ceiling. Equal to internal floor area.",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "wall_area",
+            "unit": "m2",
+            "value": 84,
+            "evidence": "Gross internal faces: perimeter 20.00 m × 3.00 m = 60.00 m2 + partition both sides 2 × 4.00 × 3.00 = 24.00 m2; no opening deductions",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "ceramic_floor_area",
+            "unit": "m2",
+            "value": 24,
+            "evidence": "Finishes note: ceramic floor; equals floor area 24 m2",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "paint_area",
+            "unit": "m2",
+            "value": 75.45,
+            "evidence": "Gross 84.00 m2 − openings [D0 1.89 + D1 both sides 3.78 + 2 windows 2.88] = 84 − 8.55 = 75.45 m2",
+            "scope_id": "QA-02"
+          },
+          {
+            "key": "ceiling_paint_area",
+            "unit": "m2",
+            "value": 24,
+            "evidence": "Flat ceiling; painted ceiling per note; equals 24 m2",
+            "scope_id": "QA-02"
+          }
+        ]
+      },
+      "detected_items": [
+        {
+          "name": "A - Room",
+          "unit": "m2",
+          "quantity": 12,
+          "description": "TILE ceramic floor; painted walls; flat ceiling; area from printed 3.00 x 4.00 m"
+        },
+        {
+          "name": "B - Room",
+          "unit": "m2",
+          "quantity": 12,
+          "description": "TILE ceramic floor; painted walls; flat ceiling; area from printed 3.00 x 4.00 m"
+        },
+        {
+          "name": "D0 external door",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "0.90 x 2.10 m = 1.89 m2"
+        },
+        {
+          "name": "D1 internal door",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "0.90 x 2.10 m = 1.89 m2 (partition door)"
+        },
+        {
+          "name": "W1 window",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "1.20 x 1.20 m = 1.44 m2; sill 0.90 m"
+        },
+        {
+          "name": "W2 window",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "1.20 x 1.20 m = 1.44 m2; sill 0.90 m"
+        },
+        {
+          "name": "Partition wall 0.15 m",
+          "unit": "m",
+          "quantity": 4.15,
+          "description": "centerline length = 4.00 + 0.15 m"
+        },
+        {
+          "name": "External walls (centerline total)",
+          "unit": "m",
+          "quantity": 20.6,
+          "description": "2×(6.00+0.15) + 2×(4.00+0.15) m = 20.60 m"
+        }
+      ],
+      "document_name": "QA-02-two-rooms.png"
+    }
+  },
+  {
+    "case": "QA-03",
+    "takeoff": {
+      "doors": 1,
+      "notes": "Architectural floor plan with clear internal dimensions. L-shaped room area computed as 5.00 x 5.00 - 2.00 x 3.00 = 19.00 m2. Internal wall length is the clear internal perimeter of the L shape: 5 + 2 + 2 + 3 + 3 + 5 = 20.00 m. Wall area is internal paintable surface at 3.00 m height, deducting openings: 20.00 x 3.00 - (0.90 x 2.10 + 1.20 x 1.20) = 56.67 m2. Door area = 1.89 m2; window area = 1.44 m2. Ceiling is flat and not suspended, so ceiling area equals room floor area. No other rooms, services or external works are shown. Assumptions/uncertainty: measurements follow the stated clear-dimension convention; wall area is net internal one-side only (no allowance for skirtings, reveals or finishes build-up). Review required by a quantity surveyor before use.",
+      "rooms": 1,
+      "windows": 1,
+      "door_area": 1.89,
+      "wall_area": 56.67,
+      "confidence": 96,
+      "floor_area": 19,
+      "wall_length": 20,
+      "window_area": 1.44,
+      "ceiling_area": 19,
+      "area_geometry": {
+        "basis": "clear_internal",
+        "spaces": [
+          {
+            "tag": "ONE L-SHAPED ROOM",
+            "kind": "enclosed",
+            "finish": "tile",
+            "polygon": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 5,
+                "y": 0
+              },
+              {
+                "x": 5,
+                "y": 2
+              },
+              {
+                "x": 3,
+                "y": 2
+              },
+              {
+                "x": 3,
+                "y": 5
+              },
+              {
+                "x": 0,
+                "y": 5
+              }
+            ],
+            "evidence": "Room labelled; area by clear dimensions 5.00 x 5.00 minus 2.00 x 3.00.",
+            "reported_area": null
+          }
+        ],
+        "coverage": "complete",
+        "envelope": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": 5
+          },
+          {
+            "x": 0,
+            "y": 5
+          }
+        ],
+        "envelope_evidence": "Clear dimensions shown: overall 5.00 m x 5.00 m with a 2.00 m x 3.00 m notch."
+      },
+      "page_evidence": {
+        "kind": "floor_plan",
+        "revision": null,
+        "scope_id": null,
+        "drawing_id": null,
+        "quantities": [
+          {
+            "key": "rooms",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "Label: 'ONE L-SHAPED ROOM' (single space).",
+            "scope_id": "ONE L-SHAPED ROOM"
+          },
+          {
+            "key": "door_count",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "OPENINGS note: D1 = 0.90 x 2.10 m (one).",
+            "scope_id": "ONE L-SHAPED ROOM"
+          },
+          {
+            "key": "window_count",
+            "unit": "nr",
+            "value": 1,
+            "evidence": "OPENINGS note: W1 = 1.20 x 1.20 m (one).",
+            "scope_id": "ONE L-SHAPED ROOM"
+          },
+          {
+            "key": "floor_area",
+            "unit": "m2",
+            "value": 19,
+            "evidence": "Clear dims: 5.00 x 5.00 - 2.00 x 3.00.",
+            "scope_id": "ONE L-SHAPED ROOM"
+          },
+          {
+            "key": "ceramic_floor_area",
+            "unit": "m2",
+            "value": 19,
+            "evidence": "Finish note: 'Finishes: ceramic floor'; extent = room floor area 19.00 m2.",
+            "scope_id": "ONE L-SHAPED ROOM"
+          },
+          {
+            "key": "paint_area",
+            "unit": "m2",
+            "value": 56.67,
+            "evidence": "Painted walls; internal perimeter 20.00 m x 3.00 m - openings (1.89 + 1.44) m2 = 56.67 m2.",
+            "scope_id": "ONE L-SHAPED ROOM"
+          }
+        ]
+      },
+      "detected_items": [
+        {
+          "name": "ONE L-SHAPED ROOM",
+          "unit": "m2",
+          "quantity": 19,
+          "description": "TILE; painted walls; flat ceiling; area = 5.00 x 5.00 - 2.00 x 3.00"
+        },
+        {
+          "name": "D1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Door 0.90 x 2.10 m; opening area = 1.89 m2"
+        },
+        {
+          "name": "W1",
+          "unit": "nr",
+          "quantity": 1,
+          "description": "Window 1.20 x 1.20 m; sill 0.90 m; opening area = 1.44 m2"
+        }
+      ],
+      "document_name": "QA-03-L-room.png"
+    }
+  }
+]

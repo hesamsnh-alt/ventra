@@ -45,7 +45,7 @@ import DocumentBranding, { useDocumentBranding } from "./DocumentBranding";
 import { brandingHtml } from "@/lib/commercialDocument.mjs";
 import { classifyEstimateItem } from "@/lib/estimateClassification.mjs";
 import { requireBoqReview, confirmBoqReview, invalidateBoqReview } from "@/lib/boqEvidence.mjs";
-import { calculateBoqBudget } from "@/lib/boqBudget.mjs";
+import { calculateBoqBudget, boqLineAmount } from "@/lib/boqBudget.mjs";
 import { buildBoqExport } from "@/lib/boqExport.mjs";
 import {catalogPriceEntries,boqUnitFactor,applyBoqCatalogSelection,editPdfBoqItem} from '@/lib/boqPriceSelection.mjs';
 import {applyProjectRateCsv} from '@/lib/boqProjectRates.mjs';
@@ -516,46 +516,10 @@ export default function ProjectBOQ({
     };
   }, [projectId]);
 
-  const subtotal = useMemo(
-    () =>
-      items
-        .filter(
-          (item) =>
-            classifyEstimateItem(item) === "verified"
-        )
-        .reduce(
-          (sum, item) =>
-            sum +
-            Number(item.quantity) *
-              Number(item.rate),
-          0
-        ),
-    [items]
-  );
-
-  const overhead = useMemo(
-    () => subtotal * ((Number(overheadPercentage) || 0) / 100),
-    [subtotal, overheadPercentage]
-  );
-
-  const profit = useMemo(
-    () => (subtotal + overhead) * ((Number(profitPercentage) || 0) / 100),
-    [subtotal, overhead, profitPercentage]
-  );
-
-  const discount = useMemo(
-    () => (subtotal + overhead + profit) * ((Number(discountPercentage) || 0) / 100),
-    [subtotal, overhead, profit, discountPercentage]
-  );
-
-  const taxableTotal = Math.max(0, subtotal + overhead + profit - discount);
-
-  const vat = useMemo(
-    () => taxableTotal * ((Number(vatPercentage) || 0) / 100),
-    [taxableTotal, vatPercentage]
-  );
-
-  const total = taxableTotal + vat;
+  const tender = useMemo(() => calculateBoqBudget({verified:buildBoqExport(items).sums.verified},
+    {overheadPercentage,profitPercentage,discountPercentage,vatPercentage}),
+    [items,overheadPercentage,profitPercentage,discountPercentage,vatPercentage]);
+  const {subtotal,overhead,profit,discount,vat,total} = tender;
   const lineSums = useMemo(() => buildBoqExport(items).sums, [items]);
   const budget = calculateBoqBudget(lineSums, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage });
 
@@ -629,7 +593,7 @@ export default function ProjectBOQ({
   }
 
   function updateItem(id, field, value) {
-    if(takeoff?.pdf_analysis){
+    if(takeoff?.pdf_analysis||takeoff?.page_evidence){
       try{setItems(items.map(item=>item.id===id?editPdfBoqItem(item,field,value):item));setErrorMessage('');}
       catch(error){setErrorMessage(error.message);}
       return;
@@ -704,7 +668,7 @@ export default function ProjectBOQ({
     const request=++priceLibraryRequestRef.current;
     setPriceLibraryItemId(item.id);
     setPriceSearch("");
-    if(!takeoff?.pdf_analysis){setPriceLibraryEntries(UAE_PRICE_LIBRARY);return;}
+    if(!takeoff?.pdf_analysis&&!takeoff?.page_evidence){setPriceLibraryEntries(UAE_PRICE_LIBRARY);return;}
     setPriceLibraryEntries([]);setErrorMessage('');setMessage('Loading existing price catalog…');
     try{
       const response=await commercialFetch('/api/boq/catalog',{method:'GET',cache:'no-store'});
@@ -716,7 +680,7 @@ export default function ProjectBOQ({
   }
 
   function applyLibraryRate(entry) {
-    if(takeoff?.pdf_analysis){
+    if(takeoff?.pdf_analysis||takeoff?.page_evidence){
       try{
         const selected=items.find(item=>item.id===priceLibraryItemId);if(!selected)throw Error('BOQ item is no longer available.');
         const updated=applyBoqCatalogSelection(selected,entry);
@@ -984,7 +948,7 @@ export default function ProjectBOQ({
               </LocalizedElement>
             ) : (
               items.map((item) => {
-                const amount = Number(item.quantity) * Number(item.rate);
+                const amount = boqLineAmount(item);
                 const tooltip = [item.description, item.quantityBasis, item.notes, item.source].filter(Boolean).join(" • ");
 
                 const ratePending =
@@ -997,7 +961,7 @@ export default function ProjectBOQ({
                     key={item.id}
                     title={
                       ratePending
-                        ? (takeoff?.pdf_analysis?"Recorded project quantity. Specification and rate require review.":"Measured quantity verified. Commercial rate pending.")
+                        ? ((takeoff?.pdf_analysis||takeoff?.page_evidence)?"Recorded project quantity. Specification and rate require review.":"Measured quantity verified. Commercial rate pending.")
                         : undefined
                     }
                   >
@@ -1084,7 +1048,7 @@ export default function ProjectBOQ({
                           onChange={(event) => {
                             updateItem(item.id, "rate", event.target.value);
                             if (
-                              !takeoff?.pdf_analysis && ratePending &&
+                              !(takeoff?.pdf_analysis||takeoff?.page_evidence) && ratePending &&
                               Number(event.target.value) > 0
                             ) {
                               setItems((currentItems) =>
@@ -1239,14 +1203,14 @@ export default function ProjectBOQ({
               </>}
             </>}
             <LocalizedElement as="div" className="boq-library-list">
-              {priceLibraryEntries.filter((entry) => (!takeoff?.pdf_analysis||boqUnitFactor(items.find(item=>item.id===priceLibraryItemId)?.unit,entry.unit)!==null)&&`${entry.itemCode||''} ${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).slice(0,100).map((entry) => (
-                <LocalizedElement as="button" type="button" key={entry.id} disabled={!!takeoff?.pdf_analysis&&entry.rateMissing} onClick={() => applyLibraryRate(entry)}>
+              {priceLibraryEntries.filter((entry) => (!(takeoff?.pdf_analysis||takeoff?.page_evidence)||boqUnitFactor(items.find(item=>item.id===priceLibraryItemId)?.unit,entry.unit)!==null)&&`${entry.itemCode||''} ${entry.section} ${entry.description} ${entry.unit} ${tr(entry.section)} ${tr(entry.description)}`.toLowerCase().includes(priceSearch.toLowerCase())).slice(0,100).map((entry) => (
+                <LocalizedElement as="button" type="button" key={entry.id} disabled={!!(takeoff?.pdf_analysis||takeoff?.page_evidence)&&entry.rateMissing} onClick={() => applyLibraryRate(entry)}>
                   <LocalizedElement as="span"><LocalizedElement as="strong"><OriginalText>{tr(entry.description)}</OriginalText></LocalizedElement><LocalizedElement as="small">{tr(entry.section)} · {tr(entry.unit)}</LocalizedElement></LocalizedElement>
                   <LocalizedElement as="b">{entry.rateMissing?tr('Rate pending'):formatCurrency(entry.rate)}</LocalizedElement>
                 </LocalizedElement>
               ))}
             </LocalizedElement>
-            <LocalizedElement as="p" className="boq-library-note">{takeoff?.pdf_analysis&&priceLibraryEntries.length===0?(errorMessage||'Loading existing price catalog…'):'Budget rates are editable and should be verified against supplier quotations before tender submission.'}</LocalizedElement>
+            <LocalizedElement as="p" className="boq-library-note">{(takeoff?.pdf_analysis||takeoff?.page_evidence)&&priceLibraryEntries.length===0?(errorMessage||'Loading existing price catalog…'):'Budget rates are editable and should be verified against supplier quotations before tender submission.'}</LocalizedElement>
           </LocalizedElement>
         </LocalizedElement>
       )}
