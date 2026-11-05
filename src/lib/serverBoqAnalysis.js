@@ -1,5 +1,6 @@
 import {planPdfCatalogRules, resolvePdfCatalogRate, retainUnboundPdfQuantities} from '@/lib/pdfBoqCoverage.mjs';
 import {isRasterTakeoff,buildRasterBoq} from '@/lib/rasterBoqEvidence.mjs';
+import {takeoffBoqIssue} from '@/lib/takeoffSource.mjs';
 import {annotatePdfBoqCompletion} from '@/lib/pdfBoqCompletion.mjs';
 import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
 import { classifyEstimateItem } from '@/lib/estimateClassification.mjs';
@@ -5392,6 +5393,9 @@ async function handleCommercialRequest(request) {
 
     const rawTakeoff =
       body?.takeoff || {};
+
+    const pendingCad=takeoffBoqIssue(rawTakeoff);
+    if(pendingCad)return NextResponse.json({success:false,code:'CAD_EXTRACTION_INCOMPLETE',error:pendingCad},{status:409});
 
     // Reject interrupted extraction before catalog reads or row generation.
     // A provisional quantity can be reviewed; an unprocessed drawing set is

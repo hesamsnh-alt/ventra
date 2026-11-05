@@ -5,6 +5,7 @@ import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedEle
 import CommercialSync from "./CommercialSync";
 import { defaultEstimateShares, eightSectionEstimate } from "@/lib/estimateSections.mjs";
 import { calculateProjectEstimate } from "@/lib/projectEstimate.mjs";
+import {takeoffBoqIssue} from '@/lib/takeoffSource.mjs';
 
 import { useEffect, useMemo, useState, useEffectEvent } from "react";
 import { Calculator, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
@@ -64,6 +65,8 @@ export default function ProjectEstimate({ projectId }) {
       if (parsed !== null && (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.items))) {
         throw new Error("Invalid saved BOQ");
       }
+      const incomplete=takeoffBoqIssue(parsed?.takeoff);
+      if(incomplete){setBoq({...parsed,items:[]});setMessage(incomplete);return;}
       const unchanged = JSON.stringify(parsed) === JSON.stringify(boq);
       setBoq(parsed);
       if (parsed?.vatPercentage != null && Number.isFinite(Number(parsed.vatPercentage))) {
@@ -117,7 +120,7 @@ export default function ProjectEstimate({ projectId }) {
   function changeQuality(value){setQuality(value);setRatePerSqm({economy:3200,standard:4200,premium:5600,luxury:7500}[value]||4200);}
 
   const items = useMemo(()=>Array.isArray(boq?.items)?boq.items:[],[boq]);
-  const floorArea = getFloorArea(boq?.takeoff);
+  const floorArea = takeoffBoqIssue(boq?.takeoff)?0:getFloorArea(boq?.takeoff);
   const calculation = useMemo(() => calculateProjectEstimate({
     items, basis, includeProvisional, floorArea, ratePerSqm,
     contingencyPct, profitPct, vatPct, scenarioPct,

@@ -1,7 +1,9 @@
 import {compactTakeoff} from './takeoffStorage.mjs';
+import {assertTakeoffReady} from './takeoffSource.mjs';
 export function saveReadyBoq(storage, projectId, document, lifecycle) {
   if (!projectId || lifecycle.loadedProject !== projectId || lifecycle.loading || lifecycle.generating) return false;
   if (!document || !Array.isArray(document.items)) throw new Error('Invalid BOQ draft');
+  assertTakeoffReady(document.takeoff);
   let snapshot=document;
   if(document.takeoff&&JSON.stringify(document.takeoff).length>64000){
     const t=document.takeoff;

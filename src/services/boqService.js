@@ -1,5 +1,6 @@
 import {runPreviewAnalysis,acknowledgePreviewJob,boqAnalysisKey} from '@/lib/previewJobClient.mjs';
 import {commercialFetch} from '@/lib/commercialFetch';
+import {assertTakeoffReady} from '@/lib/takeoffSource.mjs';
 export async function generateBoq({
   projectId,
   takeoff,
@@ -10,6 +11,7 @@ export async function generateBoq({
   if (!takeoff || typeof takeoff !== "object") {
     throw new Error("Quantity Takeoff data is required.");
   }
+  assertTakeoffReady(takeoff);
 
   console.log("[VENTRA BOQ CLIENT] request", {
     projectId,

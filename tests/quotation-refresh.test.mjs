@@ -1,3 +1,4 @@
+import {assertTakeoffReady} from '../src/lib/takeoffSource.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -15,13 +16,13 @@ function find(node) {
 }
 find(tree);
 assert.ok(declaration);
-function harness(raw) {
+function harness(raw,sourceBoq=null) {
   const errors=[],success=[],estimates=[],writes=[];
-  const window={localStorage:{getItem:()=>raw,setItem:(...a)=>writes.push(a)},requestAnimationFrame:fn=>fn()};
-  const create=new Function('window','projectId','setBusyAction','setErrorMessage','setStatusMessage','setEstimate','setRefreshNonce','markError','markSuccess','money','console',
+  const window={localStorage:{getItem:key=>key.includes('project-boq')?sourceBoq:raw,setItem:(...a)=>writes.push(a)},requestAnimationFrame:fn=>fn()};
+  const create=new Function('window','projectId','setBusyAction','setErrorMessage','setStatusMessage','setEstimate','setRefreshNonce','markError','markSuccess','money','console','assertTakeoffReady',
     source.slice(declaration.start,declaration.end)+';return refreshEstimate;');
   const noop=()=>{};
-  return {errors,success,estimates,writes,refresh:create(window,'qa-project',noop,noop,noop,v=>estimates.push(v),noop,v=>errors.push(v),v=>success.push(v),v=>String(v),{log(){}})};
+  return {errors,success,estimates,writes,refresh:create(window,'qa-project',noop,noop,noop,v=>estimates.push(v),noop,v=>errors.push(v),v=>success.push(v),v=>String(v),{log(){}},assertTakeoffReady)};
 }
 test('automatic refresh does not report missing estimate as a broken manual quotation',()=>{
   const h=harness(null);assert.equal(h.refresh({automatic:true}),false);assert.deepEqual(h.errors,[]);assert.deepEqual(h.success,[]);
@@ -38,4 +39,10 @@ test('malformed or nonfinite estimate totals never become a successful refresh',
 test('valid saved estimate refresh keeps its amount and records the successful read',()=>{
   const h=harness(JSON.stringify({finalTender:1050,basis:'boq',tenderBeforeVat:1000,vat:50}));
   assert.equal(h.refresh(),true);assert.equal(h.estimates.at(-1).finalTender,1050);assert.equal(h.errors.length,0);assert.equal(h.success.length,1);assert.equal(h.writes.length,1);
+});
+
+test('a legacy priced estimate cannot refresh from translation-only CAD source',()=>{
+ const h=harness(JSON.stringify({finalTender:58829.63,basis:'boq'}),JSON.stringify({takeoff:{source:'autodesk-aps',extraction_status:'translation-complete'}}));
+ assert.equal(h.refresh(),false);assert.match(h.errors[0],/quantity extraction is incomplete/);
+ assert.equal(h.estimates.at(-1),null);assert.equal(h.success.length,0);assert.equal(h.writes.length,0);
 });

@@ -458,6 +458,7 @@ export default function ProjectBOQ({
         if (error) throw error;
 
         setTakeoff(latestTakeoff || null);
+        assertTakeoffSource(latestTakeoff,null,projectId);
 
         const storedBoq = window.localStorage.getItem(
           `ventra:project-boq:${projectId}`

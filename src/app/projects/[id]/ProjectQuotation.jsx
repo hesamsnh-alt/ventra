@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState, useEffectEvent } from "react";
 import "./ProjectQuotation.css";
 import DocumentBranding, { useDocumentBranding } from "./DocumentBranding";
 import { quotationTotals, quotationLineAmount } from "@/lib/commercialDocument.mjs";
+import {assertTakeoffReady} from '@/lib/takeoffSource.mjs';
 
 function money(value) {
   return new Intl.NumberFormat("en-AE", {
@@ -77,6 +78,8 @@ export default function ProjectQuotation({ projectId }) {
     setStatusMessage("");
 
     try {
+      const sourceBoq=JSON.parse(window.localStorage.getItem(`ventra:project-boq:${projectId}`)||'null');
+      assertTakeoffReady(sourceBoq?.takeoff);
       const raw = window.localStorage.getItem(
         `ventra:project-estimate:${projectId}`
       );

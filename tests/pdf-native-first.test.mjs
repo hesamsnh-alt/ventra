@@ -1,3 +1,4 @@
+import {takeoffBoqIssue} from '../src/lib/takeoffSource.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -173,7 +174,7 @@ test('actual client rejects a successful HTTP response containing interrupted PD
 
 test('actual BOQ server rejects interrupted PDF before any catalog/model/storage access',async()=>{
  let reads=0,writes=0,models=0;
- const c={NextResponse:{json:Response.json},console:{error(){}},createClient:()=>{reads++;throw Error('Catalog must not be read');},
+ const c={takeoffBoqIssue,NextResponse:{json:Response.json},console:{error(){}},createClient:()=>{reads++;throw Error('Catalog must not be read');},
   buildLocalBoq:()=>{models++;},normalizeTakeoff:()=>{throw Error('Must stop before normalization');}};
  // Use the handler itself, including its early validation, not a mirror of it.
  vm.createContext(c);vm.runInContext(readFileSync('src/lib/serverBoqAnalysis.js','utf8').replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/export /g,'')+'\nthis.run=handleCommercialRequest;',c);

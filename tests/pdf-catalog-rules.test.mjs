@@ -1,3 +1,4 @@
+import {takeoffBoqIssue} from '../src/lib/takeoffSource.mjs';
 import {isRasterTakeoff,buildRasterBoq} from '../src/lib/rasterBoqEvidence.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +28,7 @@ async function run(prices,rules=[],takeoff=observed){
    insert(){writes++;throw Error('database write forbidden');},delete(){writes++;throw Error('database write forbidden');}};return q;
  }};
  const forbidden=()=>{modelCalls++;throw Error('model calls forbidden');};
- const context=vm.createContext({isRasterTakeoff,buildRasterBoq,planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
+ const context=vm.createContext({takeoffBoqIssue,isRasterTakeoff,buildRasterBoq,planPdfCatalogRules,resolvePdfCatalogRate,retainUnboundPdfQuantities,annotatePdfBoqCompletion,mergePdfEvidence,requireBoqReview,classifyEstimateItem,
   process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://offline.invalid',SUPABASE_SECRET_KEY:'offline-only',VENTRA_DISABLE_BOQ_AI:'true'}},
   createClient:()=>db,NextResponse:{json:Response.json},console:{log(){},warn(){},error(){}},
   getSemanticRooms:()=>[],hydrateSemanticRoomQuantities:()=>({rooms:[],source:'offline empty room inventory'}),

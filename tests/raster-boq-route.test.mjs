@@ -35,6 +35,14 @@ for(const [i,paint] of [50.67,75.45,56.67].entries())test(`actual production BOQ
  assert.deepEqual([...new Set(r.reads)].sort(),['boq_rules','boq_sections','price_items']);
 });
 const moreLive=JSON.parse(fs.readFileSync(new URL('./fixtures/raster-live-more-extraction.json',import.meta.url)));
+test('actual BOQ handler refuses translation-only DWG before catalog reads or model calls',async()=>{
+ const r=route(),response=await r.run(new Request('https://offline.invalid/api/ai/generate-boq',{method:'POST',body:JSON.stringify({
+  projectId:'offline-dwg',takeoff:{document_name:'QA-06-blocks-and-tables-metric.dwg',source:'autodesk-aps',aps_status:'ready',
+   extraction_status:'translation-complete',rooms:null,floor_area:null,wall_area:null,
+   notes:'Autodesk translation completed. Geometry quantities have not been extracted yet.'}})}));
+ const body=await response.json();assert.equal(response.status,409);assert.equal(body.code,'CAD_EXTRACTION_INCOMPLETE');
+ assert.equal(body.success,false);assert.equal(body.boq,undefined);assert.deepEqual(r.reads,[]);
+});
 for(const [i,expected] of [{paint:0,count:6},{paint:79.89,count:8}].entries())test(`actual BOQ handler replays LIVE QA-0${i+4}: audit and supported operations only`,async()=>{
  const r=route(),response=await r.run(new Request('https://offline.invalid/api/ai/generate-boq',{method:'POST',body:JSON.stringify({
   projectId:'offline-more-'+i,projectName:'Saved mixed-use QA replay',takeoff:moreLive[i].takeoff,vatPercentage:5})}));

@@ -1,8 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {assertTakeoffSource,savedBoqMatchesTakeoff} from '../src/lib/takeoffSource.mjs';
+import {assertTakeoffSource,savedBoqMatchesTakeoff,assertTakeoffReady,takeoffBoqIssue} from '../src/lib/takeoffSource.mjs';
+import {saveReadyBoq} from '../src/lib/boqDraftPersistence.mjs';
 const image={project_id:'p',document_id:'png',document_name:'plan.png',analyzed_at:'2026-11-05T13:00:00Z'};
+const translatedCad={project_id:'p',document_id:'dwg',document_name:'sample.dwg',source:'autodesk-aps',aps_status:'ready',
+ extraction_status:'translation-complete',floor_area:null,wall_area:null,rooms:null,
+ notes:'Autodesk translation completed. Geometry quantities have not been extracted yet.'};
+test('successful Autodesk translation without extraction cannot generate quantities or match a saved BOQ',()=>{
+ assert.throws(()=>assertTakeoffReady(translatedCad),e=>e.code==='CAD_EXTRACTION_INCOMPLETE');
+ assert.throws(()=>assertTakeoffSource(translatedCad,'dwg','p'),/quantity extraction is incomplete/);
+ assert.equal(savedBoqMatchesTakeoff({takeoff:translatedCad,items:[{quantity:1,rate:6600}]},translatedCad),false);
+});
+test('legacy normalized pending CAD drafts cannot evade the guard after metadata was lost',()=>{
+ const legacy={notes:translatedCad.notes,floor_area:0,wall_area:0,rooms:0};
+ assert.ok(takeoffBoqIssue(legacy));assert.equal(savedBoqMatchesTakeoff({takeoff:legacy},null),false);
+});
+test('partial numeric placeholders do not override an explicit unfinished CAD stage',()=>{
+ assert.throws(()=>assertTakeoffReady({...translatedCad,notes:'',floor_area:20,rooms:1}),/incomplete/);
+ assert.throws(()=>assertTakeoffReady({...translatedCad,notes:'',extraction_status:'geometry-ready-analysis-pending'}),/incomplete/);
+});
+test('completed CAD measurements requiring review remain available as provisional work',()=>{
+ assert.doesNotThrow(()=>assertTakeoffReady({...translatedCad,notes:'Review measured wall deductions.',floor_area:20,
+  extraction_status:'advanced-takeoff-needs-review',geometry_status:'needs_review'}));
+ assert.equal(takeoffBoqIssue(image),'');assert.equal(takeoffBoqIssue({document_name:'schedule.pdf',pdf_analysis:{}}),'');
+});
+test('saving a pending CAD BOQ preserves the existing browser draft rather than writing allowances',()=>{
+ const writes=[],storage={setItem:(...args)=>writes.push(args)};
+ assert.throws(()=>saveReadyBoq(storage,'p',{takeoff:translatedCad,items:[{quantity:1,rate:6600}]},
+  {loadedProject:'p',loading:false,generating:false}),/incomplete/);
+ assert.equal(writes.length,0);
+});
 test('selected PNG cannot use an older DWG takeoff',()=>{
   assert.throws(()=>assertTakeoffSource({...image,document_id:'dwg'},'png','p'),/another drawing/);
   assert.throws(()=>assertTakeoffSource({...image,document_id:null},'png','p'),/quantity takeoff/);
