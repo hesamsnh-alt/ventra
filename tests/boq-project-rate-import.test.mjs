@@ -10,6 +10,7 @@ import {applyBoqScope} from '../src/lib/boqScope.mjs';
 import {readBoqScope} from '../src/lib/boqScopeStore.mjs';
 import {buildBoqExport} from '../src/lib/boqExport.mjs';
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '../src/lib/drawingWorkflowGate.mjs';
+import {assertTakeoffSource} from '../src/lib/takeoffSource.mjs';
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
 const takeoff={...JSON.parse(read('./fixtures/pdf-observed-catalog-recovery.json')),document_id:'source-pdf',analyzed_at:'2026-10-15T10:28:37.784Z'};
 const catalog=JSON.parse(read('./fixtures/pdf-observed-price-catalog.json')).catalog;
@@ -33,7 +34,7 @@ function context(){
   const state={scopeState:null,scopeApplying:false,readBoqScope,applyBoqScope,priceAssumedRows:async x=>x,setScopeState:()=>{},projectId:`rate-import-${++serial}`,projectName:'Same project',takeoff:structuredClone(takeoff),items:baseline(),projectRateImport:null,boqSource:null,
     loadedBoqProject:null,loadingTakeoff:false,generating:false,applyingProjectRates:false,vatPercentage:5,overheadPercentage:0,profitPercentage:0,discountPercentage:0,
     warnings:[],assumptions:[],projectRateRequestRef:{current:0},projectRateContextRef:{current:null},error:'',message:'',writes:0,fetches:0,
-    projectRateImportCalls:0,beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,applyProjectRateCsv,requireBoqReview,saveReadyBoq,
+    projectRateImportCalls:0,beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,applyProjectRateCsv,requireBoqReview,saveReadyBoq,assertTakeoffSource,selectedDrawingSync:()=>null,setLoadedBoqProject(){},
     commercialFetch(){state.fetches++;throw Error('Network calls forbidden.');},generateBoq:async()=>({items:baseline(),warnings:[],assumptions:[]}),
     console:{log(){},error(){},warn(){}},Date,Map,Set};
   state.loadedBoqProject=state.projectId;

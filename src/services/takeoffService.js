@@ -3,6 +3,8 @@ import {mergePdfEvidence} from '@/lib/pdfTakeoffEvidence.mjs';
 import {rememberEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
 import {commercialFetch} from '@/lib/commercialFetch';
 import {submitDrawingAnalysis} from '@/lib/drawingAnalysisTransport.mjs';
+import {selectedDrawingSync} from '@/lib/schematicStorage.mjs';
+import {assertTakeoffSource} from '@/lib/takeoffSource.mjs';
 const TAKEOFF_STORAGE_PREFIX = "ventra:project-takeoff:";
 
 function getStorageKey(projectId) {
@@ -319,7 +321,9 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
 export async function getLatestProjectTakeoff(projectId) {
   try {
     if (!projectId) throw new Error("Project ID is required.");
-    return { takeoff: hydrateTakeoff(await readPersistedTakeoff(projectId)), error: null };
+    const takeoff = await readPersistedTakeoff(projectId);
+    assertTakeoffSource(takeoff, selectedDrawingSync(projectId), projectId);
+    return { takeoff: hydrateTakeoff(takeoff), error: null };
   } catch (error) {
     console.error("[Takeoff] Read latest result failed:", error);
     return { takeoff: null, error };

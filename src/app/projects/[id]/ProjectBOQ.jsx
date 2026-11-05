@@ -16,6 +16,8 @@ import {persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import { commercialFetch } from "@/lib/commercialFetch";
 import { getDrawingEvidence } from "@/lib/drawingEvidence.mjs";
 import { saveReadyBoq } from "@/lib/boqDraftPersistence.mjs";
+import {assertTakeoffSource,savedBoqMatchesTakeoff} from '@/lib/takeoffSource.mjs';
+import {selectedDrawingSync} from '@/lib/schematicStorage.mjs';
 import CommercialSync from "./CommercialSync";
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -314,6 +316,8 @@ export default function ProjectBOQ({
 
   async function generateFromTakeoff(sourceTakeoff, { silent = false } = {}) {
     if (!sourceTakeoff || generating) return false;
+    try { assertTakeoffSource(sourceTakeoff, selectedDrawingSync(projectId), projectId); }
+    catch (error) { setErrorMessage(error.message); return false; }
     const workflowToken = beginDrawingWorkflow(projectId,'boq');
     if (!workflowToken) {
       if (!silent) setErrorMessage(drawingWorkflowState(projectId).analysisFailed
@@ -391,6 +395,7 @@ export default function ProjectBOQ({
       const generatedScope=scoped.report?{config:scoped.config,baseItems,report:scoped.report,selectedIds:generatedItems.filter(i=>!i.scopeDefault).map(i=>i.id),defaultIds:generatedItems.filter(i=>i.scopeDefault).map(i=>i.id),defaultEdits:{}}:null;
       if(scoped.report){boq.warnings=[...(boq.warnings||[]),'[BOQ SCOPE] '+scoped.report.note+' '+scoped.report.gaps.map(g=>g.trade+': '+g.required).join('; ')];}
       // Commit the complete result before a tab switch can unmount this panel.
+      assertTakeoffSource(sourceTakeoff, selectedDrawingSync(projectId), projectId);
       saveReadyBoq(window.localStorage, projectId, {
         projectName, currency: "AED", vatPercentage, overheadPercentage,
         profitPercentage, discountPercentage, items: generatedItems,
@@ -399,6 +404,7 @@ export default function ProjectBOQ({
         boqScope:generatedScope, takeoff: sourceTakeoff, boqSource:{documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151}, projectRateImport:nextProjectRateImport, updatedAt: new Date().toISOString(),
       }, { loadedProject: projectId, loading: false, generating: false });
       setTakeoff(sourceTakeoff);
+      setLoadedBoqProject(projectId);
       setBoqSource({documentId:sourceTakeoff.document_id,name:sourceTakeoff.document_name,recordedBy:151});
       setItems(generatedItems);
       setScopeState(generatedScope);
@@ -461,6 +467,9 @@ export default function ProjectBOQ({
 
         if (storedBoq) {
           const parsedBoq = JSON.parse(storedBoq);
+          if (!savedBoqMatchesTakeoff(parsedBoq, latestTakeoff)) {
+            throw new Error('The saved BOQ belongs to an earlier drawing or analysis. Generate BOQ to use the latest quantity takeoff. The previous draft has been preserved.');
+          }
           setBoqSource(parsedBoq.boqSource||null);
           setScopeState(parsedBoq.boqScope||null);
           const savedRates=parsedBoq?.projectRateImport;

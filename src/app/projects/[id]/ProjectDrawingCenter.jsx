@@ -2,6 +2,7 @@
 import DrawingAnalysisProgress from "./DrawingAnalysisProgress";
 import {readDrawingProgress,updateDrawingProgress,subscribeDrawingProgress} from "@/lib/drawingProgressSession.mjs";
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '@/lib/drawingWorkflowGate.mjs';
+import {assertTakeoffSource} from '@/lib/takeoffSource.mjs';
 import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
@@ -2278,7 +2279,7 @@ export default function ProjectDrawingCenter({
     finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
   }
 
-  async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null} = {}) {
+  async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false} = {}) {
     if (analysisInFlightRef.current || analyzing || generatingBoq) return;
     if (documents.length === 0) {
       setErrorMessage(
@@ -2408,14 +2409,12 @@ export default function ProjectDrawingCenter({
             : "Analyzing the drawing. Keep this page open."
         );
 
-        if (["jpg", "jpeg", "png", "webp"].includes(extension)) {
+        if (previewOnly && ["jpg", "jpeg", "png", "webp"].includes(extension)) {
           const previewScene = await generateImageSchematic3D(selectedDocument, { quiet: true });
           if (previewScene) {
             analysisSucceeded = true;
-            // JPG/PNG interactive preview is intentionally isolated from the
-            // expensive takeoff call. BOQ/takeoff remains available through
-            // its own workflow; generating a 3D preview must not immediately
-            // spend a second AI request or overwrite preview state.
+            // Explicit 3D preview remains isolated from quantity analysis.
+            // Each action makes only its own request, never both paid calls.
             setMessage("Interactive 3D preview is ready. Open the 3D view to orbit, pan and zoom around it.");
             return;
           }
@@ -2441,10 +2440,8 @@ export default function ProjectDrawingCenter({
         // trap a previously failed source extraction in model-disabled recovery.
         if (resumeSourceMeasurementsOnly) setMessage('Continuing saved PDF analysis: only missing source measurements; no full page analysis if the saved cache is unavailable.');
         if(localPdfRecoveryOnly)setMessage(language==='fa'?'بازمحاسبه از PDF و صفحات ذخیره‌شده؛ بدون درخواست به مدل AI.':'Recalculating original PDF and saved pages without AI model requests.');
-        if (extension === "pdf") {
-          takeoffResultRef.current = null;
-          setTakeoffResult(null);
-        }
+        takeoffResultRef.current = null;
+        setTakeoffResult(null);
         const { takeoff, error } =
           await analyzeProjectDrawing({
             projectId,
@@ -5163,6 +5160,8 @@ async function handleApsGeometryExtracted(analysis) {
     );
     return;
   }
+  try { assertTakeoffSource(takeoffResult, selectedDrawingSync(projectId), projectId); }
+  catch (error) { setErrorMessage(error.message); return; }
   const workflowToken = beginDrawingWorkflow(projectId, 'boq');
   if (!workflowToken) return;
   try {
@@ -5871,6 +5870,13 @@ async function handleApsGeometryExtracted(analysis) {
           );
         })}
       </LocalizedElement>
+
+      {selectedDocumentIsImage && selectedDocumentForPreview && (
+        <LocalizedElement as="button" type="button" disabled={analyzing || generatingBoq || uploading}
+          onClick={() => handleAnalyzeDrawing({previewOnly:true})}>
+          {language==='fa'?'ساخت پیش‌نمایش سه‌بعدی تصویر (جدا از متره)':language==='ar'?'إنشاء معاينة الصورة ثلاثية الأبعاد (منفصلة عن حصر الكميات)':'Build image 3D preview (separate from quantity takeoff)'}
+        </LocalizedElement>
+      )}
 
       {takeoffResult && (
         <LocalizedElement as="section" className="takeoff-result">
