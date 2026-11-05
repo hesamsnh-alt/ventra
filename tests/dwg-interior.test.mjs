@@ -1,3 +1,7 @@
+import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
+import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
+import * as surfaceMaterials from '../src/lib/surfaceMaterials.mjs';
+import * as renderQuality from '../src/lib/interiorRenderQuality.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {patchDwgPresentation,dwgInteriorCameraKey,dwgFloorIndices,dwgInteriorScene,dwgInteriorMatches,savedDwgInterior,upgradeDwgInterior,rebuildDwgInterior,repairDwgInterior,updateDwgInterior,isInteriorSource} from '../src/lib/dwgInterior.mjs';
@@ -52,7 +56,7 @@ test('converted DWG uses the actual structured Three renderer with doors, window
  const ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});
  const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name?.startsWith('VENTRA_')));
  const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');
- const context=vm.createContext({THREE,console,structuredClone,sourcePresentationAssets});
+ const context=vm.createContext({...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,THREE,console,structuredClone,sourcePresentationAssets});
  vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),context);
  context.getThree=()=>THREE;
  const scene=new THREE.Scene();
@@ -118,7 +122,7 @@ test('DWG interior entry expands a single-region engineering view to all floors 
  const a=fixture(),b=fixture(1,20000),full={...a.runtime,regionCount:2,storeyFrames:[a.storey,b.storey],storeys:[...a.runtime.storeys,...b.runtime.storeys],geometry:{roomPolygons:[...a.runtime.geometry.roomPolygons,...b.runtime.geometry.roomPolygons]},doors:[...a.runtime.doors,...b.runtime.doors],windows:[...a.runtime.windows,...b.runtime.windows]};
  const original=dwgInteriorScene(a);original.assets[0].color='#123456';
  let stored=updateDwgInterior({aps_urn:'urn',document_id:'drawing',geometry:full.geometry},original),shown,expanded=0;
- const context=vm.createContext({projectId:'project',urn:'urn',dwgRoomUses:{},reconstruction:{_runtime:{...full,storeyFrames:[a.storey]}},dwgFurnitureBusyRef:{current:false},viewerRef:{current:{}},schematicBaseSceneRef:{current:null},engineeringUrn:t=>t.aps_urn,
+ const context=vm.createContext({...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,projectId:'project',urn:'urn',dwgRoomUses:{},reconstruction:{_runtime:{...full,storeyFrames:[a.storey]}},dwgFurnitureBusyRef:{current:false},viewerRef:{current:{}},schematicBaseSceneRef:{current:null},engineeringUrn:t=>t.aps_urn,
   dwgInteriorScene,rebuildDwgInterior,repairDwgInterior,updateDwgInterior,upgradeDwgInterior,readPersistedTakeoff:async()=>stored,persistTakeoff:async(id,t)=>{stored=t;},
   buildDwgInteriorRuntime:()=>{expanded++;return full;},persistSchematicScene:async scene=>{stored=updateDwgInterior(stored,scene);},saveActiveSource:async()=>{},setSchematicScene:scene=>{shown=scene;},setDwgFurnitureBusy(){},setActive3DSource(){},setInteriorView(){},setMessage:message=>{assert.ok(!message.includes('first'),message);}
  });

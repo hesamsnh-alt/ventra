@@ -5974,5 +5974,17 @@
   "Selections & Budget": {
     "fa": "انتخاب‌ها و بودجه",
     "ar": "الاختيارات والميزانية"
+  },
+  "Your session could not be verified. Sign in again to use shared documents.": {
+    "fa": "نشست ورود تأیید نشد. برای استفاده از اسناد مشترک دوباره وارد شوید.",
+    "ar": "تعذر التحقق من جلسة الدخول. سجل الدخول مجدداً لاستخدام المستندات المشتركة."
+  },
+  "Shared document access was denied. Sign in again or ask the project owner to check your access.": {
+    "fa": "دسترسی به اسناد مشترک رد شد. دوباره وارد شوید یا از مالک پروژه بخواهید دسترسی شما را بررسی کند.",
+    "ar": "رُفض الوصول إلى المستندات المشتركة. سجل الدخول مجدداً أو اطلب من مالك المشروع التحقق من صلاحياتك."
+  },
+  "Shared documents could not be loaded. Check your connection and try again. Your browser draft is unchanged.": {
+    "fa": "اسناد مشترک بارگذاری نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید. پیش‌نویس مرورگر شما تغییری نکرده است.",
+    "ar": "تعذر تحميل المستندات المشتركة. تحقق من اتصالك وحاول مجدداً. لم تتغير مسودة المتصفح."
   }
 }

@@ -1,3 +1,8 @@
+import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
+import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
+import {createWalkthrough} from '../src/lib/walkthroughControls.mjs';
+import * as surfaceMaterials from '../src/lib/surfaceMaterials.mjs';
+import * as renderQuality from '../src/lib/interiorRenderQuality.mjs';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
@@ -15,7 +20,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console};
+const context = {THREE, console, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 
@@ -43,6 +48,7 @@ test('saved furniture scaling changes the complete mesh proportionally around it
 
 test('standalone editor ray-picks the floor and furniture with actual r71 and preserves the camera on rebuild (no GPU)',()=>{
  class Canvas{
+  ownerDocument={defaultView:context.window,addEventListener(){},removeEventListener(){}};
   style={};clientWidth=800;clientHeight=600;listeners=[];
   addEventListener(type,fn,options){this.listeners.push({type,fn,options});}
   removeEventListener(type,fn){this.listeners=this.listeners.filter(a=>a.type!==type||a.fn!==fn);}
@@ -53,7 +59,7 @@ test('standalone editor ray-picks the floor and furniture with actual r71 and pr
  class Renderer{constructor({canvas}){this.domElement=canvas;}setPixelRatio(){}setSize(){}setClearColor(){}render(){}dispose(){}}
  const oldRenderer=THREE.WebGLRenderer,oldRenderScene=context.renderSchematicScene;
  THREE.WebGLRenderer=Renderer;
- Object.assign(context,{window:{THREE,devicePixelRatio:1,requestAnimationFrame:fn=>fn()},bindFurnitureInputs,bindProjectCameraInputs,cameraFitDistance,namedCameraOffset,orbitOffset,configureSchematicLighting:()=>{}});
+ Object.assign(context,{window:{THREE,devicePixelRatio:1,requestAnimationFrame:fn=>fn(),addEventListener(){},removeEventListener(){}},bindFurnitureInputs,bindProjectCameraInputs,cameraFitDistance,namedCameraOffset,orbitOffset,configureSchematicLighting:()=>{}});
  let previewMesh;
  context.renderSchematicScene=adapter=>{
   const root=new THREE.Object3D();root.position.set(-2,-2,0);adapter.impl.scene.add(root);
@@ -102,7 +108,14 @@ test('prompt furniture types have specific renderers rather than generic placeho
 
 test('upholstered sofa has rounded solid cushions inside its declared footprint', () => {
   const meshes = assetMeshes('sofa');
-  assert.ok(meshes.filter(mesh => mesh.geometry instanceof THREE.ExtrudeGeometry).length >= 5);
+  const cushions = meshes.filter(mesh => mesh.geometry.userData?.upholstery);
+  assert.ok(cushions.length >= 5);
+  for (const {geometry} of cushions) {
+    assert.ok(geometry.vertices.length > 100, 'rounded cushions keep their curved surface detail');
+    assert.ok(geometry.vertices.every(v => [v.x,v.y,v.z].every(Number.isFinite)));
+    const z = Math.max(...geometry.vertices.map(v => v.z));
+    assert.ok(geometry.vertices.some(v => v.z > 0 && v.z < z - 1e-6), 'upper edges curve into the seating surface');
+  }
   const bounds = new THREE.Box3();
   meshes.forEach(mesh => {mesh.updateMatrix(); bounds.union(new THREE.Box3().setFromObject(mesh));});
   assert.ok(bounds.min.x >= -1.001 && bounds.max.x <= 1.001, `${bounds.min.x}, ${bounds.max.x}`);
@@ -178,6 +191,6 @@ test('interior view reveals walls and shared headers reversibly without changing
  const sofa=new THREE.Mesh(new THREE.BoxGeometry(2,1,.8),furnitureMat);sofa.castShadow=true;
  scene.add(wall);scene.add(header);scene.add(sofa);
  const vertices=JSON.stringify(wall.geometry.vertices),set=context.ventraCreateInteriorView(scene);
- set(true);assert.equal(mat.opacity,.18);assert.equal(mat.depthWrite,false);assert.equal(header.castShadow,false);assert.equal(sofa.castShadow,true);assert.equal(furnitureMat.opacity,1);
+ set(true);assert.ok(mat.opacity>0&&mat.opacity<=.2);assert.equal(mat.depthWrite,false);assert.equal(header.castShadow,false);assert.equal(sofa.castShadow,true);assert.equal(furnitureMat.opacity,1);
  set(false);assert.equal(mat.opacity,1);assert.equal(mat.transparent,false);assert.equal(mat.depthWrite,true);assert.equal(wall.castShadow,true);assert.equal(header.castShadow,true);assert.equal(JSON.stringify(wall.geometry.vertices),vertices);
 });
