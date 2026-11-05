@@ -8,7 +8,7 @@ import SelectionCommercialSummary from "./SelectionCommercialSummary";
 import { useEffect, useMemo, useState, useEffectEvent } from "react";
 import "./ProjectQuotation.css";
 import DocumentBranding, { useDocumentBranding } from "./DocumentBranding";
-import { quotationTotals } from "@/lib/commercialDocument.mjs";
+import { quotationTotals, quotationLineAmount } from "@/lib/commercialDocument.mjs";
 
 function money(value) {
   return new Intl.NumberFormat("en-AE", {
@@ -25,6 +25,11 @@ function readJson(key) {
   if (!raw) return null;
 
   return JSON.parse(raw);
+}
+
+function lineAmount(item) {
+  try { return money(quotationLineAmount(item)); }
+  catch { return "—"; }
 }
 
 export default function ProjectQuotation({ projectId }) {
@@ -64,7 +69,7 @@ export default function ProjectQuotation({ projectId }) {
     setLastActionAt(new Date().toLocaleTimeString("en-AE"));
   }
 
-  function refreshEstimate() {
+  function refreshEstimate({ automatic = false } = {}) {
     if (!projectId || typeof window === "undefined") return false;
 
     setBusyAction("refresh");
@@ -78,15 +83,17 @@ export default function ProjectQuotation({ projectId }) {
 
       if (!raw) {
         setEstimate(null);
-        markError(
-          "REFRESH FAILED: no saved Estimate exists for this project."
-        );
+        if (!automatic) {
+          markError(
+            "REFRESH FAILED: no saved Estimate exists for this project."
+          );
+        }
         return false;
       }
 
       const latest = JSON.parse(raw);
 
-      if (!latest || Number(latest.finalTender) <= 0) {
+      if (!latest || !Number.isFinite(Number(latest.finalTender)) || Number(latest.finalTender) <= 0) {
         setEstimate(null);
         markError(
           "REFRESH FAILED: saved Estimate is invalid or has no final tender."
@@ -171,7 +178,7 @@ export default function ProjectQuotation({ projectId }) {
   }
 
   const loadDraftFromEffect=useEffectEvent(loadSavedDraft);
-  const refreshEstimateFromEffect=useEffectEvent(refreshEstimate);
+  const refreshEstimateFromEffect=useEffectEvent(() => refreshEstimate({ automatic: true }));
   useEffect(() => {
     let cancelled=false;
     Promise.resolve().then(()=>{if(!cancelled){loadDraftFromEffect();refreshEstimateFromEffect();}});
@@ -577,7 +584,7 @@ export default function ProjectQuotation({ projectId }) {
       {lineItems && <LocalizedElement as="div" className="quotation-lines">
         <LocalizedElement as="table"><LocalizedElement as="thead"><LocalizedElement as="tr"><LocalizedElement as="th">Description</LocalizedElement><LocalizedElement as="th">Unit</LocalizedElement><LocalizedElement as="th">Quantity</LocalizedElement><LocalizedElement as="th">Rate (AED)</LocalizedElement><LocalizedElement as="th">Amount (AED)</LocalizedElement><LocalizedElement as="th" className="commercial-no-print">Action</LocalizedElement></LocalizedElement></LocalizedElement><LocalizedElement as="tbody">{lineItems.map((item) => <LocalizedElement as="tr" key={item.id}>
           {["description", "unit", "quantity", "rate"].map((field) => <LocalizedElement as="td" key={field}><LocalizedElement as="span" className="commercial-print-only">{item[field]}</LocalizedElement><LocalizedElement as="input" className="commercial-no-print" aria-label={`${field} ${item.id}`} type={["quantity", "rate"].includes(field) ? "number" : "text"} min="0" step="any" value={item[field]} onChange={(event) => setLineItems(lineItems.map((row) => row.id === item.id ? { ...row, [field]: event.target.value } : row))} /></LocalizedElement>)}
-          <LocalizedElement as="td">{money(Number(item.quantity) * Number(item.rate))}</LocalizedElement><LocalizedElement as="td" className="commercial-no-print"><LocalizedElement as="button" type="button" onClick={() => setLineItems(lineItems.filter((row) => row.id !== item.id))}>Remove</LocalizedElement></LocalizedElement>
+          <LocalizedElement as="td">{lineAmount(item)}</LocalizedElement><LocalizedElement as="td" className="commercial-no-print"><LocalizedElement as="button" type="button" onClick={() => setLineItems(lineItems.filter((row) => row.id !== item.id))}>Remove</LocalizedElement></LocalizedElement>
         </LocalizedElement>)}</LocalizedElement></LocalizedElement>
         <LocalizedElement as="div" className="commercial-no-print"><LocalizedElement as="button" type="button" onClick={() => setLineItems([...lineItems, { id: crypto.randomUUID(), description: "", unit: "item", quantity: 1, rate: 0 }])}>Add item</LocalizedElement><LocalizedElement as="label">VAT % <LocalizedElement as="input" type="number" min="0" max="100" value={customVat ?? 5} onChange={(event) => setCustomVat(event.target.value)} /></LocalizedElement></LocalizedElement>
         {quotation.error && <LocalizedElement as="p" role="alert">{quotation.error}</LocalizedElement>}

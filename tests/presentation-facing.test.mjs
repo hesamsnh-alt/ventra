@@ -1,8 +1,12 @@
+import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
+import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
+import * as surfaceMaterials from '../src/lib/surfaceMaterials.mjs';
+import * as renderQuality from '../src/lib/interiorRenderQuality.mjs';
 import {sourcePresentationAssets} from '../src/lib/sourceFurniture.mjs';
 import THREE from 'three-test';
 import {arrangeLivingFurniture,furnitureOverlaps} from '../src/lib/interiorPresentation.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import vm from 'node:vm';import parser from '@babel/parser';
-const source=readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8');const ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||(n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name==='VENTRA_SCHEMATIC_ASSET_DEFAULTS')));const c=vm.createContext({arrangeLivingFurniture});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),c);
+const source=readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8');const ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||(n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name==='VENTRA_SCHEMATIC_ASSET_DEFAULTS')));const c=vm.createContext({...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,arrangeLivingFurniture});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),c);
 const scene=JSON.parse(readFileSync(new URL('fixtures/source-20260926-193231.json',import.meta.url)));
 test('source scene immutable; beds retain position and dimensions',()=>{const original=JSON.stringify(scene);const assets=c.ventraPresentationAssets(scene);assert.equal(JSON.stringify(scene),original);for(const a of scene.assets.filter(a=>a.type==='bed')){const b=assets.find(b=>b.type===a.type&&b.roomId===a.roomId);for(const k of ['xMeters','yMeters','width','depth','height'])assert.equal(a[k],b[k]);assert.equal(b.rotation,a.rotation+180);}});
 test('presentation is idempotent and rug not duplicated',()=>{const once=c.ventraPresentationAssets(scene);const twice=c.ventraPresentationAssets({...scene,assets:once});assert.equal(JSON.stringify(once),JSON.stringify(twice));});

@@ -6,11 +6,12 @@ import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase';
 import {indexedTakeoffRecords} from '@/lib/takeoffStorage.mjs';
 import {snapshotKeys,validateSnapshot} from '@/lib/commercialAccess.mjs';
+import {commercialStorageError} from '@/lib/commercialStorageError.mjs';
 export default function CommercialSync({projectId}){
  const [shared,setShared]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  const revision=shared?.projectId===projectId?shared.revision:null,remote=shared?.projectId===projectId?shared.remote:null;
  useEffect(()=>{let alive=true;
-  supabase.from('ventra_commercial_snapshots').select('revision,updated_at').eq('project_id',projectId).maybeSingle().then(({data,error})=>{if(!alive)return;if(error){setError('Shared storage is unavailable. The operator must apply the commercial database migration.');return;}setShared({projectId,revision:data?.revision||0,remote:data});});
+  supabase.from('ventra_commercial_snapshots').select('revision,updated_at').eq('project_id',projectId).maybeSingle().then(({data,error})=>{if(!alive)return;if(error){setError(commercialStorageError(error));return;}setError('');setShared({projectId,revision:data?.revision||0,remote:data});}).catch(error=>{if(alive)setError(commercialStorageError(error));});
   return ()=>{alive=false;};
  },[projectId]);
  async function save(){setBusy(true);setError('');setMessage('');try{
