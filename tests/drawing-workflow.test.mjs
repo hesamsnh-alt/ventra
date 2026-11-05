@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,subscribeDrawingWorkflow} from '../src/lib/drawingWorkflowGate.mjs';
+import {assertTakeoffSource} from '../src/lib/takeoffSource.mjs';
 const center=readFileSync('src/app/projects/[id]/ProjectDrawingCenter.jsx','utf8');
 const boq=readFileSync('src/app/projects/[id]/ProjectBOQ.jsx','utf8');
 const segment=(source,start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
-const gates={beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,subscribeDrawingWorkflow};
+const gates={beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState,subscribeDrawingWorkflow,assertTakeoffSource,selectedDrawingSync:()=>null};
 let sequence=0;
 function setup(){
   let resolveAnalysis,resolveSave;
@@ -27,6 +28,34 @@ function setup(){
     segment(center,' async function handleGenerateBoq()','  const aiTools =')+'\nthis.analyze=handleAnalyzeDrawing;this.generate=handleGenerateBoq;',state);
   return {state,resolveAnalysis,resolveSave};
 }
+test('PNG Analyze saves a quantity takeoff without making a 3D request',async()=>{
+  const {state:s,resolveAnalysis,resolveSave}=setup();let previewCalls=0;
+  s.documents=[{id:'png',file_name:'plan.png'}];s.selectedDocumentId='png';
+  s.getFileExtension=()=> 'png';s.AI_SUPPORTED_EXTENSIONS=['pdf','png'];
+  s.generateImageSchematic3D=async()=>{previewCalls++;return {documentId:'png'};};
+  const work=s.analyze();assert.equal(s.apiCalls,1);assert.equal(previewCalls,0);
+  assert.equal(s.takeoffResult,null);
+  resolveAnalysis({takeoff:{document_id:'png',document_name:'plan.png',rooms:3,floor_area:46.5225,doors:3,windows:3},error:null});
+  resolveSave();await work;
+  assert.equal(s.persistCalls,1);assert.equal(s.takeoffResult.document_id,'png');
+  assert.equal(s.takeoffResult.floor_area,46.5225);assert.equal(previewCalls,0);
+});
+test('explicit image 3D preview preserves its workflow without a second paid quantity request',async()=>{
+  const {state:s}=setup();let previewCalls=0;
+  s.documents=[{id:'png',file_name:'plan.png'}];s.selectedDocumentId='png';
+  s.getFileExtension=()=> 'png';s.AI_SUPPORTED_EXTENSIONS=['png'];
+  s.generateImageSchematic3D=async()=>{previewCalls++;return {documentId:'png'};};
+  await s.analyze({previewOnly:true});
+  assert.equal(previewCalls,1);assert.equal(s.apiCalls,0);assert.equal(s.persistCalls,0);
+});
+test('failed PNG quantity analysis does not fall back to a successful old DWG',async()=>{
+  const {state:s,resolveAnalysis}=setup();
+  s.documents=[{id:'png',file_name:'plan.png'}];s.selectedDocumentId='png';
+  s.getFileExtension=()=> 'png';s.AI_SUPPORTED_EXTENSIONS=['png'];
+  const work=s.analyze();resolveAnalysis({takeoff:null,error:Error('Image analysis unavailable')});await work;
+  assert.equal(s.takeoffResult,null);assert.equal(s.persistCalls,0);
+  await s.generate();assert.equal(s.boqCalls.length,0);
+});
 test('pending PDF analysis removes the old visible result and blocks BOQ until persistence completes',async()=>{
   const {state:s,resolveAnalysis,resolveSave}=setup();
   const work=s.analyze();assert.equal(s.apiCalls,1);assert.equal(s.takeoffResult,null);assert.equal(s.takeoffResultRef.current,null);
