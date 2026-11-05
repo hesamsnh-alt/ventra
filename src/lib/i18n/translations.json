@@ -5986,5 +5986,9 @@
   "Shared documents could not be loaded. Check your connection and try again. Your browser draft is unchanged.": {
     "fa": "اسناد مشترک بارگذاری نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید. پیش‌نویس مرورگر شما تغییری نکرده است.",
     "ar": "تعذر تحميل المستندات المشتركة. تحقق من اتصالك وحاول مجدداً. لم تتغير مسودة المتصفح."
+  },
+  "The selected file is empty. Choose a non-empty drawing.": {
+    "fa": "فایل انتخاب‌شده خالی است. یک نقشهٔ غیرخالی انتخاب کنید.",
+    "ar": "الملف المحدد فارغ. اختر رسماً غير فارغ."
   }
 }

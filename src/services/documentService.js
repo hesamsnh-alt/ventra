@@ -70,6 +70,10 @@ export async function uploadProjectDocument({
       );
     }
 
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      throw new Error("The selected file is empty. Choose a non-empty drawing.");
+    }
+
     const {
       data: { user },
       error: userError,

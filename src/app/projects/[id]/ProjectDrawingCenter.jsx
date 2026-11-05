@@ -2092,6 +2092,10 @@ export default function ProjectDrawingCenter({
       return "Only PDF, DWG, DXF, IFC, RVT, JPG, PNG and WEBP files are allowed.";
     }
 
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      return "The selected file is empty. Choose a non-empty drawing.";
+    }
+
     if (file.size > MAX_FILE_SIZE) {
       return "The maximum file size is 100 MB.";
     }
