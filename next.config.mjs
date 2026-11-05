@@ -6,7 +6,12 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {turbopackFileSystemCacheForDev: process.env.VENTRA_DISABLE_DEV_CACHE !== "1"},
+  experimental: {
+    turbopackFileSystemCacheForDev: process.env.VENTRA_DISABLE_DEV_CACHE !== "1",
+    // The persisted compiler graph can contain the build environment. Keep
+    // server credentials out of disk caches that CI scans and restores.
+    turbopackFileSystemCacheForBuild: false,
+  },
   turbopack: {
     root: __dirname,
   },

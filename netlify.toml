@@ -1,5 +1,5 @@
 [build]
-command = "node scripts/build-netlify-preview.mjs && npm run build"
+command = "node scripts/clear-turbopack-build-cache.mjs && node scripts/build-netlify-preview.mjs && npm run build"
 [functions]
 directory = "netlify/functions"
 node_bundler = "esbuild"
