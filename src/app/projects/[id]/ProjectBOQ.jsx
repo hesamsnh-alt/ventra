@@ -1,4 +1,5 @@
 "use client";
+import {currentBoqWarnings} from '@/lib/boqCurrentWarnings.mjs';
 import BoqScopePanel from './BoqScopePanel';
 import {createScopeManualItem} from '@/lib/boqScopeManual.mjs';
 import {priceScopeDefaults,removeIncludedDefaultComponents} from '@/lib/boqScopeRates.mjs';
@@ -524,6 +525,7 @@ export default function ProjectBOQ({
   const {subtotal,overhead,profit,discount,vat,total} = tender;
   const lineSums = useMemo(() => buildBoqExport(items).sums, [items]);
   const budget = calculateBoqBudget(lineSums, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage });
+  const visibleWarnings=useMemo(()=>currentBoqWarnings(warnings,items),[warnings,items]);
 
 
   useEffect(() => {
@@ -537,7 +539,7 @@ export default function ProjectBOQ({
         profitPercentage,
         discountPercentage,
         items,
-        warnings,
+        warnings:visibleWarnings,
         assumptions,
         takeoff,
         boqSource,
@@ -545,7 +547,7 @@ export default function ProjectBOQ({
         boqScope:scopeState,
         updatedAt: new Date().toISOString(),
       }, { loadedProject: loadedBoqProject, loading: loadingTakeoff, generating:generating||scopeApplying||applyingProjectRates });
-  }, [projectId, loadedBoqProject, loadingTakeoff, generating, scopeApplying, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, warnings, assumptions, takeoff, boqSource, projectRateImport, scopeState]);
+  }, [projectId, loadedBoqProject, loadingTakeoff, generating, scopeApplying, applyingProjectRates, projectName, vatPercentage, overheadPercentage, profitPercentage, discountPercentage, items, visibleWarnings, assumptions, takeoff, boqSource, projectRateImport, scopeState]);
 
   function saveProjectRateDraft(nextItems,nextImport) {
     const saved=saveReadyBoq(window.localStorage,projectId,{
@@ -889,11 +891,11 @@ export default function ProjectBOQ({
         <LocalizedElement as="div" className="boq-error-message">{errorMessage}</LocalizedElement>
       )}
 
-      {warnings.length > 0 && (
+      {visibleWarnings.length > 0 && (
         <LocalizedElement as="div" className="boq-warning-box">
           <LocalizedElement as="strong">Warnings</LocalizedElement>
           <LocalizedElement as="ul">
-            {warnings.map((warning, index) => (
+            {visibleWarnings.map((warning, index) => (
               <LocalizedElement as="li" key={`${warning}-${index}`}>{tr(warning)}</LocalizedElement>
             ))}
           </LocalizedElement>

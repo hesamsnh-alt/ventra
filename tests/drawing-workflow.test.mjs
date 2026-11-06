@@ -12,7 +12,7 @@ let sequence=0;
 function setup(){
   let resolveAnalysis,resolveSave;
   const pending=new Promise(r=>resolveAnalysis=r),saving=new Promise(r=>resolveSave=r);
-  const state={updateDrawingProgress(){},...gates,projectId:`workflow-test-${++sequence}`,analyzing:false,generatingBoq:false,
+  const state={apsPreviewOnlyRef:{current:null},buildImageAfterAnalysis:false,updateDrawingProgress(){},...gates,projectId:`workflow-test-${++sequence}`,analyzing:false,generatingBoq:false,
     documents:[{id:'pdf',file_name:'source.pdf'}],selectedDocumentId:'pdf',language:'en',AI_SUPPORTED_EXTENSIONS:['pdf'],APS_SUPPORTED_EXTENSIONS:['dwg'],
     getFileExtension:()=> 'pdf',selectDrawingDocument(){},analysisRunIdRef:{current:null},setAnalysisRunId(){},crypto:{randomUUID:()=> 'new-run'},
     analysisInFlightRef:{current:false},takeoffResult:{document_id:'old',rooms:1,floor_area:17},takeoffResultRef:{current:{document_id:'old'}},
@@ -222,4 +222,11 @@ test('UI disables Generate BOQ and report export while analysis is active',()=>{
   assert.match(center,/disabled: generatingBoq \|\| analyzing/);
   assert.match(center,/<button type="button" disabled=\{analyzing\} onClick=\{async\(\)=>\{if\(analysisInFlightRef.current\)return/);
   assert.match(boq,/disabled=\{generating \|\| scopeApplying \|\| loadingTakeoff \|\| !!drawingWorkflow.active \|\| drawingWorkflow.analysisFailed\}/);
+});
+test('failed explicit image 3D never falls through to paid quantity analysis',async()=>{
+ const {state:s}=setup();
+ s.documents=[{id:'png',file_name:'plan.png'}];s.selectedDocumentId='png';s.getFileExtension=()=> 'png';s.AI_SUPPORTED_EXTENSIONS=['png'];
+ s.generateImageSchematic3D=async()=>null;
+ await s.analyze({previewOnly:true});
+ assert.equal(s.apiCalls,0);assert.equal(s.persistCalls,0);assert.match(s.errors.at(-1),/No quantity analysis/);
 });

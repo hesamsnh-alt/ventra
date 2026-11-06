@@ -61,7 +61,7 @@ test('actual client saves successful results once and preserves saved evidence o
         assert.equal(JSON.parse(request.body).localPdfRecoveryOnly,undefined);
         if(failed)throw new TypeError('Failed to fetch');
         return Response.json({success:true,result:{floor_area:81}});
-      },saveTakeoffLocally:async(_,takeoff)=>{writes++;saved=takeoff;}};
+      },hydrateTakeoff:t=>t,saveTakeoffLocally:async(_,takeoff)=>{writes++;saved=takeoff;}};
     vm.createContext(context);vm.runInContext(fn+'\nthis.run=analyzeProjectDrawing;',context);
     const result=await context.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf'}});
     assert.equal(posts,1);assert.equal(writes,failed?0:1);

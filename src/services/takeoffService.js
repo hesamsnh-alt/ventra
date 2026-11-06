@@ -298,7 +298,7 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
         {code:'PDF_ANALYSIS_INCOMPLETE'});
     }
 
-    const takeoff = {
+    const takeoff = hydrateTakeoff({
       ...payload.result,
       project_id: projectId,
       document_id: document.id || null,
@@ -306,7 +306,7 @@ export async function analyzeProjectDrawing({ projectId, document, resumeSourceM
       document_type: document.file_type || null,
       analyzed_at: new Date().toISOString(),
       raw_result: payload.result,
-    };
+    });
 
     onProgress?.({status:'running',progress:{stage:'saving'}});
     await saveTakeoffLocally(projectId, takeoff);

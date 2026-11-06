@@ -1597,6 +1597,8 @@ export default function ProjectDrawingCenter({
   const [analysisRunId,setAnalysisRunId]=useState('initial');
   const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
   const pdfPreviewInFlightRef=useRef(false);
+  const apsPreviewOnlyRef=useRef(null);
+  const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(false);
   const fileInputRef = useRef(null);
   const localImagePreviewUrlRef = useRef("");
   const localImagePreviewDocumentIdRef = useRef(null);
@@ -2280,7 +2282,21 @@ export default function ProjectDrawingCenter({
     finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
   }
 
-  async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false} = {}) {
+  async function handleOpenSaved3D() {
+    clearMessages();
+    try {
+      const source=selectedDocumentForPreview;
+      if(!source?.id)throw Error('Select a drawing first.');
+      const {readSchematic}=await import('@/lib/schematicStorage.mjs');
+      const scene=await readSchematic(projectId);
+      if(!scene||scene.documentId!==source.id)throw Error('No saved 3D scene for this drawing. Use its 3D build action first. Opening a saved scene makes no AI request.');
+      await saveActiveSource(projectId,'schematic');
+      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
+      onOpen3D?.();
+    } catch(error){setErrorMessage(error.message);}
+  }
+
+  async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false,apsGeometryOnly = false} = {}) {
     if (analysisInFlightRef.current || analyzing || generatingBoq) return;
     if (documents.length === 0) {
       setErrorMessage(
@@ -2396,6 +2412,7 @@ export default function ProjectDrawingCenter({
 
     const workflowToken = beginDrawingWorkflow(projectId, 'analysis');
     if (!workflowToken) return;
+    apsPreviewOnlyRef.current=apsGeometryOnly&&isCadDrawing?selectedDocument.id:null;
     let analysisSucceeded = false;
     analysisInFlightRef.current = true;
     try {
@@ -2419,6 +2436,7 @@ export default function ProjectDrawingCenter({
             setMessage("Interactive 3D preview is ready. Open the 3D view to orbit, pan and zoom around it.");
             return;
           }
+          throw new Error('Image 3D preview did not complete. No quantity analysis was started.');
         }
 
         // Keep the last successful record in storage, but never expose it as
@@ -2590,6 +2608,9 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
 } else {
   setMessage("AI quantity takeoff completed successfully.");
 }
+        if(buildImageAfterAnalysis && ["jpg","jpeg","png","webp"].includes(extension)) {
+          await generateImageSchematic3D(selectedDocument,{quiet:false});
+        }
         return;
       }
 
@@ -2654,6 +2675,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         document_type:
           selectedDocument.file_type || null,
         source: "autodesk-aps",
+        aps_processing_mode: apsGeometryOnly ? 'geometry_only' : 'analysis',
         aps_urn: uploadResult.urn,
         aps_status: "ready",
         extraction_status:
@@ -3035,12 +3057,30 @@ async function handleApsGeometryExtracted(analysis) {
 
   // Publish verified geometry independently; optional AI room/schedule reads must not block 3D.
   const preview={...extractionSource,geometry,object_details:generatedTakeoff.object_details,model_unit:generatedTakeoff.model_unit,meter_factor:generatedTakeoff.meter_factor,geometry_status:"ready-for-3d",extraction_status:"geometry-ready-analysis-pending",analyzed_at:new Date().toISOString()};
+  let previewSaved=false;
   if(dwgReconstructionReadiness(preview,apsUrn).ready){
     try{
       await persistTakeoff(projectId,preview,{kind:"engineering"});
+      previewSaved=true;
       if(takeoffResultRef.current?.aps_urn!==apsUrn)return;
       window.dispatchEvent(new CustomEvent('ventra:engineering-takeoff-updated',{detail:{projectId,urn:apsUrn}}));
     }catch(error){console.warn("[VENTRA APS] early geometry save failed",error.message);}
+  }
+
+  // Explicit APS-only action stops before all room/schedule AI calls. Geometry
+  // stays in the existing engineering store and is never presented as a BOQ.
+  if(apsPreviewOnlyRef.current===extractionSource.document_id||extractionSource.aps_processing_mode==='geometry_only'){
+    const readiness=dwgReconstructionReadiness(preview,apsUrn);
+    if(readiness.ready&&previewSaved){
+      try {
+        await saveActiveSource(projectId,'aps');
+        setMessage('APS geometry is ready for 3D without OpenAI analysis. Quantities have not been approved for BOQ.');
+        onOpen3D?.();
+      } catch(error){setErrorMessage(error.message);}
+    }else if(readiness.ready){
+      setErrorMessage('APS geometry could not be saved. Retry the 3D action; no AI analysis was started.');
+    }else setErrorMessage(readiness.reason);
+    return;
   }
 
   generatedTakeoff.drawing_evidence = collectDrawingText(spatialProperties);
@@ -5382,15 +5422,18 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
-      {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<div className="takeoff-result">
-        <p><strong>{selectedDocumentForPreview.file_name}</strong></p>
-        <button type="button" style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>
-        {pdfPreviewStatus?.documentId===selectedDocumentForPreview.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
+      <div className="takeoff-result" aria-label="3D drawing actions">
+        <p><strong>{selectedDocumentForPreview?.file_name||'Select a drawing from Uploaded Drawings'}</strong></p>
+        <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
+        <button type="button" disabled={analyzing||generatingBoq||getFileExtension(selectedDocumentForPreview?.file_name||'')!=='pdf'} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>
+        <button type="button" disabled={analyzing||generatingBoq||!APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>
+        {selectedDocumentIsImage&&<button type="button" disabled={analyzing||generatingBoq} onClick={handleOpenSaved3D}>{language==='fa'?'باز کردن 3D ذخیره‌شده بدون AI':'Open saved 3D without AI'}</button>}
+        {pdfPreviewStatus&&pdfPreviewStatus.documentId===selectedDocumentForPreview?.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
           {pdfPreviewStatus.text}
           {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
         </div>}
         <p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>
-      </div>}
+      </div>
       {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
         <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
         <p>{language==='fa'?'صفحات پلان از جدول‌ها و جزئیات جدا شده‌اند. مقادیر AI نیاز به بررسی دارند.':language==='ar'?'تم فصل المخططات عن الجداول والتفاصيل. تحتاج كميات AI إلى المراجعة.':'Floor plans are reconciled separately from schedules and details. AI quantities require review.'}</p>
@@ -5531,6 +5574,9 @@ async function handleApsGeometryExtracted(analysis) {
         })}
       </LocalizedElement>
 
+      {selectedDocumentIsImage && selectedDocumentForPreview && (
+        <label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label>
+      )}
       {selectedDocumentIsImage && selectedDocumentForPreview && (
         <LocalizedElement as="button" type="button" disabled={analyzing || generatingBoq || uploading}
           onClick={() => handleAnalyzeDrawing({previewOnly:true})}>
@@ -5898,6 +5944,11 @@ async function handleApsGeometryExtracted(analysis) {
             </LocalizedElement>
           )}
 
+        {!!takeoffResult.raster_measurement_audit?.corrections?.length&&<div role="status">
+          <strong>{language==='fa'?'کنترل محاسبات هندسی؛ مقادیر اصلاح‌شده در خلاصه و BOQ یکسان‌اند':'Geometry arithmetic checked; summary and BOQ use the reconciled values'}</strong>
+          <ul>{takeoffResult.raster_measurement_audit.corrections.map((c,i)=><li key={i}>{c.tag||c.key}: {String(c.reported??'—')} → {c.computed} m²</li>)}</ul>
+          <p>{language==='fa'?'یادداشت زیر متن اولیهٔ تحلیل، پیش از اصلاح محاسبات است.':'The notes below are the original analysis before arithmetic reconciliation.'}</p>
+        </div>}
         {takeoffResult.notes && (
             <LocalizedElement as="p" className="takeoff-result-notes">
               {takeoffResult.notes}
@@ -5978,7 +6029,7 @@ async function handleApsGeometryExtracted(analysis) {
           </LocalizedElement>
 
           <LocalizedElement as="p" style={{ margin: 0, padding: "12px 18px 16px", fontSize: 12, color: "#94a3b8" }}>
-            JPG/PNG/WebP is shown directly while AI schematic 3D runs separately in the background.
+            JPG/PNG/WebP is shown directly. Build image 3D explicitly or enable 3D after analysis above. Saved 3D opens without another AI request.
           </LocalizedElement>
         </LocalizedElement>
       )}

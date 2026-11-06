@@ -52,7 +52,7 @@ test('the actual client local action bypasses all analysis HTTP calls and persis
   const ctx={Date,JSON,Error,console:{error(){}},downloadProjectDocument:async()=>({url:args.fileUrl}),
    readPersistedTakeoff:async()=>saved,recoverSavedPdfReport:async input=>{calls++;assert.equal(input.saved,saved);if(fail)throw Error('Incomplete report');return {floor_area:81};},
    submitDrawingAnalysis:()=>{throw Error('Analysis transport must never run');},commercialFetch:()=>{throw Error('Commercial API must never run');},
-   saveTakeoffLocally:async(_,value)=>{writes++;stored=value;}};
+   hydrateTakeoff:t=>t,saveTakeoffLocally:async(_,value)=>{writes++;stored=value;}};
   vm.createContext(ctx);vm.runInContext(fn+'\nthis.run=analyzeProjectDrawing;',ctx);
   const result=await ctx.run({projectId:'project-1',document,localPdfRecoveryOnly:true});
   assert.equal(calls,1);assert.equal(writes,fail?0:1);

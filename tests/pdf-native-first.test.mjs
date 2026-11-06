@@ -165,7 +165,7 @@ test('actual client rejects a successful HTTP response containing interrupted PD
  ]){
   let writes=0,posts=0;
   const c={Date,JSON,Error,submitDrawingAnalysis,console:{error(){}},downloadProjectDocument:async()=>({url:'https://source.invalid/file.pdf'}),
-   commercialFetch:async(_,r)=>{if(r.method==='GET')return Response.json({success:true});posts++;return Response.json({success:true,result:partial});},saveTakeoffLocally:async()=>writes++};
+   commercialFetch:async(_,r)=>{if(r.method==='GET')return Response.json({success:true});posts++;return Response.json({success:true,result:partial});},hydrateTakeoff:t=>t,saveTakeoffLocally:async()=>writes++};
   vm.createContext(c);vm.runInContext(fn+'\nthis.run=analyzeProjectDrawing;',c);
   const r=await c.run({projectId:'p',document:{id:'d',file_path:'f',file_name:'source.pdf'}});
   assert.equal(posts,1);assert.equal(writes,0);assert.equal(r.takeoff,null);assert.equal(r.error.code,'PDF_ANALYSIS_INCOMPLETE');

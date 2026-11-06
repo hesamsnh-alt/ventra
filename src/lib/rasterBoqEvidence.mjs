@@ -266,7 +266,20 @@ export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName
       imageEvidence:{metricKey:'window_count',basis:'Saved window count; area unavailable.'},
       source:'Image operation evidence',notes:'Count retained as count. Supply measured window dimensions before area-based pricing.'});
   }
-  const budgetItems=applyRasterDoorBudget(unbound.items,takeoff,adapter,prices,priceLevel);
+  const doorItems=applyRasterDoorBudget(unbound.items,takeoff,adapter,prices,priceLevel);
+  // The image path must also honor the same explicit, editable catalog policies
+  // for generic floor/ceiling operations. Specific systems require a selection.
+  const budgetItems=doorItems.map(item=>{
+    const key=item.pdfEvidence?.metricKey;
+    if(!['wood_floor_area','ceiling_paint_area'].includes(key)||doorItems.filter(i=>i.pdfEvidence?.metricKey===key).length!==1)return item;
+    const text=[...(adapter.pdf_analysis.quantity_evidence[key]||[]).map(q=>q.evidence),
+      ...(takeoff.detected_items||[]).filter(i=>new RegExp(key==='wood_floor_area'?'wood|timber|parquet':'ceiling','i').test(i.name||'')).map(i=>i.description)].join(' ');
+    if(key==='wood_floor_area'&&/\b(?:solid|engineered|laminate|parquet|vinyl|lvt|spc|oak|teak|bamboo|herringbone|outdoor)\b/i.test(text))return item;
+    if(key==='ceiling_paint_area'&&/\b(?:epoxy|fire|acoustic|antibacterial|specialist|textured|enamel|exterior|exposed)\b/i.test(text))return item;
+    const next=applyPdfDefaultSpecifications([item],adapter,prices,priceLevel)[0];
+    return next.defaultSpecification?.status==='applied'?{...next,source:'Image measured quantity + editable catalog specification assumption'}:next;
+  });
+  for(let i=warnings.length-1;i>=0;i--)if(budgetItems.some(row=>row.rate>0&&warnings[i].startsWith(`Image quantity ${row.pdfEvidence?.metricKey} retained as an unpriced row;`)))warnings.splice(i,1);
   const assumedDoors=budgetItems.filter(i=>/door_count$/.test(i.pdfEvidence?.metricKey||'')&&i.defaultSpecification?.status==='applied');
   if(assumedDoors.length){
     for(let i=warnings.length-1;i>=0;i--)if(assumedDoors.some(row=>warnings[i].startsWith(`Image quantity ${row.pdfEvidence.metricKey} retained as an unpriced row;`)))warnings.splice(i,1);
