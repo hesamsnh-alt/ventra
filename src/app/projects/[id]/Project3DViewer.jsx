@@ -7915,7 +7915,12 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onExit:()=>{
     renderer.setWalkthroughActive?.(false);setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
   }});
-  const stopMotion=()=>walker.stop();
+  renderer.onVRState=state=>{
+    if(state==='starting'){walker.stop();clearFurniturePreview();furnitureTool=null;renderer.setWalkthroughActive?.(true);setInteriorView(false);render();}
+    if(state==='idle'){renderer.setWalkthroughActive?.(false);setInteriorView(interiorRequested);render();}
+    window.dispatchEvent(new CustomEvent('ventra:vr-state',{detail:{projectId,state}}));
+  };
+  const stopMotion=()=>{walker.stop();renderer.stopVR?.().catch(()=>{});};
   const unbindInputs=bindProjectCameraInputs(renderer.domElement,{
     orbit,pan,getMode:()=>controlMode,home:()=>setNamedView('iso'),
     zoom:factor=>{const offset=camera.position.clone().sub(target),fit=getBoundsInfo().distance;
@@ -7923,7 +7928,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   });
 
   const resize = () => {
-    if (!container.isConnected) return;
+    if (!container.isConnected || renderer.isVRActive?.()) return;
     const nextWidth = Math.max(1, container.clientWidth || width);
     const nextHeight = Math.max(1, container.clientHeight || height);
     camera.aspect = nextWidth / nextHeight;
@@ -7940,7 +7945,10 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     model,
     render,
     supportsPersonalModels:renderer.supportsPersonalModels===true,
-    startWalkthrough:()=>{clearFurniturePreview();walker.start();renderer.setWalkthroughActive?.(true);setInteriorView(false);render();},
+    startVR:settings=>{if(!renderer.startVR)throw Error("VR needs the modern renderer. / VR به نمایشگر جدید نیاز دارد.");render();return renderer.startVR(settings);},
+    stopVR:()=>renderer.stopVR?.(),
+    supportsVR:renderer.supportsVR===true,
+    startWalkthrough:()=>{if(renderer.isVRActive?.())return;clearFurniturePreview();walker.start();renderer.setWalkthroughActive?.(true);setInteriorView(false);render();},
     stopWalkthrough:()=>walker.stop(),
     setWalkAxis:(forward,right)=>walker.setAxis(forward,right),
     turnWalk:(yaw,pitch)=>walker.turn(yaw,pitch),
@@ -7961,7 +7969,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     pickWall:e=>rayFor(e)?meshHits().find(hit=>hit.object.visible&&hit.object.userData?.wallId)?.object.userData.wallId:null,
     setFurnitureTool:tool=>{unbindFurniture.cancel();furnitureTool=tool;},
     clearFurniturePreview,
-    setInteriorView: enabled => {interiorRequested=enabled;setInteriorView(walker.isActive()?false:enabled);render();},
+    setInteriorView: enabled => {interiorRequested=enabled;setInteriorView(walker.isActive()||renderer.isVRActive?.()?false:enabled);render();},
     fitView: () => {stopMotion();setNamedView("iso");},
     homeView: () => {stopMotion();setNamedView("iso");},
     setNamedView: view => {stopMotion();setNamedView(view);},

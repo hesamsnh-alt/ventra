@@ -46,3 +46,5 @@
  .panel .touchHint{display:block;font-size:12px;line-height:1.7;margin:8px 0 0;}
  .overlay .touchHint{grid-column:1/-1;}
 }
+
+.vrSettings{border:1px solid #65748a;border-radius:8px;padding:10px;margin-top:10px}.vrSettings summary{cursor:pointer;font-weight:700}.vrSettings label{display:flex;align-items:center;gap:8px;margin:10px 0;flex-wrap:wrap}.vrSettings input[type=range]{min-width:100px;flex:1}.vrSettings select{padding:8px;background:#253247;color:#fff}.boundaryMap{display:block;width:100%;height:auto;aspect-ratio:5/3;background:#10151e;border:1px solid #65748a;cursor:crosshair;touch-action:manipulation}.vrActions{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.vrActions button{font-size:12px}.overlay .vrSettings{grid-column:1/-1}.overlay .vrSettings small,.overlay .vrSettings p{display:block}

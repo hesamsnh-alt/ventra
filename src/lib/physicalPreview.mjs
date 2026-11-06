@@ -1,3 +1,4 @@
+import {createVRWalkthrough} from './vrWalkthrough.mjs';
 import {createReferenceLighting,interiorShadowCaster,REFERENCE_LIGHTING} from './referenceLighting.mjs';
 import {surfacePhysicalSettings,createSurfaceRelief} from './interiorRenderQuality.mjs';
 import {syncTextureSource,textureSourceStamp,textureSourceResized,bridgeTextureSource} from './textureBridge.mjs';
@@ -72,9 +73,9 @@ export function createPhysicalPreview(options){
   output=new OutputPass();composer.addPass(new RenderPass(scene,camera));composer.addPass(occlusion);composer.addPass(output);
  }
  const nativeSize=renderer.setSize.bind(renderer);
- renderer.setSize=(w,h,style)=>{nativeSize(w,h,style);composer?.setSize(w,h);};
+ renderer.setSize=(w,h,style)=>{nativeSize(w,h,style);if(!renderer.xr.enabled)composer?.setSize(w,h);};
  const nativeRatio=renderer.setPixelRatio.bind(renderer);
- renderer.setPixelRatio=ratio=>{nativeRatio(ratio);composer?.setPixelRatio(Math.min(ratio,1.5));};
+ renderer.setPixelRatio=ratio=>{nativeRatio(ratio);if(!renderer.xr.enabled)composer?.setPixelRatio(Math.min(ratio,1.5));};
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
  function texture(old,color){
   if(!old?.image)return null;
@@ -115,6 +116,7 @@ export function createPhysicalPreview(options){
  renderer.readyResources=()=>Promise.all([detailed.ready(),surfaces.ready(),textiles.ready()]);
  renderer.render=(oldScene,oldCamera)=>{
   if(oldCamera.isCamera)return nativeRender(oldScene,oldCamera);
+  if(vr.isActive()){renderer.shadowMap.needsUpdate=true;return;}
   lastSource=oldScene;lastCamera=oldCamera;
   oldScene.updateMatrixWorld(true);const active=new Set(),activeGeometry=new Set();activeMaterials=new Set();activeTextures=new Set();relief.begin();
   oldScene.traverse(old=>{
@@ -135,7 +137,11 @@ export function createPhysicalPreview(options){
   camera.position.copy(oldCamera.position);camera.quaternion.copy(oldCamera.quaternion);camera.up.copy(oldCamera.up);
   camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(composer)composer.render();else nativeRender(scene,camera);
  };
+ let shadowBeforeVR=null;
+ const vr=createVRWalkthrough({renderer,scene,sceneData:options.sceneData,draw:nativeRender,onState:state=>{if(state==='starting'){shadowBeforeVR=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;}if(state==='idle'&&shadowBeforeVR!==null){renderer.shadowMap.autoUpdate=shadowBeforeVR;shadowBeforeVR=null;}renderer.onVRState?.(state);if(state==='idle'&&lastSource&&lastCamera)renderer.render(lastSource,lastCamera);}});
+ renderer.startVR=settings=>vr.start(settings);renderer.stopVR=()=>vr.stop();renderer.isVRActive=()=>vr.isActive();
+ renderer.supportsVR=true;
  const nativeDispose=renderer.dispose.bind(renderer);
- renderer.dispose=()=>{lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();textiles.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
+ renderer.dispose=()=>{vr.dispose();lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();textiles.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
  return renderer;
 }

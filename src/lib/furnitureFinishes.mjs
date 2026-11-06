@@ -2,6 +2,7 @@ export const FURNITURE_FINISHES=Object.freeze([
  ['fabric-linen','Linen','کتان','fabric','#c7baa3',.88,0],['fabric-boucle','Bouclé','بوکله','fabric','#e0d4bd',.96,0],['fabric-velvet','Velvet','مخمل','fabric','#60756b',.8,0],['fabric-leather','Leather','چرم','fabric','#8c6550',.5,0],
  ['wood-oak','Oak','چوب بلوط','wood','#b58d5f',.58,0],['wood-walnut','Walnut','چوب گردو','wood','#78543d',.55,0],['wood-ebony','Dark timber','چوب تیره','wood','#433a33',.6,0],
  ['metal-brushed','Brushed metal','فلز برس‌خورده','metal','#9ea4a8',.38,.85],['metal-gold','Gold metal','فلز طلایی','metal','#c5a05a',.3,.82],['metal-chrome','Chrome','کروم','metal','#d3d9df',.18,.95],
+ ['wood-teak','Teak','چوب ساج','wood','#b27543',.54,0],['wood-herringbone','Herringbone wood','چوب جناغی','wood','#ac8159',.58,0],['metal-copper','Copper','مس','metal','#bb7960',.35,.85],['stone-nero','Black marble','مرمر مشکی','stone','#393b40',.28,0],['fabric-herringbone','Herringbone fabric','پارچه جناغی','fabric','#969084',.9,0],['fabric-stripe','Woven stripes','پارچه راه‌راه','fabric','#8eaaa6',.88,0],
  ['stone-marble','Marble','سنگ مرمر','stone','#dedbd2',.32,0],['stone-terrazzo','Terrazzo','ترازو','stone','#c9c0ad',.68,0],
 ].map(([id,en,fa,kind,color,roughness,metalness])=>({id,en,fa,ar:en,kind,color,roughness,metalness})));
 export const furnitureHasUpholstery=a=>['sofa','armchair','bed','chair','curtain'].includes(a?.type);
@@ -21,10 +22,14 @@ export function createFurnitureFinishMaterial(THREE,selection){
   const u=x/size,v=y/size,noise=((x*73+y*139+x*y*13)%113)/113-.5;
   let value=240+noise*9,height=128+noise*18;
   if(item.kind==='wood'){const grain=Math.sin(u*320+Math.sin(v*14)*2+Math.sin(v*39)*.6);value=222+grain*19+noise*9;height=128+grain*20;}
+  if(item.id==='wood-herringbone'){const row=Math.floor(v*8),grain=Math.sin((u+(row%2?v:-v))*210);value=218+grain*22+noise*8;height=128+grain*16;}
   if(item.kind==='metal'){value=238+noise*7+(item.id==='metal-brushed'?Math.sin(y*2.6)*9:0);height=128+(item.id==='metal-brushed'?Math.sin(y*2.6)*8:noise*3);}
   if(item.id==='fabric-boucle'){height=128+Math.sin(u*140)*Math.cos(v*140)*45;value=232+height*.08+noise*8;}
   if(item.id==='fabric-linen'){height=128+(x%4<2?1:-1)*25+(y%4<2?1:-1)*18;value=237+height*.05+noise*7;}
   if(item.id==='fabric-leather'){height=128+Math.sin(u*90+Math.cos(v*37))*Math.sin(v*83)*25;value=235+height*.04+noise*8;}
+  if(item.id==='fabric-herringbone'){const row=Math.floor(v*12),weave=Math.sin((u+(row%2?v:-v))*180);value=224+weave*22;height=128+weave*32;}
+  if(item.id==='fabric-stripe'){const stripe=Math.floor(u*10)%3;value=(stripe===0?192:244)+noise*8;height=128+(x%4<2?16:-16)+(y%4<2?14:-14);}
+  if(item.id==='stone-nero'){const vein=Math.pow(Math.abs(Math.sin(u*15+Math.sin(v*12)*2)),25);value=130+vein*125;height=128;}
   if(item.id==='stone-marble'){const vein=Math.pow(Math.abs(Math.sin(u*17+Math.sin(v*11)*2)),18);value=248-vein*65+noise*4;height=128;}
   if(item.id==='stone-terrazzo'){const chip=Math.sin(x*13+y*29)> .82;value=chip?170+noise*65:241+noise*8;height=128+noise*4;}
   const i=(y*size+x)*4;for(let c=0;c<3;c++){pixels[i+c]=Math.max(0,Math.min(255,value));relief[i+c]=height;}pixels[i+3]=relief[i+3]=255;
