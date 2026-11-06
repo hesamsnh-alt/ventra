@@ -16,7 +16,7 @@ import {persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import { commercialFetch } from "@/lib/commercialFetch";
 import { getDrawingEvidence } from "@/lib/drawingEvidence.mjs";
 import { saveReadyBoq } from "@/lib/boqDraftPersistence.mjs";
-import {assertTakeoffSource,savedBoqMatchesTakeoff} from '@/lib/takeoffSource.mjs';
+import {assertTakeoffSource,savedBoqMatchesTakeoff,bindBoqSource} from '@/lib/takeoffSource.mjs';
 import {selectedDrawingSync} from '@/lib/schematicStorage.mjs';
 import CommercialSync from "./CommercialSync";
 
@@ -471,7 +471,7 @@ export default function ProjectBOQ({
           if (!savedBoqMatchesTakeoff(parsedBoq, latestTakeoff)) {
             throw new Error('The saved BOQ belongs to an earlier drawing or analysis. Generate BOQ to use the latest quantity takeoff. The previous draft has been preserved.');
           }
-          setBoqSource(parsedBoq.boqSource||null);
+          setBoqSource(bindBoqSource(parsedBoq,parsedBoq.takeoff,projectId).boqSource||null);
           setScopeState(parsedBoq.boqScope||null);
           const savedRates=parsedBoq?.projectRateImport;
           setProjectRateImport(savedRates?.projectId===projectId&&savedRates?.documentId&&savedRates.documentId===latestTakeoff?.document_id&&savedRates.analyzedAt===latestTakeoff?.analyzed_at&&typeof savedRates?.csvText==='string'&&savedRates.csvText.length<=4*1024*1024&&Array.isArray(savedRates.beforeItems)?savedRates:null);

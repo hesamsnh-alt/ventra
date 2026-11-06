@@ -1,0 +1,352 @@
+{
+  "takeoff": {
+    "doors": 3,
+    "notes": "Architectural floor plan with printed clear dimensions. Measurement basis: clear internal areas; wall lengths on centerline using 0.15 m wall thickness printed. Floor/ceiling area is the sum of the three tagged rooms. Wall_area reported as gross INTERNAL wall face area (no opening deductions): perimeter of each room x 3.00 m height, summed. Separate net internal wall paint area provided in page_evidence.quantities with deductions for D0/D1/D2 and W1/W2/W3 as scheduled. Window and door areas taken from the printed opening schedule; counts verified on plan. No finishes specified; room finish marked unknown. No stair/void/terrace on this page. Review needed to confirm opening placements (assumed W1 in Living, W2 Bedroom, W3 Kitchen) and that centerline convention matches project QS rules. Preliminary AI takeoff; QS to verify.",
+    "rooms": 3,
+    "windows": 3,
+    "door_area": 5.67,
+    "wall_area": 141.3,
+    "confidence": 90,
+    "floor_area": 46.5225,
+    "wall_length": 38.75,
+    "window_area": 5.04,
+    "ceiling_area": 46.5225,
+    "area_geometry": {
+      "basis": "clear_internal",
+      "spaces": [
+        {
+          "tag": "LIVING ROOM",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 4,
+              "y": 0
+            },
+            {
+              "x": 4,
+              "y": 6
+            },
+            {
+              "x": 0,
+              "y": 6
+            }
+          ],
+          "evidence": "Printed 4.00 x 6.00 m",
+          "reported_area": null
+        },
+        {
+          "tag": "KITCHEN",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 3.5
+            },
+            {
+              "x": 8,
+              "y": 3.5
+            },
+            {
+              "x": 8,
+              "y": 6
+            },
+            {
+              "x": 4.15,
+              "y": 6
+            }
+          ],
+          "evidence": "Printed 3.85 x 2.50 m; located to right of 0.15 m partition",
+          "reported_area": null
+        },
+        {
+          "tag": "BEDROOM",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 3.35
+            },
+            {
+              "x": 4.15,
+              "y": 3.35
+            }
+          ],
+          "evidence": "Printed 3.85 x 3.35 m; below kitchen with 0.15 m wall between",
+          "reported_area": null
+        },
+        {
+          "tag": "INT WALL - vertical",
+          "kind": "wall",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4,
+              "y": 0
+            },
+            {
+              "x": 4.15,
+              "y": 0
+            },
+            {
+              "x": 4.15,
+              "y": 6
+            },
+            {
+              "x": 4,
+              "y": 6
+            }
+          ],
+          "evidence": "Internal wall thickness 0.15 m printed",
+          "reported_area": null
+        },
+        {
+          "tag": "INT WALL - horizontal (between Kitchen/Bedroom)",
+          "kind": "wall",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 3.35
+            },
+            {
+              "x": 8,
+              "y": 3.35
+            },
+            {
+              "x": 8,
+              "y": 3.5
+            },
+            {
+              "x": 4.15,
+              "y": 3.5
+            }
+          ],
+          "evidence": "Internal wall thickness 0.15 m printed",
+          "reported_area": null
+        }
+      ],
+      "coverage": "complete",
+      "envelope": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 8,
+          "y": 0
+        },
+        {
+          "x": 8,
+          "y": 6
+        },
+        {
+          "x": 0,
+          "y": 6
+        }
+      ],
+      "envelope_evidence": "8.00 m CLEAR INSIDE (horizontal) and 6.00 m (vertical) printed on plan"
+    },
+    "page_evidence": {
+      "kind": "floor_plan",
+      "revision": null,
+      "scope_id": "Ground Floor",
+      "drawing_id": null,
+      "quantities": [
+        {
+          "key": "rooms",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Tagged rooms: LIVING ROOM, KITCHEN, BEDROOM",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "door_count",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Doors D0, D1, D2 shown",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "window_count",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Windows W1, W2, W3 shown",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "door_area",
+          "unit": "m2",
+          "value": 5.67,
+          "evidence": "3 x (0.90 x 2.10) = 5.67 m2",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "window_area",
+          "unit": "m2",
+          "value": 5.04,
+          "evidence": "W1 1.80x1.20 + W2 1.20x1.20 + W3 1.20x1.20 = 2.16 + 1.44 + 1.44",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "wall_length",
+          "unit": "m",
+          "value": 38.75,
+          "evidence": "External CL 28.60 + internal CL (6.15 + 4.00) = 38.75 m",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "internal_wall_length",
+          "unit": "m",
+          "value": 10.15,
+          "evidence": "Vertical 6.15 m + horizontal 4.00 m (centerline)",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "external_wall_length",
+          "unit": "m",
+          "value": 28.6,
+          "evidence": "Perimeter at wall centerline: 2*(8.00 + 6.00 + 0.30) = 28.60 m",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "floor_area",
+          "unit": "m2",
+          "value": 46.5225,
+          "evidence": "Living 4.00x6.00=24.00; Kitchen 3.85x2.50=9.625; Bedroom 3.85x3.35=12.8975; Sum=46.5225",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "ceiling_area",
+          "unit": "m2",
+          "value": 46.5225,
+          "evidence": "Same as enclosed floor area; clear height 3.00 m noted",
+          "scope_id": "Ground Floor"
+        },
+        {
+          "key": "paint_area",
+          "unit": "m2",
+          "value": 126.81,
+          "evidence": "Gross perimeters x 3.0 m less openings. Gross: Living 2*(4+6)*3=60.0; Kitchen 2*(3.85+2.50)*3=38.10; Bedroom 2*(3.85+3.35)*3=43.20; Sum gross=141.30. Deductions: doors 3x1.89=5.67; windows 2.16+1.44+1.44=5.04; Internal doors deducted twice (both faces) already by room method; Total deduction=14.49; Net=141.30-14.49=126.81",
+          "scope_id": "Ground Floor"
+        }
+      ]
+    },
+    "detected_items": [
+      {
+        "name": "LIVING ROOM",
+        "unit": "m2",
+        "quantity": 24,
+        "description": "UNKNOWN finish; area from printed 4.00 x 6.00 m = 24.00 m2"
+      },
+      {
+        "name": "KITCHEN",
+        "unit": "m2",
+        "quantity": 9.625,
+        "description": "UNKNOWN finish; area from printed 3.85 x 2.50 m = 9.625 m2"
+      },
+      {
+        "name": "BEDROOM",
+        "unit": "m2",
+        "quantity": 12.8975,
+        "description": "UNKNOWN finish; area from printed 3.85 x 3.35 m = 12.8975 m2"
+      },
+      {
+        "name": "Door D0",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "Entrance door 0.90 x 2.10 m (from schedule)"
+      },
+      {
+        "name": "Door D1",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "Internal door 0.90 x 2.10 m (from schedule)"
+      },
+      {
+        "name": "Door D2",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "Internal door 0.90 x 2.10 m (from schedule)"
+      },
+      {
+        "name": "Window W1",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "1.80 x 1.20 m (from schedule)"
+      },
+      {
+        "name": "Window W2",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "1.20 x 1.20 m (from schedule)"
+      },
+      {
+        "name": "Window W3",
+        "unit": "nr",
+        "quantity": 1,
+        "description": "1.20 x 1.20 m (from schedule)"
+      },
+      {
+        "name": "External walls 0.15 m thick (CL length)",
+        "unit": "m",
+        "quantity": 28.6,
+        "description": "Perimeter at centerline = 2*(8.00+6.00+0.30) = 28.60 m"
+      },
+      {
+        "name": "Internal walls 0.15 m thick (CL length)",
+        "unit": "m",
+        "quantity": 10.15,
+        "description": "Vertical 6.15 m (6.00 + 0.075 + 0.075) + Horizontal 4.00 m (3.85 + 0.075 + 0.075)"
+      }
+    ],
+    "analysis_source": {
+      "job_id": "fe9331d6-e37b-51a5-f3b3-32d90a6c7e56",
+      "file_name": "Ventra-key-check-plan.png",
+      "transport": "background-v151",
+      "document_id": "828d8477-0bf9-481a-b517-b3dbf614e779"
+    },
+    "project_id": "qa-ground-floor",
+    "document_id": "828d8477-0bf9-481a-b517-b3dbf614e779",
+    "document_name": "Ventra-key-check-plan.png",
+    "analyzed_at": "2026-11-06T07:35:30Z"
+  },
+  "prices": [
+    {
+      "item_code": "DOR-001",
+      "description": "Single leaf timber door complete with frame and ironmongery",
+      "unit": "nos",
+      "standard_rate": "1260.00",
+      "economy_rate": "1050.00",
+      "premium_rate": "1550.00",
+      "is_active": true,
+      "currency": "AED",
+      "source_reference": null
+    },
+    {
+      "item_code": "VNT-DEF-DOOR-PACKAGE",
+      "description": "Standard timber door sets with frame and ironmongery",
+      "unit": "nr",
+      "standard_rate": "1260.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "is_active": true,
+      "currency": "AED",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"door_count\",\"specification\":{\"door_system\":\"standard_timber_set\"},\"label\":\"Standard timber door sets with frame and ironmongery\",\"rate_basis\":\"Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Standard timber construction assumed for unspecified non-garage doors. Special entrance/fire/external performance requires review.\",\"opening_components\":{\"door\":{\"item_code\":\"DOR-001\",\"label\":\"Standard timber door sets with frame and ironmongery\",\"door_system\":\"standard_timber_set\",\"rate_basis\":\"Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Material/performance is assumed; source table supplies count and dimensions.\"},\"garage_door\":{\"item_code\":\"VNT-DEF-GARAGE-COMPONENT\",\"label\":\"Motorized insulated sectional garage door package\",\"door_system\":\"motorized_sectional\",\"reference_area_m2\":7.625,\"rate_basis\":\"Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated\",\"conditions\":\"For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded.\"}}}"
+    }
+  ]
+}

@@ -15,6 +15,24 @@ export function assertTakeoffReady(takeoff) {
   if(issue)throw Object.assign(new Error(issue),{code:'CAD_EXTRACTION_INCOMPLETE'});
 }
 
+// Bind the generated document to its measured source at every generation entry
+// point. Never relabel an existing BOQ with the currently selected drawing.
+export function bindBoqSource(boq, takeoff = boq?.takeoff, projectId = boq?.projectId) {
+  if (!takeoff) return boq;
+  assertTakeoffSource(takeoff, null, projectId);
+  const previous = boq?.boqSource;
+  if (previous?.documentId && takeoff.document_id && previous.documentId !== takeoff.document_id) {
+    throw new Error('BOQ source belongs to another drawing. Generate a new BOQ from the selected analysis.');
+  }
+  if (boq?.takeoff?.document_id && takeoff !== boq.takeoff && !savedBoqMatchesTakeoff(boq, takeoff)) {
+    throw new Error('BOQ source belongs to an earlier drawing or analysis.');
+  }
+  if (!takeoff.document_id) return boq;
+  return {...boq, takeoff, boqSource:{...previous, documentId:takeoff.document_id,
+    name:takeoff.document_name || previous?.name || '', analyzedAt:takeoff.analyzed_at,
+    recordedBy:previous?.recordedBy || 157}};
+}
+
 export function assertTakeoffSource(takeoff, documentId, projectId) {
   if (!takeoff) return;
   const owner = takeoff.project_id || takeoff.projectId;

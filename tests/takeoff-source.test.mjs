@@ -1,12 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {assertTakeoffSource,savedBoqMatchesTakeoff,assertTakeoffReady,takeoffBoqIssue} from '../src/lib/takeoffSource.mjs';
+import {assertTakeoffSource,savedBoqMatchesTakeoff,assertTakeoffReady,takeoffBoqIssue,bindBoqSource} from '../src/lib/takeoffSource.mjs';
 import {saveReadyBoq} from '../src/lib/boqDraftPersistence.mjs';
 const image={project_id:'p',document_id:'png',document_name:'plan.png',analyzed_at:'2026-11-05T13:00:00Z'};
 const translatedCad={project_id:'p',document_id:'dwg',document_name:'sample.dwg',source:'autodesk-aps',aps_status:'ready',
  extraction_status:'translation-complete',floor_area:null,wall_area:null,rooms:null,
  notes:'Autodesk translation completed. Geometry quantities have not been extracted yet.'};
+test('Drawings-generated BOQ binds the complete source before storage and navigation',()=>{
+ const b={projectId:'p',items:[{quantity:3,rate:1260}]},bound=bindBoqSource(b,image,'p');
+ assert.equal(bound.boqSource.documentId,'png');assert.equal(bound.boqSource.name,'plan.png');
+ assert.equal(bound.boqSource.analyzedAt,image.analyzed_at);assert.deepEqual(bound.takeoff,image);
+ assert.equal(b.boqSource,undefined);
+ const values=new Map(),storage={setItem:(k,v)=>values.set(k,v)};
+ saveReadyBoq(storage,'p',{...b,takeoff:image},{loadedProject:'p',loading:false,generating:false});
+ const saved=JSON.parse(values.get('ventra:project-boq:p'));
+ assert.deepEqual(saved.boqSource,bound.boqSource);assert.equal(savedBoqMatchesTakeoff(saved,image),true);
+});
+test('source binding never relabels another drawing, analysis or project as the current source',()=>{
+ assert.throws(()=>bindBoqSource({boqSource:{documentId:'dwg'}},image,'p'),/another drawing/);
+ assert.throws(()=>bindBoqSource({takeoff:{...image,document_id:'dwg'}},image,'p'),/earlier drawing/);
+ assert.throws(()=>bindBoqSource({takeoff:{...image,analyzed_at:'2026-10-01'}},image,'p'),/earlier drawing/);
+ assert.throws(()=>bindBoqSource({},image,'other'),/another project/);
+ const manual={items:[]};assert.equal(bindBoqSource(manual,{},'p'),manual);
+});
+test('server-normalized output can bind its original source without losing priced rows',()=>{
+ const b={takeoff:{floor_area:46.52},items:[{quantity:3,rate:1260}]};
+ const bound=bindBoqSource(b,image,'p');assert.equal(bound.items,b.items);assert.equal(bound.boqSource.name,'plan.png');
+});
 test('successful Autodesk translation without extraction cannot generate quantities or match a saved BOQ',()=>{
  assert.throws(()=>assertTakeoffReady(translatedCad),e=>e.code==='CAD_EXTRACTION_INCOMPLETE');
  assert.throws(()=>assertTakeoffSource(translatedCad,'dwg','p'),/quantity extraction is incomplete/);

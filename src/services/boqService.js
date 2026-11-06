@@ -1,6 +1,6 @@
 import {runPreviewAnalysis,acknowledgePreviewJob,boqAnalysisKey} from '@/lib/previewJobClient.mjs';
 import {commercialFetch} from '@/lib/commercialFetch';
-import {assertTakeoffReady} from '@/lib/takeoffSource.mjs';
+import {assertTakeoffReady,bindBoqSource} from '@/lib/takeoffSource.mjs';
 export async function generateBoq({
   projectId,
   takeoff,
@@ -159,5 +159,5 @@ export async function generateBoq({
   }
 
   acknowledgePreviewJob(jobKey,storage);
-  return data.boq;
+  return bindBoqSource(data.boq,takeoff,projectId);
 }

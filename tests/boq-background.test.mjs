@@ -1,4 +1,4 @@
-import {assertTakeoffReady} from '../src/lib/takeoffSource.mjs';
+import {assertTakeoffReady,bindBoqSource} from '../src/lib/takeoffSource.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -31,7 +31,7 @@ test('actual BOQ client polls queued work and preserves returned financial amoun
  const client=fs.readFileSync(new URL('../src/services/boqService.js',import.meta.url),'utf8');
  const jobId='12345678-1234-1234-1234-123456789012',map=new Map(),calls=[];
  const boq={items:[{id:'a',quantity:3,rate:40,amount:120}],subtotal:120,total:126};
- const context=vm.createContext({assertTakeoffReady,crypto,boqAnalysisKey,acknowledgePreviewJob,runPreviewAnalysis:(start,options)=>runPreviewAnalysis(start,{...options,delay:async()=>{}}),window:{sessionStorage:{getItem:k=>map.get(k),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)}},console:{log(){},error(){}},commercialFetch:async(url,options)=>{calls.push({url,options});return calls.length===1?Response.json({jobId},{status:202}):Response.json({success:true,boq});}});
+ const context=vm.createContext({assertTakeoffReady,bindBoqSource,crypto,boqAnalysisKey,acknowledgePreviewJob,runPreviewAnalysis:(start,options)=>runPreviewAnalysis(start,{...options,delay:async()=>{}}),window:{sessionStorage:{getItem:k=>map.get(k),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)}},console:{log(){},error(){}},commercialFetch:async(url,options)=>{calls.push({url,options});return calls.length===1?Response.json({jobId},{status:202}):Response.json({success:true,boq});}});
  vm.runInContext(client.replace(/^import .*;\n/gm,'').replace('export async function generateBoq','async function generateBoq')+'\nthis.generate=generateBoq;',context);
  const result=await context.generate({projectId:'p',takeoff:{wall_area:10}});
  assert.equal(JSON.stringify(result),JSON.stringify(boq));assert.equal(calls.length,2);assert.equal(calls[0].url,'/api/ai/generate-boq');assert.match(calls[1].url,/design-3d-preview\?jobId=/);assert.equal(map.size,0);

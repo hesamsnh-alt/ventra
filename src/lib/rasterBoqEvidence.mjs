@@ -3,6 +3,8 @@ import {planPdfCatalogRules,retainUnboundPdfQuantities,resolvePdfCatalogRate} fr
 import {requireBoqReview} from './boqEvidence.mjs';
 import {boqLineAmount,calculateBoqBudget} from './boqBudget.mjs';
 import {currencySum} from './commercialDocument.mjs';
+import {applyPdfDefaultSpecifications} from './pdfDefaultSpecifications.mjs';
+import {bindBoqSource} from './takeoffSource.mjs';
 
 // Raster extraction already supplies typed operation evidence. Do not feed it
 // through CAD fallback rules, which turn counts into area and price every
@@ -136,6 +138,28 @@ export function rasterOperationEvidence(takeoff) {
   return {adapter:{scheduled_quantities:quantities,pdf_analysis:{quantity_evidence:evidence}},warnings,measurementIssues};
 }
 
+function applyRasterDoorBudget(items,takeoff,adapter,prices,priceLevel) {
+  const page=takeoff.page_evidence||takeoff.raw_result?.page_evidence;
+  if(page?.kind!=='floor_plan')return items;
+  const claims=adapter.pdf_analysis.quantity_evidence.door_count||[];
+  const detail=[takeoff.notes,...claims.map(c=>c.evidence),
+    ...(page.quantities||[]).filter(q=>/door/.test(q.key)).map(q=>q.evidence),
+    JSON.stringify(takeoff.object_details?.doors||[])].join(' ');
+  // An unspecified ordinary door may use the existing editable budget policy.
+  // Special/material-specific doors must not inherit its timber assumption.
+  if(/\b(?:garage|roller|shutter|overhead|steel|stainless|metal|alumini?um|glass|glazed|fib(?:re|er)glass|frp|grp|wpc|composite|upvc|pvc|fire|fireproof|fd\d+|security|acoustic|external|weatherproof|double[- ]leaf|double[- ]door|sliding|folding|revolving)\b/i.test(detail))return items;
+  const count=adapter.scheduled_quantities.door_count,area=adapter.scheduled_quantities.door_area;
+  if(area>0&&count>0&&area/count>2.5)return items;
+  const doorRows=items.filter(i=>i.pdfEvidence?.metricKey==='door_count');
+  if(!doorRows.length)return items;
+  const priced=applyPdfDefaultSpecifications(doorRows,adapter,prices,priceLevel);
+  const replacements=new Map(doorRows.map((row,i)=>[row,priced[i]]));
+  return items.map(row=>{
+    const next=replacements.get(row)||row;
+    return next.defaultSpecification?.status==='applied'?{...next,source:'Image measured quantity + editable catalog specification assumption'}:next;
+  });
+}
+
 export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName,priceLevel='standard',vatPercentage=5}) {
   const {adapter,warnings,measurementIssues}=rasterOperationEvidence(takeoff);
   const plan=planPdfCatalogRules(adapter,rules,prices);
@@ -166,19 +190,29 @@ export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName
       imageEvidence:{metricKey:'window_count',basis:'Saved window count; area unavailable.'},
       source:'Image operation evidence',notes:'Count retained as count. Supply measured window dimensions before area-based pricing.'});
   }
-  const finalItems=unbound.items.map((item,i)=>requireBoqReview({...item,
+  const budgetItems=applyRasterDoorBudget(unbound.items,takeoff,adapter,prices,priceLevel);
+  if(budgetItems.some(i=>i.pdfEvidence?.metricKey==='door_count'&&i.defaultSpecification?.status==='applied')){
+    for(let i=warnings.length-1;i>=0;i--)if(warnings[i].startsWith('Image quantity door_count retained as an unpriced row;'))warnings.splice(i,1);
+    warnings.push('Door budget uses the existing editable catalog specification assumption. Confirm material, opening size and required performance before tender approval.');
+  }
+  const finalItems=budgetItems.map((item,i)=>{
+    const reviewed=requireBoqReview({...item,
     itemNumber:String(i+1).padStart(2,'0'),itemCode:item.itemCode?.replace(/^PDF-/,'IMG-'),
     source:String(item.source||'').replaceAll('PDF','Image'),notes:String(item.notes||'').replaceAll('PDF','Image'),
     quantityBasis:'image_operation_evidence',quantitySource:'image_operation_evidence',
     imageEvidence:item.imageEvidence||item.pdfEvidence,
-  }));
+    amount:boqLineAmount(item),
+    });
+    return item.defaultSpecification?.status==='applied'?{...reviewed,specificationVerification:'assumed'}:reviewed;
+  });
   if(!finalItems.length)throw Error('No supported measurable operations were found in this image. Review dimensions and operation evidence; no allowance was invented.');
   const subtotal=currencySum(finalItems.filter(i=>!i.rateMissing).map(boqLineAmount));
   const budget=calculateBoqBudget({provisional:subtotal},{vatPercentage});
-  return {projectId,projectName,currency:'AED',priceLevel,takeoff,items:finalItems,
+  return bindBoqSource({projectId,projectName,currency:'AED',priceLevel,takeoff,items:finalItems,
     calculationVersion:'image-operation-evidence-v1',measurementIssues,
     warnings:[...warnings,'Image quantities and catalog specifications require review. Unsupported work is not priced.'],
-    assumptions:['Only saved image operation evidence is used. No CAD allowances or additional model requests.'],
+    assumptions:['Only saved image operation evidence is used. No CAD allowances or additional model requests.',
+      ...finalItems.filter(i=>i.defaultSpecification?.status==='applied').map(i=>`Editable budget assumption: ${i.defaultSpecification.policy.label}; ${i.defaultSpecification.rateBasis}. ${i.defaultSpecification.policy.conditions||''}`)],
     summary:{totalItems:finalItems.length,verifiedSubtotal:0,provisionalSubtotal:subtotal,subtotal,
-      vatPercentage,vatAmount:budget.vat,grandTotal:budget.total,commercialSafe:false,scopeCoverage:'unconfirmed'}};
+      vatPercentage,vatAmount:budget.vat,grandTotal:budget.total,commercialSafe:false,scopeCoverage:'unconfirmed'}},takeoff,projectId);
 }
