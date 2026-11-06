@@ -82,6 +82,19 @@ export const FURNITURE_CATALOG=Object.freeze([
 ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs,...(SOFA_SET_LAYOUTS[id]?{layout:SOFA_SET_LAYOUTS[id]}:{})})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};
+export function furniturePlacementScale(value=1){
+ if(!Number.isFinite(value)||value<.5||value>1.25)fail('Placement size must be between 50% and 125%. / اندازه باید بین ۵۰ تا ۱۲۵ درصد باشد.');return value;
+}
+export function furnitureSetBounds(model,scale=1){
+ furniturePlacementScale(scale);if(!model?.layout)return null;
+ const boxes=model.layout.map(p=>{
+  const child=FURNITURE_CATALOG.find(m=>m.id===p.catalogId);if(!child)fail('Unknown set component.');
+  const a=p.rotation*Math.PI/180,rx=(Math.abs(Math.cos(a))*child.width+Math.abs(Math.sin(a))*child.depth)/2,ry=(Math.abs(Math.sin(a))*child.width+Math.abs(Math.cos(a))*child.depth)/2;
+  return {minX:p.x-rx,maxX:p.x+rx,minY:p.y-ry,maxY:p.y+ry,height:child.height};
+ });
+ const minX=Math.min(...boxes.map(b=>b.minX))*scale,maxX=Math.max(...boxes.map(b=>b.maxX))*scale,minY=Math.min(...boxes.map(b=>b.minY))*scale,maxY=Math.max(...boxes.map(b=>b.maxY))*scale;
+ return {width:maxX-minX,depth:maxY-minY,height:Math.max(...boxes.map(b=>b.height))*scale,centerX:(minX+maxX)/2,centerY:(minY+maxY)/2};
+}
 export function resolveFurnitureCatalog(edit){
  const builtIn=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);if(builtIn)return builtIn;
  if(edit.personalModel){const m=personalFurnitureModel(edit.personalModel);if(m.id===edit.catalogId)return m;}
@@ -149,6 +162,7 @@ export function furnitureDraft(scene,edit){
   :roomAtPoint(scene,p);if(!room)fail('Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
  const model=edit.kind==='add'||edit.kind==='replace'?catalog:null;
  const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:room.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
+ if(edit.kind==='add'&&model){const scale=furniturePlacementScale(edit.scale??1);for(const k of ['width','depth','height'])draft[k]*=scale;}
  if(draft.type==='range_hood')draft.zMeters=1.95;
  else if(model)delete draft.zMeters;
  if(edit.color)draft.color=edit.color;
@@ -167,7 +181,11 @@ export function previewFurnitureEdit(scene,edit){
  let candidate;
  try{
   candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};
-  if(edit.kind==='add'&&resolveFurnitureCatalog(edit)?.layout){applyFurnitureEdit(scene,edit);return {candidate,valid:true};}
+  if(edit.kind==='add'&&resolveFurnitureCatalog(edit)?.layout){
+   const b=furnitureSetBounds(resolveFurnitureCatalog(edit),edit.scale??1),angle=candidate.rotation*Math.PI/180;
+   candidate={...candidate,width:b.width,depth:b.depth,height:b.height,xMeters:candidate.xMeters+b.centerX*Math.cos(angle)-b.centerY*Math.sin(angle),yMeters:candidate.yMeters+b.centerX*Math.sin(angle)+b.centerY*Math.cos(angle)};
+   applyFurnitureEdit(scene,edit);return {candidate,valid:true};
+  }
   const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true});
   // Sets need room for the chairs too; the full transaction is checked at commit.
   if(problem)return {candidate,valid:false,error:problem};
@@ -181,12 +199,12 @@ export function applyFurnitureEdit(scene,edit){
  if(chosen?.layout&&edit.kind==='replace')fail('Place a complete set on the floor; it cannot replace one object. / ست کامل را روی کف قرار بده؛ جایگزین یک وسیله نمی‌شود.');
  if(chosen?.layout&&edit.kind==='add'){
   if(!Number.isFinite(edit.point?.x)||!Number.isFinite(edit.point?.y))fail('Choose a point on the floor.');
-  const angle=(edit.rotation||0)*Math.PI/180,groupId=`sofa-set-${globalThis.crypto.randomUUID()}`,originalCount=scene.assets.length;
+  const scale=furniturePlacementScale(edit.scale??1),angle=(edit.rotation||0)*Math.PI/180,groupId=`sofa-set-${globalThis.crypto.randomUUID()}`,originalCount=scene.assets.length;
   let next=scene;
   try{for(const piece of chosen.layout){
    const before=next.assets.length;
-   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,freePlacement:edit.freePlacement,point:{x:edit.point.x+piece.x*Math.cos(angle)-piece.y*Math.sin(angle),y:edit.point.y+piece.x*Math.sin(angle)+piece.y*Math.cos(angle)},rotation:(edit.rotation||0)+piece.rotation});
-   next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,seatingCapacity:piece.seats}:a);
+   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,scale,freePlacement:edit.freePlacement,point:{x:edit.point.x+scale*(piece.x*Math.cos(angle)-piece.y*Math.sin(angle)),y:edit.point.y+scale*(piece.x*Math.sin(angle)+piece.y*Math.cos(angle))},rotation:(edit.rotation||0)+piece.rotation});
+   next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,furnitureSetScale:scale,seatingCapacity:piece.seats}:a);
   }}catch(error){fail('Not enough clear space for the complete set; nothing was added. / فضای آزاد کافی برای ست کامل نیست؛ هیچ وسیله‌ای اضافه نشد. '+error.message);}
   if(next.assets.length!==originalCount+chosen.layout.length)fail('Incomplete furniture set.');
   next.furnitureEditor={version:'furniture-editor-v67',lastOperation:'add-set',setCatalogId:chosen.id};return next;
@@ -209,7 +227,7 @@ export function applyFurnitureEdit(scene,edit){
  const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
+  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&(edit.scale??1)!==1?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
  }
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);
  if(edit.kind==='resize')next.assets=next.assets.map(a=>a.id===original.id?{...a,renderingBaseDimensions:original.renderingBaseDimensions||{width:original.width,depth:original.depth,height:original.height}}:a);

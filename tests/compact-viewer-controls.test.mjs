@@ -1,9 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import parser from '@babel/parser';
-test('all 63 existing viewer, furniture and render buttons retain their original click handlers',()=>{
+test('64 viewer, furniture and render buttons retain reviewed click handlers, including placement-size reset',()=>{
  for(const [file,count,hash] of [
   ['Project3DViewer.jsx',48,'e0c125a6a9ceba32f5e5eee4b4538805af4818686798f6532fdc1699eb699211'],
-  ['FurnitureEditorPanel.jsx',13,'8cdbb1fb685814fef0c6d8e875cf0e4895e3e3be8f7b06d7effe6d78b1afecc1'],
+  ['FurnitureEditorPanel.jsx',14,'371d44d73a135df769634958daf483b598ec02f685aadd897422cc99ad06d4ed'],
   ['PlanRenderPanel.jsx',2,'57b966f2577d4157446aa5ae91e4571a286be25fe3870f70ca643e7d4119e69e'],
  ]){
   const source=readFileSync(`src/app/projects/[id]/${file}`,'utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']}),buttons=[];

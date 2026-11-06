@@ -22,3 +22,23 @@ test('sets have a dedicated dropdown category and never recurse into another set
  const sets=filterFurniture(FURNITURE_CATALOG,'sets');assert.equal(sets.length,6);assert.equal(filterFurniture(sets,'sofas').length,0);
  for(const set of sets)for(const p of set.layout){const child=FURNITURE_CATALOG.find(m=>m.id===p.catalogId);assert.ok(child);assert.equal(child.layout,undefined);}
 });
+
+test('a reduced set fits a small room where original placement fails, scaling every piece and spacing equally',async()=>{
+ const {furnitureSetBounds}=await import('../src/lib/furnitureEditor.mjs');const s=scene();s.width=3.8;s.depth=3.2;s.footprint=[{x:0,y:0},{x:3.8,y:0},{x:3.8,y:3.2},{x:0,y:3.2}];s.rooms=[{id:'living',polygon:s.footprint}];
+ const id='sofa-set-comfort-7',point={x:1.9,y:1.8},edit={kind:'add',catalogId:id,point},original=JSON.stringify(s);
+ assert.equal(previewFurnitureEdit(s,edit).valid,false);const preview=previewFurnitureEdit(s,{...edit,scale:.7});assert.equal(preview.valid,true);
+ const n=applyFurnitureEdit(s,{...edit,scale:.7}),model=FURNITURE_CATALOG.find(m=>m.id===id),b=furnitureSetBounds(model,.7);
+ assert.equal(n.assets.length,4);assert.equal(preview.candidate.width,b.width);assert.equal(preview.candidate.depth,b.depth);assert.ok(Math.abs(preview.candidate.yMeters-(point.y+b.centerY))<1e-9);
+ for(const [i,a] of n.assets.entries()){
+  const p=model.layout[i],base=FURNITURE_CATALOG.find(m=>m.id===p.catalogId);for(const k of ['width','depth','height'])assert.ok(Math.abs(a[k]-base[k]*.7)<1e-9);
+  assert.deepEqual(a.renderingBaseDimensions,{width:base.width,depth:base.depth,height:base.height});assert.ok(Math.abs(a.xMeters-point.x-p.x*.7)<1e-9);assert.ok(Math.abs(a.yMeters-point.y-p.y*.7)<1e-9);assert.equal(a.furnitureSetScale,.7);
+ }
+ assert.equal(JSON.stringify(s),original);assert.deepEqual(JSON.parse(JSON.stringify(n)).assets,n.assets);
+});
+test('invalid placement scales and collisions remain atomic for all set styles',()=>{
+ for(const scale of [NaN,Infinity,0,-1,.49,1.26,'0.7']){const s=scene(),snapshot=JSON.stringify(s);assert.throws(()=>applyFurnitureEdit(s,{kind:'add',catalogId:'sofa-set-modern-6',point:{x:5,y:4},scale}));assert.equal(JSON.stringify(s),snapshot);}
+ for(const style of ['modern','comfort','classic']){
+  const s=scene();s.assets=[{id:'obstacle',roomId:'living',type:'cabinet',xMeters:5,yMeters:4.07,width:.3,depth:.3,height:1,rotation:0}];const snapshot=JSON.stringify(s);
+  assert.throws(()=>applyFurnitureEdit(s,{kind:'add',catalogId:`sofa-set-${style}-6`,point:{x:5,y:4},scale:.7}),/nothing was added/);assert.equal(JSON.stringify(s),snapshot);
+ }
+});

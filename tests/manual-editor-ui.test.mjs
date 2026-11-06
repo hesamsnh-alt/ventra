@@ -77,3 +77,11 @@ test('one model selection and one floor click add an entire sofa set through the
  assert.equal(ui.getScene().assets.length,4);assert.equal(ui.getScene().assets.reduce((n,a)=>n+a.seatingCapacity,0),6);assert.equal(ui.getScene().assets.filter(a=>a.type==='coffee_table').length,1);
  await ui.button(tree,'Undo').props.onClick();assert.equal(ui.getScene().assets.length,0);
 });
+
+test('actual set-size slider updates floor preview and places resized components in one click',async()=>{
+ const ui=await panel();let tree=ui.render();ui.button(tree,'Furniture studio').props.onClick();tree=ui.render();ui.nodes(tree,'select').find(n=>n.props.value==='all').props.onChange({target:{value:'sets'}});tree=ui.render();ui.button(tree,'Modern set · 6').props.onClick();tree=ui.render();
+ const slider=ui.nodes(tree,'input').find(n=>n.props.type==='range');assert.ok(slider);slider.props.onChange({target:{value:'70'}});tree=ui.render();
+ assert.equal(ui.nodes(tree,'input').find(n=>n.props.type==='range').props.value,70);const preview=ui.getTool().preview({x:3,y:3},{},{});assert.equal(preview.valid,true);assert.ok(preview.candidate.width<3.3);
+ await ui.getTool().commit({x:3,y:3},{},false,{});tree=ui.render();assert.equal(ui.getScene().assets.length,4);assert.ok(ui.getScene().assets.every(a=>a.furnitureSetScale===.7));assert.ok(Math.abs(ui.getScene().assets[0].width-2.2*.7)<1e-9);
+ ui.button(tree,'Original size').props.onClick();tree=ui.render();assert.equal(ui.nodes(tree,'input').find(n=>n.props.type==='range').props.value,100);
+});
