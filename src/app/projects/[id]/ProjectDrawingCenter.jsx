@@ -1,11 +1,12 @@
 "use client";
 import DrawingAnalysisProgress from "./DrawingAnalysisProgress";
+import {confirmRasterWallHeight,formatRasterAuditNumber} from '@/lib/rasterMeasurementAudit.mjs';
 import {readDrawingProgress,updateDrawingProgress,subscribeDrawingProgress} from "@/lib/drawingProgressSession.mjs";
 import {beginDrawingWorkflow,finishDrawingWorkflow,drawingWorkflowState} from '@/lib/drawingWorkflowGate.mjs';
 import {generateBoq} from '@/services/boqService';
 import {assertTakeoffSource} from '@/lib/takeoffSource.mjs';
 import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
-import {resolveDrawingSelection,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
+import {resolveDrawingSelection,drawingTakeoffMatches,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {saveSchematic,saveActiveSource,selectSchematicDrawing,selectDrawingDocument,selectedDrawingSync,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
@@ -1599,6 +1600,7 @@ export default function ProjectDrawingCenter({
   const pdfPreviewInFlightRef=useRef(false);
   const apsPreviewOnlyRef=useRef(null);
   const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(true);
+  const [printedRoomHeight,setPrintedRoomHeight]=useState('');
   const fileInputRef = useRef(null);
   const localImagePreviewUrlRef = useRef("");
   const localImagePreviewDocumentIdRef = useRef(null);
@@ -1706,6 +1708,7 @@ export default function ProjectDrawingCenter({
           return;
         }
 
+        let resolvedDocument=null;
         if (documentsResult.error) {
           setErrorMessage(
             documentsResult.error.message ||
@@ -1720,14 +1723,17 @@ export default function ProjectDrawingCenter({
           const savedDocumentId =
             takeoffResultResponse?.takeoff?.document_id || null;
 
-          setSelectedDocumentId(resolveDrawingSelection(
+          const resolvedId=resolveDrawingSelection(
             loadedDocuments,selectedDrawingSync(projectId),savedDocumentId
-          ));
+          );
+          setSelectedDocumentId(resolvedId);
+          selectDrawingDocument(projectId,resolvedId);
+          resolvedDocument=loadedDocuments.find(d=>d.id===resolvedId)||null;
         }
 
         if (
           !takeoffResultResponse.error &&
-          takeoffResultResponse.takeoff
+          drawingTakeoffMatches(takeoffResultResponse.takeoff,resolvedDocument)
         ) {
           setTakeoffResult(
             takeoffResultResponse.takeoff
@@ -2282,6 +2288,18 @@ export default function ProjectDrawingCenter({
     finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
   }
 
+  async function handleConfirmRoomHeight() {
+    try {
+      const current=takeoffResultRef.current,documentId=selectedDocumentForPreview?.id;
+      if(!current||!documentId||current.document_id!==documentId)throw Error('Select the drawing belonging to this analysis first.');
+      const next=confirmRasterWallHeight(current,printedRoomHeight);
+      await persistTakeoff(projectId,next);
+      if(selectedDrawingSync(projectId)!==documentId)return;
+      takeoffResultRef.current=next;setTakeoffResult(next);setErrorMessage('');
+      setMessage(language==='fa'?'مساحت سطوح دیوار از ارتفاع تأییدشده محاسبه شد؛ برای به‌روزرسانی ردیف‌ها Generate BOQ را بزنید.':'Wall faces recalculated from the confirmed height without AI. Generate BOQ to update its rows.');
+    }catch(error){setErrorMessage(error.message);}
+  }
+
   async function handleOpenSaved3D() {
     clearMessages();
     try {
@@ -2568,7 +2586,7 @@ const finalTakeoff = {
       : "floor_area_room_estimate",
 
   wall_height_source:
-    "project_default",
+    takeoff.wall_height_source || (takeoff.wall_height_evidence ? 'printed_dimension' : 'project_default'),
 
   wall_area_source:
     originalWallArea > 0
@@ -5429,14 +5447,18 @@ async function handleApsGeometryExtracted(analysis) {
       <div className="takeoff-result" aria-label="3D drawing actions">
         <p><strong>{selectedDocumentForPreview?.file_name||'Select a drawing from Uploaded Drawings'}</strong></p>
         <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
-        <button type="button" disabled={analyzing||generatingBoq||getFileExtension(selectedDocumentForPreview?.file_name||'')!=='pdf'} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>
-        <button type="button" disabled={analyzing||generatingBoq||!APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>
-        {selectedDocumentIsImage&&<button type="button" disabled={analyzing||generatingBoq} onClick={handleOpenSaved3D}>{language==='fa'?'باز کردن 3D ذخیره‌شده بدون AI':'Open saved 3D without AI'}</button>}
+        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<button type="button" disabled={analyzing||generatingBoq} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>}
+        {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
+        {selectedDocumentIsImage&&<>
+          <button type="button" disabled={analyzing||generatingBoq||uploading} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}} onClick={()=>handleAnalyzeDrawing({previewOnly:true})}>{language==='fa'?'ساخت سه‌بعدی از همین تصویر (با AI)':'Build image 3D preview (separate from quantity takeoff)'}</button>
+          <button type="button" disabled={analyzing||generatingBoq} onClick={handleOpenSaved3D}>{language==='fa'?'باز کردن 3D ذخیره‌شده بدون AI':'Open saved 3D without AI'}</button>
+          <p><label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label></p>
+        </>}
         {pdfPreviewStatus&&pdfPreviewStatus.documentId===selectedDocumentForPreview?.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
           {pdfPreviewStatus.text}
           {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
         </div>}
-        <p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>
+        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>}
       </div>
       {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
         <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
@@ -5578,15 +5600,6 @@ async function handleApsGeometryExtracted(analysis) {
         })}
       </LocalizedElement>
 
-      {selectedDocumentIsImage && selectedDocumentForPreview && (
-        <label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label>
-      )}
-      {selectedDocumentIsImage && selectedDocumentForPreview && (
-        <LocalizedElement as="button" type="button" disabled={analyzing || generatingBoq || uploading}
-          onClick={() => handleAnalyzeDrawing({previewOnly:true})}>
-          {language==='fa'?'ساخت پیش‌نمایش سه‌بعدی تصویر (جدا از متره)':language==='ar'?'إنشاء معاينة الصورة ثلاثية الأبعاد (منفصلة عن حصر الكميات)':'Build image 3D preview (separate from quantity takeoff)'}
-        </LocalizedElement>
-      )}
 
       {takeoffResult && (
         <LocalizedElement as="section" className="takeoff-result">
@@ -5919,10 +5932,9 @@ async function handleApsGeometryExtracted(analysis) {
               <LocalizedElement as="article">
                 <LocalizedElement as="span">Wall Area</LocalizedElement>
                 <LocalizedElement as="strong">
-                  {formatQuantity(
-                    takeoffResult.wall_area,
-                    "m²"
-                  )}
+                  {takeoffResult.raster_measurement_audit?.wallMeasurementStatus==='height_required'
+                    ? (language==='fa'?'نیازمند ارتفاع روی نقشه':'Printed height required')
+                    : formatQuantity(takeoffResult.wall_area,"m²")}
                 </LocalizedElement>
               </LocalizedElement>
 
@@ -5949,9 +5961,14 @@ async function handleApsGeometryExtracted(analysis) {
           )}
 
         {!!takeoffResult.raster_measurement_audit?.corrections?.length&&<div role="status">
-          <strong>{language==='fa'?'کنترل محاسبات هندسی؛ مقادیر اصلاح‌شده در خلاصه و BOQ یکسان‌اند':'Geometry arithmetic checked; summary and BOQ use the reconciled values'}</strong>
-          <ul>{takeoffResult.raster_measurement_audit.corrections.map((c,i)=><li key={i}>{c.tag||c.key}: {String(c.reported??'—')} → {c.computed} m²</li>)}</ul>
+          <strong>{language==='fa'?'مساحت کف و سقف از هندسهٔ اتاق‌ها کنترل شد':'Floor and ceiling areas checked against room geometry'}</strong>
+          <ul>{takeoffResult.raster_measurement_audit.corrections.map((c,i)=><li key={i}>{c.tag||c.key}: {formatRasterAuditNumber(c.reported)} → {formatRasterAuditNumber(c.computed)} m²</li>)}</ul>
           <p>{language==='fa'?'یادداشت زیر متن اولیهٔ تحلیل، پیش از اصلاح محاسبات است.':'The notes below are the original analysis before arithmetic reconciliation.'}</p>
+        </div>}
+        {takeoffResult.raster_measurement_audit?.wallMeasurementStatus==='height_required'&&<div role="status">
+          <p>{language==='fa'?'ارتفاع اتاق از تحلیل ذخیره‌شده مشخص نیست؛ مساحت سطوح دیوار هنوز تأیید نشده است. ارتفاع عمودی نوشته‌شده روی نقشه را وارد کنید.':'The saved analysis has no explicit room height. Internal wall-face area is not checked yet. Enter the vertical clear room height printed on this drawing.'}</p>
+          <label>{language==='fa'?'ارتفاع اتاق روی نقشه (متر)':'Printed clear room height (m)'}<input aria-label="Printed clear room height (m)" type="number" min="0.01" step="0.01" value={printedRoomHeight} onChange={event=>setPrintedRoomHeight(event.target.value)} /></label>
+          <button type="button" disabled={analyzing||generatingBoq||!printedRoomHeight} onClick={handleConfirmRoomHeight}>{language==='fa'?'تأیید ارتفاع و محاسبه دیوار بدون AI':'Confirm height and recalculate walls without AI'}</button>
         </div>}
         {takeoffResult.notes && (
             <LocalizedElement as="p" className="takeoff-result-notes">

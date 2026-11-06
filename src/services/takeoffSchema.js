@@ -115,3 +115,6 @@ takeoffSchema.properties.area_geometry={type:['object','null'],additionalPropert
   required:['tag','kind','finish','polygon','reported_area','evidence']}}
 },required:['coverage','basis','envelope','envelope_evidence','spaces']};
 takeoffSchema.required.push('area_geometry');
+takeoffSchema.properties.wall_height={type:['number','null'],minimum:0};
+takeoffSchema.properties.wall_height_evidence={type:['string','null']};
+takeoffSchema.required.push('wall_height','wall_height_evidence');

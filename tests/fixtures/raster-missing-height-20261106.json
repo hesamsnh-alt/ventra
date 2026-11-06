@@ -1,0 +1,368 @@
+{
+  "doors": 3,
+  "notes": "Architectural FLOOR PLAN with printed dimensions and an opening schedule. Measurement basis: CLEAR INTERNAL for room polygons; internal partitions modeled as separate wall polygons (0.15 m thick). Floor and ceiling areas are the sum of clearly tagged rooms only; there is no additional corridor space. Wall_length and wall_area are gross at wall centerline for the whole floor (external perimeter at centerline plus internal partitions), no deductions for openings; painting scope not specified, so no net paint area reported. Door/window areas use the printed schedule sizes and counted instances on this page only. Review required: confirm that all walls are 0.15 m thick as noted; confirm no additional openings not shown here; verify that ceiling area equals enclosed walkable floor (no terraces/voids). Preliminary AI takeoff—must be checked by a quantity surveyor.",
+  "rooms": 3,
+  "windows": 3,
+  "door_area": 5.67,
+  "wall_area": 115.35,
+  "confidence": 94,
+  "floor_area": 46.5225,
+  "wall_length": 38.45,
+  "window_area": 5.04,
+  "ceiling_area": 46.5225,
+  "area_geometry": {
+    "basis": "clear_internal",
+    "spaces": [
+      {
+        "tag": "LIVING ROOM",
+        "kind": "enclosed",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 6
+          },
+          {
+            "x": 0,
+            "y": 6
+          }
+        ],
+        "evidence": "Room label: LIVING ROOM 4.00 x 6.00 m",
+        "reported_area": null
+      },
+      {
+        "tag": "KITCHEN",
+        "kind": "enclosed",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 4.15,
+            "y": 3.5
+          },
+          {
+            "x": 8,
+            "y": 3.5
+          },
+          {
+            "x": 8,
+            "y": 6
+          },
+          {
+            "x": 4.15,
+            "y": 6
+          }
+        ],
+        "evidence": "Room label: KITCHEN 3.85 x 2.50 m; right-side height 2.50 m",
+        "reported_area": null
+      },
+      {
+        "tag": "BEDROOM",
+        "kind": "enclosed",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 4.15,
+            "y": 0
+          },
+          {
+            "x": 8,
+            "y": 0
+          },
+          {
+            "x": 8,
+            "y": 3.35
+          },
+          {
+            "x": 4.15,
+            "y": 3.35
+          }
+        ],
+        "evidence": "Room label: BEDROOM 3.85 x 3.35 m; right-side height 3.35 m",
+        "reported_area": null
+      },
+      {
+        "tag": "INT WALL VERT",
+        "kind": "wall",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 4.15,
+            "y": 0
+          },
+          {
+            "x": 4.15,
+            "y": 6
+          },
+          {
+            "x": 4,
+            "y": 6
+          }
+        ],
+        "evidence": "Internal wall thickness 0.15 m; full height 6.00 m",
+        "reported_area": null
+      },
+      {
+        "tag": "INT WALL HORIZ",
+        "kind": "wall",
+        "finish": "unknown",
+        "polygon": [
+          {
+            "x": 4.15,
+            "y": 3.35
+          },
+          {
+            "x": 8,
+            "y": 3.35
+          },
+          {
+            "x": 8,
+            "y": 3.5
+          },
+          {
+            "x": 4.15,
+            "y": 3.5
+          }
+        ],
+        "evidence": "Internal wall thickness 0.15 m; right-side width 3.85 m separates KITCHEN/BEDROOM",
+        "reported_area": null
+      }
+    ],
+    "coverage": "complete",
+    "envelope": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 8,
+        "y": 0
+      },
+      {
+        "x": 8,
+        "y": 6
+      },
+      {
+        "x": 0,
+        "y": 6
+      }
+    ],
+    "envelope_evidence": "Overall inside dimensions printed: 8.00 m CLEAR INSIDE (horizontal), 6.00 m (vertical). Wall thickness noted 0.15 m."
+  },
+  "page_evidence": {
+    "kind": "floor_plan",
+    "revision": null,
+    "scope_id": "ground floor",
+    "drawing_id": null,
+    "quantities": [
+      {
+        "key": "rooms",
+        "unit": "nr",
+        "value": 3,
+        "evidence": "Tags: LIVING ROOM, KITCHEN, BEDROOM",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "door_count",
+        "unit": "nr",
+        "value": 3,
+        "evidence": "D0, D1, D2 shown once each",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "window_count",
+        "unit": "nr",
+        "value": 3,
+        "evidence": "W1, W2, W3 shown once each",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "door_area",
+        "unit": "m2",
+        "value": 5.67,
+        "evidence": "D0/D1/D2 size 0.90x2.10 m from schedule; 3 units -> 3*0.90*2.10=5.67 m2",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "window_area",
+        "unit": "m2",
+        "value": 5.04,
+        "evidence": "W1 1.80x1.20=2.16 m2 (1x) + W2/W3 1.20x1.20=1.44 m2 (2x) -> total 5.04 m2",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "wall_length",
+        "unit": "m",
+        "value": 38.45,
+        "evidence": "External centerline: 2*((8.00+0.15)+(6.00+0.15))=28.60 m. Internal partitions: 6.00 m (vertical) + 3.85 m (horizontal)=9.85 m. Total=38.45 m",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "internal_wall_length",
+        "unit": "m",
+        "value": 9.85,
+        "evidence": "Vertical partition 6.00 m + horizontal partition 3.85 m",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "external_wall_length",
+        "unit": "m",
+        "value": 28.6,
+        "evidence": "Perimeter at wall centerline: 2*((8.00+0.15)+(6.00+0.15))=28.60 m",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "internal_door_count",
+        "unit": "nr",
+        "value": 2,
+        "evidence": "D1, D2 internal doors",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "entrance_door_count",
+        "unit": "nr",
+        "value": 1,
+        "evidence": "D0 entrance door at bottom wall",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "floor_area",
+        "unit": "m2",
+        "value": 46.5225,
+        "evidence": "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.",
+        "scope_id": "ground floor"
+      },
+      {
+        "key": "ceiling_area",
+        "unit": "m2",
+        "value": 46.5225,
+        "evidence": "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.",
+        "scope_id": "ground floor"
+      }
+    ]
+  },
+  "detected_items": [
+    {
+      "name": "LIVING ROOM",
+      "unit": "m2",
+      "quantity": 24,
+      "description": "UNKNOWN; 4.00 x 6.00 m = 24.00 m2"
+    },
+    {
+      "name": "KITCHEN",
+      "unit": "m2",
+      "quantity": 9.625,
+      "description": "UNKNOWN; 3.85 x 2.50 m = 9.625 m2"
+    },
+    {
+      "name": "BEDROOM",
+      "unit": "m2",
+      "quantity": 12.8975,
+      "description": "UNKNOWN; 3.85 x 3.35 m = 12.8975 m2"
+    },
+    {
+      "name": "Door D0",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "0.90 x 2.10 m (entrance) from opening schedule"
+    },
+    {
+      "name": "Door D1",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "0.90 x 2.10 m (internal) from opening schedule"
+    },
+    {
+      "name": "Door D2",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "0.90 x 2.10 m (internal) from opening schedule"
+    },
+    {
+      "name": "Window W1",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "1.80 x 1.20 m (living room) from opening schedule"
+    },
+    {
+      "name": "Window W2",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "1.20 x 1.20 m (bedroom) from opening schedule"
+    },
+    {
+      "name": "Window W3",
+      "unit": "nr",
+      "quantity": 1,
+      "description": "1.20 x 1.20 m (kitchen) from opening schedule"
+    }
+  ],
+  "analysis_source": {
+    "job_id": "f321be0c-6e7c-4c97-759c-218586024a01",
+    "file_name": "Screenshot 2026-11-05 165713.png",
+    "transport": "background-v151",
+    "document_id": "ccb4d05f-8063-40e6-a2c5-bd11b2faf814"
+  },
+  "raster_measurement_audit": {
+    "status": "dimension_geometry_checked",
+    "version": 1,
+    "warnings": [
+      "Image page 1: unknown floor finishes; complete material totals withheld."
+    ],
+    "corrections": [
+      {
+        "key": "floor_area",
+        "basis": "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.",
+        "computed": 46.522499999999994,
+        "reported": 46.52,
+        "reportedClaims": [
+          {
+            "key": "floor_area",
+            "unit": "m2",
+            "value": 46.5225,
+            "evidence": "Areas: Living 4.00x6.00=24.00; Kitchen 3.85x2.50=9.625; Bedroom 3.85x3.35=12.8975; Sum=46.5225 m2",
+            "scope_id": "ground floor"
+          }
+        ]
+      },
+      {
+        "key": "ceiling_area",
+        "basis": "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.",
+        "computed": 46.522499999999994,
+        "reported": 46.52,
+        "reportedClaims": [
+          {
+            "key": "ceiling_area",
+            "unit": "m2",
+            "value": 46.5225,
+            "evidence": "Same as enclosed walkable floor area on this level",
+            "scope_id": "ground floor"
+          }
+        ]
+      },
+      {
+        "key": "room_area",
+        "tag": "KITCHEN",
+        "computed": 9.625,
+        "reported": 9.63
+      },
+      {
+        "key": "room_area",
+        "tag": "BEDROOM",
+        "computed": 12.8975,
+        "reported": 12.9
+      }
+    ]
+  }
+}

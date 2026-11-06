@@ -5,6 +5,11 @@ export function resolveDrawingSelection(documents,selectedId,takeoffDocumentId){
  if(available(takeoffDocumentId))return takeoffDocumentId;
  return documents.length===1?documents[0].id:null;
 }
+export function drawingTakeoffMatches(takeoff,document){
+ if(!takeoff||!document)return false;
+ if(takeoff.document_id)return takeoff.document_id===document.id;
+ return !!takeoff.document_name&&takeoff.document_name===document.file_name;
+}
 export function schematicRequestKey(projectId,document){
  return JSON.stringify([String(projectId),String(document?.id||document?.file_name||'unknown')]);
 }

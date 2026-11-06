@@ -22,6 +22,7 @@ Important rules:
 8. detected_items must include useful visible construction items.
 9. Ignore title blocks, logos, stamps, borders and revision tables.
 10. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.
+11. Preserve the printed vertical clear room/wall height in wall_height (metres) and quote its source note in wall_height_evidence. Do not confuse a room's plan width/depth or a door/window opening height with room height. If height is absent, varying or conflicting, return null for both fields; never assume 3 m or derive height from your wall_area result. Wall centerline length times height is not internal wall-face finish area.
 
 Project name:
 ${projectName || "Unknown"}
