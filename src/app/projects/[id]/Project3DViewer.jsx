@@ -5613,8 +5613,30 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     return mesh;
   };
 
+  const traditionalSeat=()=>{
+    addBox(w*.93,d*.82,h*.1,0,0,h*.19,dark);
+    addCushion(w*.8,d*.68,h*.19,0,d*.06,h*.36,accent);
+    addCushion(w*.79,d*.15,h*.46,0,-d*.37,h*.65,accent);
+    for(const sign of [-1,1]){
+      addBox(w*.045,d*.77,h*.09,sign*w*.45,0,h*.53,dark);
+      addCushion(w*.09,d*.7,h*.15,sign*w*.43,0,h*.57,accent);
+      for(const y of [-.3,.3])addBox(w*.035,d*.035,h*.19,sign*w*.39,d*y,h*.095,dark);
+    }
+    // Exposed wooden arched crest gives the classic set its own silhouette.
+    for(let i=0;i<13;i++){const x=(i/12-.5)*w*.88,z=h*(.88+.085*Math.cos(x/w*Math.PI*2));addBox(w*.075,d*.055,h*.035,x,-d*.39,z,dark);}
+    for(const x of [-.28,0,.28])addCylinder(.012,h*.009,w*x,-d*.29,h*.73,metal,true);
+  };
+  const comfortSeat=()=>{
+    addBox(w*.94,d*.86,h*.18,0,0,h*.15,dark);
+    for(const x of (w>1.3?[-.23,.23]:[0])){
+      addCushion(w*(w>1.3?.43:.76),d*.69,h*.24,w*x,d*.08,h*.36,accent);
+      addCushion(w*(w>1.3?.43:.76),d*.22,h*.51,w*x,-d*.32,h*.67,accent);
+    }
+    for(const x of [-1,1])addCushion(w*.12,d*.79,h*.41,x*w*.43,0,h*.43,accent);
+  };
+
   switch (assetType) {
-    case 'personal_model': {const m=new THREE.MeshBasicMaterial({color:0x9ca3af,wireframe:true});addBox(w,d,h,0,0,h/2,m);break;}
+    case 'personal_model' : {const m=new THREE.MeshBasicMaterial({color:0x9ca3af,wireframe:true});addBox(w,d,h,0,0,h/2,m);break;}
 
     case 'curtain': {
       for(const mesh of ventraCurtainMeshes(THREE,w,d,h,designVariant,asset.color||'#c5b8a4')){
@@ -5623,6 +5645,20 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'sofa': {
+      if(designVariant==='traditional'){traditionalSeat();break;}
+      if(designVariant==='comfort'){comfortSeat();break;}
+      if(designVariant==='minimal'){
+        addBox(w*.94,d*.85,h*.11,0,0,h*.22,dark);
+        for(const x of [-.22,.22]){
+          addCushion(w*.43,d*.67,h*.17,w*x,d*.07,h*.4,accent);
+          addCushion(w*.43,d*.13,h*.44,w*x,-d*.36,h*.72,accent);
+        }
+        for(const x of [-1,1]){
+          addCushion(w*.035,d*.77,h*.36,x*w*.47,0,h*.47,accent);
+          for(const y of [-.3,.3])addBox(.025,.025,h*.16,x*w*.4,y*d,h*.08,metal);
+        }
+        break;
+      }
       if(designVariant==='bench'){addCushion(w,d*.9,.18,0,0,.4,accent);for(const x of [-.4,.4])for(const y of [-.35,.35])addBox(.05,.05,.32,w*x,d*y,.16,dark);break;}
       if(designVariant.startsWith('sectional-')){
         const side=designVariant==='sectional-left'?-1:1;
@@ -5692,6 +5728,8 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'armchair': {
+      if(designVariant==='traditional'){traditionalSeat();break;}
+      if(designVariant==='comfort'){comfortSeat();break;}
       addBox(w * 0.82, d * 0.74, 0.13, 0, 0.04 * d, 0.14, dark);
       addCushion(w * 0.76, d * 0.61, 0.17, 0, 0.06 * d, 0.31, light);
       addCushion(w * 0.76, d * 0.16, 0.55, 0, -d * 0.38, 0.50, accent);

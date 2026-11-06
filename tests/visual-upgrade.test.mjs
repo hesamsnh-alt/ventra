@@ -226,3 +226,12 @@ test('rug motifs are textured and fringes batched, without raised block ornament
   const bounds=new THREE.Box3();for(const p of parts){p.updateMatrixWorld(true);bounds.union(new THREE.Box3().setFromObject(p));}assert.ok(bounds.min.z>=0&&bounds.max.z<=.031);
  }
 });
+
+test('modern, minimal, comfort and classic sofas retain distinct shapes and independent catalog colors',()=>{
+ const variants=['modern','minimal','comfort','traditional'],colors=['#b4a28f','#d4c8b7','#a5b3a0','#bca07c'];
+ const signatures=variants.map((variant,i)=>{
+  const parts=assetMeshes('sofa',{variant,color:colors[i],width:2.4,depth:1,height:1.05});
+  const cloth=parts.find(p=>p.material.userData?.ventraTextile==='fabric');assert.ok(cloth);assert.equal(cloth.material.color.getHexString(),colors[i].slice(1));
+  return JSON.stringify(parts.map(p=>[p.position.toArray(),p.geometry.vertices.length,p.geometry.faces.length]));
+ });assert.equal(new Set(signatures).size,4);
+});

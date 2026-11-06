@@ -1,3 +1,4 @@
+import {SOFA_SET_LAYOUTS} from './sofaSets.mjs';
 import {personalFurnitureModel} from './personalAssets.mjs';
 import {applyPromptActions,placementProblem} from './scenePromptActions.mjs';
 export const FURNITURE_CATALOG=Object.freeze([
@@ -65,7 +66,20 @@ export const FURNITURE_CATALOG=Object.freeze([
  ["bath", "bathtub", "Bathtub", "وان حمام", "Bathtub", 1.7, 0.75, 0.58, "modern", "#eeeee7"],
  ["mirror", "mirror", "Standing mirror", "آینه ایستاده", "Standing mirror", 0.65, 0.08, 1.7, "modern", "#bcaa8d"],
  ["lamp-tall", "floor_lamp", "Tall floor lamp", "آباژور بلند", "Tall floor lamp", 0.5, 0.5, 1.85, "modern", "#c6a66c"],
-].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs})));
+ ["sofa-modern-two", "sofa", "Modern two-seater", "مبل مدرن دونفره", "أريكة حديثة لشخصين", 1.6, 0.9, 0.85, "modern", "#b4a28f"],
+ ["sofa-comfort", "sofa", "Comfort three-seater", "مبل راحتی سه‌نفره", "أريكة مريحة لثلاثة", 2.5, 1, 0.95, "comfort", "#a5b3a0"],
+ ["sofa-comfort-two", "sofa", "Comfort two-seater", "مبل راحتی دونفره", "أريكة مريحة لشخصين", 1.8, 1, 0.95, "comfort", "#a5b3a0"],
+ ["sofa-classic", "sofa", "Classic three-seater", "مبل استیل سه‌نفره", "أريكة كلاسيكية لثلاثة", 2.5, 1, 1.05, "traditional", "#bca07c"],
+ ["sofa-classic-two", "sofa", "Classic two-seater", "مبل استیل دونفره", "أريكة كلاسيكية لشخصين", 1.8, 1, 1.05, "traditional", "#bca07c"],
+ ["armchair-classic", "armchair", "Classic armchair", "مبل استیل تک‌نفره", "كرسي كلاسيكي", 0.95, 1, 1.05, "traditional", "#bca07c"],
+ ["armchair-comfort", "armchair", "Comfort armchair", "مبل راحتی تک‌نفره", "كرسي مريح", 1, 1, 0.95, "comfort", "#a5b3a0"],
+ ["sofa-set-modern-6", "sofa", "Modern set · 6 seats + coffee table", "ست مدرن 6 نفره با میز جلو مبلی", "Modern · 6", 4.8, 3.8, 1.05, "modern", "#b4a28f"],
+ ["sofa-set-modern-7", "sofa", "Modern set · 7 seats + coffee table", "ست مدرن 7 نفره با میز جلو مبلی", "Modern · 7", 4.8, 3.8, 1.05, "modern", "#b4a28f"],
+ ["sofa-set-comfort-6", "sofa", "Comfort set · 6 seats + coffee table", "ست راحتی 6 نفره با میز جلو مبلی", "Comfort · 6", 4.8, 3.8, 1.05, "comfort", "#a5b3a0"],
+ ["sofa-set-comfort-7", "sofa", "Comfort set · 7 seats + coffee table", "ست راحتی 7 نفره با میز جلو مبلی", "Comfort · 7", 4.8, 3.8, 1.05, "comfort", "#a5b3a0"],
+ ["sofa-set-classic-6", "sofa", "Classic set · 6 seats + coffee table", "ست استیل 6 نفره با میز جلو مبلی", "Classic · 6", 4.8, 3.8, 1.05, "classic", "#bca07c"],
+ ["sofa-set-classic-7", "sofa", "Classic set · 7 seats + coffee table", "ست استیل 7 نفره با میز جلو مبلی", "Classic · 7", 4.8, 3.8, 1.05, "classic", "#bca07c"],
+].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs,...(SOFA_SET_LAYOUTS[id]?{layout:SOFA_SET_LAYOUTS[id]}:{})})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};
 export function resolveFurnitureCatalog(edit){
@@ -152,7 +166,9 @@ export function furnitureDraft(scene,edit){
 export function previewFurnitureEdit(scene,edit){
  let candidate;
  try{
-  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true});
+  candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};
+  if(edit.kind==='add'&&resolveFurnitureCatalog(edit)?.layout){applyFurnitureEdit(scene,edit);return {candidate,valid:true};}
+  const problem=placementProblem(candidate,scene,{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true});
   // Sets need room for the chairs too; the full transaction is checked at commit.
   if(problem)return {candidate,valid:false,error:problem};
   applyFurnitureEdit(scene,edit);
@@ -161,6 +177,21 @@ export function previewFurnitureEdit(scene,edit){
 }
 export function applyFurnitureEdit(scene,edit){
  if(!['add','move','rotate','resize','color','replace','remove'].includes(edit.kind))fail('Unsupported furniture operation.');
+ const chosen=resolveFurnitureCatalog(edit);
+ if(chosen?.layout&&edit.kind==='replace')fail('Place a complete set on the floor; it cannot replace one object. / ست کامل را روی کف قرار بده؛ جایگزین یک وسیله نمی‌شود.');
+ if(chosen?.layout&&edit.kind==='add'){
+  if(!Number.isFinite(edit.point?.x)||!Number.isFinite(edit.point?.y))fail('Choose a point on the floor.');
+  const angle=(edit.rotation||0)*Math.PI/180,groupId=`sofa-set-${globalThis.crypto.randomUUID()}`,originalCount=scene.assets.length;
+  let next=scene;
+  try{for(const piece of chosen.layout){
+   const before=next.assets.length;
+   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,freePlacement:edit.freePlacement,point:{x:edit.point.x+piece.x*Math.cos(angle)-piece.y*Math.sin(angle),y:edit.point.y+piece.x*Math.sin(angle)+piece.y*Math.cos(angle)},rotation:(edit.rotation||0)+piece.rotation});
+   next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,seatingCapacity:piece.seats}:a);
+  }}catch(error){fail('Not enough clear space for the complete set; nothing was added. / فضای آزاد کافی برای ست کامل نیست؛ هیچ وسیله‌ای اضافه نشد. '+error.message);}
+  if(next.assets.length!==originalCount+chosen.layout.length)fail('Incomplete furniture set.');
+  next.furnitureEditor={version:'furniture-editor-v67',lastOperation:'add-set',setCatalogId:chosen.id};return next;
+ }
+
  const original=scene.assets.find(a=>a.id===edit.assetId);
  let plan,model,candidate;
  if(edit.kind==='remove')plan={action:'remove',assetId:edit.assetId};

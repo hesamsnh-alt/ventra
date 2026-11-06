@@ -1,5 +1,5 @@
 export const FURNITURE_CATEGORIES=[
- ['all','All models','همه مدل‌ها',null],['sofas','Sofas & armchairs','مبل و کاناپه',['sofa','armchair']],
+ ['all','All models','همه مدل‌ها',null],['sets','Complete sofa sets','ست کامل مبلمان',['sofa-set']],['sofas','Sofas & armchairs','مبل و کاناپه',['sofa','armchair']],
  ['cabinets','Cabinets & wardrobes','کابینت و کمد',['cabinet','cabinet_door','wardrobe']],
  ['beds','Beds','تخت خواب',['bed','nightstand']],['dining','Dining tables','میز غذاخوری',['dining_table']],
  ['tables','Tables & desks','میز و میز کار',['coffee_table','desk','dressing_table']],['chairs','Chairs','صندلی',['chair']],
@@ -11,5 +11,5 @@ export const FURNITURE_CATEGORIES=[
 ].map(([id,en,fa,types])=>({id,en,fa,ar:en,types}));
 export function filterFurniture(catalog,category='all',query=''){
  const c=FURNITURE_CATEGORIES.find(c=>c.id===category);if(!c)return [];
- const q=query.trim().toLocaleLowerCase();return catalog.filter(m=>(!c.types||c.types.includes(m.type))&&(!q||[m.en,m.fa,m.ar].some(s=>s?.toLocaleLowerCase().includes(q))));
+ const q=query.trim().toLocaleLowerCase();return catalog.filter(m=>(!c.types||(c.id==='sets'?!!m.layout:!m.layout&&c.types.includes(m.type)))&&(!q||[m.en,m.fa,m.ar].some(s=>s?.toLocaleLowerCase().includes(q))));
 }

@@ -68,3 +68,12 @@ test('actual panel supports drawing a wall in one drag gesture',async()=>{
  ui.button(tree,'Wide window').props.onClick();tree=ui.render();await ui.getTool().commit({x:6,y:3},{},false,{});
  assert.equal(ui.getScene().openings[0].type,'window');assert.equal(ui.getScene().openings[0].width,2.4);assert.equal(ui.getScene().assets.length,0);
 });
+
+test('one model selection and one floor click add an entire sofa set through the actual panel',async()=>{
+ const ui=await panel();let tree=ui.render();ui.button(tree,'Furniture studio').props.onClick();tree=ui.render();
+ ui.nodes(tree,'select').find(n=>n.props.value==='all').props.onChange({target:{value:'sets'}});tree=ui.render();
+ ui.button(tree,'Modern set · 6').props.onClick();tree=ui.render();
+ assert.equal(ui.getTool().preview({x:3,y:3},{},{}).valid,true);await ui.getTool().commit({x:3,y:3},{},false,{});tree=ui.render();
+ assert.equal(ui.getScene().assets.length,4);assert.equal(ui.getScene().assets.reduce((n,a)=>n+a.seatingCapacity,0),6);assert.equal(ui.getScene().assets.filter(a=>a.type==='coffee_table').length,1);
+ await ui.button(tree,'Undo').props.onClick();assert.equal(ui.getScene().assets.length,0);
+});

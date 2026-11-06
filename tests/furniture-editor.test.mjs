@@ -43,7 +43,7 @@ test('mouse rotation is continuous, reversible and optionally snaps to 15 degree
  assert.equal(next.assets[0].rotation,90);assert.equal(next.assets[0].xMeters,5);assert.equal(next.assets[0].yMeters,4);
 });
 test('all catalog models place inside a clear room without mutating architecture or input',()=>{
- for(const m of FURNITURE_CATALOG){const input=scene(),before=structuredClone(input),next=applyFurnitureEdit(input,add(m.id));assert.deepEqual(input,before);for(const k of LOCKED_ARCHITECTURE)assert.deepEqual(next[k],input[k]);assert.equal(next.assets[0].catalogId,m.id);assert.equal(next.assets[0].excludeFromTakeoff,true);assert.equal(next.assets[0].variant,m.variant);}
+ for(const m of FURNITURE_CATALOG){const input=scene(),before=structuredClone(input),next=applyFurnitureEdit(input,add(m.id));assert.deepEqual(input,before);for(const k of LOCKED_ARCHITECTURE)assert.deepEqual(next[k],input[k]);if(m.layout){assert.equal(next.assets.length,4);assert.equal(next.assets[0].furnitureSetCatalogId,m.id);continue;}assert.equal(next.assets[0].catalogId,m.id);assert.equal(next.assets[0].excludeFromTakeoff,true);assert.equal(next.assets[0].variant,m.variant);}
 });
 test('dining set is an atomic five-object transaction; blocked chairs reject entire set',()=>{
  const s=scene(),next=applyFurnitureEdit(s,add('dining-set'));assert.equal(next.assets.length,5);
