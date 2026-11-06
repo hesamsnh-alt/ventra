@@ -10051,10 +10051,11 @@ export default function Project3DViewer({ projectId }) {
         <LocalizedElement as="div" className="ventra-model-canvas-shell">
           {!urn && !schematicScene && status === "missing" ? (
             <LocalizedElement as="div" className="ventra-model-empty">
-              <LocalizedElement as="strong">No APS model available</LocalizedElement>
+              <LocalizedElement as="strong">No 3D model has been built for the selected drawing</LocalizedElement>
               <LocalizedElement as="p">
-                Open Drawings and analyze a DWG/DXF/IFC/RVT engineering file, or upload a JPG/PNG/WebP image for AI schematic 3D.
+                Open Drawings, select your file and use its 3D build action: image 3D for JPG/PNG/WebP, PDF 3D for a vector plan, or APS 3D for DWG/DXF/IFC/RVT. Uploading alone does not build a model.
               </LocalizedElement>
+              <a href={`?tab=drawings`}>Open Drawings to build 3D</a>
             </LocalizedElement>
           ) : (
             <div ref={containerRef} className="ventra-model-canvas" dir="ltr">

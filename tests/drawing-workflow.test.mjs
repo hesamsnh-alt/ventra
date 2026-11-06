@@ -21,7 +21,7 @@ function setup(){
     setAnalyzing:v=>state.analyzing=v,setGeneratingBoq:v=>state.generatingBoq=v,setTakeoffResult:v=>state.takeoffResult=v,
     setSelectedDocumentId:v=>state.selectedDocumentId=v,setMessage:v=>state.messages.push(v),setErrorMessage:v=>state.errors.push(v),
     generateBoq:async(input)=>{state.boqCalls.push(input);return {items:[]};},
-    importAiBoq(){},localStorage:{setItem(){}},onOpenBoq(){},
+    importAiBoq(){},localStorage:{setItem(){}},onOpenBoq(){},onOpen3D(){},
   };
   vm.createContext(state);
   vm.runInContext(segment(center,'  async function handleAnalyzeDrawing(','  async function handleDownload(')+'\n'+
@@ -229,4 +229,23 @@ test('failed explicit image 3D never falls through to paid quantity analysis',as
  s.generateImageSchematic3D=async()=>null;
  await s.analyze({previewOnly:true});
  assert.equal(s.apiCalls,0);assert.equal(s.persistCalls,0);assert.match(s.errors.at(-1),/No quantity analysis/);
+});
+
+for(const extension of ['jpg','jpeg','png','webp'])test(`${extension} quantity analysis builds 3D when enabled and keeps saved quantities if preview fails`,async()=>{
+ for(const success of [true,false]){
+  const {state:s,resolveAnalysis,resolveSave}=setup();let previews=0;
+  s.buildImageAfterAnalysis=true;s.documents=[{id:'image',file_name:`plan.${extension}`}];s.selectedDocumentId='image';
+  s.getFileExtension=()=>extension;s.AI_SUPPORTED_EXTENSIONS=[extension];
+  s.generateImageSchematic3D=async()=>{previews++;assert.equal(s.persistCalls,1);return success?{documentId:'image'}:null;};
+  const work=s.analyze();resolveAnalysis({takeoff:{document_id:'image',floor_area:20,rooms:2},error:null});resolveSave();await work;
+  assert.equal(previews,1);assert.equal(s.apiCalls,1);assert.equal(s.takeoffResult.document_id,'image');
+  assert.equal(s.analyzing,false);assert.equal(drawingWorkflowState(s.projectId).active,null);
+  if(!success)assert.ok(s.messages.some(m=>m.includes('Image 3D did not complete')));
+ }
+});
+test('explicit image preview opens the 3D tab after the scene is ready',async()=>{
+ const {state:s}=setup();let opened=0;
+ s.documents=[{id:'png',file_name:'plan.png'}];s.selectedDocumentId='png';s.getFileExtension=()=> 'png';s.AI_SUPPORTED_EXTENSIONS=['png'];
+ s.generateImageSchematic3D=async()=>({documentId:'png'});s.onOpen3D=()=>opened++;
+ await s.analyze({previewOnly:true});assert.equal(opened,1);assert.equal(s.apiCalls,0);
 });

@@ -1598,7 +1598,7 @@ export default function ProjectDrawingCenter({
   const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
   const pdfPreviewInFlightRef=useRef(false);
   const apsPreviewOnlyRef=useRef(null);
-  const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(false);
+  const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(true);
   const fileInputRef = useRef(null);
   const localImagePreviewUrlRef = useRef("");
   const localImagePreviewDocumentIdRef = useRef(null);
@@ -2434,6 +2434,7 @@ export default function ProjectDrawingCenter({
             // Explicit 3D preview remains isolated from quantity analysis.
             // Each action makes only its own request, never both paid calls.
             setMessage("Interactive 3D preview is ready. Open the 3D view to orbit, pan and zoom around it.");
+            onOpen3D?.();
             return;
           }
           throw new Error('Image 3D preview did not complete. No quantity analysis was started.');
@@ -2609,7 +2610,10 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
   setMessage("AI quantity takeoff completed successfully.");
 }
         if(buildImageAfterAnalysis && ["jpg","jpeg","png","webp"].includes(extension)) {
-          await generateImageSchematic3D(selectedDocument,{quiet:false});
+          const scene = await generateImageSchematic3D(selectedDocument,{quiet:false});
+          if (!scene) {
+            setMessage('Quantity takeoff saved. Image 3D did not complete; use Build image 3D to retry.');
+          }
         }
         return;
       }

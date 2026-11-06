@@ -500,6 +500,7 @@ export default function ProjectWorkspacePage() {
   <ProjectDrawingCenter
     projectId={project.id}
     onOpenBoq={() => setActiveTab("boq")}
+    onOpen3D={() => setActiveTab("model3d")}
   />
 )}
 
