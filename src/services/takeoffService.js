@@ -5,6 +5,7 @@ import {commercialFetch} from '@/lib/commercialFetch';
 import {submitDrawingAnalysis} from '@/lib/drawingAnalysisTransport.mjs';
 import {selectedDrawingSync} from '@/lib/schematicStorage.mjs';
 import {assertTakeoffSource} from '@/lib/takeoffSource.mjs';
+import {reconcileRasterMeasurements} from '@/lib/rasterMeasurementAudit.mjs';
 const TAKEOFF_STORAGE_PREFIX = "ventra:project-takeoff:";
 
 function getStorageKey(projectId) {
@@ -110,6 +111,7 @@ function hydrateTakeoff(takeoff) {
   if (!isUsableTakeoff(takeoff)) {
     return takeoff;
   }
+  if(/\.(png|jpe?g|webp)$/i.test(takeoff.document_name||takeoff.analysis_source?.file_name||''))takeoff=reconcileRasterMeasurements(takeoff);
   if(takeoff.pdf_analysis && takeoff.page_results?.length){
     takeoff={...takeoff,...mergePdfEvidence(takeoff.page_results,takeoff.failed_pages||[],takeoff.total_pages)};
   }

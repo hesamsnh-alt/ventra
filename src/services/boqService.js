@@ -159,5 +159,5 @@ export async function generateBoq({
   }
 
   acknowledgePreviewJob(jobKey,storage);
-  return bindBoqSource(data.boq,takeoff,projectId);
+  return bindBoqSource(data.boq,data.boq.takeoff?.raster_measurement_audit?{...takeoff,...data.boq.takeoff}:takeoff,projectId);
 }

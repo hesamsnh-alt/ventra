@@ -3,6 +3,7 @@ import {commercialRun} from './serverCommercial';
 import {completeDrawingResult} from './drawingJobIdentity.mjs';
 import { NextResponse } from "next/server";
 import { analyzeDrawing } from "@/services/takeoffServerService";
+import {reconcileRasterMeasurements} from './rasterMeasurementAudit.mjs';
 
 
 async function handleCommercialRequest(request) {
@@ -32,7 +33,7 @@ async function handleCommercialRequest(request) {
     });
 
     await reportDrawingProgress({stage:'analyzing'});
-    const result = await analyzeDrawing({
+    let result = await analyzeDrawing({
       fileUrl,
       fileName,
       fileType,
@@ -43,6 +44,7 @@ async function handleCommercialRequest(request) {
       localPdfRecoveryOnly: body?.localPdfRecoveryOnly === true,
       noAutomaticRetries: body?.noAutomaticRetries === true,
     });
+    if(/\.(png|jpe?g|webp)$/i.test(fileName))result=reconcileRasterMeasurements(result);
 
     if(!completeDrawingResult(result)){
       const total=Number(result.total_pages||result.pdf_analysis?.total_pages||0);

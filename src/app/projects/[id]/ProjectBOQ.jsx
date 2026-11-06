@@ -342,6 +342,7 @@ export default function ProjectBOQ({
         priceLevel: "standard",
         vatPercentage,
       });
+      if(boq.takeoff?.raster_measurement_audit)sourceTakeoff=boq.takeoff;
 
       if (!Array.isArray(boq?.items) || boq.items.length === 0) {
         throw new Error(
@@ -710,7 +711,7 @@ export default function ProjectBOQ({
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report});
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report,sourceDocumentName:boqSource?.name||takeoff?.document_name});
     const rows = [
       [branding.companyName, branding.address, branding.contact, branding.taxNumber],
       [projectName + " - Bill of Quantities"],
@@ -746,7 +747,7 @@ export default function ProjectBOQ({
       return;
     }
 
-    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report});
+    const exportDocument = buildBoqExport(items, { overheadPercentage, profitPercentage, discountPercentage, vatPercentage, overhead, profit, discount, vat, total }, {language,translations:boqTranslations,scopeReport:scopeState?.report,sourceDocumentName:boqSource?.name||takeoff?.document_name});
     const rows = exportDocument.rows.map(row => `<tr>${row.map(value => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("");
     const headers = exportDocument.headers.map(value => `<th>${escapeHtml(value)}</th>`).join("");
     const summary = exportDocument.summary.map(([label, amount]) => `<tr><td colspan="6">${escapeHtml(label)}</td><td>${escapeHtml(amount)}</td><td colspan="6"></td></tr>`).join("");
@@ -881,7 +882,7 @@ export default function ProjectBOQ({
       )}
       {items.some((item) => item?.status === "measured_rate_pending") && (
         <LocalizedElement as="div" className="boq-warning-message">
-          Any measured structural quantity without a safe catalog rate remains excluded from the commercial subtotal until a rate is confirmed.
+          Measured work without a selected material/system and applicable rate remains excluded from the priced budget. Select a compatible catalog item; the displayed budget is incomplete while rates are pending.
         </LocalizedElement>
       )}
       {errorMessage && (

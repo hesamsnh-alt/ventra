@@ -141,7 +141,7 @@ export function retainUnboundPdfQuantities(items, takeoff) {
   for (const [key, [sectionCode, section, description]] of Object.entries(operations)) {
     if(nativeFinishReplacesMetric(takeoff,key))continue;
     if(key==='door_count'&&completeDoors)continue;
-    if(doorKeys.includes(key)&&!completeDoors)continue;
+    if(doorKeys.includes(key)&&Number.isFinite(takeoff.scheduled_quantities?.door_count)&&!completeDoors)continue;
     const quantity = takeoff.scheduled_quantities?.[key];
     const claims = takeoff.pdf_analysis.quantity_evidence?.[key];
     if (bound.has(key) || !Number.isFinite(quantity) || quantity <= 0 || !claims?.length) continue;

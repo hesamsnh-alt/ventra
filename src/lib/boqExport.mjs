@@ -7,7 +7,7 @@ export const BOQ_EXPORT_HEADERS = ['Item No.', 'Section', 'Description', 'Unit',
 
 // Export the same commercial selection as the BOQ screen, while accounting
 // separately for every displayed row. Inclusion is not proof of scope completeness.
-export function buildBoqExport(items = [], commercial = {}, {language="en",translations={},scopeReport=null} = {}) {
+export function buildBoqExport(items = [], commercial = {}, {language="en",translations={},scopeReport=null,sourceDocumentName=''} = {}) {
   const tr=text=>localizeBoqText(text,language,translations);
   const sums = { verified: 0, provisional: 0, pending: 0 };
   const rows = items.map(item => {
@@ -51,5 +51,5 @@ export function buildBoqExport(items = [], commercial = {}, {language="en",trans
     if(scope.specifications)summary.push(['Customer instructions / confirm against structured specification choices',scope.specifications]);
   }
   return { headers: BOQ_EXPORT_HEADERS.map(tr), rows, summary:summary.map(([label,value])=>[tr(label),value]), sums,
-    note: (scope?scope.note+' ':'')+tr('Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.') };
+    note: (sourceDocumentName?tr('Drawing source')+': '+sourceDocumentName+'. ':'')+(scope?scope.note+' ':'')+tr('Provisional and unresolved rows are excluded from the tender subtotal. All displayed line amounts are a reconciliation total, not a complete project estimate. Scope completeness and rates require review. Estimate uses its separately selected basis and markups.') };
 }

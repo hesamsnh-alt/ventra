@@ -17,7 +17,7 @@ const door=b=>b.items.find(i=>i.imageEvidence?.metricKey==='door_count');
 test('live ground-floor PNG replays without AI: source identity and measured quantities retained, budget rate disclosed',()=>{
   const t=structuredClone(fixture.takeoff),before=structuredClone(t),b=run(t),d=door(b);
   assert.equal(b.boqSource.documentId,t.document_id);assert.equal(b.boqSource.name,t.document_name);
-  assert.equal(b.items.length,3);assert.equal(d.quantity,3);assert.equal(d.rate,1260);assert.equal(d.amount,3780);
+  assert.equal(b.items.length,5);assert.equal(d.quantity,3);assert.equal(d.rate,1260);assert.equal(d.amount,3780);
   assert.equal(d.defaultSpecification.catalogItemCode,'VNT-DEF-DOOR-PACKAGE');
   assert.equal(d.specificationVerification,'assumed');assert.equal(d.reviewRequired,true);
   assert.equal(d.includeInCommercialTotal,false);assert.match(d.description,/assumed specification/);

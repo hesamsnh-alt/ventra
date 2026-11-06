@@ -113,7 +113,7 @@ function defaultOperations(items,takeoff,c,active) {
  };
  const floor=quantity('floor_area')||number(takeoff.floor_area)||rooms.reduce((s,r)=>s+r.area,0);
  const floorMetrics=['ceramic_floor_area','wood_floor_area','epoxy_floor_area','stone_floor_area','cement_floor_area','terrace_floor_area'];
- const finished=items.filter(i=>floorMetrics.includes(scopeMetric(i))||i.pdfEvidence?.operation?.family==='floor').reduce((s,i)=>s+number(i.quantity),0);
+ const finished=items.filter(i=>floorMetrics.includes(scopeMetric(i))||i.pdfEvidence?.operation?.family==='floor'||i.measurementPlaceholder?.surface==='floor'&&number(i.rate)>0).reduce((s,i)=>s+number(i.quantity),0);
  const unallocated=Math.max(0,floor-finished);
  const floorKey={ceramic:'ceramic_floor_area',porcelain:'ceramic_floor_area',stone:'stone_floor_area',wood:'wood_floor_area',cement:'cement_floor_area'}[c.floorFinish];
  // Do not overwrite a partially assigned finish. Unallocated areas become a distinct assumption.
@@ -125,14 +125,16 @@ function defaultOperations(items,takeoff,c,active) {
  // Scope defaults cannot revive a measurement already rejected by the audit,
  // including plaster inferred from the same contradictory wall-area summary.
  const wallConflict=items.some(i=>i.measurementIssue?.metricKey==='paint_area'&&i.status==='quantity_pending');
- const wallSurface=wallConflict?0:quantity('plaster_area')||quantity('paint_area')||number(takeoff.wall_area)||number(takeoff.wall_length)*c.wallHeight;
- if(c.wallFinish!=='none'){
+ const wallSurface=wallConflict?0:quantity('plaster_area')||quantity('paint_area')||(takeoff.raster_measurement_audit?.netInternalWall?.value??number(takeoff.wall_area))||number(takeoff.wall_length)*c.wallHeight;
+ const userWallFinish=items.some(i=>i.measurementPlaceholder?.surface==='wall'&&number(i.rate)>0);
+ if(c.wallFinish!=='none'&&!userWallFinish){
   add('plaster_area','finishes',wallSurface,'m²','Internal wall plaster [assumed]',`Recorded wall surface, or recorded wall length × editable height ${c.wallHeight} m; sides and deductions require review`);
   if(c.wallFinish==='paint')add('paint_area','finishes',Math.max(0,wallSurface-quantity('wet_wall_tile_area')),'m²','Internal wall paint [assumed]','Recorded plaster/wall surface less known wet wall tile area');
   if(c.wallFinish==='tile')add('wet_wall_tile_area','finishes',wallSurface,'m²','Wall tiles [assumed]','Recorded wall surface; selected default wall finish');
  }
  const ceiling=quantity('ceiling_area')||number(takeoff.ceiling_area);
- if(c.ceilingFinish!=='none'){
+ const userCeilingFinish=items.some(i=>i.measurementPlaceholder?.surface==='ceiling'&&number(i.rate)>0);
+ if(c.ceilingFinish!=='none'&&!userCeilingFinish){
   if(c.ceilingFinish==='gypsum')add('gypsum_ceiling_area','finishes',ceiling,'m²','Gypsum board ceiling [assumed]','Recorded enclosed ceiling area; board, suspension and wet-area specifications require confirmation');
   add('ceiling_paint_area','finishes',ceiling,'m²','Ceiling paint [assumed]','Recorded enclosed ceiling area; finish compatibility to confirm');
  }
@@ -163,7 +165,8 @@ export function applyBoqScope(items=[],takeoff={},config={},options={}) {
   if(active.includes(trade))selected.push(item);else excluded.push({...item,scopeExclusion:trade==='unclassified'?'classification_required':'outside_selected_scope'});
  }
  const defaults=c.defaultsEnabled?defaultOperations(selected,takeoff,c,active).filter(i=>!options.defaultEdits?.[i.id]?.disabled):[];
- const merged=[...selected,...defaults];
+ const replacements={floor:/floor_finish_area|^(?:ceramic|wood|stone|cement)_floor_area$/,ceiling:/^(?:ceiling_paint|gypsum_ceiling)_area$/,wall:/^(?:paint|wet_wall_tile)_area$/};
+ const merged=[...selected.filter(row=>!row.measurementPlaceholder||number(row.rate)>0||!defaults.some(d=>replacements[row.measurementPlaceholder.surface]?.test(scopeMetric(d)))),...defaults];
  // Rates for assumptions are explicit user choices only. Never borrow an unrelated positive rate.
  for(let i=0;i<merged.length;i++){
   const row=merged[i],edit=options.defaultEdits?.[row.id];

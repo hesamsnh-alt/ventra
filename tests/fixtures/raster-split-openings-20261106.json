@@ -1,0 +1,738 @@
+{
+  "takeoff": {
+    "doors": 3,
+    "notes": "Architectural ground floor plan with clear printed dimensions. Floor and ceiling areas are sum of the three rooms using printed clear sizes: Living 4.00x6.00=24.00 m2, Kitchen 3.85x2.50=9.625 m2, Bedroom 3.85x3.35=12.8875 m2. Wall_length is total wall centreline length: external rectangle taken at centreline = (8.00+0.15) by (6.00+0.15) giving perimeter 28.60 m; internal partitions centreline lengths 6.00 m + 3.85 m = 9.85 m; total 38.45 m. Wall_area is gross internal wall face area at 3.00 m height without any deductions: interior perimeter faces 2*(8+6)=28 m -> 84.0 m2 plus both faces of internal partitions 2*(6.00+3.85)=19.7 m -> 59.1 m2; total 143.1 m2. Door/window areas are from the printed opening schedule. No terraces/voids. Uncertainties: external wall centreline perimeter derived by adding 0.15 m to clear inside spans; if external overall dimensions differ, wall_length will change. Wall_area is gross (no deductions for openings). Finishes not specified. Review by QS required.",
+    "rooms": 3,
+    "windows": 3,
+    "door_area": 5.67,
+    "wall_area": 143.1,
+    "confidence": 90,
+    "floor_area": 46.5125,
+    "wall_length": 38.45,
+    "window_area": 5.04,
+    "ceiling_area": 46.5125,
+    "area_geometry": {
+      "basis": "clear_internal",
+      "spaces": [
+        {
+          "tag": "LIVING ROOM",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 4,
+              "y": 0
+            },
+            {
+              "x": 4,
+              "y": 6
+            },
+            {
+              "x": 0,
+              "y": 6
+            }
+          ],
+          "evidence": "Printed 4.00 x 6.00 m",
+          "reported_area": 24
+        },
+        {
+          "tag": "BEDROOM",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": 3.35
+            },
+            {
+              "x": 4.15,
+              "y": 3.35
+            }
+          ],
+          "evidence": "Printed 3.85 x 3.35 m (to right of vertical wall)",
+          "reported_area": 12.8875
+        },
+        {
+          "tag": "KITCHEN",
+          "kind": "enclosed",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 3.5
+            },
+            {
+              "x": 8,
+              "y": 3.5
+            },
+            {
+              "x": 8,
+              "y": 6
+            },
+            {
+              "x": 4.15,
+              "y": 6
+            }
+          ],
+          "evidence": "Printed 3.85 x 2.50 m (above horizontal wall)",
+          "reported_area": 9.625
+        },
+        {
+          "tag": "VERTICAL PARTITION",
+          "kind": "wall",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4,
+              "y": 0
+            },
+            {
+              "x": 4.15,
+              "y": 0
+            },
+            {
+              "x": 4.15,
+              "y": 6
+            },
+            {
+              "x": 4,
+              "y": 6
+            }
+          ],
+          "evidence": "Wall thickness 0.15 m; length 6.00 m",
+          "reported_area": null
+        },
+        {
+          "tag": "HORIZONTAL PARTITION",
+          "kind": "wall",
+          "finish": "unknown",
+          "polygon": [
+            {
+              "x": 4.15,
+              "y": 3.35
+            },
+            {
+              "x": 8,
+              "y": 3.35
+            },
+            {
+              "x": 8,
+              "y": 3.5
+            },
+            {
+              "x": 4.15,
+              "y": 3.5
+            }
+          ],
+          "evidence": "Wall thickness 0.15 m; clear spans 3.85 m with 2.50 m (kitchen) above and 3.35 m (bedroom) below",
+          "reported_area": null
+        }
+      ],
+      "coverage": "complete",
+      "envelope": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 8,
+          "y": 0
+        },
+        {
+          "x": 8,
+          "y": 6
+        },
+        {
+          "x": 0,
+          "y": 6
+        }
+      ],
+      "envelope_evidence": "Overall clear inside: 8.00 m (top note) x 6.00 m (left). Walls 0.15 m thick."
+    },
+    "page_evidence": {
+      "kind": "floor_plan",
+      "revision": null,
+      "scope_id": "ground floor",
+      "drawing_id": "Ground Floor Plan 01",
+      "quantities": [
+        {
+          "key": "rooms",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Room tags: LIVING ROOM, KITCHEN, BEDROOM",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "door_count",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Doors labeled D0, D1, D2",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "window_count",
+          "unit": "nr",
+          "value": 3,
+          "evidence": "Windows labeled W1, W2, W3",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "door_area",
+          "unit": "m2",
+          "value": 5.67,
+          "evidence": "D0/D1/D2: 0.90 x 2.10 m each -> 3 x 1.89 m2",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "window_area",
+          "unit": "m2",
+          "value": 5.04,
+          "evidence": "W1: 1.80 x 1.20=2.16 m2; W2/W3: 1.20 x 1.20=1.44 m2 each -> total 5.04 m2",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "internal_wall_length",
+          "unit": "m",
+          "value": 9.85,
+          "evidence": "Vertical partition 6.00 m + horizontal partition 3.85 m (centreline)",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "external_wall_length",
+          "unit": "m",
+          "value": 28.6,
+          "evidence": "External centreline rectangle: (8.00+0.15) x (6.00+0.15) -> perimeter 2*(8.15+6.15)=28.60 m",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "wall_length",
+          "unit": "m",
+          "value": 38.45,
+          "evidence": "External CL 28.60 m + internal CL 9.85 m",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "floor_area",
+          "unit": "m2",
+          "value": 46.5125,
+          "evidence": "Sum of clear room areas: 24.00 + 9.625 + 12.8875 m2",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "ceiling_area",
+          "unit": "m2",
+          "value": 46.5125,
+          "evidence": "Equal to enclosed walkable floor (no terraces)",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "wall_area",
+          "unit": "m2",
+          "value": 143.1,
+          "evidence": "Gross internal faces at 3.00 m height: 2*(8+6)=28 m -> 84.0 m2 plus 2*(6.00+3.85)=19.7 m -> 59.1 m2; total 143.1 m2",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "internal_door_count",
+          "unit": "nr",
+          "value": 2,
+          "evidence": "D1 and D2 inside",
+          "scope_id": "ground floor"
+        },
+        {
+          "key": "entrance_door_count",
+          "unit": "nr",
+          "value": 1,
+          "evidence": "D0 at main entrance",
+          "scope_id": "ground floor"
+        }
+      ]
+    },
+    "detected_items": [
+      {
+        "name": "LIVING ROOM",
+        "unit": "m2",
+        "quantity": 24,
+        "description": "UNKNOWN, 4.00 x 6.00 m clear"
+      },
+      {
+        "name": "KITCHEN",
+        "unit": "m2",
+        "quantity": 9.625,
+        "description": "UNKNOWN, 3.85 x 2.50 m clear"
+      },
+      {
+        "name": "BEDROOM",
+        "unit": "m2",
+        "quantity": 12.8875,
+        "description": "UNKNOWN, 3.85 x 3.35 m clear"
+      },
+      {
+        "name": "D0 Door",
+        "unit": "m2",
+        "quantity": 1.89,
+        "description": "Door 0.90 x 2.10 m (entrance)"
+      },
+      {
+        "name": "D1 Door",
+        "unit": "m2",
+        "quantity": 1.89,
+        "description": "Door 0.90 x 2.10 m (to bedroom)"
+      },
+      {
+        "name": "D2 Door",
+        "unit": "m2",
+        "quantity": 1.89,
+        "description": "Door 0.90 x 2.10 m (to kitchen)"
+      },
+      {
+        "name": "W1 Window",
+        "unit": "m2",
+        "quantity": 2.16,
+        "description": "Window 1.80 x 1.20 m (living)"
+      },
+      {
+        "name": "W2 Window",
+        "unit": "m2",
+        "quantity": 1.44,
+        "description": "Window 1.20 x 1.20 m (bedroom)"
+      },
+      {
+        "name": "W3 Window",
+        "unit": "m2",
+        "quantity": 1.44,
+        "description": "Window 1.20 x 1.20 m (kitchen)"
+      }
+    ],
+    "analysis_source": {
+      "job_id": "1192ebdf-574d-8a14-639a-5698a4263a9c",
+      "file_name": "Screenshot 2026-11-05 165713.png",
+      "transport": "background-v151",
+      "document_id": "f54fc003-fd25-44a2-800e-b804f734d9cb"
+    },
+    "document_id": "f54fc003-fd25-44a2-800e-b804f734d9cb",
+    "document_name": "split-opening-plan.png",
+    "project_id": "qa-split",
+    "analyzed_at": "2026-11-06T08:03:15Z"
+  },
+  "catalog": [
+    {
+      "item_code": "DOR-001",
+      "description": "Single leaf timber door complete with frame and ironmongery",
+      "unit": "nos",
+      "standard_rate": "1260.00",
+      "economy_rate": "1050.00",
+      "premium_rate": "1550.00",
+      "source_name": "Ventra UAE Base Rate",
+      "source_reference": null,
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "07",
+      "category": "Doors and Windows"
+    },
+    {
+      "item_code": "WIN-001",
+      "description": "Aluminium framed glazed window complete",
+      "unit": "m2",
+      "standard_rate": "750.00",
+      "economy_rate": "620.00",
+      "premium_rate": "920.00",
+      "source_name": "Ventra UAE Base Rate",
+      "source_reference": null,
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "07",
+      "category": "Doors and Windows"
+    },
+    {
+      "item_code": "PNT-001",
+      "description": "Internal wall emulsion paint including primer and putty",
+      "unit": "m2",
+      "standard_rate": "20.00",
+      "economy_rate": "16.00",
+      "premium_rate": "25.00",
+      "source_name": "Ventra UAE Base Rate",
+      "source_reference": null,
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "09",
+      "category": "Painting"
+    },
+    {
+      "item_code": "VNT-DEF-GARAGE-COMPONENT",
+      "description": "Motorized insulated sectional garage door — reference package budget",
+      "unit": "nr",
+      "standard_rate": "5675.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra budget reference from published installed starting estimate",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_component\",\"fallback_only\":true,\"reference_url\":\"https://alsaray.ae/products/garage-doors/standard\",\"published_starting_price\":5675,\"vat_basis\":\"not_stated_assumed_excluded\",\"reference_width_m\":3.05,\"reference_height_m\":2.5}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "07",
+      "category": "Doors and Windows"
+    },
+    {
+      "item_code": "VNT-DEF-PCC-BLINDING",
+      "description": "Plain concrete blinding C15",
+      "unit": "m3",
+      "standard_rate": "340.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"pcc_volume\",\"specification\":{\"concrete_grade\":\"C15\"},\"label\":\"Plain concrete blinding C15\",\"rate_basis\":\"Existing user catalog CON-001: 340 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-FOUNDATION",
+      "description": "Foundation concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"foundation_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Foundation concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-PEDESTAL",
+      "description": "Pedestal concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"pedestal_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Pedestal concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-COLUMN",
+      "description": "Column concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"column_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Column concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-BEAM",
+      "description": "Beam downstand concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"beam_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Beam downstand concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-GROUND-SLAB",
+      "description": "Ground floor slab concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"ground_slab_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Ground floor slab concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-FIRST-SLAB",
+      "description": "First floor slab concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"first_slab_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"First floor slab concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-ROOF-SLAB",
+      "description": "Roof slab concrete C25",
+      "unit": "m3",
+      "standard_rate": "400.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"roof_slab_volume\",\"specification\":{\"concrete_grade\":\"C25\"},\"label\":\"Roof slab concrete C25\",\"rate_basis\":\"Existing user catalog CON-002: 400 AED/m3; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Concrete placement only. Reinforcement and formwork are separate measured items; no additional wastage assumed.\",\"reference_item_code\":\"CON-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "03",
+      "category": "Concrete Works"
+    },
+    {
+      "item_code": "VNT-DEF-INTERNAL-BLOCK-100",
+      "description": "100mm concrete internal blockwork including mortar",
+      "unit": "m2",
+      "standard_rate": "50.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"internal_block_area\",\"specification\":{\"thickness_mm\":100,\"block_material\":\"concrete\"},\"label\":\"100mm concrete internal blockwork including mortar\",\"rate_basis\":\"Existing user catalog MAS-001: 50 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Net measured wall area; plaster and paint excluded.\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "04",
+      "category": "Masonry Works"
+    },
+    {
+      "item_code": "VNT-DEF-INTERNAL-BLOCK-120",
+      "description": "120mm concrete internal blockwork including mortar",
+      "unit": "m2",
+      "standard_rate": "53.20",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"internal_block_area\",\"specification\":{\"thickness_mm\":120,\"block_material\":\"concrete\"},\"label\":\"120mm concrete internal blockwork including mortar\",\"rate_basis\":\"Interpolated budget rate between existing MAS-001 100mm at 50 and MAS-002 150mm at 58: 50+(120-100)/(150-100)*(58-50)=53.20 AED/m2; not a supplier quote\",\"conditions\":\"Net measured wall area; plaster and paint excluded.\",\"source_required\":[\"thickness_mm\"]}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "04",
+      "category": "Masonry Works"
+    },
+    {
+      "item_code": "VNT-DEF-INTERNAL-BLOCK-150",
+      "description": "150mm concrete internal blockwork including mortar",
+      "unit": "m2",
+      "standard_rate": "58.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"internal_block_area\",\"specification\":{\"thickness_mm\":150,\"block_material\":\"concrete\"},\"label\":\"150mm concrete internal blockwork including mortar\",\"rate_basis\":\"Existing user catalog MAS-002: 58 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Net measured wall area; plaster and paint excluded.\",\"source_required\":[\"thickness_mm\"]}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "04",
+      "category": "Masonry Works"
+    },
+    {
+      "item_code": "VNT-DEF-INTERNAL-BLOCK-200",
+      "description": "200mm concrete internal blockwork including mortar",
+      "unit": "m2",
+      "standard_rate": "66.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"internal_block_area\",\"specification\":{\"thickness_mm\":200,\"block_material\":\"concrete\"},\"label\":\"200mm concrete internal blockwork including mortar\",\"rate_basis\":\"Existing user catalog MAS-003: 66 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Net measured wall area; plaster and paint excluded.\",\"source_required\":[\"thickness_mm\"]}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "04",
+      "category": "Masonry Works"
+    },
+    {
+      "item_code": "VNT-DEF-ROOF-WATERPROOF",
+      "description": "Roof torch-applied bitumen waterproofing",
+      "unit": "m2",
+      "standard_rate": "46.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"roof_waterproofing_area\",\"specification\":{\"waterproofing_system\":\"torch_bitumen\"},\"label\":\"Roof torch-applied bitumen waterproofing\",\"rate_basis\":\"Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.\",\"reference_item_code\":\"WAT-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "05",
+      "category": "Waterproofing"
+    },
+    {
+      "item_code": "VNT-DEF-TERRACE-WATERPROOF",
+      "description": "Terrace torch-applied bitumen waterproofing",
+      "unit": "m2",
+      "standard_rate": "46.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"terrace_waterproofing_area\",\"specification\":{\"waterproofing_system\":\"torch_bitumen\"},\"label\":\"Terrace torch-applied bitumen waterproofing\",\"rate_basis\":\"Existing user catalog WAT-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.\",\"reference_item_code\":\"WAT-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "05",
+      "category": "Waterproofing"
+    },
+    {
+      "item_code": "VNT-DEF-WET-FLOOR-WATERPROOF",
+      "description": "Wet area floor cementitious waterproofing",
+      "unit": "m2",
+      "standard_rate": "33.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"wet_floor_waterproofing_area\",\"specification\":{\"waterproofing_system\":\"cementitious\"},\"label\":\"Wet area floor cementitious waterproofing\",\"rate_basis\":\"Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.\",\"reference_item_code\":\"WAT-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "05",
+      "category": "Waterproofing"
+    },
+    {
+      "item_code": "VNT-DEF-WET-WALL-WATERPROOF",
+      "description": "Wet area wall cementitious waterproofing",
+      "unit": "m2",
+      "standard_rate": "33.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"wet_wall_waterproofing_area\",\"specification\":{\"waterproofing_system\":\"cementitious\"},\"label\":\"Wet area wall cementitious waterproofing\",\"rate_basis\":\"Existing user catalog WAT-002: 33 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Budget system allowance only; membrane thickness/layers and substrate repairs require project confirmation. Tiling is separate.\",\"reference_item_code\":\"WAT-002\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "05",
+      "category": "Waterproofing"
+    },
+    {
+      "item_code": "VNT-DEF-TERRACE-TILE",
+      "description": "Outdoor ceramic terrace floor tiling including adhesive and grout",
+      "unit": "m2",
+      "standard_rate": "88.55",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"terrace_floor_area\",\"specification\":{\"tile_material\":\"ceramic\"},\"label\":\"Outdoor ceramic terrace floor tiling including adhesive and grout\",\"rate_basis\":\"Existing user catalog FIN-003: 77 AED/m2; legacy budget rate, not a newly verified supplier quotation plus an assumed 15% outdoor installation uplift\",\"conditions\":\"No additional area or wastage added; slip resistance and substrate specification need review.\",\"reference_item_code\":\"FIN-003\",\"assumed_uplift_percent\":15}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "08",
+      "category": "Finishes"
+    },
+    {
+      "item_code": "VNT-DEF-WET-WALL-TILE",
+      "description": "Ceramic wet area wall tiles including adhesive and grout",
+      "unit": "m2",
+      "standard_rate": "78.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"wet_wall_tile_area\",\"specification\":{\"tile_material\":\"ceramic\"},\"label\":\"Ceramic wet area wall tiles including adhesive and grout\",\"rate_basis\":\"Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Standard ceramic tile assumed; waterproofing is separately measured.\",\"reference_item_code\":\"FIN-004\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "08",
+      "category": "Finishes"
+    },
+    {
+      "item_code": "VNT-DEF-BACKSPLASH",
+      "description": "Ceramic kitchen backsplash including adhesive and grout",
+      "unit": "m2",
+      "standard_rate": "78.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"backsplash_area\",\"specification\":{\"tile_material\":\"ceramic\"},\"label\":\"Ceramic kitchen backsplash including adhesive and grout\",\"rate_basis\":\"Existing user catalog FIN-004: 78 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Standard ceramic tile assumed; waterproofing is separately measured.\",\"reference_item_code\":\"FIN-004\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "08",
+      "category": "Finishes"
+    },
+    {
+      "item_code": "VNT-DEF-SPLIT-AC",
+      "description": "Wall-mounted split air conditioner 1.5 TR — equipment and mounting allowance",
+      "unit": "nr",
+      "standard_rate": "3250.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"ac_count\",\"specification\":{\"capacity_tr\":1.5,\"unit_system\":\"split\"},\"label\":\"Wall-mounted split air conditioner 1.5 TR — equipment and mounting allowance\",\"rate_basis\":\"Existing user catalog HVC-001: 3250 AED/nos; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Capacity/mounting are budget assumptions, not a cooling-load design. Copper piping is separately measured; this allowance assumes no included pipe length.\",\"reference_item_code\":\"HVC-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "12",
+      "category": "HVAC"
+    },
+    {
+      "item_code": "VNT-DEF-DRIVEWAY",
+      "description": "Concrete interlock driveway paving including sand bed and installation",
+      "unit": "m2",
+      "standard_rate": "75.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"driveway_area\",\"specification\":{\"paving_system\":\"concrete_interlock\"},\"label\":\"Concrete interlock driveway paving including sand bed and installation\",\"rate_basis\":\"Existing user catalog EXT-001: 75 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Interlock assumed instead of asphalt; sub-base depth, drainage and kerbs require separate scope confirmation.\",\"reference_item_code\":\"EXT-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "14",
+      "category": "External Works"
+    },
+    {
+      "item_code": "VNT-DEF-LANDSCAPE",
+      "description": "Natural grass soft landscaping including soil preparation and laying",
+      "unit": "m2",
+      "standard_rate": "46.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"landscape_area\",\"specification\":{\"landscape_system\":\"natural_grass\"},\"label\":\"Natural grass soft landscaping including soil preparation and laying\",\"rate_basis\":\"Existing user catalog LAN-001: 46 AED/m2; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Groundcover allowance only; trees, irrigation and furniture excluded unless separately measured.\",\"reference_item_code\":\"LAN-001\"}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "15",
+      "category": "Landscaping"
+    },
+    {
+      "item_code": "VNT-DEF-DOOR-PACKAGE",
+      "description": "Standard timber door sets with frame and ironmongery",
+      "unit": "nr",
+      "standard_rate": "1260.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"door_count\",\"specification\":{\"door_system\":\"standard_timber_set\"},\"label\":\"Standard timber door sets with frame and ironmongery\",\"rate_basis\":\"Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Standard timber construction assumed for unspecified non-garage doors. Special entrance/fire/external performance requires review.\",\"opening_components\":{\"door\":{\"item_code\":\"DOR-001\",\"label\":\"Standard timber door sets with frame and ironmongery\",\"door_system\":\"standard_timber_set\",\"rate_basis\":\"Existing user catalog DOR-001: 1260 AED/nos; legacy budget rate, not a newly verified supplier quotation\",\"conditions\":\"Material/performance is assumed; source table supplies count and dimensions.\"},\"garage_door\":{\"item_code\":\"VNT-DEF-GARAGE-COMPONENT\",\"label\":\"Motorized insulated sectional garage door package\",\"door_system\":\"motorized_sectional\",\"reference_area_m2\":7.625,\"rate_basis\":\"Published installed starting estimate5675 AED for single door <3.05m and height<=2.5m; treated as provisional net budget; VAT not stated\",\"conditions\":\"For oversize openings the budget is scaled by measured opening area/reference area, minimum factor1; not a supplier quotation. Motor included; special electrical/civil work excluded.\"}}}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "07",
+      "category": "Doors and Windows"
+    },
+    {
+      "item_code": "PNT-010",
+      "description": "Two-coat standard ceiling emulsion paint",
+      "unit": "m2",
+      "standard_rate": "21.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable budget estimate — source/assumptions in reference",
+      "source_reference": "{\"batch\":\"ventra-v132-complete-measured-pricing\",\"kind\":\"pricing_default\",\"fallback_only\":true,\"enabled\":true,\"metric\":\"ceiling_paint_area\",\"specification\":{\"paint_system\":\"two_coat_emulsion\"},\"label\":\"Two-coat standard ceiling emulsion paint\",\"rate_basis\":\"Midpoint (12+30)/2 of published ceiling painting range, treated as a budget estimate\",\"conditions\":\"Assumes normal preparation and standard emulsion; major repairs/access and specialist finishes excluded.\",\"reference_urls\":[\"https://renovel.ae/blog/false-ceiling-cost-dubai/\"],\"published_range_aed\":[12,30]}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": "09",
+      "category": "Painting"
+    },
+    {
+      "item_code": "TIL-001",
+      "description": "Porcelain Floor Tile 600x600",
+      "unit": "m2",
+      "standard_rate": "265.00",
+      "economy_rate": "0.00",
+      "premium_rate": "0.00",
+      "source_name": "Ventra editable analyst budget — not a supplier quotation",
+      "source_reference": "{\"kind\": \"construction_budget_reference\", \"batch\": \"ventra-v159-budget-completion\", \"version\": 1, \"conditions\": \"Editable budget AED excluding VAT; verify specification and scope before purchase. Not a supplier quote. Existing quantity rules unchanged.\", \"provenance\": {\"kind\": \"existing_catalog_or_analyst_budget\", \"independently_verified_supplier_quote\": false}, \"rate_basis\": \"600x600 porcelain floor including normal fixing; existing VNT-OP-PORCELAIN budget\", \"fallback_only\": true, \"automatic_quantity_binding\": false}",
+      "is_active": true,
+      "currency": "AED",
+      "section_code": null,
+      "category": "Tile Works"
+    }
+  ]
+}

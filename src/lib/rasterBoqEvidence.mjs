@@ -5,6 +5,7 @@ import {boqLineAmount,calculateBoqBudget} from './boqBudget.mjs';
 import {currencySum} from './commercialDocument.mjs';
 import {applyPdfDefaultSpecifications} from './pdfDefaultSpecifications.mjs';
 import {bindBoqSource} from './takeoffSource.mjs';
+import {reconcileRasterMeasurements} from './rasterMeasurementAudit.mjs';
 
 // Raster extraction already supplies typed operation evidence. Do not feed it
 // through CAD fallback rules, which turn counts into area and price every
@@ -102,6 +103,19 @@ export function rasterOperationEvidence(takeoff) {
     // as unknown where dimensions are missing; no assumed standard dimensions.
     for(const [key,field] of [['door_count','doors'],['window_count','windows'],['window_area','window_area'],['door_area','door_area']])
       add(key,takeoff[field],`Image extraction: ${field}; measured ${PDF_METRIC_UNITS[key]}, review against source.`);
+    const doorRoles=['internal_door_count','service_door_count','entrance_door_count','garage_door_count'];
+    const knownRoles=doorRoles.filter(k=>Object.hasOwn(quantities,k));
+    if(quantities.door_count===0&&quantities.door_area>0||doorRoles.some(k=>blocked.has(k))||knownRoles.reduce((s,k)=>s+quantities[k],0)>quantities.door_count||
+      knownRoles.length===doorRoles.length&&knownRoles.reduce((s,k)=>s+quantities[k],0)!==quantities.door_count){
+      const basis='Door breakdown conflicts with the recorded total or has invalid count evidence. Door quantities and rates withheld; reconcile opening tags and roles.';
+      measurementIssues.push({metricKey:'door_count',basis,claimedQuantity:quantities.door_count,roleCounts:Object.fromEntries(knownRoles.map(k=>[k,quantities[k]]))});warnings.push(basis);
+      for(const key of ['door_count',...doorRoles]){delete quantities[key];delete evidence[key];blocked.add(key);}
+    }
+    if(quantities.window_count===0&&quantities.window_area>0){
+      const basis='Positive window area conflicts with an explicit zero window count. Reconcile source openings before pricing.';
+      measurementIssues.push({metricKey:'window_area',claimedQuantity:quantities.window_area,basis});warnings.push(basis);delete quantities.window_area;delete evidence.window_area;
+    }
+    if(!Object.hasOwn(quantities,'door_count')&&knownRoles.length)warnings.push('Only recorded door categories are available; the full opening inventory is unconfirmed.');
 
     const geometry=takeoff.area_geometry||takeoff.raw_result?.area_geometry;
     const spaces=geometry?.basis==='clear_internal'?(geometry.spaces||[]).filter(s=>s.kind==='enclosed'):[];
@@ -132,6 +146,18 @@ export function rasterOperationEvidence(takeoff) {
         `Gross internal wall faces ${takeoff.wall_area} minus measured door area ${takeoff.door_area} and window area ${takeoff.window_area}; single room.`);
     const issue=wallPaintIssue(takeoff,page,quantities,evidence);
     if(issue){measurementIssues.push(issue);warnings.push(issue.basis);delete quantities.paint_area;delete evidence.paint_area;}
+    if(takeoff.raster_measurement_audit?.status==='dimension_geometry_checked'){
+      const floors=['ceramic_floor_area','wood_floor_area','epoxy_floor_area','terrace_floor_area'];
+      const conflicts=[];
+      if(floors.reduce((s,k)=>s+(quantities[k]||0),0)>takeoff.floor_area+.02)conflicts.push(...floors.filter(k=>quantities[k]>0));
+      for(const k of ['ceiling_paint_area','gypsum_ceiling_area'])if(quantities[k]>takeoff.ceiling_area+.02)conflicts.push(k);
+      const wallMaximum=takeoff.raster_measurement_audit.netInternalWall?.value??takeoff.wall_area;
+      if(quantities.paint_area>wallMaximum+.02)conflicts.push('paint_area');
+      for(const metricKey of conflicts){
+        const basis=`Measured ${metricKey} exceeds the checked surface available to that operation. Original claim retained for review; no automatic material quantity correction.`;
+        measurementIssues.push({metricKey,claimedQuantity:quantities[metricKey],basis});warnings.push(basis);delete quantities[metricKey];delete evidence[metricKey];
+      }
+    }
   }
   // Adapter is private to the shared operation reconciler, not a reclassification
   // of the image as PDF and not a change to the stored analysis or 3D scene.
@@ -142,7 +168,7 @@ function applyRasterDoorBudget(items,takeoff,adapter,prices,priceLevel) {
   const page=takeoff.page_evidence||takeoff.raw_result?.page_evidence;
   if(page?.kind!=='floor_plan')return items;
   const claims=adapter.pdf_analysis.quantity_evidence.door_count||[];
-  const detail=[takeoff.notes,...claims.map(c=>c.evidence),
+  const detail=[...String(takeoff.notes||'').split(/[.;\n]/).filter(s=>/\bdoors?\b/i.test(s)),...claims.map(c=>c.evidence),
     ...(page.quantities||[]).filter(q=>/door/.test(q.key)).map(q=>q.evidence),
     JSON.stringify(takeoff.object_details?.doors||[])].join(' ');
   // An unspecified ordinary door may use the existing editable budget policy.
@@ -150,9 +176,18 @@ function applyRasterDoorBudget(items,takeoff,adapter,prices,priceLevel) {
   if(/\b(?:garage|roller|shutter|overhead|steel|stainless|metal|alumini?um|glass|glazed|fib(?:re|er)glass|frp|grp|wpc|composite|upvc|pvc|fire|fireproof|fd\d+|security|acoustic|external|weatherproof|double[- ]leaf|double[- ]door|sliding|folding|revolving)\b/i.test(detail))return items;
   const count=adapter.scheduled_quantities.door_count,area=adapter.scheduled_quantities.door_area;
   if(area>0&&count>0&&area/count>2.5)return items;
-  const doorRows=items.filter(i=>i.pdfEvidence?.metricKey==='door_count');
+  const doorRows=items.filter(i=>['door_count','internal_door_count','entrance_door_count','service_door_count'].includes(i.pdfEvidence?.metricKey));
   if(!doorRows.length)return items;
-  const priced=applyPdfDefaultSpecifications(doorRows,adapter,prices,priceLevel);
+  const priced=doorRows.map(row=>{
+    const key=row.pdfEvidence.metricKey;
+    const configured=prices.some(p=>{try{const meta=typeof p.source_reference==='string'?JSON.parse(p.source_reference):p.source_reference;return p.is_active!==false&&meta?.kind==='pricing_default'&&meta.enabled===true&&meta.metric===key;}catch{return false;}});
+    const policies=configured||key==='door_count'?prices:prices.map(p=>{
+      try{const meta=typeof p.source_reference==='string'?JSON.parse(p.source_reference):p.source_reference;
+        return meta?.kind==='pricing_default'&&meta.metric==='door_count'?{...p,source_reference:JSON.stringify({...meta,metric:key,opening_components:undefined})}:p;
+      }catch{return p;}
+    });
+    return applyPdfDefaultSpecifications([row],adapter,policies,priceLevel)[0];
+  });
   const replacements=new Map(doorRows.map((row,i)=>[row,priced[i]]));
   return items.map(row=>{
     const next=replacements.get(row)||row;
@@ -160,14 +195,47 @@ function applyRasterDoorBudget(items,takeoff,adapter,prices,priceLevel) {
   });
 }
 
+function appendUnallocatedSurfaces(items,takeoff,warnings){
+  if(takeoff.raster_measurement_audit?.status!=='dimension_geometry_checked')return;
+  const metric=i=>i.imageEvidence?.metricKey||i.pdfEvidence?.metricKey;
+  const total=keys=>items.filter(i=>keys.includes(metric(i))&&i.quantity>0).reduce((s,i)=>s+i.quantity,0);
+  const add=(surface,value,basis)=>{
+    if(!(value>.001))return;
+    const key=`unallocated_${surface}_finish_area`;
+    items.push({itemCode:`IMG-${key.toUpperCase()}`,section:'Internal finishes',boqTrade:'finishes',
+      description:`${surface[0].toUpperCase()+surface.slice(1)} finish — measured area; select material/system`,unit:'m2',quantity:round(value),rate:0,amount:0,
+      rateMissing:true,status:'measured_rate_pending',verification:'pending',includeInCommercialTotal:false,
+      measurementPlaceholder:{surface,status:'selection_required'},pdfEvidence:{metricKey:key,pages:[1],basis},
+      imageEvidence:{metricKey:key,basis},source:'Checked image room geometry; finish unspecified',
+      notes:`${basis} Material/system is not specified by the drawing. Select an applicable existing catalog item or enable and review the editable scope defaults. Area is retained, not silently omitted.`,
+      completion:{code:'finish_selection_required',required_information:['Select floor/wall/ceiling finish and applicable catalog rate.']}});
+    warnings.push(`${round(value)} m2 of ${surface} finish remains unselected and is excluded from the priced budget. The displayed budget is incomplete.`);
+  };
+  add('floor',takeoff.floor_area-total(['ceramic_floor_area','wood_floor_area','epoxy_floor_area','terrace_floor_area','stone_floor_area','cement_floor_area']),
+    'Complete checked clear floor area less explicitly allocated floor finishes; walls and voids excluded.');
+  add('ceiling',takeoff.ceiling_area-Math.max(total(['ceiling_paint_area']),total(['gypsum_ceiling_area'])),
+    'Complete checked enclosed ceiling area less allocated ceiling finish; outdoor spaces and voids excluded.');
+  const net=takeoff.raster_measurement_audit.netInternalWall;
+  if(net&&!items.some(i=>i.measurementIssue?.metricKey==='paint_area'))add('wall',net.value-total(['paint_area','wet_wall_tile_area']),net.basis);
+}
+
 export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName,priceLevel='standard',vatPercentage=5}) {
+  takeoff=reconcileRasterMeasurements(takeoff);
   const {adapter,warnings,measurementIssues}=rasterOperationEvidence(takeoff);
+  warnings.push(...(takeoff.raster_measurement_audit?.warnings||[]));
+  if(takeoff.raster_measurement_audit?.corrections?.length)warnings.push('Saved arithmetic reconciled against complete dimensioned room geometry. Original values and calculation basis are retained in the measurement audit.');
   const plan=planPdfCatalogRules(adapter,rules,prices);
   warnings.push(...plan.warnings.map(s=>s.replaceAll('PDF','Image')));
   const items=[];
   const byCode=new Map(prices.map(p=>[String(p.item_code||'').toUpperCase(),p]));
   for(const [code,q] of plan.bindings){
     const p=byCode.get(code);if(!p)continue;
+    if(q.metricKey==='window_area'&&/alumini?um/i.test(p.description)){
+      const specification=[q.evidence,...(takeoff.detected_items||[]).filter(i=>/window/i.test(i.name||'')).map(i=>i.description)].join(' ');
+      if(/\b(?:steel|timber|wood|upvc|pvc)\b/i.test(specification)){
+        warnings.push('Recorded window material does not match the aluminium catalog package. Window quantity retained without that rate.');continue;
+      }
+    }
     const rate=resolvePdfCatalogRate(p,priceLevel);
     items.push({itemCode:code,sectionCode:p.section_code||'07',section:p.category||'Measured work',
       description:p.description,unit:p.unit,quantity:q.quantity,rate:rate.rate,amount:boqLineAmount({quantity:q.quantity,rate:rate.rate}),
@@ -175,12 +243,20 @@ export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName
       verification:'pending',includeInCommercialTotal:false,source:'Image operation evidence',
       quantityBasis:'image_operation_evidence',pdfEvidence:{metricKey:q.metricKey,metricKeys:q.metricKeys,pages:[1],basis:q.evidence},
       imageEvidence:{metricKey:q.metricKey,basis:q.evidence},notes:q.evidence});
+    const row=items.at(-1);
+    if(q.metricKey==='window_area'&&/alumini?um/i.test(p.description)&&!/alumini?um/i.test(q.evidence||'')){
+      const basis='Existing catalog window package used provisionally; frame material and glazing are not established by the opening dimensions.';
+      row.description+=' [assumed specification — editable]';
+      row.defaultSpecification={status:'applied',metric:'window_area',assumed:{window_system:p.description},catalogItemCode:code,rateBasis:basis,
+        policy:{label:p.description,conditions:'Confirm frame, glazing, hardware and performance.',rate_basis:basis}};
+      row.notes+=' PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): '+basis;
+    }
   }
   const unbound=retainUnboundPdfQuantities(items,adapter);
   warnings.push(...unbound.warnings.map(s=>s.replaceAll('PDF','Image')));
-  for(const issue of measurementIssues)unbound.items.push({itemCode:'IMG-PAINT-MEASUREMENT-CONFLICT',
-    section:'Internal finishes',description:'Wall paint — conflicting measurement, source review required',
-    unit:'m2',quantity:0,rate:0,amount:0,rateMissing:true,status:'quantity_pending',verification:'pending',
+  for(const issue of measurementIssues)unbound.items.push({itemCode:`IMG-${issue.metricKey.toUpperCase()}-MEASUREMENT-CONFLICT`,
+    section:issue.metricKey==='door_count'?'Doors and Windows':'Internal finishes',description:`${issue.metricKey==='paint_area'?'Wall paint':issue.metricKey.replaceAll('_',' ')} — conflicting measurement, source review required`,
+    unit:PDF_METRIC_UNITS[issue.metricKey]||'m2',quantity:0,rate:0,amount:0,rateMissing:true,status:'quantity_pending',verification:'pending',
     includeInCommercialTotal:false,source:'Image measurement consistency audit',
     imageEvidence:{metricKey:issue.metricKey,basis:issue.basis},measurementIssue:issue,notes:issue.basis});
   if(adapter.scheduled_quantities.window_count>0&&!adapter.scheduled_quantities.window_area){
@@ -191,10 +267,12 @@ export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName
       source:'Image operation evidence',notes:'Count retained as count. Supply measured window dimensions before area-based pricing.'});
   }
   const budgetItems=applyRasterDoorBudget(unbound.items,takeoff,adapter,prices,priceLevel);
-  if(budgetItems.some(i=>i.pdfEvidence?.metricKey==='door_count'&&i.defaultSpecification?.status==='applied')){
-    for(let i=warnings.length-1;i>=0;i--)if(warnings[i].startsWith('Image quantity door_count retained as an unpriced row;'))warnings.splice(i,1);
+  const assumedDoors=budgetItems.filter(i=>/door_count$/.test(i.pdfEvidence?.metricKey||'')&&i.defaultSpecification?.status==='applied');
+  if(assumedDoors.length){
+    for(let i=warnings.length-1;i>=0;i--)if(assumedDoors.some(row=>warnings[i].startsWith(`Image quantity ${row.pdfEvidence.metricKey} retained as an unpriced row;`)))warnings.splice(i,1);
     warnings.push('Door budget uses the existing editable catalog specification assumption. Confirm material, opening size and required performance before tender approval.');
   }
+  appendUnallocatedSurfaces(budgetItems,takeoff,warnings);
   const finalItems=budgetItems.map((item,i)=>{
     const reviewed=requireBoqReview({...item,
     itemNumber:String(i+1).padStart(2,'0'),itemCode:item.itemCode?.replace(/^PDF-/,'IMG-'),
@@ -209,10 +287,10 @@ export function buildRasterBoq({takeoff,prices=[],rules=[],projectId,projectName
   const subtotal=currencySum(finalItems.filter(i=>!i.rateMissing).map(boqLineAmount));
   const budget=calculateBoqBudget({provisional:subtotal},{vatPercentage});
   return bindBoqSource({projectId,projectName,currency:'AED',priceLevel,takeoff,items:finalItems,
-    calculationVersion:'image-operation-evidence-v1',measurementIssues,
+    calculationVersion:'image-operation-evidence-v1',measurementIssues,measurementAudit:takeoff.raster_measurement_audit||null,
     warnings:[...warnings,'Image quantities and catalog specifications require review. Unsupported work is not priced.'],
     assumptions:['Only saved image operation evidence is used. No CAD allowances or additional model requests.',
       ...finalItems.filter(i=>i.defaultSpecification?.status==='applied').map(i=>`Editable budget assumption: ${i.defaultSpecification.policy.label}; ${i.defaultSpecification.rateBasis}. ${i.defaultSpecification.policy.conditions||''}`)],
-    summary:{totalItems:finalItems.length,verifiedSubtotal:0,provisionalSubtotal:subtotal,subtotal,
+    summary:{totalItems:finalItems.length,unpricedMeasuredItems:finalItems.filter(i=>i.rateMissing&&i.quantity>0).length,verifiedSubtotal:0,provisionalSubtotal:subtotal,subtotal,
       vatPercentage,vatAmount:budget.vat,grandTotal:budget.total,commercialSafe:false,scopeCoverage:'unconfirmed'}},takeoff,projectId);
 }

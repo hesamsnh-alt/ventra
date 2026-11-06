@@ -50,10 +50,21 @@ export function applyBoqCatalogSelection(item,entry){
   if(factor===null)throw Error(`Cannot apply a ${entry.unit} rate to a ${item.unit} quantity. Select a compatible unit.`);
   if(!Number.isFinite(rate)||rate<=0||entry.rateMissing)throw Error('This catalog item has no recorded rate. A project-specific rate is required.');
   if(!Number.isFinite(Number(item.quantity))||Number(item.quantity)<0)throw Error('Invalid BOQ quantity.');
+  let placeholderFields={};
+  if(item.measurementPlaceholder){
+    const surface=item.measurementPlaceholder.surface,d=String(entry.description||'').toLowerCase();
+    let key;
+    if(surface==='floor'&&/floor|flooring/.test(d)&&!/waterproof|screed|wall|ceiling/.test(d))key=/wood|parquet|laminate|lvt|spc/.test(d)?'wood_floor_area':/epoxy|resin/.test(d)?'epoxy_floor_area':/stone|marble|granite/.test(d)?'stone_floor_area':/cement|concrete/.test(d)?'cement_floor_area':/ceramic|porcelain/.test(d)?'ceramic_floor_area':'unallocated_floor_finish_area';
+    if(surface==='ceiling'&&/ceiling/.test(d))key=/gypsum|board/.test(d)?'gypsum_ceiling_area':/paint|emulsion/.test(d)?'ceiling_paint_area':null;
+    if(surface==='wall'&&!/external|exterior|ceiling|floor/.test(d))key=/wall.*(?:paint|emulsion)|(?:paint|emulsion).*wall/.test(d)?'paint_area':/plaster/.test(d)?'plaster_area':/wall.*tile|tile.*wall/.test(d)?'wet_wall_tile_area':null;
+    if(!key)throw Error(`Select a compatible ${surface} finish, not just an item with the same unit.`);
+    placeholderFields={measurementPlaceholder:{...item.measurementPlaceholder,status:'catalog_selected'},
+      imageEvidence:{...item.imageEvidence,metricKey:key},pdfEvidence:{...item.pdfEvidence,metricKey:key}};
+  }
   const before={quantity:Number(item.quantity),unit:item.unit};
   const scope=String(item.itemCode||'').startsWith('PDF-')?String(item.description||'').split(' — ')[0].trim():'';
   const description=scope&&scope.toLowerCase()!==String(entry.description).toLowerCase()?`${scope} — ${entry.description}`:entry.description;
-  return pendingState({...invalidateBoqReview(item),section:entry.section,description,
+  return pendingState({...invalidateBoqReview(item),...placeholderFields,section:entry.section,description,
     ...(item.defaultSpecification?{defaultSpecification:{...item.defaultSpecification,status:'superseded_by_catalog_selection'},source:'PDF measured quantity + user catalog selection'}:{}),
     quantity:before.quantity*factor,unit:entry.unit,rate,referenceRate:rate,rateSource:`Catalog ${entry.itemCode||entry.id}: ${entry.rateSource}`,
     catalogSelection:{itemCode:entry.itemCode||entry.id,rateSource:entry.rateSource,sourceName:entry.sourceName||'',selectedUnit:entry.unit,selectedRate:rate,
