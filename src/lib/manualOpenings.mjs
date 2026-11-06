@@ -3,6 +3,10 @@ export const OPENING_CATALOG=Object.freeze([
  {id:'manual-door',type:'door',variant:'single',width:.9,height:2.1,sillHeight:0,en:'Room door',fa:'در اتاق',ar:'باب غرفة'},
  {id:'manual-double-door',type:'door',variant:'double',width:1.6,height:2.1,sillHeight:0,en:'Double door',fa:'در دولنگه',ar:'باب مزدوج'},
  {id:'manual-passage',type:'door',variant:'passage',width:1.2,height:2.2,sillHeight:0,en:'Open passage',fa:'بازشوی بدون در',ar:'فتحة مرور'},
+ {id:'manual-entry-door',type:'door',variant:'single',width:1.1,height:2.3,sillHeight:0,en:'Wide entrance door',fa:'در ورودی عریض',ar:'باب مدخل عريض'},
+ {id:'manual-window-wide',type:'window',variant:'fixed',width:2.4,height:1.2,sillHeight:.9,en:'Wide window',fa:'پنجره عریض',ar:'نافذة عريضة'},
+ {id:'manual-window-tall',type:'window',variant:'fixed',width:1,height:2.2,sillHeight:.3,en:'Tall window',fa:'پنجره قدی',ar:'نافذة طويلة'},
+ {id:'manual-window-high',type:'window',variant:'fixed',width:.8,height:.6,sillHeight:1.7,en:'High bathroom window',fa:'پنجره مرتفع سرویس',ar:'نافذة حمام مرتفعة'},
  {id:'manual-window',type:'window',variant:'fixed',width:1.2,height:1.2,sillHeight:.9,en:'Window',fa:'پنجره',ar:'نافذة'},
 ]);
 const fail=m=>{throw new Error(m);};

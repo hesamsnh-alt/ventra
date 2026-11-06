@@ -36,6 +36,35 @@ export const FURNITURE_CATALOG=Object.freeze([
  ['counter','kitchen_counter','Kitchen counter','کابینت آشپزخانه','خزانة مطبخ',1.8,.6,.92,'modern','#bca487'],
  ['cooker','stove','Cooker','اجاق','موقد',.6,.6,.9,'modern','#d0d0cb'],
  ['hood','range_hood','Extractor hood','هود','شفاط',.6,.48,.45,'modern','#c1c1bc'],
+ ["sofa-compact", "sofa", "Compact sofa", "مبل جمع‌وجور", "Compact sofa", 1.5, 0.8, 0.85, "minimal", "#9cafa1"],
+ ["sofa-sectional-left", "sofa", "Sectional · Left chaise", "مبل ال سمت چپ", "Sectional · Left chaise", 2.8, 1.6, 0.85, "sectional-left", "#a29a8f"],
+ ["sofa-sectional-right", "sofa", "Sectional · Right chaise", "مبل ال سمت راست", "Sectional · Right chaise", 2.8, 1.6, 0.85, "sectional-right", "#829094"],
+ ["sofa-bench", "sofa", "Bench sofa", "مبل نیمکتی", "Bench sofa", 1.7, 0.7, 0.85, "bench", "#bb8a5f"],
+ ["armchair-soft", "armchair", "Lounge armchair", "مبل تک‌نفره", "Lounge armchair", 0.9, 0.9, 0.9, "modern", "#b8a291"],
+ ["armchair-compact", "armchair", "Compact armchair", "مبل تک‌نفره کوچک", "Compact armchair", 0.7, 0.75, 0.85, "minimal", "#8b9c86"],
+ ["rug-persian", "rug", "Persian rug", "فرش ایرانی", "Persian rug", 2.4, 1.7, 0.03, "persian", "#8d343b"],
+ ["rug-round", "rug", "Round rug", "فرش گرد", "Round rug", 1.8, 1.8, 0.03, "round", "#c4ac86"],
+ ["rug-runner", "rug", "Runner rug", "قالیچه راهرو", "Runner rug", 2.4, 0.75, 0.03, "runner", "#b99377"],
+ ["rug-minimal", "rug", "Minimal rug", "فرش ساده", "Minimal rug", 2.2, 1.6, 0.03, "minimal", "#c1b8a5"],
+ ["curtain-closed", "curtain", "Pleated curtain · Closed", "پرده پلیسه بسته", "Pleated curtain · Closed", 2, 0.16, 2.5, "closed", "#c5b8a4"],
+ ["curtain-open", "curtain", "Pleated curtain · Open", "پرده پلیسه باز", "Pleated curtain · Open", 2, 0.16, 2.5, "open", "#c0b0a0"],
+ ["curtain-sheer", "curtain", "Sheer curtain", "پرده حریر", "Sheer curtain", 2, 0.12, 2.5, "sheer", "#f1eee5"],
+ ["curtain-roller", "curtain", "Roller blind", "پرده رول", "Roller blind", 1.2, 0.1, 1.6, "roller", "#d0c8b9"],
+ ["cabinet-tall", "cabinet", "Tall storage cabinet", "کمد بلند", "Tall storage cabinet", 0.8, 0.5, 2, "modern", "#c8b398"],
+ ["cabinet-wide", "cabinet", "Wide sideboard", "بوفه عریض", "Wide sideboard", 1.8, 0.45, 0.85, "modern", "#856348"],
+ ["wardrobe-wide", "wardrobe", "Wide wardrobe", "کمد لباس عریض", "Wide wardrobe", 2.4, 0.6, 2.4, "modern", "#e0d7c8"],
+ ["coffee-round", "coffee_table", "Round coffee table", "جلو مبلی گرد", "Round coffee table", 0.85, 0.85, 0.42, "round", "#ae865f"],
+ ["coffee-low", "coffee_table", "Low coffee table", "جلو مبلی کوتاه", "Low coffee table", 1.2, 0.6, 0.32, "minimal", "#d8ccba"],
+ ["coffee-walnut", "coffee_table", "Walnut coffee table", "جلو مبلی گردویی", "Walnut coffee table", 1.1, 0.6, 0.45, "modern", "#77533a"],
+ ["dining-large", "dining_table", "Dining table · Large", "میز غذاخوری بزرگ", "Dining table · Large", 2.2, 1, 0.76, "modern", "#aa8159"],
+ ["dining-small", "dining_table", "Dining table · Compact", "میز غذاخوری کوچک", "Dining table · Compact", 0.9, 0.9, 0.76, "round", "#d0bc9b"],
+ ["desk-wide", "desk", "Wide desk", "میز کار عریض", "Wide desk", 1.8, 0.75, 0.76, "modern", "#a77d52"],
+ ["bed-king", "bed", "King bed", "تخت کینگ", "King bed", 2, 2.1, 1, "luxury", "#bca995"],
+ ["bed-small", "bed", "Guest bed", "تخت مهمان", "Guest bed", 1.2, 2, 0.85, "minimal", "#afbdc0"],
+ ["island", "kitchen_island", "Kitchen island", "جزیره آشپزخانه", "Kitchen island", 1.8, 0.9, 0.92, "modern", "#d0b899"],
+ ["bath", "bathtub", "Bathtub", "وان حمام", "Bathtub", 1.7, 0.75, 0.58, "modern", "#eeeee7"],
+ ["mirror", "mirror", "Standing mirror", "آینه ایستاده", "Standing mirror", 0.65, 0.08, 1.7, "modern", "#bcaa8d"],
+ ["lamp-tall", "floor_lamp", "Tall floor lamp", "آباژور بلند", "Tall floor lamp", 0.5, 0.5, 1.85, "modern", "#c6a66c"],
 ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};
@@ -69,7 +98,7 @@ export function roomAtPoint(scene,point){
 }
 // Snap wall-adjacent furniture onto the visible wall face, never its centreline.
 export function snapFurnitureToWall(draft,scene){
- if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table'].includes(draft.type))return draft;
+ if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table','curtain'].includes(draft.type))return draft;
  let result=draft;
  for(let pass=0;pass<2;pass++){
   const candidates=[];

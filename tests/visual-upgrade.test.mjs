@@ -194,3 +194,13 @@ test('interior view reveals walls and shared headers reversibly without changing
  set(true);assert.ok(mat.opacity>0&&mat.opacity<=.2);assert.equal(mat.depthWrite,false);assert.equal(header.castShadow,false);assert.equal(sofa.castShadow,true);assert.equal(furnitureMat.opacity,1);
  set(false);assert.equal(mat.opacity,1);assert.equal(mat.transparent,false);assert.equal(mat.depthWrite,true);assert.equal(wall.castShadow,true);assert.equal(header.castShadow,true);assert.equal(JSON.stringify(wall.geometry.vertices),vertices);
 });
+
+test('curtain variants are real pleated or roller meshes and new sofas and rugs have distinct geometry',()=>{
+ const closed=assetMeshes('curtain',{id:'curtain',variant:'closed',width:2,depth:.16,height:2.5}),open=assetMeshes('curtain',{variant:'open',width:2,depth:.16,height:2.5}),roller=assetMeshes('curtain',{variant:'roller',width:1.2,depth:.1,height:1.6}),sheer=assetMeshes('curtain',{variant:'sheer'});
+ assert.equal(closed.length,25);assert.equal(open.length,13);assert.equal(roller.length,3);assert.ok(sheer.some(m=>m.material.transparent&&m.material.opacity<1));assert.ok(closed.every(m=>m.userData.assetId==='curtain'));
+ const left=assetMeshes('sofa',{variant:'sectional-left',width:2.8,depth:1.6,height:.85}),right=assetMeshes('sofa',{variant:'sectional-right',width:2.8,depth:1.6,height:.85});
+ assert.notEqual(left[2].position.x,right[2].position.x);assert.equal(left[2].position.x,-right[2].position.x);
+ assert.notEqual(assetMeshes('sofa',{variant:'bench'}).length,assetMeshes('sofa',{variant:'modern'}).length);
+ assert.ok(assetMeshes('rug',{variant:'persian',width:2.4,depth:1.7,height:.03}).length>30);
+ assert.ok(assetMeshes('rug',{variant:'round',width:1.8,depth:1.8,height:.03}).every(m=>m.geometry instanceof THREE.CylinderGeometry));
+});

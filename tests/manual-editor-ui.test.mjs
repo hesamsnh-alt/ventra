@@ -1,3 +1,4 @@
+import * as categories from '../src/lib/furnitureCategories.mjs';
 import * as walls from '../src/lib/manualWalls.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';import {createRequire} from 'node:module';import vm from 'node:vm';
@@ -10,7 +11,7 @@ async function panel(){
  const states=[];let cursor=0,effects=[],tool;
  const react={useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return [states[i],v=>{states[i]=typeof v==='function'?v(states[i]):v;}];},useRef(initial){const i=cursor++;return states[i]||=( {current:initial});},useEffect(fn){effects.push(fn);}};
  const jsx={jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'};
- const sandbox={window:{addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},exports:{},require:id=>id==='react'?react:id==='react/jsx-runtime'?jsx:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='@/app/components/i18n/LanguageProvider'?{useLanguage:()=>({language:'en'})}:id.endsWith('.css')?{}:id==='./ToolDrawer'?{default:'drawer'}:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:require(id)};
+ const sandbox={window:{addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},exports:{},require:id=>id==='@/lib/furnitureCategories.mjs'?categories:id==='react'?react:id==='react/jsx-runtime'?jsx:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='@/app/components/i18n/LanguageProvider'?{useLanguage:()=>({language:'en'})}:id.endsWith('.css')?{}:id==='./ToolDrawer'?{default:'drawer'}:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:require(id)};
  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
  let scene={source:'dwg-engineering-interior',dwgRegion:1,width:8,depth:6,height:3.2,assets:[],openings:[],rooms:[{id:'scope',scopeOnly:true,polygon:[{x:0,y:0},{x:8,y:0},{x:8,y:6},{x:0,y:6}]}],footprint:[{x:0,y:0},{x:8,y:0},{x:8,y:6},{x:0,y:6}],walls:[{id:'w',start:{x:6,y:0},end:{x:6,y:6},thickness:.15}]};
  const renderer={setFurnitureTool:v=>{tool=v;},setNamedView(){}};
@@ -56,4 +57,14 @@ test('actual panel supports drawing a wall in one drag gesture',async()=>{
  assert.equal(ui.getTool().preview({x:2.06,y:5},data,{}).valid,true);
  await ui.getTool().commit({x:2.06,y:5},data,true,{});tree=ui.render();
  assert.equal(ui.getScene().walls.length,2);assert.equal(ui.getScene().walls.at(-1).start.x,2);assert.equal(ui.getScene().walls.at(-1).end.x,2);
+});
+
+ test('actual dropdown filters curtains and rugs and door choices use the real opening tool',async()=>{
+ const ui=await panel();let tree=ui.render();ui.button(tree,'Furniture studio').props.onClick();tree=ui.render();
+ const category=ui.nodes(tree,'select').find(n=>n.props.value==='all');category.props.onChange({target:{value:'curtains'}});tree=ui.render();
+ assert.ok(ui.button(tree,'Pleated curtain'));assert.equal(ui.button(tree,'Indoor plant'),undefined);
+ ui.nodes(tree,'select').find(n=>n.props.value==='curtains').props.onChange({target:{value:'rugs'}});tree=ui.render();assert.ok(ui.button(tree,'Persian rug'));
+ ui.nodes(tree,'select').find(n=>n.props.value==='rugs').props.onChange({target:{value:'windows'}});tree=ui.render();
+ ui.button(tree,'Wide window').props.onClick();tree=ui.render();await ui.getTool().commit({x:6,y:3},{},false,{});
+ assert.equal(ui.getScene().openings[0].type,'window');assert.equal(ui.getScene().openings[0].width,2.4);assert.equal(ui.getScene().assets.length,0);
 });

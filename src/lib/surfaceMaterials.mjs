@@ -324,7 +324,12 @@ export function decorateSurfaceMesh(THREE,mesh,target,scene,cache){
     const original=mesh.material;
     const materials=WALL_SURFACE_SIDES.map(side=>{
       const faceId=assignments[surfaceKey({...target,side})]??id;
-      return findSurfaceMaterial(faceId,scene)?resolve(faceId,surfaceTextureSize(scene,{...target,side})):original;
+      const base=findSurfaceMaterial(faceId,scene)?resolve(faceId,surfaceTextureSize(scene,{...target,side})):original;
+      const exterior=scene.exteriorDesign;
+      if(/^#[0-9a-f]{6}$/i.test(exterior?.color||'')&&exterior.targets?.some(t=>t.id===target.id&&t.side===side)){
+        const tinted=base.clone();tinted.color?.set(exterior.color);return tinted;
+      }
+      return base;
     });
     assignWallFaceMaterials(THREE,mesh,materials);
     applySurfaceUVs(THREE,mesh,target.kind);return;

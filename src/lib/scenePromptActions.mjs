@@ -8,6 +8,7 @@ export const PROMPT_ASSET_DEFAULTS={
  washing_machine:[.65,.65,.88],refrigerator:[.85,.75,1.85],stove:[.7,.65,.9],
  nightstand:[.5,.45,.5],rug:[2.2,1.6,.025],plant:[.45,.45,.9],mirror:[.75,.04,1.1],
  freezer:[.7,.7,1.5],floor_lamp:[.4,.4,1.6],dressing_table:[.9,.42,1.6],flower_pot:[.45,.45,.7],
+ curtain:[2,.16,2.5],
  range_hood:[.7,.5,.45],
 };
 const fail=(message,code='SCENE_EDIT_REJECTED')=>{throw Object.assign(new Error(message),{code,status:422});};

@@ -1,3 +1,4 @@
+import * as categories from '../src/lib/furnitureCategories.mjs';
 import * as walls from '../src/lib/manualWalls.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {FURNITURE_CATALOG,LOCKED_ARCHITECTURE,applyFurnitureEdit,previewFurnitureEdit,roomAtPoint,furnitureRotationFromDrag,furnitureSizeFromDrag} from '../src/lib/furnitureEditor.mjs';
@@ -41,7 +42,7 @@ test('mouse rotation is continuous, reversible and optionally snaps to 15 degree
  const next=applyFurnitureEdit(s,{kind:'rotate',assetId:id,rotation:furnitureRotationFromDrag(0,100,{clientX:280})});
  assert.equal(next.assets[0].rotation,90);assert.equal(next.assets[0].xMeters,5);assert.equal(next.assets[0].yMeters,4);
 });
-test('all 20 catalog models place inside a clear room without mutating architecture or input',()=>{
+test('all catalog models place inside a clear room without mutating architecture or input',()=>{
  for(const m of FURNITURE_CATALOG){const input=scene(),before=structuredClone(input),next=applyFurnitureEdit(input,add(m.id));assert.deepEqual(input,before);for(const k of LOCKED_ARCHITECTURE)assert.deepEqual(next[k],input[k]);assert.equal(next.assets[0].catalogId,m.id);assert.equal(next.assets[0].excludeFromTakeoff,true);assert.equal(next.assets[0].variant,m.variant);}
 });
 test('dining set is an atomic five-object transaction; blocked chairs reject entire set',()=>{
@@ -82,7 +83,7 @@ test('actual furniture panel renders localized controls without executing saves'
  const {transform,loadBindings}=require('next/dist/build/swc');await loadBindings();
  const compiled=await transform(readFileSync('src/app/projects/[id]/FurnitureEditorPanel.jsx','utf8'),{filename:'FurnitureEditorPanel.jsx',jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'commonjs'}});
  const drawer=await loadComponent('src/app/projects/[id]/ToolDrawer.jsx');
- const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
+ const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/lib/furnitureCategories.mjs'?categories:id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
  for(const [locale,title] of [['en','Furniture studio'],['fa','پنل مبلمان'],['ar','لوحة الأثاث']])assert.ok(renderToStaticMarkup(React.createElement(language.default,{initialLanguage:locale},React.createElement(sandbox.exports.default,{scene:scene(),getRenderer:()=>null,onCommit:()=>{throw new Error('Unexpected save');}}))).includes(title));
 });
