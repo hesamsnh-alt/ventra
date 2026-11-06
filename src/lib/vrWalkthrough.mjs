@@ -72,7 +72,7 @@ export function createVRWalkthrough({renderer,scene,sceneData,draw,onState=()=>{
    await renderer.xr.setSession(session);
    if(disposed||!session)return;
    pending=false;last=null;renderer.setAnimationLoop(tick);onState('active');
-  }catch(error){const failed=session;cleanup();try{await failed?.end();}catch{}throw error;}
+  }catch(error){if(disposed||ticket!==generation)return;const failed=session;cleanup();try{await failed?.end();}catch{}throw error;}
  }
  async function stop(){
   if(pending&&!session){generation++;pending=false;if(!disposed)onState('idle');return;}
