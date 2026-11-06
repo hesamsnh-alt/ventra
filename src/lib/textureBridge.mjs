@@ -13,3 +13,13 @@ export function markTextureResourceReady(texture){
 }
 
 export const textureSourceResized=(target,source)=>target.userData.ventraSourceWidth!==source.image?.width||target.userData.ventraSourceHeight!==source.image?.height;
+
+// Raw textile pixels must remain a DataTexture across the r71 → modern bridge.
+// A generic Texture cannot upload an {data,width,height} source as a DOM image.
+export function bridgeTextureSource(THREE,source){
+ const image=source.image;
+ const next=ArrayBuffer.isView(image?.data)?new THREE.DataTexture(image.data,image.width,image.height,THREE.RGBAFormat):new THREE.Texture(image);
+ next.flipY=source.flipY;next.generateMipmaps=source.generateMipmaps;
+ next.minFilter=source.minFilter;next.magFilter=source.magFilter;
+ return next;
+}

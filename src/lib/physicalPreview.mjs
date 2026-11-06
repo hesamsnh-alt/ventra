@@ -1,8 +1,9 @@
 import {createReferenceLighting,interiorShadowCaster,REFERENCE_LIGHTING} from './referenceLighting.mjs';
 import {surfacePhysicalSettings,createSurfaceRelief} from './interiorRenderQuality.mjs';
-import {syncTextureSource,textureSourceStamp,textureSourceResized} from './textureBridge.mjs';
+import {syncTextureSource,textureSourceStamp,textureSourceResized,bridgeTextureSource} from './textureBridge.mjs';
 import * as T from 'three';
 import {createDetailedSurfaces} from './detailedSurfaces.mjs';
+import {createDetailedTextiles} from './detailedTextiles.mjs';
 import {createDetailedFurniture} from './detailedFurniture.mjs';
 import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
@@ -46,7 +47,7 @@ export function physicalMaterialSettings(source){
 export function textilePhysicalSettings(source){
  const scale=Number(source?.bumpScale);
  if(!source?.bumpMap||!Number.isFinite(scale)||Math.abs(scale-.0005)>1e-9||surfacePhysicalSettings(source))return null;
- return {roughness:.84,metalness:0,sheen:.32,sheenRoughness:.85,sheenColor:0xffffff};
+ return {roughness:source.userData?.ventraTextile==='rug'?.96:.84,metalness:0,sheen:source.userData?.ventraTextile==='rug'?.16:.32,sheenRoughness:.85,sheenColor:0xffffff};
 }
 export function createPhysicalPreview(options){
  const renderer=new T.WebGLRenderer(options),nativeRender=renderer.render.bind(renderer);
@@ -76,7 +77,7 @@ export function createPhysicalPreview(options){
  function texture(old,color){
   if(!old?.image)return null;
   const cacheKey=old.uuid+':'+color;if(textures.has(cacheKey)){const cached=textures.get(cacheKey);if(!textureSourceResized(cached,old)){syncTextureSource(cached,old);return cached;}cached.dispose();textures.delete(cacheKey);}
-  const next=new T.Texture(old.image);next.wrapS=old.wrapS;next.wrapT=old.wrapT;
+  const next=bridgeTextureSource(T,old);next.wrapS=old.wrapS;next.wrapT=old.wrapT;
   next.repeat.set(old.repeat?.x||1,old.repeat?.y||1);next.offset.set(old.offset?.x||0,old.offset?.y||0);
   next.userData.ventraSourceVersion=textureSourceStamp(old);next.userData.ventraSourceWidth=old.image.width;next.userData.ventraSourceHeight=old.image.height;next.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;next.anisotropy=anisotropy;next.needsUpdate=true;textures.set(cacheKey,next);return next;
  }
@@ -96,18 +97,20 @@ export function createPhysicalPreview(options){
    next.map=texture(old.map,true);if(!basic){next.bumpMap=texture(old.bumpMap,false);next.bumpScale=old.bumpScale||0;}
    materials.set(old,next);
   }
-  if(old.map){const map=texture(old.map,true);if(next.map!==map){next.map=map;next.needsUpdate=true;}}if(!basicMaterial(old)&&old.bumpMap)next.bumpMap=texture(old.bumpMap,false);
+  if(old.map&&!next.userData.ventraPhotographicTextile){const map=texture(old.map,true);if(next.map!==map){next.map=map;next.needsUpdate=true;}}if(!basicMaterial(old)&&old.bumpMap)next.bumpMap=texture(old.bumpMap,false);
   if(old.color)next.color.setRGB(old.color.r,old.color.g,old.color.b,T.SRGBColorSpace);
   Object.assign(next,{opacity:old.opacity,transparent:old.transparent,depthWrite:old.depthWrite,depthTest:old.depthTest,side:old.side,polygonOffset:old.polygonOffset,polygonOffsetFactor:old.polygonOffsetFactor,polygonOffsetUnits:old.polygonOffsetUnits});
   if(old.userData?.ventraMaterial==='railing_glass'){next.opacity=options.mobile?.24:1;next.transparent=true;}
   if(!basicMaterial(old))relief.apply(old,next);
   if(!options.sceneData?.palette?.designPreset)surfaces.apply(old,next);
+  textiles.apply(old,next);
   return next;
  }
  let lastSource=null,lastCamera=null;
  const surfaces=createDetailedSurfaces(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
+ const textiles=createDetailedTextiles(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
  const detailed=createDetailedFurniture(scene,options.sceneData,()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
- renderer.readyResources=()=>Promise.all([detailed.ready(),surfaces.ready()]);
+ renderer.readyResources=()=>Promise.all([detailed.ready(),surfaces.ready(),textiles.ready()]);
  renderer.render=(oldScene,oldCamera)=>{
   if(oldCamera.isCamera)return nativeRender(oldScene,oldCamera);
   lastSource=oldScene;lastCamera=oldCamera;
@@ -131,6 +134,6 @@ export function createPhysicalPreview(options){
   camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(composer)composer.render();else nativeRender(scene,camera);
  };
  const nativeDispose=renderer.dispose.bind(renderer);
- renderer.dispose=()=>{lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
+ renderer.dispose=()=>{lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();textiles.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
  return renderer;
 }

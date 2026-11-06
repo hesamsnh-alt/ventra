@@ -12,7 +12,7 @@ export function detailedFurnitureKey(asset){
   return 'potted_plant_02';
  }
  if(asset?.type==='chair')return 'dining_chair_02';
- if(asset?.type==='sofa'&&(!asset.variant||['classic','luxury'].includes(asset.variant)))return 'sofa_02';
+ if(asset?.type==='sofa'&&(!asset.variant||['classic','luxury','modern','minimal'].includes(asset.variant)))return 'sofa_02';
  return null;
 }
 export function fitDetailedFurniture(model,width,depth,height,personal=false){

@@ -5352,13 +5352,145 @@ function ventraSoftFurnitureBox(THREE,w,d,h){
 
 // Soft upholstery geometry, generated inside the existing measured dimensions.
 function ventraUpholsteryGeometry(THREE,w,d,h){
- const g=new THREE.BoxGeometry(w,d,h,10,8,6),r=Math.min(w*.12,d*.16,h*.42);
- if(!g.vertices)return ventraSoftFurnitureBox(THREE,w,d,h);
- for(const v of g.vertices){
-  const q=new THREE.Vector3(Math.max(-w/2+r,Math.min(w/2-r,v.x)),Math.max(-d/2+r,Math.min(d/2-r,v.y)),Math.max(-h/2+r,Math.min(h/2-r,v.z)));
-  const delta=v.clone().sub(q);if(delta.length()>0)v.copy(q.add(delta.normalize().multiplyScalar(r)));
+ const g=new THREE.BoxGeometry(w,d,h,14,12,8),r=Math.min(w*.12,d*.16,h*.42);
+ const sculpt=(x,y,z)=>{
+  const q=new THREE.Vector3(Math.max(-w/2+r,Math.min(w/2-r,x)),Math.max(-d/2+r,Math.min(d/2-r,y)),Math.max(-h/2+r,Math.min(h/2-r,z)));
+  const delta=new THREE.Vector3(x,y,z).sub(q);if(delta.length()>0)q.add(delta.normalize().multiplyScalar(r));
+  if(q.z>h*.25){
+   const center=Math.max(0,1-Math.pow(q.x/(w*.5),2))*Math.max(0,1-Math.pow(q.y/(d*.5),2));
+   q.z-=h*.045*center; // slight loading of a padded seat, never a rigid slab
+   q.z+=h*.009*Math.sin(q.x/w*45+q.y/d*8)*Math.pow(1-center,3);
+  }
+  q.z=Math.max(-h/2,Math.min(h/2,q.z));return q;
+ };
+ if(g.vertices){for(const v of g.vertices)v.copy(sculpt(v.x,v.y,v.z));g.computeFaceNormals?.();}
+ else{const a=g.attributes.position;for(let i=0;i<a.count;i++){const v=sculpt(a.getX(i),a.getY(i),a.getZ(i));a.setXYZ(i,v.x,v.y,v.z);}}
+ g.computeVertexNormals();g.userData={upholstery:true};return g;
+}
+
+// Textile geometry is built in metres, with shared vertices and continuous UVs.
+// The same mesh runs in the legacy editor and the modern PBR preview.
+function ventraTextileGrid(THREE,columns,rows,point){
+ const positions=[],uvs=[],indices=[];
+ for(let j=0;j<=rows;j++)for(let i=0;i<=columns;i++){
+  const u=i/columns,v=j/rows,p=point(u,v);positions.push(p.x,p.y,p.z);uvs.push(u,v);
  }
- g.computeFaceNormals();g.computeVertexNormals();g.userData={upholstery:true};return g;
+ for(let j=0;j<rows;j++)for(let i=0;i<columns;i++){
+  const a=j*(columns+1)+i,b=a+1,c=a+columns+1,d=c+1;indices.push(a,b,d,a,d,c);
+ }
+ let g;
+ if(THREE.Geometry){
+  g=new THREE.Geometry();for(let i=0;i<positions.length;i+=3)g.vertices.push(new THREE.Vector3(...positions.slice(i,i+3)));
+  for(let i=0;i<indices.length;i+=3){const ids=indices.slice(i,i+3);g.faces.push(new THREE.Face3(...ids));g.faceVertexUvs[0].push(ids.map(n=>new THREE.Vector2(uvs[n*2],uvs[n*2+1])));}
+  g.computeFaceNormals();g.computeVertexNormals();
+ }else{
+  g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();
+ }
+ g.computeBoundingBox();g.computeBoundingSphere();g.userData={textileSurface:true};return g;
+}
+
+function ventraTextileMaterial(THREE,color,width,height,kind='fabric',variant='modern'){
+ const size=kind==='rug'?512:128,data=new Uint8Array(size*size*4),relief=new Uint8Array(128*128*4);
+ const chosen=new THREE.Color(color||'#c4b8a4'),base=[chosen.r,chosen.g,chosen.b].map(n=>Math.round(n*255));
+ // Ornament belongs to the rug surface, rather than stacked solid blocks.
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+  const u=x/(size-1),v=y/(size-1),noise=((Math.imul(x+17,73856093)^Math.imul(y+31,19349663))>>>0)%101/100-.5;
+  const weave=(x%3===0?-.025:.008)+(y%3===0?-.018:.008)+noise*.035;
+  let rgb=kind==='rug'?base:[238,238,238];
+  if(kind==='rug'&&variant==='persian'){
+   const X=(u-.5)*2,Y=(v-.5)*2,edge=Math.max(Math.abs(X),Math.abs(Y)),angle=Math.atan2(Y,X),radius=Math.hypot(X,Y);
+   const border=edge>.80&&edge<.96,guard=edge>.96||edge>.77&&edge<.80;
+   const floral=Math.sin(26*X+2*Math.sin(18*Y))*Math.cos(24*Y+2*Math.sin(16*X));
+   const medallion=radius<.28+.045*Math.cos(8*angle),petal=Math.abs(Math.sin(12*angle+radius*22));
+   if(guard)rgb=base.map(n=>n*.44);
+   else if(border){const repeat=Math.cos((Math.abs(X)>Math.abs(Y)?Y:X)*Math.PI*22);rgb=repeat>.25?[209,186,140]:base.map(n=>n*.65);}
+   else if(medallion)rgb=petal>.82?[211,183,125]:[52,65,76];
+   else if(floral>.69)rgb=[215,196,154];
+   else if(floral<-.8)rgb=base.map(n=>n*.52);
+  }else if(kind==='rug'&&variant==='runner'){
+   const edge=Math.min(u,1-u);if(edge<.06)rgb=base.map(n=>n*.6);else if(edge<.08)rgb=base.map(n=>Math.min(255,n*1.12));
+  }
+  const i=(y*size+x)*4;for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,Math.round(rgb[c]*(1+weave))));data[i+3]=255;
+ }
+ for(let y=0;y<128;y++)for(let x=0;x<128;x++){
+  const i=(y*128+x)*4,warp=Math.sin(x*Math.PI/2),weft=Math.cos(y*Math.PI/2),n=((x*73+y*139)%37)/37;
+  relief[i]=relief[i+1]=relief[i+2]=Math.round(128+warp*28+weft*20+n*12);relief[i+3]=255;
+ }
+ const texture=(pixels,n)=>{const t=new THREE.DataTexture(pixels,n,n,THREE.RGBAFormat);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.generateMipmaps=true;t.minFilter=THREE.LinearMipmapLinearFilter||THREE.LinearMipMapLinearFilter;t.magFilter=THREE.LinearFilter;t.anisotropy=4;t.needsUpdate=true;return t;};
+ const map=texture(data,size),bump=texture(relief,128);
+ if(kind!=='rug')map.repeat.set(Math.max(1,width/.18),Math.max(1,height/.18));
+ bump.repeat.set(Math.max(1,width/.12),Math.max(1,height/.12));
+ const Material=THREE.MeshPhongMaterial||THREE.MeshLambertMaterial;
+ const mat=new Material({color:kind==='rug'?0xffffff:color||'#c4b8a4',map,bumpMap:bump,bumpScale:.0005,shininess:2,specular:0x121212,side:THREE.DoubleSide});
+ mat.userData={ventraTextile:kind,textileVariant:variant,textileColor:color,physicalWidth:width,physicalHeight:height};return mat;
+}
+
+function ventraCurtainMeshes(THREE,w,d,h,variant,color){
+ const out=[],fabric=ventraTextileMaterial(THREE,color,w,h,'curtain',variant),metal=new THREE.MeshPhongMaterial({color:0x8d8578,shininess:95}),hem=fabric.clone();hem.color.multiplyScalar(.94);
+ if(variant==='sheer'){fabric.transparent=true;fabric.opacity=.57;fabric.depthWrite=false;hem.transparent=true;hem.opacity=.7;hem.depthWrite=false;}
+ const add=(g,m,x=0,y=0,z=0)=>{const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);mesh.castShadow=variant!=='sheer';mesh.receiveShadow=true;out.push(mesh);return mesh;};
+ const rod=add(new THREE.CylinderGeometry(.016,.016,w*.98,16),metal,0,-d*.22,h-.024);rod.rotation.z=Math.PI/2;
+ const top=h-.065,bottom=.015;
+ if(variant==='roller'){
+  add(ventraTextileGrid(THREE,20,24,(u,v)=>({x:(u-.5)*w*.98,y:Math.sin(v*Math.PI)*d*.08,z:bottom+v*(top-bottom)})),fabric);
+  const rail=add(new THREE.CylinderGeometry(.013,.013,w*.98,12),metal,0,0,.02);rail.rotation.z=Math.PI/2;
+ }else{
+  for(const sign of [-1,1]){
+   const point=(u,v)=>{
+    const opening=variant==='open'?.62*Math.pow(1-v,.62):0;
+    const inner=opening*w*.5,outer=w*.49,span=outer-inner;
+    const x=sign*(inner+u*span),fold=Math.cos(u*Math.PI*16+.15*Math.sin(v*4)),wave=Math.sin(v*7+u*4)*.025;
+    const z=bottom+v*(top-bottom)+Math.pow(1-v,6)*.007*(1+Math.sin(u*Math.PI*16));
+    return {x,y:fold*d*.34*(.68+.32*(1-v))+wave*d,z};
+   };
+   const g=ventraTextileGrid(THREE,64,32,point);g.userData={...g.userData,curtainPanel:true,variant};add(g,fabric);
+   const border=ventraTextileGrid(THREE,64,2,(u,v)=>{const p=point(u,.013+v*.014);return {...p,y:p.y+.0015};});add(border,hem);
+  }
+  // Rings sit on the pole; two continuous cloth meshes replace 24 cuboids.
+  for(let i=0;i<14;i++){
+   const ring=add(new THREE.TorusGeometry(.022,.003,5,10),metal,(i/13-.5)*w*.94,-d*.22,h-.042);ring.rotation.y=Math.PI/2;
+  }
+ }
+ return out;
+}
+
+function ventraRugMeshes(THREE,w,d,h,variant,color){
+ const out=[],fabric=ventraTextileMaterial(THREE,color,w,d,'rug',variant),edge=new THREE.MeshPhongMaterial({color:color||'#b9ab94',shininess:1,side:THREE.DoubleSide});edge.color.multiplyScalar(.73);
+ const top=Math.min(.024,Math.max(.009,h*.65));
+ const point=(u,v)=>{
+  if(variant==='round'){
+   const a=u*Math.PI*2,r=v*.49;return {x:Math.cos(a)*w*r,y:Math.sin(a)*d*r,z:top+.0005*Math.sin(u*81)*Math.sin(v*47)};
+  }
+  let x=(u-.5)*w*.98,y=(v-.5)*d*.97;const r=Math.min(.045,w*.04,d*.04),cx=w*.49-r,cy=d*.485-r;
+  if(Math.abs(x)>cx&&Math.abs(y)>cy){const dx=Math.abs(x)-cx,dy=Math.abs(y)-cy,scale=Math.min(1,r/Math.hypot(dx,dy));x=Math.sign(x)*(cx+dx*scale);y=Math.sign(y)*(cy+dy*scale);}
+  return {x,y,z:top+.0006*Math.sin(u*53)*Math.sin(v*37)};
+ };
+ const g=ventraTextileGrid(THREE,variant==='round'?96:48,32,point);g.userData={...g.userData,rugSurface:true};
+ if(variant==='round'){
+  // Cartesian UVs keep a woven pattern undistorted across the circular surface.
+  if(g.vertices){for(let i=0;i<g.faces.length;i++){const f=g.faces[i];g.faceVertexUvs[0][i]=[f.a,f.b,f.c].map(n=>new THREE.Vector2(g.vertices[n].x/w+.5,g.vertices[n].y/d+.5));}}
+  else{const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++)uv.setXY(i,p.getX(i)/w+.5,p.getY(i)/d+.5);}
+ }
+ const surface=new THREE.Mesh(g,fabric);surface.receiveShadow=true;surface.castShadow=false;out.push(surface);
+ if(variant==='round'){
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w,d)*.49,Math.min(w,d)*.49,top*.75,64),edge);base.rotation.x=Math.PI/2;base.position.z=top*.42;out.push(base);
+ }else{
+  const base=new THREE.Mesh(new THREE.BoxGeometry(w*.975,d*.965,top*.7),edge);base.position.z=top*.4;out.push(base);
+  if(variant==='persian'||variant==='runner'){
+   // A single indexed mesh contains all short twisted fringe ribbons.
+   const count=Math.min(120,Math.max(32,Math.round(w/.023))),vertices=[],triangles=[];
+   for(const sign of [-1,1])for(let i=0;i<count;i++){
+    const x=(i/(count-1)-.5)*w*.94,length=d*(.011+.003*Math.sin(i*2.4));
+    for(let j=0;j<4;j++){const along=j<2?0:1;vertices.push({x:x+(j%2?1:-1)*.0015,y:sign*(d*.479+along*length),z:top*.65+along*.001*Math.sin(i)});}
+    const n=vertices.length-4;triangles.push(n,n+1,n+3,n,n+3,n+2);
+   }
+   let fringe;
+   if(THREE.Geometry){fringe=new THREE.Geometry();fringe.vertices=vertices.map(p=>new THREE.Vector3(p.x,p.y,p.z));for(let i=0;i<triangles.length;i+=3)fringe.faces.push(new THREE.Face3(...triangles.slice(i,i+3)));fringe.computeFaceNormals();fringe.computeVertexNormals();}
+   else{fringe=new THREE.BufferGeometry();fringe.setAttribute('position',new THREE.Float32BufferAttribute(vertices.flatMap(p=>[p.x,p.y,p.z]),3));fringe.setIndex(triangles);fringe.computeVertexNormals();}
+   const yarn=new THREE.MeshPhongMaterial({color:0xd8cbb2,shininess:1,side:THREE.DoubleSide}),mesh=new THREE.Mesh(fringe,yarn);mesh.userData={rugFringe:true};out.push(mesh);
+  }
+ }
+ return out;
 }
 
 function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
@@ -5416,14 +5548,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   };
   const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
-  const accent = new OpaqueMaterial({
+  const accent = upholstery ? ventraTextileMaterial(THREE,asset?.color||palette?.upholstery||'#b8afa2',w,d) : new OpaqueMaterial({
     color: hexNumber(asset?.color || (upholstery ? palette?.upholstery : palette?.furniture || palette?.accent), upholstery ? 0xb8afa2 : 0x815a3f),
     side: THREE.DoubleSide,
     shininess: upholstery ? 5 : 36,
     specular: upholstery ? 0x121212 : 0x302b25,
     ...finish(upholstery ? 'fabric' : 'wood'),
   });
-  const light = new OpaqueMaterial({ color: hexNumber(asset?.color || palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
+  const light = upholstery ? ventraTextileMaterial(THREE,asset?.color||palette?.upholstery||'#d9d0c4',w,d) : new OpaqueMaterial({ color: hexNumber(asset?.color || palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
   const white = new OpaqueMaterial({ color: hexNumber(asset?.color, 0xe8e2da), side: THREE.DoubleSide, shininess: 38, specular: 0x444444, ...finish('stone') });
   const dark = new OpaqueMaterial({ color: 0x4d433b, side: THREE.DoubleSide, shininess: 9 });
   const sage = new OpaqueMaterial({ color: hexNumber(palette?.textileAccent, 0x8e9b78), side: THREE.DoubleSide, shininess: 3, ...finish('fabric') });
@@ -5460,6 +5592,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     meshes.push(mesh);
+    const radius=Math.min(.002,bh*.025);
+    const piping=ventraTextileGrid(THREE,72,4,(u,v)=>{
+      const a=u*Math.PI*2,c=Math.cos(a),s=Math.sin(a),x=Math.sign(c)*Math.pow(Math.abs(c),.32)*(bw/2-radius*2),y=Math.sign(s)*Math.pow(Math.abs(s),.32)*(bd/2-radius*2),length=Math.hypot(c,s)||1;
+      return {x:x+c/length*Math.cos(v*Math.PI*2)*radius,y:y+s/length*Math.cos(v*Math.PI*2)*radius,z:bh*.15+Math.sin(v*Math.PI*2)*radius};
+    });
+    const seam=new THREE.Mesh(piping,material);seam.position.copy(mesh.position);seam.rotation.copy(mesh.rotation);seam.castShadow=true;seam.receiveShadow=true;seam.userData={upholsterySeam:true};meshes.push(seam);
     return mesh;
   };
 
@@ -5479,13 +5617,8 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     case 'personal_model': {const m=new THREE.MeshBasicMaterial({color:0x9ca3af,wireframe:true});addBox(w,d,h,0,0,h/2,m);break;}
 
     case 'curtain': {
-      if(designVariant==='sheer'){accent.transparent=true;accent.opacity=.48;}
-      addBox(w,.06,.05,0,0,h-.025,metal);
-      if(designVariant==='roller'){addBox(w,d*.6,h*.94,0,0,h*.48,accent);addBox(w,.07,.04,0,0,.03,metal);break;}
-      const count=24,spacing=w/count;
-      for(let i=0;i<count;i++){
-        if(designVariant==='open'&&i>=6&&i<18)continue;
-        addBox(spacing*.96,d*.55,h-.1,-w/2+spacing*(i+.5),(i%2?1:-1)*d*.18,(h-.1)/2,accent);
+      for(const mesh of ventraCurtainMeshes(THREE,w,d,h,designVariant,asset.color||'#c5b8a4')){
+        const shift=rotateOffset(mesh.position.x,mesh.position.y);mesh.position.set(cx+shift.x,cy+shift.y,mesh.position.z+(Number(asset.zMeters)||0));mesh.rotation.z+=rot;meshes.push(mesh);
       }
       break;
     }
@@ -5515,16 +5648,9 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'rug': {
-      if(designVariant==='round'){addCylinder(Math.min(w,d)/2,.015,0,0,.015,rugMat);addCylinder(Math.min(w,d)*.42,.005,0,0,.025,light);break;}
-      if(designVariant==='persian'){
-        addBox(w,d,.012,0,0,.014,rugMat);addBox(w*.9,d*.86,.005,0,0,.023,light);addBox(w*.8,d*.72,.004,0,0,.027,accent);
-        for(const x of [-.28,0,.28]){const diamond=addBox(w*.16,d*.2,.003,w*x,0,.031,light);diamond.rotation.z=rot+Math.PI/4;}
-        for(let i=0;i<18;i++)for(const sign of [-1,1])addBox(w/75,d*.04,.004,(i/17-.5)*w*.94,sign*d*.49,.022,light);
-        break;
+      for(const mesh of ventraRugMeshes(THREE,w,d,h,designVariant,asset.color||'#b9aa94')){
+        const shift=rotateOffset(mesh.position.x,mesh.position.y);mesh.position.set(cx+shift.x,cy+shift.y,mesh.position.z+(Number(asset.zMeters)||0));mesh.rotation.z+=rot;meshes.push(mesh);
       }
-      addBox(w, d, 0.012, 0, 0, 0.014, dark);
-      addBox(w * 0.96, d * 0.96, 0.012, 0, 0, 0.018, rugMat);
-      addBox(w * 0.84, d * 0.84, 0.004, 0, 0, 0.026, light);
       break;
     }
     case 'plant': {
@@ -5949,6 +6075,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   for (const material of [accent, light, white, dark, sage, rugMat, leafMat, potMat, glass, metal]) {
     if (!usedMaterials.has(material)) {
       material.map?.dispose?.();
+      if(material.bumpMap!==material.map)material.bumpMap?.dispose?.();
       material.dispose?.();
     }
   }

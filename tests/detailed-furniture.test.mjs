@@ -7,8 +7,8 @@ test('detailed Y-up furniture fits exact floor footprint and upright height with
  assert.deepEqual(model.position.toArray(),before);
  const up=new T.Vector3(0,1,0).transformDirection(model.matrixWorld);assert.ok(up.z>.99);
 });
-test('detailed catalog leaves unsupported types and modern/minimal sofa variants intact',()=>{
- assert.equal(detailedFurnitureKey({type:'plant'}),'potted_plant_02');assert.equal(detailedFurnitureKey({type:'chair'}),'dining_chair_02');assert.equal(detailedFurnitureKey({type:'sofa'}),'sofa_02');assert.equal(detailedFurnitureKey({type:'sofa',variant:'minimal'}),null);assert.equal(detailedFurnitureKey({type:'door'}),null);
+test('textured sofa covers straight sofa variants while preserving sectional and bench geometry',()=>{
+ assert.equal(detailedFurnitureKey({type:'plant'}),'potted_plant_02');assert.equal(detailedFurnitureKey({type:'chair'}),'dining_chair_02');assert.equal(detailedFurnitureKey({type:'sofa'}),'sofa_02');assert.equal(detailedFurnitureKey({type:'sofa',variant:'minimal'}),'sofa_02');assert.equal(detailedFurnitureKey({type:'door'}),null);assert.equal(detailedFurnitureKey({type:'sofa',variant:'sectional-left'}),null);assert.equal(detailedFurnitureKey({type:'sofa',variant:'bench'}),null);
 });
 test('async asset replacement retains proxies, follows preview transforms, and loads each model once',async()=>{
  const render=new T.Scene(),source=new T.Scene(),part=new T.Mesh(new T.BoxGeometry(.5,.5,.5),new T.MeshBasicMaterial());part.userData.assetId='p';source.add(part);source.updateMatrixWorld(true);

@@ -197,10 +197,32 @@ test('interior view reveals walls and shared headers reversibly without changing
 
 test('curtain variants are real pleated or roller meshes and new sofas and rugs have distinct geometry',()=>{
  const closed=assetMeshes('curtain',{id:'curtain',variant:'closed',width:2,depth:.16,height:2.5}),open=assetMeshes('curtain',{variant:'open',width:2,depth:.16,height:2.5}),roller=assetMeshes('curtain',{variant:'roller',width:1.2,depth:.1,height:1.6}),sheer=assetMeshes('curtain',{variant:'sheer'});
- assert.equal(closed.length,25);assert.equal(open.length,13);assert.equal(roller.length,3);assert.ok(sheer.some(m=>m.material.transparent&&m.material.opacity<1));assert.ok(closed.every(m=>m.userData.assetId==='curtain'));
+ assert.equal(closed.filter(m=>m.geometry.userData?.curtainPanel).length,2);assert.equal(open.filter(m=>m.geometry.userData?.curtainPanel).length,2);assert.equal(roller.length,3);assert.ok(sheer.some(m=>m.material.transparent&&m.material.opacity<1));assert.ok(closed.every(m=>m.userData.assetId==='curtain'));
  const left=assetMeshes('sofa',{variant:'sectional-left',width:2.8,depth:1.6,height:.85}),right=assetMeshes('sofa',{variant:'sectional-right',width:2.8,depth:1.6,height:.85});
- assert.notEqual(left[2].position.x,right[2].position.x);assert.equal(left[2].position.x,-right[2].position.x);
+ const chaise=parts=>parts.find(m=>m.geometry.userData?.upholstery&&m.position.y>0);assert.notEqual(chaise(left).position.x,chaise(right).position.x);assert.equal(chaise(left).position.x,-chaise(right).position.x);
  assert.notEqual(assetMeshes('sofa',{variant:'bench'}).length,assetMeshes('sofa',{variant:'modern'}).length);
- assert.ok(assetMeshes('rug',{variant:'persian',width:2.4,depth:1.7,height:.03}).length>30);
- assert.ok(assetMeshes('rug',{variant:'round',width:1.8,depth:1.8,height:.03}).every(m=>m.geometry instanceof THREE.CylinderGeometry));
+ assert.ok(assetMeshes('rug',{variant:'persian',width:2.4,depth:1.7,height:.03}).some(m=>m.geometry.userData?.rugSurface));
+ assert.ok(assetMeshes('rug',{variant:'round',width:1.8,depth:1.8,height:.03}).some(m=>m.geometry instanceof THREE.CylinderGeometry));
+});
+
+test('continuous curtain folds, cloth normals and metric bounds survive both legacy and modern geometry',async()=>{
+ const Modern=await import('three');
+ for(const engine of [THREE,Modern])for(const variant of ['closed','open','sheer','roller']){
+  const params={type:'curtain',id:'cloth',width:2,depth:.16,height:2.5,xMeters:4,yMeters:4,color:'#a78f79',variant},copy=JSON.stringify(params);
+  const parts=context.buildSchematicAssetMeshes({THREE:engine,asset:params,palette:{},roomWidth:8,roomDepth:8});
+  assert.equal(JSON.stringify(params),copy);assert.ok(parts.length<25);const bounds=new engine.Box3();let triangles=0;
+  for(const p of parts){p.updateMatrixWorld(true);bounds.union(new engine.Box3().setFromObject(p));triangles+=p.geometry.faces?.length??p.geometry.index.count/3;}
+  assert.ok(triangles<13000);assert.ok(bounds.min.x>=-1.001&&bounds.max.x<=1.001);assert.ok(bounds.min.z>=0&&bounds.max.z<=2.501);
+  const panel=parts.find(m=>m.material.userData?.ventraTextile==='curtain');assert.ok(panel.material.map.image.data.length>10000);assert.ok(panel.material.bumpMap!==panel.material.map);
+  const g=panel.geometry;assert.ok((g.vertices?.length??g.attributes.position.count)>400);assert.ok(g.faceVertexUvs?.[0]?.length||g.attributes.uv.count);
+ }
+});
+test('rug motifs are textured and fringes batched, without raised block ornaments',()=>{
+ for(const variant of ['persian','round','runner','minimal']){
+  const parts=assetMeshes('rug',{variant,color:'#89343b',width:2.4,depth:1.7,height:.03});assert.ok(parts.length<=3);
+  const surface=parts.find(p=>p.geometry.userData?.rugSurface);assert.equal(surface.material.userData.ventraTextile,'rug');assert.equal(surface.material.map.image.width,512);
+  assert.equal(surface.material.bumpMap.image.width,128);assert.notEqual(surface.material.map,surface.material.bumpMap);
+  const pixels=surface.material.map.image.data;assert.ok(new Set(Array.from(pixels).filter((_,i)=>i%4!==3)).size>(variant==='persian'?30:5));
+  const bounds=new THREE.Box3();for(const p of parts){p.updateMatrixWorld(true);bounds.union(new THREE.Box3().setFromObject(p));}assert.ok(bounds.min.z>=0&&bounds.max.z<=.031);
+ }
 });
