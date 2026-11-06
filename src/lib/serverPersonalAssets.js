@@ -46,7 +46,7 @@ export async function libraryList(request){
  const {db,user}=await personalAssetAccount(request);await ensurePrivate(db);
  const assets=check(await db.from('ventra_personal_assets').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).limit(100));
  const jobs=check(await db.from('ventra_model_jobs').select('id,status,progress,name,error,created_at,credits').eq('user_id',user.id).in('status',['submitting','pending','unknown','failed']).order('created_at',{ascending:false}).limit(10));
- return {assets:await Promise.all(assets.map(async row=>({...row,thumbnailUrl:await signed(db,row,true)}))),jobs,configuration:modelGenerationConfig()};
+ return {assets:await Promise.all(assets.filter(row=>!row.archived_at).map(async row=>({...row,thumbnailUrl:await signed(db,row,true)}))),archivedAssets:assets.filter(row=>row.archived_at&&row.kind==='material'),jobs,configuration:modelGenerationConfig()};
 }
 export async function libraryAsset(request,assetId,projectId){
  if(!validAssetId(assetId))throw assetFailure('Invalid asset ID.',400);
@@ -74,6 +74,10 @@ export async function uploadLibraryMaterial(request,body){
 }
 export async function editLibraryAsset(request,body){
  const{db,user}=await personalAssetAccount(request);if(!validAssetId(body.assetId))throw assetFailure('Invalid asset.',400);
+ if(['archive','restore'].includes(body.action)){
+  const rows=check(await db.from('ventra_personal_assets').update({archived_at:body.action==='archive'?new Date().toISOString():null}).eq('id',body.assetId).eq('user_id',user.id).eq('kind','material').select('id'));
+  if(!rows?.length)throw assetFailure('Material not found.',404);return {success:true};
+ }
  const details=assetDetails(body);const rows=check(await db.from('ventra_personal_assets').update(details).eq('id',body.assetId).eq('user_id',user.id).select('id'));
  if(!rows?.length)throw assetFailure('Asset not found.',404);return {success:true};
 }

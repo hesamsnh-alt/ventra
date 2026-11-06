@@ -34,3 +34,6 @@ export async function uploadPersonalGlb({file,projectId}){
  if(!response.ok)throw Error('GLB upload failed. / آپلود مدل ناموفق بود.');
  return send('/api/personal-assets',{action:'finish-glb',projectId,assetId:started.assetId,name:file.name.replace(/\.glb$/i,'').slice(0,100),furniture_type:'cabinet'});
 }
+
+export const deletePersonalMaterial=assetId=>send('/api/personal-assets',{assetId,action:'archive'},'PATCH');
+export const restorePersonalMaterial=assetId=>send('/api/personal-assets',{assetId,action:'restore'},'PATCH');

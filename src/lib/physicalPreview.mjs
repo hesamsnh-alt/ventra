@@ -38,6 +38,7 @@ export function physicalGeometry(source){
  g.computeBoundingBox();g.computeBoundingSphere();return g;
 }
 export function physicalMaterialSettings(source){
+ if(source.userData?.furniturePbr)return source.userData.furniturePbr;
  const surface=surfacePhysicalSettings(source);if(surface)return surface;
  const shininess=Number(source.shininess)||0;
  return {roughness:Math.max(.22,Math.min(.94,Math.sqrt(2/(shininess+2)))),metalness:shininess>=100?.72:0};
@@ -45,6 +46,7 @@ export function physicalMaterialSettings(source){
 // This exact bump scale identifies the procedural fabric already produced by the viewer.
 // Keep paint, wood and user-supplied photo materials out of textile shading.
 export function textilePhysicalSettings(source){
+ if(source?.userData?.furnitureKind==='fabric')return {...source.userData.furniturePbr,sheen:.2,sheenRoughness:.85,sheenColor:0xffffff};
  const scale=Number(source?.bumpScale);
  if(!source?.bumpMap||!Number.isFinite(scale)||Math.abs(scale-.0005)>1e-9||surfacePhysicalSettings(source))return null;
  return {roughness:source.userData?.ventraTextile==='rug'?.96:.84,metalness:0,sheen:source.userData?.ventraTextile==='rug'?.16:.32,sheenRoughness:.85,sheenColor:0xffffff};

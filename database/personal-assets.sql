@@ -6,6 +6,7 @@ create table if not exists public.ventra_personal_assets (
  width numeric not null default 1 check(width between 0.05 and 6), depth numeric not null default 1 check(depth between 0.05 and 4), height numeric not null default 1 check(height between 0.05 and 3),
  mime text not null, created_at timestamptz not null default now()
 );
+alter table public.ventra_personal_assets add column if not exists archived_at timestamptz;
 create index if not exists ventra_personal_assets_user on public.ventra_personal_assets(user_id,created_at desc);
 create table if not exists public.ventra_model_jobs (
  id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,

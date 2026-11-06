@@ -80,3 +80,19 @@ test('GLB import blocks foreign projects/assets, oversized or malformed files be
  const begun=await server.beginLibraryGlbUpload(request(),{projectId,size:100});const path=user+'/'+begun.assetId+'/model.glb';h.files.set(path,new Uint8Array(100));await assert.rejects(server.finishLibraryGlbUpload(request(),{projectId,assetId:begun.assetId}),{status:422});assert.equal(h.files.has(path),false);assert.equal(h.tables.ventra_personal_assets.length,0);assert.equal(h.posts,0);
  }finally{h.restore();}
 });
+test('material deletion is owner-only and reversible, preserving project links and texture files without AI',async()=>{
+ const h=setup();try{
+ const {asset}=await server.uploadLibraryMaterial(request(),body());await server.linkLibraryAsset(request(),{assetId:asset.id,projectId});
+ await assert.rejects(server.editLibraryAsset(request(null),{assetId:asset.id,action:'archive'}),{status:401});
+ await assert.rejects(server.editLibraryAsset(request(foreign),{assetId:asset.id,action:'archive'}),{status:404});
+ assert.equal((await server.libraryList(request())).assets.length,1);
+ await server.editLibraryAsset(request(),{assetId:asset.id,action:'archive'});
+ const removed=await server.libraryList(request());assert.equal(removed.assets.length,0);assert.equal(removed.archivedAssets.length,1);
+ assert.ok(h.files.has(user+'/'+asset.id+'/texture.png'));assert.equal(h.tables.ventra_project_asset_links.length,1);
+ h.tables.ventra_project_members.push({project_id:projectId,user_id:foreign,role:'viewer'});assert.ok((await server.libraryAsset(request(foreign),asset.id,projectId)).url);
+ await assert.rejects(server.editLibraryAsset(request(foreign),{assetId:asset.id,action:'restore'}),{status:404});
+ await server.editLibraryAsset(request(),{assetId:asset.id,action:'restore'});assert.equal((await server.libraryList(request())).assets.length,1);assert.equal((await server.libraryList(request())).archivedAssets.length,0);assert.equal(h.posts,0);
+ const modelId='30000000-0000-4000-8000-000000000001';h.tables.ventra_personal_assets.push({id:modelId,user_id:user,kind:'model'});
+ await assert.rejects(server.editLibraryAsset(request(),{assetId:modelId,action:'archive'}),{status:404});
+ }finally{h.restore();}
+});

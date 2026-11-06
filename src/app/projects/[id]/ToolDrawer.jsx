@@ -14,9 +14,9 @@ const labels={
  edit:{en:'Selected furniture settings',fa:'تنظیمات مبلمان انتخاب‌شده',ar:'إعدادات الأثاث المختار'},
  inspector:{en:'Object inspector',fa:'اطلاعات اجزای مدل',ar:'معلومات عناصر النموذج'},
 };
-export default function ToolDrawer({title,children,className='',onClose}){
+export default function ToolDrawer({title,children,className='',onClose,onOpen,name,open}){
  const {language}=useLanguage();
- return <details className={`ventra-tool-drawer ${className}`} onToggle={e=>{if(!e.currentTarget.open)onClose?.();}}>
+ return <details name={name} open={open} className={`ventra-tool-drawer ${className}`} onToggle={e=>{if(e.target!==e.currentTarget)return;if(e.currentTarget.open)onOpen?.();else onClose?.();}}>
   <summary><span>{labels[title]?.[language]||labels[title]?.en||title}</span><span className="ventra-drawer-chevron" aria-hidden="true">⌄</span></summary>
   <div className="ventra-drawer-content">{children}</div>
  </details>;

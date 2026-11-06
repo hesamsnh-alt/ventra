@@ -16,3 +16,9 @@ test('local photograph has explicit public-domain provenance and is bounded for 
  const p=new URL('../public/realistic-assets/textiles/persian-vase-carpet.jpg',import.meta.url),bytes=readFileSync(p);assert.equal(bytes[0],255);assert.equal(bytes[1],216);assert.ok(bytes.length<400000);
  const license=readFileSync(new URL('../public/realistic-assets/textiles/LICENSE.md',import.meta.url),'utf8');assert.match(license,/452187/);assert.match(license,/isPublicDomain: true/);
 });
+test('additional Iranian photo rugs load independently once and retain their native colors',async()=>{
+ const {PERSIAN_RUG_PHOTOS}=await import('../src/lib/detailedTextiles.mjs'),loads=[],photos=[];
+ const c=createDetailedTextiles(()=>{}, {loadAsync:async url=>{loads.push(url);const t=new T.Texture();photos.push(t);return t;}});
+ for(const [variant,p] of Object.entries(PERSIAN_RUG_PHOTOS)){const old={userData:{ventraTextile:'rug',textileVariant:variant,textileColor:p.color}},mat=new T.MeshPhysicalMaterial();c.apply(old,mat);await c.ready();c.apply(old,mat);assert.equal(mat.color.getHexString(),'ffffff');const bytes=readFileSync(new URL('../public/realistic-assets/textiles/'+p.file,import.meta.url));assert.ok(bytes.length<400000);}
+ assert.equal(new Set(loads).size,4);let disposed=0;photos.forEach(p=>p.addEventListener('dispose',()=>disposed++));c.dispose();assert.equal(disposed,4);
+});

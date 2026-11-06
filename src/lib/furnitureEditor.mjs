@@ -1,3 +1,4 @@
+import {applyFurnitureFinish} from './furnitureFinishes.mjs';
 import {SOFA_SET_LAYOUTS} from './sofaSets.mjs';
 import {personalFurnitureModel} from './personalAssets.mjs';
 import {applyPromptActions,placementProblem} from './scenePromptActions.mjs';
@@ -27,7 +28,7 @@ export const FURNITURE_CATALOG=Object.freeze([
  ['plant-calathea','plant','Calathea · Medium','کالاتیا متوسط','كالاتيا متوسطة',.65,.65,.85,'calathea','#9e7655'],
  ['plant-calathea-large','plant','Calathea · Large','کالاتیا بزرگ','كالاتيا كبيرة',.9,.9,1.2,'calathea','#9e7655'],
  ['plant-succulent','plant','Succulent · Tabletop','گیاه گوشتی رومیزی','نبات عصاري للطاولة',.3,.3,.4,'succulent','#b07b59'],
- ['tv','tv_unit','TV console','تلویزیون و میز','تلفاز وطاولة',1.6,.35,.65,'modern','#947050'],
+ ['tv','tv_unit','TV console','تلویزیون و میز','تلفاز وطاولة',1.6,.35,1.35,'modern','#947050'],
  ['washer','washing_machine','Washing machine','لباس‌شویی','غسالة',.6,.65,.88,'modern','#e9e9e5'],
  ['fridge','refrigerator','Refrigerator','یخچال','ثلاجة',.75,.7,1.85,'modern','#d8d8d4'],
  ['toilet','toilet','Toilet','توالت','مرحاض',.55,.75,.78,'modern','#f1f0e9'],
@@ -44,6 +45,9 @@ export const FURNITURE_CATALOG=Object.freeze([
  ["armchair-soft", "armchair", "Lounge armchair", "مبل تک‌نفره", "Lounge armchair", 0.9, 0.9, 0.9, "modern", "#b8a291"],
  ["armchair-compact", "armchair", "Compact armchair", "مبل تک‌نفره کوچک", "Compact armchair", 0.7, 0.75, 0.85, "minimal", "#8b9c86"],
  ["rug-persian", "rug", "Persian rug", "فرش ایرانی", "Persian rug", 2.4, 1.7, 0.03, "persian", "#8d343b"],
+ ["rug-persian-polonaise", "rug", "Persian Polonaise rug", "فرش ایرانی پولونز", "Persian Polonaise rug", 2.01, 1.84, 0.03, "persian-polonaise", "#a66c4d"],
+ ["rug-persian-medallion", "rug", "Persian medallion rug", "فرش ایرانی ترنج‌دار", "Persian medallion rug", 2.36, 1.45, 0.03, "persian-medallion", "#b1996d"],
+ ["rug-persian-czartoryski", "rug", "Persian long floral rug", "فرش ایرانی کشیده گل‌دار", "Persian long floral rug", 3.2, 1.43, 0.03, "persian-czartoryski", "#8f7950"],
  ["rug-round", "rug", "Round rug", "فرش گرد", "Round rug", 1.8, 1.8, 0.03, "round", "#c4ac86"],
  ["rug-runner", "rug", "Runner rug", "قالیچه راهرو", "Runner rug", 2.4, 0.75, 0.03, "runner", "#b99377"],
  ["rug-minimal", "rug", "Minimal rug", "فرش ساده", "Minimal rug", 2.2, 1.6, 0.03, "minimal", "#c1b8a5"],
@@ -79,6 +83,23 @@ export const FURNITURE_CATALOG=Object.freeze([
  ["sofa-set-comfort-7", "sofa", "Comfort set · 7 seats + coffee table", "ست راحتی 7 نفره با میز جلو مبلی", "Comfort · 7", 4.8, 3.8, 1.05, "comfort", "#a5b3a0"],
  ["sofa-set-classic-6", "sofa", "Classic set · 6 seats + coffee table", "ست استیل 6 نفره با میز جلو مبلی", "Classic · 6", 4.8, 3.8, 1.05, "classic", "#bca07c"],
  ["sofa-set-classic-7", "sofa", "Classic set · 7 seats + coffee table", "ست استیل 7 نفره با میز جلو مبلی", "Classic · 7", 4.8, 3.8, 1.05, "classic", "#bca07c"],
+ ["curtain-eyelet", "curtain", "Eyelet curtain", "پرده پانچ", "ستارة حلقات", 2, 0.18, 2.5, "eyelet", "#ab967e"],
+ ["curtain-linen", "curtain", "Natural linen curtain", "پرده کتان طبیعی", "ستارة كتان", 2, 0.16, 2.5, "linen", "#d6c9ad"],
+ ["curtain-blackout", "curtain", "Blackout curtain", "پرده بلک‌اوت", "ستارة تعتيم", 2, 0.2, 2.5, "blackout", "#6d7b82"],
+ ["curtain-double", "curtain", "Double layer · Sheer + drape", "پرده دولایه حریر و پارچه", "ستارة بطبقتين", 2.4, 0.25, 2.6, "double-layer", "#a99581"],
+ ["curtain-roman", "curtain", "Roman blind", "پرده رومن", "ستارة رومانية", 1.2, 0.12, 1.7, "roman", "#c7b99e"],
+ ["curtain-tieback", "curtain", "Tieback curtain", "پرده با بند جمع‌کن", "ستارة برباط", 2, 0.18, 2.5, "tieback", "#9c8174"],
+ ["frame-oak", "picture_frame", "Oak frame · Landscape", "قاب چوبی افقی", "إطار خشبي أفقي", 0.9, 0.055, 0.6, "oak", "#af8457"],
+ ["frame-black", "picture_frame", "Black frame · Square", "قاب مشکی مربع", "إطار أسود مربع", 0.7, 0.05, 0.7, "black", "#25282a"],
+ ["frame-gold", "picture_frame", "Gold frame · Portrait", "قاب طلایی عمودی", "إطار ذهبي رأسي", 0.55, 0.065, 0.8, "gold", "#c5a35f"],
+ ["frame-white", "picture_frame", "White gallery frame", "قاب سفید پاسپارتو", "إطار أبيض", 0.8, 0.05, 0.6, "white", "#e7e3d8"],
+ ["frame-triptych", "picture_frame", "Triptych wall art", "تابلوی سه‌تکه", "لوحة ثلاثية", 1.6, 0.055, 0.65, "triptych", "#85684d"],
+ ["tv-oled-55", "wall_tv", "Wall TV · 55 inch", "تلویزیون دیواری ۵۵ اینچ", "تلفاز جداري ٥٥ بوصة", 1.24, 0.06, 0.71, "wall-mounted", "#20252a"],
+ ["tv-oled-75", "wall_tv", "Wall TV · 75 inch", "تلویزیون دیواری ۷۵ اینچ", "تلفاز جداري ٧٥ بوصة", 1.68, 0.065, 0.96, "wall-mounted", "#20252a"],
+ ["tv-console-oak", "tv_unit", "TV + oak console", "تلویزیون و کنسول چوبی", "تلفاز ووحدة خشبية", 1.8, 0.45, 1.45, "console-oak", "#b2946f"],
+ ["tv-console-white", "tv_unit", "TV + white console", "تلویزیون و کنسول سفید", "تلفاز ووحدة بيضاء", 1.8, 0.42, 1.45, "console-white", "#deded6"],
+ ["tv-pedestal", "tv_unit", "TV · Pedestal stand", "تلویزیون با پایه مرکزی", "تلفاز بقاعدة", 1.45, 0.4, 1.25, "pedestal", "#292e33"],
+ ["tv-media-wall", "tv_unit", "Media wall · Timber slats", "تی‌وی وال با پنل چوبی", "جدار تلفاز خشبي", 2.4, 0.4, 2.4, "media-wall", "#987853"],
 ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs,...(SOFA_SET_LAYOUTS[id]?{layout:SOFA_SET_LAYOUTS[id]}:{})})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};
@@ -125,7 +146,7 @@ export function roomAtPoint(scene,point){
 }
 // Snap wall-adjacent furniture onto the visible wall face, never its centreline.
 export function snapFurnitureToWall(draft,scene){
- if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table','curtain'].includes(draft.type))return draft;
+ if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table','curtain','picture_frame','wall_tv'].includes(draft.type))return draft;
  let result=draft;
  for(let pass=0;pass<2;pass++){
   const candidates=[];
@@ -164,6 +185,7 @@ export function furnitureDraft(scene,edit){
  const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:room.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
  if(edit.kind==='add'&&model){const scale=furniturePlacementScale(edit.scale??1);for(const k of ['width','depth','height'])draft[k]*=scale;}
  if(draft.type==='range_hood')draft.zMeters=1.95;
+ else if(['picture_frame','wall_tv'].includes(draft.type))draft.zMeters=1.1;
  else if(model)delete draft.zMeters;
  if(edit.color)draft.color=edit.color;
  if(edit.kind==='resize')for(const key of ['width','depth','height']){
@@ -194,6 +216,7 @@ export function previewFurnitureEdit(scene,edit){
  }catch(error){return {candidate,valid:false,error:error.message};}
 }
 export function applyFurnitureEdit(scene,edit){
+ if(edit.kind==='material')return applyFurnitureFinish(scene,edit.assetId,edit.materialId,edit.target);
  if(!['add','move','rotate','resize','color','replace','remove'].includes(edit.kind))fail('Unsupported furniture operation.');
  const chosen=resolveFurnitureCatalog(edit);
  if(chosen?.layout&&edit.kind==='replace')fail('Place a complete set on the floor; it cannot replace one object. / ست کامل را روی کف قرار بده؛ جایگزین یک وسیله نمی‌شود.');
@@ -227,8 +250,9 @@ export function applyFurnitureEdit(scene,edit){
  const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&(edit.scale??1)!==1?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:{zMeters:0})};});
+  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&(edit.scale??1)!==1?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:['picture_frame','wall_tv'].includes(model.type)?{zMeters:1.1}:{zMeters:0})};});
  }
+ if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.furnitureFinishes?{...a,furnitureFinishes:Object.fromEntries(Object.entries(a.furnitureFinishes).map(([key,value])=>[key,{...value,color:edit.color}]))}:a);
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);
  if(edit.kind==='resize')next.assets=next.assets.map(a=>a.id===original.id?{...a,renderingBaseDimensions:original.renderingBaseDimensions||{width:original.width,depth:original.depth,height:original.height}}:a);
  const editedIds=new Set(edit.kind==='add'?next.assets.slice(scene.assets.length).map(a=>a.id):[edit.assetId]);

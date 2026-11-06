@@ -22,7 +22,7 @@ function Swatch({material,label,selected,disabled,onChoose}){
   </button>;
 }
 
-export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCanvasHost,onCommit,onModeChange,onRequestSolidWalls,disabled=false}){
+export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCanvasHost,onCommit,onModeChange,onRequestSolidWalls,active=true,disabled=false}){
   const {language}=useLanguage(),lang=['fa','ar'].includes(language)?language:'en';
   const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
   const [personalMaterials,setPersonalMaterials]=useState({}),[tileSize,setTileSize]=useState(2);
@@ -49,7 +49,7 @@ export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCan
     }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
   }
   const materialScene=Object.keys(personalMaterials).length?{...scene,surfaceFinishes:{...scene.surfaceFinishes,customMaterials:{...scene.surfaceFinishes?.customMaterials,...personalMaterials}}}:scene;
-  latest.current={scene,materialScene,materialId:selected,paintMode,disabled:disabled||busy,onCommit,apply,getRenderer,canUndo:undoCount>0,undoScope:undoScope.current};
+  latest.current={scene,materialScene,materialId:selected,paintMode:paintMode&&active,disabled:disabled||busy||!active,onCommit,apply,getRenderer,canUndo:undoCount>0,undoScope:undoScope.current};
   useEffect(()=>{
     const host=getCanvasHost();if(!host)return;
     const originalTabIndex=host.getAttribute('tabindex');if(originalTabIndex===null)host.tabIndex=0;
@@ -59,14 +59,14 @@ export default function SurfaceMaterialPanel({projectId,scene,getRenderer,getCan
     const unbindUndo=bindSurfaceMaterialUndo(host,panelRef.current,()=>latest.current,()=>latest.current.apply(null,null,true));
     return ()=>{unbindInputs();unbindUndo();host.removeEventListener('pointerdown',focus,true);if(originalTabIndex===null&&host.getAttribute('tabindex')==='0')host.removeAttribute('tabindex');};
   },[scene,disabled]);
-  useEffect(()=>{onModeChange(paintMode);return()=>onModeChange(false);},[paintMode,onModeChange]);
+  useEffect(()=>{if(!active)setPaintMode(false);onModeChange(paintMode&&active);return()=>onModeChange(false);},[paintMode,active,onModeChange]);
   useEffect(()=>{const fail=e=>{if(e.detail?.projectId&&e.detail.projectId!==projectId)return;setMessage(e.detail?.message||text('Personal texture failed to load. Reopen your library and check access.','بافت شخصی بارگذاری نشد؛ دسترسی و کتابخانه را بررسی کن.','تعذر تحميل الخامة الشخصية.'));};window.addEventListener('ventra:surface-resource-error',fail);return()=>window.removeEventListener('ventra:surface-resource-error',fail);},[]);
   function choose(id){if(String(id).startsWith('personal:')||SURFACE_MATERIALS.some(m=>m.id===id&&m.wallOnly)){getRenderer()?.setInteriorView?.(false);onRequestSolidWalls?.();}setSelected(id);setPaintMode(true);getRenderer()?.setFurnitureTool?.(null);}
   const targetName=target=>!target?'':`${target.kind==='wall'?text('Wall face','وجه دیوار','وجه الجدار'):text('Floor','کف','أرضية')} · ${target.id}`;
   return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('Surface materials','متریال کف و دیوار','مواد الأرضيات والجدران')}>
-    <details open><summary>{text('Floor & wall materials','متریال کف و دیوار','مواد الأرضيات والجدران')}</summary>
+    <details onToggle={e=>{if(e.target===e.currentTarget&&!e.currentTarget.open)setPaintMode(false);}}><summary>{text('Floor & wall materials','متریال کف و دیوار','مواد الأرضيات والجدران')}</summary>
       <p>{text('Drag a swatch onto a floor or one wall face. Or select a swatch, then click that face.','نمونه را روی کف یا یک وجه دیوار بکش و رها کن؛ یا نمونه را انتخاب کن و روی همان وجه بزن.','اسحب العينة إلى الأرضية أو وجه الجدار، أو اخترها ثم اضغط على الوجه المطلوب.')}</p>
-      <PersonalAssetLibrary kind="material" projectId={projectId} disabled={disabled||busy} onChoose={row=>{const m=personalMaterial(row);setPersonalMaterials(v=>({...v,[m.id]:m}));choose(m.id);}}/>
+      <PersonalAssetLibrary onRemove={id=>{if(selected==='personal:'+id){setSelected('stone-ivory');setPaintMode(false);}setPersonalMaterials(v=>{const copy={...v};delete copy['personal:'+id];return copy;});}} kind="material" projectId={projectId} disabled={disabled||busy} onChoose={row=>{const m=personalMaterial(row);setPersonalMaterials(v=>({...v,[m.id]:m}));choose(m.id);}}/>
       {lastTarget&&<div className={styles.scale}>
         <label>{text('Width of one texture repeat (metres)','عرض یک تکرار بافت (متر)','حجم تكرار الخامة بالمتر')}<input type="number" min=".05" max="20" step=".05" value={tileSize} disabled={disabled||busy} onChange={e=>setTileSize(e.target.value)}/></label>
         <p>{text('Smaller number = finer texture. Applies only to the last selected surface.','عدد کمتر یعنی بافت ریزتر؛ فقط روی آخرین سطح انتخاب‌شده اعمال می‌شود.','رقم أصغر يعني خامة أدق؛ للسطح المختار فقط.')}</p>

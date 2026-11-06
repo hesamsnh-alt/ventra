@@ -1,3 +1,4 @@
+import * as furnitureFinishes from '../src/lib/furnitureFinishes.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
 import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
 import {createWalkthrough} from '../src/lib/walkthroughControls.mjs';
@@ -20,7 +21,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
+const context = {THREE, console, ...furnitureFinishes, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 
@@ -234,4 +235,34 @@ test('modern, minimal, comfort and classic sofas retain distinct shapes and inde
   const cloth=parts.find(p=>p.material.userData?.ventraTextile==='fabric');assert.ok(cloth);assert.equal(cloth.material.color.getHexString(),colors[i].slice(1));
   return JSON.stringify(parts.map(p=>[p.position.toArray(),p.geometry.vertices.length,p.geometry.faces.length]));
  });assert.equal(new Set(signatures).size,4);
+});
+
+test('picture frames have raised borders, a real artwork plane and hanging height without changing scene data',()=>{
+ for(const variant of ['oak','black','gold','white','triptych']){
+  const a={id:'art',type:'picture_frame',variant,width:variant==='triptych'?1.6:.8,depth:.055,height:.65,xMeters:4,yMeters:4,zMeters:1.1,color:'#ad855b'},before=JSON.stringify(a);
+  const parts=context.buildSchematicAssetMeshes({THREE,asset:a,palette:{},roomWidth:8,roomDepth:8});assert.equal(JSON.stringify(a),before);assert.ok(parts.every(m=>m.userData.assetId==='art'));
+  const planes=parts.filter(m=>m.geometry instanceof THREE.PlaneGeometry);assert.equal(planes.length,variant==='triptych'?3:1);assert.ok(planes.every(m=>m.material.map.image.width===256&&m.material.side===THREE.DoubleSide));
+  const box=new THREE.Box3();parts.forEach(m=>{m.updateMatrixWorld(true);box.union(new THREE.Box3().setFromObject(m));});assert.ok(box.min.z>=1.099&&box.max.z<=1.751);
+ }
+});
+test('TV variants render a 16:9 image display and distinct stand, console and media wall geometry',()=>{
+ const signatures=[];
+ for(const variant of ['wall-mounted','console-oak','console-white','pedestal','media-wall']){
+  const parts=assetMeshes('tv_unit',{variant,width:variant==='media-wall'?2.4:1.8,depth:variant==='wall-mounted'?.065:.45,height:variant==='media-wall'?2.4:1.45});
+  const screen=parts.find(m=>m.userData.televisionScreen);assert.ok(screen);assert.equal(screen.material.map.image.width,256);assert.equal(screen.material.map.image.height,144);assert.equal(screen.material.side,THREE.DoubleSide);assert.ok(parts.length<35);
+  const box=new THREE.Box3();parts.forEach(m=>{m.updateMatrixWorld(true);box.union(new THREE.Box3().setFromObject(m));});assert.ok(box.min.z>=-.001);assert.ok(box.max.z<=(variant==='media-wall'?2.401:1.451));signatures.push(parts.length);
+ }
+ assert.ok(new Set(signatures).size>=3);
+ const wall=assetMeshes('wall_tv',{variant:'wall-mounted',width:1.24,depth:.06,height:.71,zMeters:1.1});assert.ok(wall.some(m=>m.userData.televisionScreen));
+});
+test('new curtain styles retain curved cloth with genuinely layered and Roman geometry',()=>{
+ const variants=['eyelet','linen','blackout','double-layer','roman','tieback'];const counts=[];
+ for(const variant of variants){const parts=assetMeshes('curtain',{variant,width:2,depth:.25,height:2.6});assert.ok(parts.some(m=>m.geometry.userData?.textileSurface));assert.ok(parts.length<=40);counts.push(parts.length);}
+ assert.ok(new Set(counts).size>=3);
+});
+test('furniture finishes replace body and upholstery separately, protect TV screens and reset to original geometry',()=>{
+ const plain=assetMeshes('sofa',{variant:'modern'}),finished=assetMeshes('sofa',{variant:'modern',furnitureFinishes:{body:{id:'wood-walnut'},upholstery:{id:'fabric-linen'}}});
+ assert.equal(plain.length,finished.length);assert.ok(finished.some(m=>m.material.userData?.furnitureFinish==='wood-walnut'));assert.ok(finished.some(m=>m.material.userData?.furnitureFinish==='fabric-linen'));
+ const tv=assetMeshes('tv_unit',{variant:'console-oak',furnitureFinishes:{body:{id:'metal-brushed'}}});assert.ok(tv.some(m=>m.material.userData?.furnitureFinish==='metal-brushed'));const screen=tv.find(m=>m.userData.televisionScreen);assert.ok(screen.material.map);assert.equal(screen.material.userData?.furnitureFinish,undefined);
+ const reset=assetMeshes('sofa',{variant:'modern'});assert.ok(reset.every(m=>!m.material.userData?.furnitureFinish));assert.equal(reset.length,plain.length);
 });

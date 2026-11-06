@@ -41,7 +41,7 @@ test('facade tint affects exterior material only, preserving the interior shared
 test('category dropdown covers every catalog model exactly once outside All and supports Persian search',()=>{
  for(const m of FURNITURE_CATALOG)assert.equal(FURNITURE_CATEGORIES.filter(c=>c.id!=='all'&&filterFurniture([m],c.id).length).length,1,m.id);
  assert.equal(new Set(FURNITURE_CATALOG.map(m=>m.id)).size,FURNITURE_CATALOG.length);
- assert.equal(filterFurniture(FURNITURE_CATALOG,'curtains').length,4);assert.ok(filterFurniture(FURNITURE_CATALOG,'rugs','ایرانی').some(m=>m.id==='rug-persian'));
+ assert.equal(filterFurniture(FURNITURE_CATALOG,'curtains').length,10);assert.ok(filterFurniture(FURNITURE_CATALOG,'rugs','ایرانی').some(m=>m.id==='rug-persian'));
 });
 
 test('facade and manual boxes persist through actual schematic storage reload',async()=>{

@@ -3,17 +3,17 @@ import {SURFACE_MIME} from '@/lib/surfaceMaterials.mjs';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import Image from 'next/image';
 import {useLanguage} from '@/app/components/i18n/LanguageProvider';
-import {loadPersonalLibrary,createFurnitureFromPhoto,pollPersonalModel,uploadPersonalMaterial,preparePersonalPhoto,savePersonalAssetDetails,uploadPersonalGlb} from '@/services/personalAssetService';
+import {loadPersonalLibrary,createFurnitureFromPhoto,pollPersonalModel,uploadPersonalMaterial,preparePersonalPhoto,savePersonalAssetDetails,uploadPersonalGlb,deletePersonalMaterial,restorePersonalMaterial} from '@/services/personalAssetService';
 import {PERSONAL_FURNITURE_TYPES,personalDimensions} from '@/lib/personalAssets.mjs';
 import PersonalModelPreview from './PersonalModelPreview';
 import styles from './PersonalAssetLibrary.module.css';
-export default function PersonalAssetLibrary({kind,projectId,onChoose,disabled=false}){
+export default function PersonalAssetLibrary({kind,projectId,onChoose,onRemove,disabled=false}){
  const{language}=useLanguage(),fa=language==='fa',ar=language==='ar',text=(en,f,a)=>fa?f:ar?a:en;
- const[assets,setAssets]=useState([]),[jobs,setJobs]=useState([]),[config,setConfig]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[selected,setSelected]=useState(null),[dimensions,setDimensions]=useState({width:1,depth:1,height:1});
+ const[archived,setArchived]=useState([]),[assets,setAssets]=useState([]),[jobs,setJobs]=useState([]),[config,setConfig]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[selected,setSelected]=useState(null),[dimensions,setDimensions]=useState({width:1,depth:1,height:1});
  const glbPicker=useRef(null),picker=useRef(null),active=useRef(true),working=useRef(false),polling=useRef(false);
  const refresh=useCallback(async()=>{
   const result=await loadPersonalLibrary();if(!active.current)return;
-  setAssets(result.assets);setJobs(result.jobs);setConfig(result.configuration);
+  setArchived(result.archivedAssets||[]);setAssets(result.assets);setJobs(result.jobs);setConfig(result.configuration);
  },[]);
  useEffect(()=>{active.current=true;refresh().catch(e=>{if(active.current)setMessage(e.message);});return()=>{active.current=false;};},[refresh]);
  useEffect(()=>{
@@ -53,6 +53,15 @@ export default function PersonalAssetLibrary({kind,projectId,onChoose,disabled=f
    if(active.current)setMessage(kind==='model'?text('Now click a clear floor area to place the model.','حالا روی بخش خالی کف کلیک کن تا مدل قرار بگیرد.','اضغط على الأرضية لوضع النموذج.'):text('Now click the floor or wall face.','حالا روی کف یا وجه دیوار کلیک کن.','اضغط على الأرضية أو وجه الجدار.'));
   }catch(e){if(active.current)setMessage(e.message);}finally{working.current=false;if(active.current)setBusy(false);}
  }
+ async function changeArchive(row,restore=false){
+  if(disabled||working.current)return;working.current=true;setBusy(true);setMessage('');
+  try{
+   await (restore?restorePersonalMaterial:deletePersonalMaterial)(row.id);
+   if(!restore){if(selected?.id===row.id)setSelected(null);onRemove?.(row.id);}
+   await refresh();
+   if(active.current)setMessage(restore?text('Material restored.','متریال برگردانده شد.','تمت استعادة المادة.'):text('Removed from your library. Existing project surfaces are preserved; you can restore it below.','از کتابخانه حذف شد. متریالِ پروژه‌های قبلی حفظ می‌شود و از قسمت حذف‌شده‌ها قابل برگرداندن است.','أزيلت من المكتبة مع الحفاظ على المشاريع السابقة؛ يمكن استعادتها أدناه.'));
+  }catch(e){if(active.current)setMessage(e.message);}finally{working.current=false;if(active.current)setBusy(false);}
+ }
  const blocked=disabled||busy,visible=assets.filter(a=>a.kind===kind);
  return <section className={styles.library} dir={fa||ar?'rtl':'ltr'}>
   <strong>{kind==='model'?text('My photo-to-3D library','کتابخانه مدل از عکس من','مكتبتي من الصورة إلى ثلاثي الأبعاد'):text('My uploaded materials','متریال‌های آپلودشده من','موادي المرفوعة')}</strong>
@@ -66,7 +75,9 @@ export default function PersonalAssetLibrary({kind,projectId,onChoose,disabled=f
   {kind==='model'&&jobs.length>0&&<div className={styles.jobs}>{jobs.map(j=><div key={j.id}><b>{j.name}</b><progress max="100" value={j.progress||0}/><p>{j.status==='failed'?text('Model generation failed. Upload a revised photo after reviewing the issue.','تولید مدل ناموفق بود؛ پس از بررسی خطا عکس اصلاح‌شده انتخاب کن.','فشل التوليد؛ راجع المشكلة ثم ارفع صورة معدلة.'):j.status==='unknown'?text('Submission needs operator reconciliation. Do not generate again.','وضعیت ارسال نیازمند بررسی مدیر است؛ دوباره تولید نکن.','تحتاج حالة الإرسال مراجعة المشغل؛ لا تعِد التوليد.'):text('Generating model…','در حال ساخت مدل…','جارٍ توليد النموذج…')} {j.progress||0}%</p></div>)}</div>}
   <div className={styles.grid}>{visible.map(row=><button className={styles.asset} type="button" key={row.id} aria-pressed={selected?.id===row.id} onClick={()=>choose(row)} disabled={blocked} draggable={kind==='material'&&!blocked} onDragStart={e=>{if(kind!=='material'||blocked){e.preventDefault();return;}choose(row);e.dataTransfer.setData(SURFACE_MIME,'personal:'+row.id);e.dataTransfer.effectAllowed='copy';}}>{row.thumbnailUrl&&<Image unoptimized width={160} height={80} src={row.thumbnailUrl} alt={row.name}/>}<span>{row.name}</span></button>)}</div>
   {selected&&<>{kind==='model'&&<><PersonalModelPreview assetId={selected.id} projectId={projectId} label={selected.name}/><p>{text('Set real dimensions in metres before placing. Initial dimensions are only a proportion-preserving proposal.','پیش از جای‌گذاری، اندازه واقعی را برحسب متر تنظیم کن؛ اندازه اولیه فقط پیشنهادی و متناسب با شکل مدل است.','اضبط الأبعاد الحقيقية بالمتر؛ الأبعاد الأولية مقترحة فقط.')}</p><div className={styles.dimensions}>{[['width','Width','عرض','العرض'],['depth','Depth','عمق','العمق'],['height','Height','ارتفاع','الارتفاع']].map(([key,en,f,a])=><label key={key}>{text(en,f,a)}<input type="number" min=".05" max={key==='width'?6:key==='depth'?4:3} step=".01" value={dimensions[key]} onChange={e=>setDimensions(v=>({...v,[key]:e.target.value}))}/></label>)}</div><label>{text('Furniture category','نوع وسیله','نوع الأثاث')}<select value={selected.furniture_type} onChange={e=>setSelected(v=>({...v,furniture_type:e.target.value}))}>{PERSONAL_FURNITURE_TYPES.map(t=><option key={t} value={t}>{({sofa:'مبل',chair:'صندلی',bed:'تخت',dining_table:'میز غذاخوری',cabinet:'کمد یا وسیله عمومی',plant:'گیاه',desk:'میز کار',coffee_table:'میز جلو مبلی'})[t]&&fa?({sofa:'مبل',chair:'صندلی',bed:'تخت',dining_table:'میز غذاخوری',cabinet:'کمد یا وسیله عمومی',plant:'گیاه',desk:'میز کار',coffee_table:'میز جلو مبلی'})[t]:t}</option>)}</select></label></>}
+   {kind==='material'&&<button type="button" disabled={blocked} onClick={()=>changeArchive(selected)}>{text('Delete material','حذف متریال','حذف المادة')}</button>}
    <button type="button" disabled={blocked} onClick={useSelected}>{kind==='model'?text('Place this model','جای‌گذاری این مدل','وضع هذا النموذج'):text('Use this material','استفاده از این متریال','استخدام المادة')}</button></>}
+  {kind==='material'&&archived.length>0&&<details><summary>{text('Deleted materials · restore','متریال‌های حذف‌شده · برگرداندن','المواد المحذوفة · استعادة')}</summary>{archived.map(row=><div key={row.id}><span>{row.name} </span><button type="button" disabled={blocked} onClick={()=>changeArchive(row,true)}>{text('Restore','برگرداندن','استعادة')}</button></div>)}</details>}
   {message&&<p className={styles.feedback} role="status">{message}</p>}
  </section>;
 }

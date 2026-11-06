@@ -8,6 +8,7 @@ export const PROMPT_ASSET_DEFAULTS={
  washing_machine:[.65,.65,.88],refrigerator:[.85,.75,1.85],stove:[.7,.65,.9],
  nightstand:[.5,.45,.5],rug:[2.2,1.6,.025],plant:[.45,.45,.9],mirror:[.75,.04,1.1],
  freezer:[.7,.7,1.5],floor_lamp:[.4,.4,1.6],dressing_table:[.9,.42,1.6],flower_pot:[.45,.45,.7],
+ picture_frame:[.8,.05,.6],wall_tv:[1.24,.06,.71],
  curtain:[2,.16,2.5],
  range_hood:[.7,.5,.45],
 };
@@ -83,7 +84,7 @@ export function applyPromptActions(input,plan,{manualDwgPlacement=false,manualFu
   const type=op.type||existing?.type,defaults=PROMPT_ASSET_DEFAULTS[type];
   if(!defaults)fail(`The renderer does not support ${type}.`);
   const a=existing?{...existing}:{id:`prompt-${index}-${next.assets.length}`,type,width:defaults[0],depth:defaults[1],height:defaults[2],rotation:0};
-  if(!existing){let suffix=0;const base=a.id;while(next.assets.some(b=>b.id===a.id))a.id=`${base}-${++suffix}`;if(type==='range_hood')a.zMeters=1.95;}
+  if(!existing){let suffix=0;const base=a.id;while(next.assets.some(b=>b.id===a.id))a.id=`${base}-${++suffix}`;if(type==='range_hood')a.zMeters=1.95;else if(['picture_frame','wall_tv'].includes(type))a.zMeters=1.1;}
   // Only allow visual furniture fields; never spread model output into a scene.
   for(const key of ['roomId','xMeters','yMeters','width','depth','height','rotation','color'])if(op[key]!=null)a[key]=op[key];
   if(op.type!=null)a.type=op.type;

@@ -5,7 +5,7 @@ import {FACADE_PRESETS,applyFacade,editExteriorBox,exteriorFaces} from '@/lib/ex
 import {SURFACE_MATERIALS} from '@/lib/surfaceMaterials.mjs';
 import styles from './FurnitureEditorPanel.module.css';
 const defaults={x:0,y:0,z:0,width:1,depth:.2,height:1,rotation:0,color:'#ffffff',material:'stone-ivory'};
-export default function ExteriorDesignPanel({scene,onCommit,disabled=false}){
+export default function ExteriorDesignPanel({scene,onCommit,name,disabled=false}){
  const {language}=useLanguage(),fa=language==='fa',t=(en,faText)=>fa?faText:en;
  const [preset,setPreset]=useState(scene.exteriorDesign?.preset||'stone'),[material,setMaterial]=useState(scene.exteriorDesign?.material||'stone-beige'),[color,setColor]=useState(scene.exteriorDesign?.color||'#ffffff');
  const [draft,setDraft]=useState(defaults),[selected,setSelected]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[undoCount,setUndoCount]=useState(0);
@@ -23,7 +23,7 @@ export default function ExteriorDesignPanel({scene,onCommit,disabled=false}){
    setUndoCount(history.current.length);setMessage(t('Exterior design saved.','طرح نما ذخیره شد.'));
   }catch(e){setMessage(e.message);}finally{working.current=false;setBusy(false);}
  }
- return <details className={styles.panel} dir={fa?'rtl':'ltr'}><summary>{t('Exterior facade & manual boxes','طراحی نمای خارجی و باکس دستی')}</summary>
+ return <details name={name} className={styles.facadePanel} dir={fa?'rtl':'ltr'}><summary>{t('Exterior facade & boxes','نمای خارجی و باکس دستی')}</summary>
   <p>{t('Exterior faces only. Decorative proposals are separate from BOQ. Coordinates are in plan metres; Z is height above the floor.','فقط سطح بیرونی دیوارها. تغییرات تزئینی وارد BOQ نمی‌شوند. مختصات بر حسب مترِ نقشه است؛ Z ارتفاع از کف است.')}</p>
   <div className={styles.tools}>
    <label>{t('Style','سبک')}<select disabled={blocked} value={preset} onChange={e=>{const p=FACADE_PRESETS.find(p=>p.id===e.target.value);setPreset(p.id);setMaterial(p.material);setColor('#ffffff');}}>{FACADE_PRESETS.map(p=><option key={p.id} value={p.id}>{fa?p.fa:p.en}</option>)}</select></label>

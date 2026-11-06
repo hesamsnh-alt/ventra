@@ -1,3 +1,4 @@
+import * as finishes from '../src/lib/furnitureFinishes.mjs';
 import * as categories from '../src/lib/furnitureCategories.mjs';
 import * as walls from '../src/lib/manualWalls.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
@@ -83,7 +84,7 @@ test('actual furniture panel renders localized controls without executing saves'
  const {transform,loadBindings}=require('next/dist/build/swc');await loadBindings();
  const compiled=await transform(readFileSync('src/app/projects/[id]/FurnitureEditorPanel.jsx','utf8'),{filename:'FurnitureEditorPanel.jsx',jsc:{parser:{syntax:'ecmascript',jsx:true},transform:{react:{runtime:'automatic'}}},module:{type:'commonjs'}});
  const drawer=await loadComponent('src/app/projects/[id]/ToolDrawer.jsx');
- const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/lib/furnitureCategories.mjs'?categories:id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
+ const batch=await import('../src/lib/furnitureBatch.mjs'),openings=await import('../src/lib/manualOpenings.mjs'),editor=await import('../src/lib/furnitureEditor.mjs'),sandbox={exports:{},require:id=>id==='@/lib/furnitureFinishes.mjs'?finishes:id==='@/lib/furnitureCategories.mjs'?categories:id==='@/app/components/i18n/LanguageProvider'?language:id==='@/lib/furnitureEditor.mjs'?editor:id==='@/lib/manualOpenings.mjs'?openings:id==='@/lib/manualWalls.mjs'?walls:id==='@/lib/furnitureBatch.mjs'?batch:id==='./ToolDrawer'?drawer:id==='./PersonalAssetLibrary'?{__esModule:true,default:()=>null}:id==='@/lib/personalAssets.mjs'?{}:id==='@/services/personalAssetService'?{}:id.endsWith('.module.css')?{}:require(id)};
  vm.createContext(sandbox);vm.runInContext(compiled.code,sandbox);
  for(const [locale,title] of [['en','Furniture studio'],['fa','پنل مبلمان'],['ar','لوحة الأثاث']])assert.ok(renderToStaticMarkup(React.createElement(language.default,{initialLanguage:locale},React.createElement(sandbox.exports.default,{scene:scene(),getRenderer:()=>null,onCommit:()=>{throw new Error('Unexpected save');}}))).includes(title));
 });

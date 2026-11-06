@@ -4,6 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 
 export function detailedFurnitureKey(asset){
  if(validAssetId(asset?.customModelId))return 'personal:'+asset.customModelId;
+ if(asset?.furnitureFinishes)return null;
  if(asset?.type==='plant'){
   const key=asset.catalogId||asset.variant;
   if(['tree-potted','tree-potted-tall','potted-tree'].includes(key))return 'potted_plant_01';
