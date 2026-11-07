@@ -1,7 +1,7 @@
 // Shared, unbilled geometry handler. Both public routes call it inside their
 // existing commercialRun boundary; background jobs use the same handler.
 import {NextResponse} from 'next/server';
-import sharp from 'sharp';
+import {prepareRasterVisionBuffer,traceInOriginalImage} from './rasterImagePreparation.mjs';
 import {createHash} from 'node:crypto';
 import {getOpenAIClient} from '@/services/openaiClient';
 import {requestRasterVision,consumeRasterVisionStream,shouldRetryRasterGeometry} from './rasterVisionRequest.mjs';
@@ -20,26 +20,7 @@ async function prepareVisionImage(imageUrl, { maxDimension = 1600, quality = 88 
   }
 
   const sourceBuffer = Buffer.from(await response.arrayBuffer());
-
-  const { data: optimizedBuffer, info } = await sharp(sourceBuffer)
-    .rotate()
-    .resize({
-      width: maxDimension,
-      height: maxDimension,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .flatten({ background: "#ffffff" })
-    .sharpen({ sigma: 0.6 })
-    .jpeg({ quality, chromaSubsampling: "4:4:4" })
-    .toBuffer({ resolveWithObject: true });
-
-  return {
-    imageUrl: `data:image/jpeg;base64,${optimizedBuffer.toString("base64")}`,
-    width: info.width,
-    height: info.height,
-    buffer: optimizedBuffer,
-  };
+  return prepareRasterVisionBuffer(sourceBuffer,{maxDimension,quality});
 }
 
 function extractJson(text) {
@@ -112,8 +93,11 @@ Return only JSON conforming to the supplied schema.`;
       strategy: "pixel_guided_trace_with_source_alignment",
     });
     rasterDiagnostics.imageHash=createHash('sha256').update(prepared.buffer).digest('hex').slice(0,16);
-    rasterDiagnostics.imageWidth = prepared.width;
-    rasterDiagnostics.imageHeight = prepared.height;
+    rasterDiagnostics.imageWidth = prepared.sourceFrame?.width || prepared.width;
+    rasterDiagnostics.preparedImageWidth = prepared.width;
+    rasterDiagnostics.preparedImageHeight = prepared.height;
+    rasterDiagnostics.sourceFrame = prepared.sourceFrame || null;
+    rasterDiagnostics.imageHeight = prepared.sourceFrame?.height || prepared.height;
     rasterDiagnostics.imagePreparationMs = Date.now() - requestStartedAt;
     rasterDiagnostics.pixelGuideCount = imageEvidence.guides.length;
     let previousFailure = null;
@@ -161,9 +145,9 @@ Return only JSON conforming to the supplied schema.`;
         rasterDiagnostics.imageEvidence = null;
         attemptDiagnostic.rawPixelTrace = pixelTrace;
         const rawGeometry = normalizeRasterPixelTrace(pixelTrace, { imageWidth: prepared.width, imageHeight: prepared.height });
-        rasterDiagnostics.trace = rawGeometry;
+        rasterDiagnostics.trace = traceInOriginalImage(rawGeometry,prepared.sourceFrame);
         rasterDiagnostics.traceAttempt = attempt;
-        attemptDiagnostic.trace = rawGeometry;
+        attemptDiagnostic.trace = rasterDiagnostics.trace;
         const imageAlignment = inspectRasterImageEvidence(pixelTrace, imageEvidence);
         rasterDiagnostics.imageEvidence = imageAlignment;
         attemptDiagnostic.imageEvidence = imageAlignment;

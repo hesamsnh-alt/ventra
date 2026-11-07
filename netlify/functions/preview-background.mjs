@@ -1,6 +1,49 @@
 // src/lib/serverRasterPreview.js
 import { NextResponse } from "next/server.js";
-import sharp2 from "sharp";
+
+// src/lib/rasterImagePreparation.mjs
+import sharp from "sharp";
+async function prepareRasterVisionBuffer(source2, { maxDimension = 2200, quality = 92 } = {}) {
+  const { data, info } = await sharp(source2).rotate().flatten({ background: "#ffffff" }).removeAlpha().toColourspace("srgb").raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+  let left = width, top = height, right = -1, bottom = -1;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const offset = (y * width + x) * channels;
+    if (Math.min(data[offset], data[offset + 1], data[offset + 2]) < 248) {
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  const pad = Math.max(12, Math.ceil(Math.min(width, height) * 0.015));
+  left = Math.max(0, left - pad);
+  top = Math.max(0, top - pad);
+  right = Math.min(width - 1, right + pad);
+  bottom = Math.min(height - 1, bottom + pad);
+  let crop = { left: 0, top: 0, width, height };
+  if (right >= left && bottom >= top) {
+    const candidate = { left, top, width: right - left + 1, height: bottom - top + 1 };
+    if (candidate.width >= 32 && candidate.height >= 32 && candidate.width * candidate.height < width * height * 0.85) crop = candidate;
+  }
+  const result = await sharp(data, { raw: { width, height, channels } }).extract(crop).resize({ width: maxDimension, height: maxDimension, fit: "inside", withoutEnlargement: true }).sharpen({ sigma: 0.6 }).jpeg({ quality, chromaSubsampling: "4:4:4" }).toBuffer({ resolveWithObject: true });
+  return {
+    buffer: result.data,
+    imageUrl: `data:image/jpeg;base64,${result.data.toString("base64")}`,
+    width: result.info.width,
+    height: result.info.height,
+    sourceFrame: { width, height, crop, preparedWidth: result.info.width, preparedHeight: result.info.height }
+  };
+}
+function traceInOriginalImage(trace, frame) {
+  if (!trace || !frame) return trace;
+  const point3 = (p) => ({ ...p, x: (frame.crop.left + p.x * frame.crop.width / 1e3) * 1e3 / frame.width, y: (frame.crop.top + p.y * frame.crop.height / 1e3) * 1e3 / frame.height });
+  const polygon3 = (ps) => Array.isArray(ps) ? ps.map(point3) : ps;
+  const spans = (rows) => Array.isArray(rows) ? rows.map((row) => ({ ...row, start: point3(row.start), end: point3(row.end) })) : rows;
+  return { ...trace, footprint: polygon3(trace.footprint), holes: trace.holes?.map((r) => ({ ...r, polygon: polygon3(r.polygon) })), rooms: trace.rooms?.map((r) => ({ ...r, polygon: polygon3(r.polygon) })), walls: spans(trace.walls), openings: spans(trace.openings), measurements: spans(trace.measurements) };
+}
+
+// src/lib/serverRasterPreview.js
 import { createHash } from "node:crypto";
 
 // src/services/drawingJobRuntime.mjs
@@ -593,7 +636,7 @@ function compileRasterFloorplan(raw, { imageWidth, imageHeight } = {}) {
 }
 
 // src/lib/rasterImageEvidence.mjs
-import sharp from "sharp";
+import sharp2 from "sharp";
 var RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v1";
 function evidenceError(code, message, details) {
   return Object.assign(new Error(message), { name: "RasterImageEvidenceError", code, details });
@@ -710,7 +753,7 @@ function strokeGuides(mask, width, height, horizontal) {
   });
 }
 async function prepareRasterImageEvidence(buffer) {
-  const { data, info } = await sharp(buffer).flatten({ background: "#ffffff" }).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await sharp2(buffer).flatten({ background: "#ffffff" }).greyscale().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   const mask = Uint8Array.from(data, (v) => v < 170 ? 1 : 0);
   const background = exteriorBackground(mask, width, height);
@@ -872,7 +915,7 @@ function requireRasterImageEvidence(result) {
 }
 
 // src/lib/verifiedPreview.mjs
-var VERIFIED_PREVIEW_VERSION = "verified-raster-preview-v134-20261107";
+var VERIFIED_PREVIEW_VERSION = "verified-raster-preview-v135-20261107";
 
 // src/lib/serverRasterPreview.js
 var RASTER_PREVIEW_VERSION = VERIFIED_PREVIEW_VERSION;
@@ -885,18 +928,7 @@ async function prepareVisionImage(imageUrl, { maxDimension = 1600, quality = 88 
     throw new Error(`Could not download floor-plan image (${response.status}).`);
   }
   const sourceBuffer = Buffer.from(await response.arrayBuffer());
-  const { data: optimizedBuffer, info } = await sharp2(sourceBuffer).rotate().resize({
-    width: maxDimension,
-    height: maxDimension,
-    fit: "inside",
-    withoutEnlargement: true
-  }).flatten({ background: "#ffffff" }).sharpen({ sigma: 0.6 }).jpeg({ quality, chromaSubsampling: "4:4:4" }).toBuffer({ resolveWithObject: true });
-  return {
-    imageUrl: `data:image/jpeg;base64,${optimizedBuffer.toString("base64")}`,
-    width: info.width,
-    height: info.height,
-    buffer: optimizedBuffer
-  };
+  return prepareRasterVisionBuffer(sourceBuffer, { maxDimension, quality });
 }
 function extractJson(text2) {
   const raw = String(text2 || "").trim();
@@ -968,8 +1000,11 @@ Return only JSON conforming to the supplied schema.`;
       strategy: "pixel_guided_trace_with_source_alignment"
     });
     rasterDiagnostics.imageHash = createHash("sha256").update(prepared.buffer).digest("hex").slice(0, 16);
-    rasterDiagnostics.imageWidth = prepared.width;
-    rasterDiagnostics.imageHeight = prepared.height;
+    rasterDiagnostics.imageWidth = prepared.sourceFrame?.width || prepared.width;
+    rasterDiagnostics.preparedImageWidth = prepared.width;
+    rasterDiagnostics.preparedImageHeight = prepared.height;
+    rasterDiagnostics.sourceFrame = prepared.sourceFrame || null;
+    rasterDiagnostics.imageHeight = prepared.sourceFrame?.height || prepared.height;
     rasterDiagnostics.imagePreparationMs = Date.now() - requestStartedAt;
     rasterDiagnostics.pixelGuideCount = imageEvidence.guides.length;
     let previousFailure = null;
@@ -1021,9 +1056,9 @@ Exact supplied image dimensions: width=${prepared.width} pixels, height=${prepar
         rasterDiagnostics.imageEvidence = null;
         attemptDiagnostic.rawPixelTrace = pixelTrace;
         const rawGeometry = normalizeRasterPixelTrace(pixelTrace, { imageWidth: prepared.width, imageHeight: prepared.height });
-        rasterDiagnostics.trace = rawGeometry;
+        rasterDiagnostics.trace = traceInOriginalImage(rawGeometry, prepared.sourceFrame);
         rasterDiagnostics.traceAttempt = attempt;
-        attemptDiagnostic.trace = rawGeometry;
+        attemptDiagnostic.trace = rasterDiagnostics.trace;
         const imageAlignment = inspectRasterImageEvidence(pixelTrace, imageEvidence);
         rasterDiagnostics.imageEvidence = imageAlignment;
         attemptDiagnostic.imageEvidence = imageAlignment;
@@ -5132,6 +5167,10 @@ function assertTakeoffReady(takeoff) {
 function bindBoqSource(boq, takeoff = boq?.takeoff, projectId = boq?.projectId) {
   if (!takeoff) return boq;
   assertTakeoffSource(takeoff, null, projectId);
+  const savedProject = boq?.projectId || boq?.project_id || boq?.takeoff?.project_id || boq?.takeoff?.projectId;
+  if (savedProject && projectId && savedProject !== projectId) {
+    throw new Error("BOQ belongs to another project. Generate a new BOQ for the current project.");
+  }
   const previous = boq?.boqSource;
   if (previous?.documentId && takeoff.document_id && previous.documentId !== takeoff.document_id) {
     throw new Error("BOQ source belongs to another drawing. Generate a new BOQ from the selected analysis.");
@@ -5162,9 +5201,12 @@ function assertTakeoffSource(takeoff, documentId, projectId) {
 function savedBoqMatchesTakeoff(boq, takeoff) {
   if (takeoffBoqIssue(takeoff) || takeoffBoqIssue(boq?.takeoff)) return false;
   if (!takeoff) return true;
+  const currentProject = takeoff.project_id || takeoff.projectId;
+  const savedProjects = [boq?.projectId, boq?.project_id, boq?.takeoff?.project_id, boq?.takeoff?.projectId].filter(Boolean);
+  if (currentProject && savedProjects.some((id) => id !== currentProject)) return false;
   const documentId = boq?.boqSource?.documentId || boq?.takeoff?.document_id;
   if (takeoff.document_id && documentId !== takeoff.document_id) return false;
-  const previous = boq?.takeoff?.analyzed_at;
+  const previous = boq?.boqSource?.analyzedAt || boq?.takeoff?.analyzed_at;
   return !previous || !takeoff.analyzed_at || previous === takeoff.analyzed_at;
 }
 
