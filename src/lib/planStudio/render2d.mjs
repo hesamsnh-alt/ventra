@@ -13,15 +13,36 @@ export function hatchPattern(type,scale=.2,color='#999'){const gap=Math.max(.01,
 export function pathData(e){if(e.type==='polyline')return 'M'+e.points.map(p=>`${p.x},${p.y}`).join('L')+(e.closed?'Z':'');if(e.type==='line')return`M${e.a.x},${e.a.y}L${e.b.x},${e.b.y}`;if(['arc','circle'].includes(e.type)){if(e.type==='circle'){const a=at(e,0),b=at(e,.5);return`M${a.x},${a.y}A${e.radius},${e.radius} 0 1 1 ${b.x},${b.y}A${e.radius},${e.radius} 0 1 1 ${a.x},${a.y}`;}const a=at(e,0),b=at(e,1);return`M${a.x},${a.y}A${e.radius},${e.radius} 0 ${Math.abs(e.sweep)>Math.PI?1:0} ${e.sweep>0?1:0} ${b.x},${b.y}`;}return '';}
 export function dimensionGeometry(e){const l=dist(e.a,e.b),n={x:-(e.b.y-e.a.y)/l,y:(e.b.x-e.a.x)/l},o=e.offsetDistance||.3,a={x:e.a.x+n.x*o,y:e.a.y+n.y*o},b={x:e.b.x+n.x*o,y:e.b.y+n.y*o};return{a,b,mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},normal:n,length:l,angle:Math.atan2(e.b.y-e.a.y,e.b.x-e.a.x)*180/Math.PI};}
 export function plateHoles(e){return[-1,1].flatMap(x=>[-1,1].map(y=>({x:x*(e.width/2-e.edge),y:y*(e.depth/2-e.edge)})));}
-export function entitySVG(doc,e,{print=false,selected=false}={}){
- const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&st.color.toLowerCase()==='#dce6ed'?'#202832':st.color,w=(e.role==='wall'?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=st.dash==='dashed'?'.15 .09':st.dash==='center'?'.3 .08 .04 .08':'',attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+// Wall width is geometry; the drafting outline remains a thin screen pen.
+export function wallOutlineData(e){
+ const half=e.thickness/2;
+ if(e.type==='line'){
+  const length=dist(e.a,e.b);if(!length)return '';
+  const nx=-(e.b.y-e.a.y)/length*half,ny=(e.b.x-e.a.x)/length*half;
+  return `M${e.a.x+nx},${e.a.y+ny}L${e.b.x+nx},${e.b.y+ny}L${e.b.x-nx},${e.b.y-ny}L${e.a.x-nx},${e.a.y-ny}Z`;
+ }
+ if(e.type==='arc'&&e.radius>half){
+  const outer={...e,radius:e.radius+half},inner={...e,radius:e.radius-half},end=at(inner,1),first=at(inner,0),sweep=e.sweep>0?0:1;
+  return `${pathData(outer)}L${end.x},${end.y}A${inner.radius},${inner.radius} 0 ${Math.abs(e.sweep)>Math.PI?1:0} ${sweep} ${first.x},${first.y}Z`;
+ }
+ return '';
+}
+function renderEntitySVG(doc,e,{print=false,selected=false,screen=false}={}){
+ const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&st.color.toLowerCase()==='#dce6ed'?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=st.dash==='dashed'?'.15 .09':st.dash==='center'?'.3 .08 .04 .08':'',attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+ const outline=screen&&e.role==='wall'&&e.thickness?wallOutlineData(e):'';if(outline)return `<path d="${outline}" ${attrs.replace(' fill="none"','')} fill="${escapeXML(color)}" fill-opacity=".08"/>`;
  const path=pathData(e);if(path)return `<path d="${path}" ${attrs.replace(' fill="none"','')} fill="${e.hatch?`url(#hatch-${escapeXML(e.id)})`:'none'}"/>`;
  if(e.type==='text')return `<text transform="translate(${e.position.x},${e.position.y}) rotate(${e.rotation||0}) scale(1,-1)" fill="${color}" font-size="${e.textHeight}" font-family="Arial,sans-serif" direction="${/[\u0600-\u06ff]/.test(e.text)?'rtl':'ltr'}">${escapeXML(e.text)}</text>`;
  if(e.type==='dimension'){const d=dimensionGeometry(e),size=Math.max(.09,.0025*(print?doc.printScale:50));return`<g ${attrs}><path d="M${e.a.x},${e.a.y}L${d.a.x+d.normal.x*.1},${d.a.y+d.normal.y*.1}M${e.b.x},${e.b.y}L${d.b.x+d.normal.x*.1},${d.b.y+d.normal.y*.1}M${d.a.x},${d.a.y}L${d.b.x},${d.b.y}"/>${[d.a,d.b].map(p=>`<path d="M${p.x-size*.3},${p.y-size*.3}l${size*.6},${size*.6}"/>`).join('')}<text transform="translate(${d.mid.x},${d.mid.y+size*.3}) scale(1,-1)" text-anchor="middle" fill="${color}" stroke="none" font-family="Arial,sans-serif" font-size="${size}">${displayLength(d.length,doc.units)}</text></g>`;}
  if(e.type==='plate')return `<g transform="translate(${e.center.x},${e.center.y}) rotate(${e.rotation||0})" ${attrs}><rect x="${-e.width/2}" y="${-e.depth/2}" width="${e.width}" height="${e.depth}" fill="${color}" fill-opacity=".12"/>${plateHoles(e).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="${e.boltDiameter/2}"/>`).join('')}</g>`;
  if(e.type==='asset')return `<g transform="translate(${e.center.x},${e.center.y}) rotate(${e.rotation||0})" ${attrs}><rect x="${-e.width/2}" y="${-e.depth/2}" width="${e.width}" height="${e.depth}" rx=".05" fill="${color}" fill-opacity=".13"/><path d="M${-e.width/2},${-e.depth/2}L${e.width/2},${e.depth/2}"/></g>`;
- if(e.type==='opening'){const wall=doc.entities.find(w=>w.id===e.wall);if(!wall)return '';const p=at(wall,e.offset),a=Math.atan2(wall.b.y-wall.a.y,wall.b.x-wall.a.x)*180/Math.PI;return`<g transform="translate(${p.x},${p.y}) rotate(${a})"><path d="M${-e.width/2},0H${e.width/2}" stroke="${print?'#fff':'#111923'}" stroke-width="${wall.thickness+.02}"/>${e.kind==='window'?`<path d="M${-e.width/2},0H${e.width/2}" ${attrs}/>`:`<path d="M${-e.width/2},0v${e.width}A${e.width},${e.width} 0 0 0 ${e.width/2},0" ${attrs}/>`}</g>`;}
+ if(e.type==='opening'){const wall=doc.entities.find(w=>w.id===e.wall);if(!wall)return '';const p=at(wall,e.offset),a=Math.atan2(wall.b.y-wall.a.y,wall.b.x-wall.a.x)*180/Math.PI;return`<g transform="translate(${p.x},${p.y}) rotate(${a})"><path d="M${-e.width/2},0H${e.width/2}" stroke="${print?'#fff':'#111923'}" stroke-width="${wall.thickness+.02}" ${screen?'data-world-stroke="true"':''}/>${e.kind==='window'?`<path d="M${-e.width/2},0H${e.width/2}" ${attrs}/>`:`<path d="M${-e.width/2},0v${e.width}A${e.width},${e.width} 0 0 0 ${e.width/2},0" ${attrs}/>`}</g>`;}
  if(e.type==='light')return `<g ${attrs}><circle cx="${e.center.x}" cy="${e.center.y}" r=".12"/><path d="M${e.center.x-.17},${e.center.y}h.34M${e.center.x},${e.center.y-.17}v.34"/></g>`;return '';
+}
+export function entitySVG(doc,e,options={}){
+ const markup=renderEntitySVG(doc,e,options);
+ if(!options.screen)return markup;
+ // vector-effect is not inherited by children of an SVG group.
+ return markup.replace(/<(path|rect|circle|ellipse|line|polyline|polygon)\b([^>]*)>/g,(tag,name,attributes)=>attributes.includes('vector-effect=')||attributes.includes('data-world-stroke=')?tag:`<${name} vector-effect="non-scaling-stroke"${attributes}>`);
 }
 export function drawingSVG(doc,{print=false,width=1800,height=1200,viewport=null}={}){
  const entities=visibleEntities(doc),b=viewport||bounds(entities),pad=viewport?0:Math.max(.3,Math.max(b.width,b.height)*.04);let w=b.width+2*pad,h=b.height+2*pad;if(w/h>width/height)h=w*height/width;else w=h*width/height;
