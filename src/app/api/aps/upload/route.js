@@ -1,3 +1,4 @@
+import {compatibleApsFile} from '@/lib/planStudio/legacyDXF.mjs';
 import {commercialContext,commercialError} from "@/lib/serverCommercial";
 import {apsObjectKey} from "@/lib/apsObjectKey.mjs";
 import {randomUUID} from "node:crypto";
@@ -34,15 +35,16 @@ export async function POST(request) {
       );
     }
 
+    const compatible=await compatibleApsFile(file);
     const result = await uploadToAps({
-      file,
+      file:compatible.file,
       sourceObjectKey:apsObjectKey(projectId,context.owner,randomUUID(),file.name),
     });
 
     return NextResponse.json(
       {
         success: true,
-        result,
+        result:compatible.changed?{...result,compatibilityRepair:{applied:true,reason:compatible.reason,entityCount:compatible.entityCount,units:compatible.units}}:result,
       },
       {
         headers: {

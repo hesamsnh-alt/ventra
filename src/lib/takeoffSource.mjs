@@ -20,6 +20,10 @@ export function assertTakeoffReady(takeoff) {
 export function bindBoqSource(boq, takeoff = boq?.takeoff, projectId = boq?.projectId) {
   if (!takeoff) return boq;
   assertTakeoffSource(takeoff, null, projectId);
+  const savedProject = boq?.projectId || boq?.project_id || boq?.takeoff?.project_id || boq?.takeoff?.projectId;
+  if (savedProject && projectId && savedProject !== projectId) {
+    throw new Error('BOQ belongs to another project. Generate a new BOQ for the current project.');
+  }
   const previous = boq?.boqSource;
   if (previous?.documentId && takeoff.document_id && previous.documentId !== takeoff.document_id) {
     throw new Error('BOQ source belongs to another drawing. Generate a new BOQ from the selected analysis.');
@@ -48,8 +52,11 @@ export function assertTakeoffSource(takeoff, documentId, projectId) {
 export function savedBoqMatchesTakeoff(boq, takeoff) {
   if(takeoffBoqIssue(takeoff)||takeoffBoqIssue(boq?.takeoff))return false;
   if (!takeoff) return true;
+  const currentProject = takeoff.project_id || takeoff.projectId;
+  const savedProjects = [boq?.projectId, boq?.project_id, boq?.takeoff?.project_id, boq?.takeoff?.projectId].filter(Boolean);
+  if (currentProject && savedProjects.some(id => id !== currentProject)) return false;
   const documentId = boq?.boqSource?.documentId || boq?.takeoff?.document_id;
   if (takeoff.document_id && documentId !== takeoff.document_id) return false;
-  const previous = boq?.takeoff?.analyzed_at;
+  const previous = boq?.boqSource?.analyzedAt || boq?.takeoff?.analyzed_at;
   return !previous || !takeoff.analyzed_at || previous === takeoff.analyzed_at;
 }
