@@ -11,7 +11,7 @@ export function exportDXF(document){
  function polygon(points,e,closed=true){entity('LWPOLYLINE',e);pair(100,'AcDbEntity');pair(100,'AcDbPolyline');pair(90,points.length);pair(70,closed?1:0);pair(38,e.z||0);for(const p of points){pair(10,p.x);pair(20,p.y);}}
  function emit(e){
   if(e.type==='line')line(e.a,e.b,e);
-  if(e.type==='polyline')polygon(e.points,e,e.closed);
+  if(e.type==='polyline'&&e.role!=='hatch')polygon(e.points,e,e.closed);
   if(e.type==='circle'||e.type==='arc'){entity(e.type==='circle'?'CIRCLE':'ARC',e);pair(10,e.center.x);pair(20,e.center.y);pair(30,e.z||0);pair(40,e.radius);if(e.type==='arc'){pair(50,(e.start+(e.sweep<0?e.sweep:0))*180/Math.PI);pair(51,(e.start+(e.sweep>0?e.sweep:0))*180/Math.PI);}}
   if(e.type==='text')text(e.position,e.text,e.textHeight,e.rotation,e);
   if(e.type==='dimension'){const g=dimensionGeometry(e);line(e.a,g.a,e);line(e.b,g.b,e);line(g.a,g.b,e);text({...g.mid,y:g.mid.y+.05},displayLength(g.length,doc.units),.125,0,e);}
@@ -21,7 +21,7 @@ export function exportDXF(document){
   if(e.type==='opening'){const w=doc.entities.find(x=>x.id===e.wall);if(w)text(at(w,e.offset),e.kind+' '+displayLength(e.width,doc.units),.1,0,e);}
   if(e.hatch&&(e.type==='circle'||e.type==='polyline'&&e.closed)){
    const ps=e.type==='circle'?Array.from({length:96},(_,i)=>at(e,i/96)):e.points;
-   entity('HATCH',e);pair(100,'AcDbEntity');pair(100,'AcDbHatch');pair(10,0);pair(20,0);pair(30,0);pair(210,0);pair(220,0);pair(230,1);pair(2,e.hatch==='solid'?'SOLID':'USERDEFINED');pair(70,e.hatch==='solid'?1:0);pair(71,0);pair(91,1);pair(92,2);pair(72,0);pair(73,1);pair(93,ps.length);for(const p of ps){pair(10,p.x);pair(20,p.y);}pair(97,0);pair(75,0);pair(76,0);
+   entity('HATCH',e);pair(100,'AcDbEntity');pair(100,'AcDbHatch');pair(10,0);pair(20,0);pair(30,0);pair(210,0);pair(220,0);pair(230,1);pair(2,e.hatch==='solid'?'SOLID':'USERDEFINED');pair(70,e.hatch==='solid'?1:0);pair(71,0);pair(91,1+(e.hatchHoles||[]).length);for(const [index,ring]of [ps,...(e.hatchHoles||[])].entries()){pair(92,index===0?3:2);pair(72,0);pair(73,1);pair(93,ring.length);for(const p of ring){pair(10,p.x);pair(20,p.y);}pair(97,0);}pair(75,0);pair(76,0);
    if(e.hatch!=='solid'){pair(52,0);pair(41,1);pair(77,0);const k=e.hatchScale||.2,styles=e.hatch==='interlock'?[[0,0,0,0,k,[.6*k,-.4*k]],[0,.6*k,.3*k,0,k,[.4*k,-.6*k]],[0,0,.5*k,0,k,[.6*k,-.4*k]],[0,.6*k,.7*k,0,k,[.4*k,-.6*k]],[90,.6*k,0,k,0,[.7*k,-.3*k]],[90,.3*k,.5*k,k,0,[.5*k,-.5*k]]]:e.hatch==='brick'?[[0,0,0,0,k/2,[]],[90,k/2,0,k,0,[k/2,-k/2]],[90,0,k/2,k,0,[k/2,-k/2]]]:e.hatch==='cross'?[[45,0,0,0,k,[]],[135,0,0,0,k,[]]]:[[45,0,0,0,k,[]]];pair(78,styles.length);for(const[a,x,y,dx,dy,dashes]of styles){pair(53,a);pair(43,x);pair(44,y);pair(45,dx);pair(46,dy);pair(79,dashes.length);for(const dash of dashes)pair(49,dash);}}
    pair(98,0);
   }

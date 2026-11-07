@@ -1,14 +1,14 @@
 // Touch input is deferred until release: a second finger can begin a gesture
 // without first adding an unwanted CAD point. No document geometry lives here.
-export function createPlanTouchInput({getState,getView,getRect,isPan,onView,onPoint,onPreview}){
+export function createPlanTouchInput({getState,getView,getRect,isPan,onView,onPoint,onPreview,onSelectionPreview,onSelectionBox}){
  const fingers=new Map();let gesture=null;
  const world=(p,v=getView())=>{const r=getRect(),h=v.width*r.height/r.width;return{x:v.x+(p.x-r.left)/r.width*v.width,y:v.y+(1-(p.y-r.top)/r.height)*h};};
  const position=e=>({x:e.clientX,y:e.clientY});
  const midpoint=()=>{const a=[...fingers.values()];return{x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};};
  function down(e){
   fingers.set(e.pointerId,position(e));
-  if(fingers.size===1){const s=getState(),p=position(e);gesture={start:p,view:{...getView()},multi:false,moved:false,pan:isPan()||s.command==='SELECT',explicitPan:isPan(),command:s.command,pointCount:s.points.length};}
-  else if(fingers.size===2){const a=[...fingers.values()],mid=midpoint(),view={...getView()};gesture={...gesture,multi:true,view,distance:Math.max(1,Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)),anchor:world(mid,view)};}
+  if(fingers.size===1){const s=getState(),p=position(e);gesture={start:p,view:{...getView()},multi:false,moved:false,pan:isPan()||s.command==='SELECT'&&!onSelectionBox,select:s.command==='SELECT'&&!isPan()&&!!onSelectionBox,explicitPan:isPan(),command:s.command,pointCount:s.points.length};}
+  else if(fingers.size===2){onSelectionPreview?.(null);const a=[...fingers.values()],mid=midpoint(),view={...getView()};gesture={...gesture,multi:true,view,distance:Math.max(1,Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)),anchor:world(mid,view)};}
  }
  function move(e){
   if(!fingers.has(e.pointerId)||!gesture)return;fingers.set(e.pointerId,position(e));
@@ -17,6 +17,7 @@ export function createPlanTouchInput({getState,getView,getRect,isPan,onView,onPo
   }
   if(gesture.multi)return;
   const p=position(e),r=getRect();gesture.moved ||= Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>8;
+  if(gesture.select&&gesture.moved){onSelectionPreview?.({a:world(gesture.start,gesture.view),b:world(p,gesture.view),crossing:p.x<gesture.start.x});return;}
   if(gesture.pan&&gesture.moved){onView({x:gesture.view.x-(p.x-gesture.start.x)/r.width*gesture.view.width,y:gesture.view.y+(p.y-gesture.start.y)/r.width*gesture.view.width,width:gesture.view.width});}
   else onPreview(world(p));
  }
@@ -25,9 +26,10 @@ export function createPlanTouchInput({getState,getView,getRect,isPan,onView,onPo
   if(g.multi){if(!fingers.size)gesture=null;return;}
   gesture=null;const p=position(e),moved=g.moved||Math.hypot(p.x-g.start.x,p.y-g.start.y)>8;
   if(g.explicitPan||g.pan&&moved)return;
+  if(g.select){onSelectionPreview?.(null);if(moved){onSelectionBox({a:world(g.start,g.view),b:world(p,g.view),crossing:p.x<g.start.x});return;}}
   if(moved&&['LINE','WALL'].includes(g.command)&&g.pointCount===0)onPoint(world(g.start,g.view));
   onPoint(world(p,g.view));
  }
- function cancel(){fingers.clear();gesture=null;}
+ function cancel(){fingers.clear();gesture=null;onSelectionPreview?.(null);}
  return{down,move,up,cancel,active:()=>fingers.size>0};
 }

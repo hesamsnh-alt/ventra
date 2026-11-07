@@ -1,3 +1,4 @@
+import {findHatchBoundary,hatchContains} from './hatchBoundary.mjs';
 import {triangleShape,regularPolygonShape} from './shapes.mjs';
 import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document.mjs';
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
@@ -47,10 +48,10 @@ export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
  const near=visible.filter(e=>(nearest(e,p)?.distance??Infinity)<tolerance*3).slice(0,32);for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++)for(const a of segments(near[i]))for(const b of segments(near[j]))candidates.push(...curveIntersections(a,b));
  candidates=candidates.filter(q=>dist(q,p)<tolerance&&(!(shift||s.ortho)||!from||Math.abs(q.x-from.x)<EPS||Math.abs(q.y-from.y)<EPS));if(candidates.length)p=candidates.sort((a,b)=>dist(a,p)-dist(b,p))[0];return exactEndpoint(s,p);
 }
-export function hitEntity(s,p,tolerance=.15){return s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false).map(e=>{const n=nearest(e,p);let distance=n?.distance??Infinity;if(e.center){distance=Math.min(distance,dist(e.center,p));if(['asset','plate'].includes(e.type)){const a=-(e.rotation||0)*Math.PI/180,dx=p.x-e.center.x,dy=p.y-e.center.y;if(Math.abs(dx*Math.cos(a)-dy*Math.sin(a))<=e.width/2&&Math.abs(dx*Math.sin(a)+dy*Math.cos(a))<=e.depth/2)distance=0;}}if(e.position)distance=dist(e.position,p);if(e.type==='dimension')distance=nearest({type:'line',a:e.a,b:e.b},p)?.distance??Infinity;return{e,distance};}).filter(x=>x.distance<=tolerance).sort((a,b)=>a.distance-b.distance)[0]?.e;}
+export function hitEntity(s,p,tolerance=.15){return s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false).map(e=>{const n=nearest(e,p);let distance=n?.distance??Infinity;if(e.role==='hatch'&&hatchContains(e,p))distance=0;if(e.center){distance=Math.min(distance,dist(e.center,p));if(['asset','plate'].includes(e.type)){const a=-(e.rotation||0)*Math.PI/180,dx=p.x-e.center.x,dy=p.y-e.center.y;if(Math.abs(dx*Math.cos(a)-dy*Math.sin(a))<=e.width/2&&Math.abs(dx*Math.sin(a)+dy*Math.cos(a))<=e.depth/2)distance=0;}}if(e.position)distance=dist(e.position,p);if(e.type==='dimension')distance=nearest({type:'line',a:e.a,b:e.b},p)?.distance??Infinity;return{e,distance};}).filter(x=>x.distance<=tolerance).sort((a,b)=>a.distance-b.distance)[0]?.e;}
 function drawRole(s){return s.command==='WALL'?{role:'wall',height:s.options.wallHeight,thickness:s.options.thickness,z:s.options.z}:s.command==='PIPE'?{role:'pipe',diameter:s.options.diameter,z:s.options.z}:{role:'line'};}
 export function clickPoint(s,raw,event={}){
- if(!point(raw))throw Error('Invalid point.');const p=event.raw?raw:snappedPoint(s,raw,event),cmd=s.command,hit=event.entityId?s.doc.entities.find(e=>e.id===event.entityId):hitEntity(s,p,event.tolerance),n=s.points.length;
+ if(!point(raw))throw Error('Invalid point.');const p=event.raw||s.command==='HATCH'?raw:snappedPoint(s,raw,event),cmd=s.command,hit=event.entityId?s.doc.entities.find(e=>e.id===event.entityId):hitEntity(s,p,event.tolerance),n=s.points.length;
  if(!point(p))throw Error('Coordinates outside drawing range. / نقطه خارج از محدودهٔ ترسیم است.');
  if(cmd==='SELECT'){const selection=hit?(event.shift?(s.selection.includes(hit.id)?s.selection.filter(i=>i!==hit.id):[...s.selection,hit.id]):[hit.id]):[];return{...s,selection};}
  if(['TRIM','EXTEND'].includes(cmd)){
@@ -70,8 +71,13 @@ export function clickPoint(s,raw,event={}){
   const v={x:p.x-s.points[0].x,y:p.y-s.points[0].y};return transformSelection(s,cmd.toLowerCase(),v);
  }
  if(cmd==='HATCH'){
-  const e=hit?.type==='polyline'&&hit.closed||hit?.type==='circle'?hit:s.doc.entities.slice().reverse().find(e=>e.type==='polyline'&&e.closed&&inside(p,e.points)||e.type==='circle'&&dist(p,e.center)<e.radius);if(!e)throw Error('Hatch needs a closed outline. / محدودهٔ بسته انتخاب کن.');layerGuard(s,[e.id]);return finish(commitDocument(s,{...s.doc,entities:s.doc.entities.map(a=>a.id===e.id?{...a,hatch:s.options.hatch,hatchScale:s.options.hatchScale}:a)},'HATCH'));
+  const boundary=findHatchBoundary(s.doc,p);if(!boundary)throw Error('No closed boundary here. Join the endpoints or close the outline. / مرز بسته پیدا نشد؛ اتصال سرخط‌ها را بررسی کن.');
+  const patch={hatch:s.options.hatch,hatchScale:s.options.hatchScale,hatchHoles:boundary.holes};
+  if(boundary.existingId){layerGuard(s,[boundary.existingId]);return finish(commitDocument(s,{...s.doc,entities:s.doc.entities.map(e=>e.id===boundary.existingId?{...e,...patch}:e)},'HATCH'));}
+  layerGuard(s,boundary.sources);
+  return finish(add(s,[{type:'polyline',role:'hatch',points:boundary.points,closed:true,...patch}],'HATCH boundary'));
  }
+
  if(cmd==='TEXT')return finish(add(s,[{type:'text',position:p,text:s.options.text,textHeight:s.options.textHeight,rotation:0,layer:'notes'}],'TEXT'));
  if(cmd==='BASEPLATE')return finish(add(s,[{type:'plate',center:p,width:s.options.plateWidth,depth:s.options.plateDepth,thickness:s.options.plateThickness,boltDiameter:s.options.boltDiameter,edge:s.options.edge,rotation:0,z:s.options.z}],'BASEPLATE'));
  if(cmd==='LIGHT')return finish(add(s,[{type:'light',center:p,z:2.7,intensity:1,color:'#fff2d7'}],'LIGHT'));
@@ -120,3 +126,8 @@ export function submit(s,raw){
  return clickPoint(s,parsePoint(text,s.points.at(-1),s.doc.units,s.cursor),{raw:true});
 }
 export function updateProperties(s,patch){layerGuard(s);const selected=new Set(s.selection);return commitDocument(s,{...s.doc,entities:s.doc.entities.map(e=>{if(!selected.has(e.id))return e;let value=e;if(patch.rotation!==undefined&&['line','arc','circle','polyline','dimension'].includes(e.type)){const base=e.center||e.a||e.points[0];value=transformEntity(e,'rotate',base,patch.rotation-(e.rotation||0));}return{...value,...patch};})},'Properties');}
+
+export function removeHatch(s){
+ layerGuard(s);const selected=new Set(s.selection),removed=new Set(s.doc.entities.filter(e=>selected.has(e.id)&&e.role==='hatch').map(e=>e.id));
+ return commitDocument({...s,selection:s.selection.filter(id=>!removed.has(id))},{...s.doc,entities:s.doc.entities.filter(e=>!removed.has(e.id)).map(e=>selected.has(e.id)&&e.hatch?{...e,hatch:null,hatchHoles:[]}:e)},'Remove hatch');
+}

@@ -1,5 +1,5 @@
 import {LINE_TYPES} from './lineTypes.mjs';
-import {point,dist,validPolygon,segments,at,sub,EPS} from './geometry.mjs';
+import {point,dist,validPolygon,segments,at,sub,EPS,inside,curveIntersections} from './geometry.mjs';
 export const SCHEMA='ventra-plan-studio/1';
 export const HATCHES=['diagonal','cross','concrete','steel','brick','interlock','sand','insulation','solid'];
 export const id=()=>globalThis.crypto.randomUUID();
@@ -34,6 +34,11 @@ export function validateDocument(input){
   else if(e.type==='opening'){if(!d.entities.some(w=>w.id===e.wall&&w.role==='wall'&&w.type==='line')||!Number.isFinite(e.offset)||e.offset<0||e.offset>1||![e.width,e.height].every(n=>Number.isFinite(n)&&n>0)||!['door','window','arched'].includes(e.kind))throw Error('Invalid wall opening.');}
   else throw Error('Unsupported plan entity.');
   if(e.type==='opening'){const w=d.entities.find(x=>x.id===e.wall),length=dist(w.a,w.b);if(e.offset*length<e.width/2-EPS||(1-e.offset)*length<e.width/2-EPS||e.height+(e.z||0)>w.height+EPS||e.width/2>e.height&&e.kind==='arched')throw Error('Opening does not fit inside the wall.');const overlaps=d.entities.some(o=>o.id!==e.id&&o.type==='opening'&&o.wall===e.wall&&Math.abs(o.offset-e.offset)*length<(o.width+e.width)/2-EPS);if(overlaps)throw Error('Wall openings overlap.');}
+  if(e.hatchHoles!==undefined){
+   if(!Array.isArray(e.hatchHoles)||e.hatchHoles.length>32||e.hatchHoles.reduce((sum,r)=>sum+(Array.isArray(r)?r.length:2001),0)>2000||!['circle','polyline'].includes(e.type)||e.type==='polyline'&&!e.closed)throw Error('Invalid hatch islands.');
+   for(const ring of e.hatchHoles){if(!Array.isArray(ring)||ring.length>300||!validPolygon(ring)||ring.some(p=>e.type==='circle'?dist(p,e.center)>=e.radius:!inside(p,e.points)))throw Error('Hatch island must be a closed outline inside its boundary.');if(e.type==='polyline'&&segments({type:'polyline',points:ring,closed:true}).some(a=>segments(e).some(b=>curveIntersections(a,b).length)))throw Error('Hatch island crosses its boundary.');}
+   for(let a=0;a<e.hatchHoles.length;a++)for(let b=a+1;b<e.hatchHoles.length;b++)if(segments({type:'polyline',points:e.hatchHoles[a],closed:true}).some(x=>segments({type:'polyline',points:e.hatchHoles[b],closed:true}).some(y=>curveIntersections(x,y).length)))throw Error('Hatch islands intersect.');
+  }
   for(const k of ['rotation','z','height','thickness','diameter','hatchScale','intensity','offsetDistance'])if(e[k]!==undefined&&(!Number.isFinite(e[k])||Math.abs(e[k])>10000))throw Error('Invalid entity property.');
   if(e.role==='wall'&&!['line','arc'].includes(e.type))throw Error('A wall must be a straight line or arc.');
   if(e.role==='wall'&&e.type==='arc'&&e.radius<=e.thickness/2)throw Error('Curved wall radius must exceed half its thickness.');
@@ -43,7 +48,7 @@ export function validateDocument(input){
 }
 export function transformEntity(e,kind,base,value){
  const convert=p=>{const v=sub(p,base);if(kind==='move'||kind==='copy')return{x:p.x+value.x,y:p.y+value.y};if(kind==='rotate'){const a=value*Math.PI/180;return{x:base.x+v.x*Math.cos(a)-v.y*Math.sin(a),y:base.y+v.x*Math.sin(a)+v.y*Math.cos(a)};}return{x:base.x+v.x*value,y:base.y+v.y*value};};
- const n=structuredClone(e);for(const key of ['a','b','center','position'])if(n[key])n[key]=convert(n[key]);if(n.points)n.points=n.points.map(convert);if(kind==='rotate'){n.rotation=(n.rotation||0)+value;if(['arc','circle'].includes(n.type))n.start+=value*Math.PI/180;}
+ const n=structuredClone(e);for(const key of ['a','b','center','position'])if(n[key])n[key]=convert(n[key]);if(n.points)n.points=n.points.map(convert);if(n.hatchHoles)n.hatchHoles=n.hatchHoles.map(r=>r.map(convert));if(kind==='rotate'){n.rotation=(n.rotation||0)+value;if(['arc','circle'].includes(n.type))n.start+=value*Math.PI/180;}
  if(kind==='scale'){if(!Number.isFinite(value)||value<=.001||value>1000)throw Error('Use a positive scale factor.');for(const key of ['radius','width','depth','height','thickness','boltDiameter','edge','diameter','textHeight','offsetDistance','hatchScale'])if(n[key]!==undefined)n[key]*=value;}
  return n;
 }

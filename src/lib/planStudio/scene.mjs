@@ -29,7 +29,7 @@ export function planWallGeometry(e,openings=[]){
 }
 export function createPlanScene(doc){
  const root=new T.Group(),entities=visibleEntities(doc),b=bounds(entities),matCache=new Map();const mat=(color,metal=false)=>{const k=color+metal;if(!matCache.has(k))matCache.set(k,material(color,metal));return matCache.get(k);};
- for(const e of entities){const group=new T.Group();group.userData={planEntityId:e.id};root.add(group);const color=styleFor(doc,e).color;
+ for(const e of entities){if(e.role==='hatch')continue;const group=new T.Group();group.userData={planEntityId:e.id};root.add(group);const color=styleFor(doc,e).color;
   if(e.role==='floor'&&e.type==='polyline'&&e.closed){const mesh=addMesh(group,new T.ExtrudeGeometry(shapeFromPoints(e.points),{depth:e.height||.12,bevelEnabled:false}),floorMaterial(e));mesh.position.z=(e.z||0)-(e.height||.12);}
   if(e.role==='wall'&&e.type==='line'){
    const mesh=addMesh(group,planWallGeometry(e,entities.filter(o=>o.type==='opening'&&o.wall===e.id)),mat(e.surfaceColor||'#d9d3c5'));mesh.rotation.x=Math.PI/2;mesh.position.y=e.thickness/2;group.position.set(e.a.x,e.a.y,e.z||0);group.rotation.z=Math.atan2(e.b.y-e.a.y,e.b.x-e.a.x);
