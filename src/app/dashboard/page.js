@@ -25,6 +25,7 @@ import {
   MoreHorizontal,
   Plus,
   Search,
+  Ruler,
   Settings,
   Sparkles,
   Upload,
@@ -299,6 +300,15 @@ export default function DashboardPage() {
             <LocalizedElement as="span" className="vt-db-nav__count">
               {projects.length}
             </LocalizedElement>
+          </LocalizedLink>
+
+          <LocalizedLink
+            href="/plan-studio"
+            className="vt-db-nav__item"
+            onClick={closeSidebar}
+          >
+            <Ruler size={19} />
+            <LocalizedElement as="span">Plan Studio · پلان‌ساز</LocalizedElement>
           </LocalizedLink>
 
           <LocalizedLink 

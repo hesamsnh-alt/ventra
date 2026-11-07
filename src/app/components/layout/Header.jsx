@@ -37,6 +37,7 @@ const mainMenu = [
   },
 ];
 const publicSideMenu = [
+  {label:"Plan Studio · پلان‌ساز",href:"/plan-studio"},
   {
     label: "Home",
     href: "/",
