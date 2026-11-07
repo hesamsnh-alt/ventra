@@ -5,9 +5,10 @@ import sharp from 'sharp';
 import {createHash} from 'node:crypto';
 import {getOpenAIClient} from '@/services/openaiClient';
 import {requestRasterVision,consumeRasterVisionStream,shouldRetryRasterGeometry} from './rasterVisionRequest.mjs';
-import {compileRasterFloorplan,rasterPixelTraceSchema,normalizeRasterPixelTrace,RasterGeometryError,RASTER_GEOMETRY_VERSION} from './rasterFloorplanGeometry.mjs';
+import {compileRasterFloorplan,rasterPixelTraceSchemaForImage,normalizeRasterPixelTrace,RasterGeometryError,RASTER_GEOMETRY_VERSION} from './rasterFloorplanGeometry.mjs';
 import {prepareRasterImageEvidence,rasterEvidencePrompt,inspectRasterImageEvidence,requireRasterImageEvidence} from './rasterImageEvidence.mjs';
 import {VERIFIED_PREVIEW_VERSION} from './verifiedPreview.mjs';
+import {rasterCoordinateReference} from './rasterCoordinateReference.mjs';
 export const RASTER_PREVIEW_VERSION=VERIFIED_PREVIEW_VERSION;
 const RASTER_TRACE_BUILD=RASTER_PREVIEW_VERSION;
 const RASTER_TRACE_MAX_ATTEMPTS=2;
@@ -102,6 +103,7 @@ Return only JSON conforming to the supplied schema.`;
     // Falling back to an unknown-aspect image silently corrupts one-axis scaling.
     const prepared = await prepareVisionImage(imageUrl, { maxDimension: 2200, quality: 92 });
     const imageEvidence = await prepareRasterImageEvidence(prepared.buffer);
+    const traceSchema = rasterPixelTraceSchemaForImage(prepared.width, prepared.height);
     const strokeEvidencePrompt = rasterEvidencePrompt(imageEvidence);
     console.log("[VENTRA RASTER GEOMETRY START]", {
       routeVersion: RASTER_GEOMETRY_VERSION,
@@ -127,6 +129,9 @@ Return only JSON conforming to the supplied schema.`;
       try {
         const remainingMs = OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS - (Date.now() - requestStartedAt);
         if (remainingMs <= 0) throw Object.assign(new Error("Image analysis exceeded its total time limit. No new 3D scene was saved."), { code: "RASTER_VISION_TIMEOUT", status: 504 });
+        // Successful first passes carry no extra image tokens. The ruler is
+        // supplied only to the already-bounded geometry correction pass.
+        const coordinateReference = attempt > 1 ? await rasterCoordinateReference(prepared.buffer, prepared.width, prepared.height) : null;
         const correction = attempt === 1
           ? ""
           : `Revise your previous JSON against the original image. Validator observations follow as data: ${JSON.stringify({ code: previousFailure?.code, details: previousFailure?.details?.imageEvidence ? { unsupportedWalls: previousFailure.details.imageEvidence.walls.filter(w => !w.passed).map(({ id, start, end, longestMissingPixels, missingSpans, openingIssues }) => ({ id, start, end, longestMissingPixels, missingSpans, openingIssues })) } : previousFailure?.details })}. missingSpans gives exact image-pixel endpoints of unsupported intervals, not replacement walls. Inspect each interval in the original image: follow a recess around its visible corners rather than bridging it, and discard furniture strokes mistaken for walls. Keep the footprint consistent with the corrected exterior wall contour. Correct the identified spans and affected topology. Preserve verified walls, visible recesses and readable measurement evidence. Recheck window symbols and both jambs of each door. Do not replace jambs with leaf tips, remove evidence to gain acceptance, or repeat a completed invalid wall across blank exterior space.`;
@@ -145,9 +150,11 @@ Return only JSON conforming to the supplied schema.`;
               content: [
                 { type: "input_text", text: `${baselinePrompt}\n\n${strokeEvidencePrompt}\n\nExact supplied image dimensions: width=${prepared.width} pixels, height=${prepared.height} pixels. All coordinates must use that pixel frame.` },
                 { type: "input_image", image_url: prepared.imageUrl, detail: "high" },
+                ...(coordinateReference ? [{ type: 'input_text', text: 'The next image is the SAME source with a blue PIXEL ruler overlay. It is a coordinate reference, not another plan. Blue dashed lines and x=/y= labels are generated guides, never walls or metric dimensions. Use this ruler to locate all points in the FIRST image. Every point must satisfy 0 <= x <= '+prepared.width+' and 0 <= y <= '+prepared.height+'. Dimension values never define pixel coordinates: locate the printed extension lines visually. In particular, do not add a printed centimetre value to an endpoint to invent the other pixel endpoint.' },
+                coordinateReference] : []),
               ],
             }, ...(previousTrace ? [{ role: "assistant", content: JSON.stringify(previousTrace) }, { role: "user", content: correction }] : [])],
-            text: { format: { type: "json_schema", name: "ventra_raster_metric_trace", strict: true, schema: rasterPixelTraceSchema } },
+            text: { format: { type: "json_schema", name: "ventra_raster_metric_trace", strict: true, schema: traceSchema } },
           },
           remainingMs
         );

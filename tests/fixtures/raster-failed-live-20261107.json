@@ -1,0 +1,783 @@
+{
+  "imageWidth": 2200,
+  "imageHeight": 679,
+  "rawPixelTrace": {
+    "holes": [],
+    "rooms": [
+      {
+        "id": "r1",
+        "name": "LIVING ROOM",
+        "type": "living",
+        "polygon": [
+          {
+            "x": 200,
+            "y": 140
+          },
+          {
+            "x": 520,
+            "y": 140
+          },
+          {
+            "x": 520,
+            "y": 557
+          },
+          {
+            "x": 200,
+            "y": 557
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "name": "B.R",
+        "type": "bedroom",
+        "polygon": [
+          {
+            "x": 980,
+            "y": 140
+          },
+          {
+            "x": 1335,
+            "y": 140
+          },
+          {
+            "x": 1335,
+            "y": 270
+          },
+          {
+            "x": 980,
+            "y": 270
+          }
+        ]
+      },
+      {
+        "id": "r3",
+        "name": "ROOM",
+        "type": "bedroom",
+        "polygon": [
+          {
+            "x": 980,
+            "y": 270
+          },
+          {
+            "x": 1335,
+            "y": 270
+          },
+          {
+            "x": 1335,
+            "y": 410
+          },
+          {
+            "x": 980,
+            "y": 410
+          }
+        ]
+      },
+      {
+        "id": "r4",
+        "name": "MASTER ROOM",
+        "type": "bedroom",
+        "polygon": [
+          {
+            "x": 1335,
+            "y": 140
+          },
+          {
+            "x": 1710,
+            "y": 140
+          },
+          {
+            "x": 1710,
+            "y": 250
+          },
+          {
+            "x": 1335,
+            "y": 250
+          }
+        ]
+      },
+      {
+        "id": "r5",
+        "name": "B.R",
+        "type": "bathroom",
+        "polygon": [
+          {
+            "x": 1335,
+            "y": 250
+          },
+          {
+            "x": 1710,
+            "y": 250
+          },
+          {
+            "x": 1710,
+            "y": 330
+          },
+          {
+            "x": 1335,
+            "y": 330
+          }
+        ]
+      },
+      {
+        "id": "r6",
+        "name": "BALCONY",
+        "type": "balcony",
+        "polygon": [
+          {
+            "x": 1845,
+            "y": 140
+          },
+          {
+            "x": 2022,
+            "y": 140
+          },
+          {
+            "x": 2022,
+            "y": 250
+          },
+          {
+            "x": 1845,
+            "y": 250
+          }
+        ]
+      },
+      {
+        "id": "r7",
+        "name": "LANDRY",
+        "type": "laundry",
+        "polygon": [
+          {
+            "x": 1845,
+            "y": 445
+          },
+          {
+            "x": 2022,
+            "y": 445
+          },
+          {
+            "x": 2022,
+            "y": 557
+          },
+          {
+            "x": 1845,
+            "y": 557
+          }
+        ]
+      }
+    ],
+    "title": "Traced floor plan – living room, bedrooms, master room, balcony, laundry",
+    "walls": [
+      {
+        "id": "w1",
+        "end": {
+          "x": 2022,
+          "y": 140
+        },
+        "type": "external",
+        "start": {
+          "x": 200,
+          "y": 140
+        }
+      },
+      {
+        "id": "w2",
+        "end": {
+          "x": 2022,
+          "y": 557
+        },
+        "type": "external",
+        "start": {
+          "x": 200,
+          "y": 557
+        }
+      },
+      {
+        "id": "w3",
+        "end": {
+          "x": 200,
+          "y": 557
+        },
+        "type": "external",
+        "start": {
+          "x": 200,
+          "y": 140
+        }
+      },
+      {
+        "id": "w4",
+        "end": {
+          "x": 2022,
+          "y": 557
+        },
+        "type": "external",
+        "start": {
+          "x": 2022,
+          "y": 140
+        }
+      },
+      {
+        "id": "w5",
+        "end": {
+          "x": 520,
+          "y": 557
+        },
+        "type": "internal",
+        "start": {
+          "x": 520,
+          "y": 140
+        }
+      },
+      {
+        "id": "w6",
+        "end": {
+          "x": 980,
+          "y": 557
+        },
+        "type": "internal",
+        "start": {
+          "x": 980,
+          "y": 140
+        }
+      },
+      {
+        "id": "w7",
+        "end": {
+          "x": 1335,
+          "y": 557
+        },
+        "type": "internal",
+        "start": {
+          "x": 1335,
+          "y": 140
+        }
+      },
+      {
+        "id": "w8",
+        "end": {
+          "x": 1710,
+          "y": 557
+        },
+        "type": "internal",
+        "start": {
+          "x": 1710,
+          "y": 140
+        }
+      },
+      {
+        "id": "w9",
+        "end": {
+          "x": 1845,
+          "y": 557
+        },
+        "type": "internal",
+        "start": {
+          "x": 1845,
+          "y": 140
+        }
+      },
+      {
+        "id": "w10",
+        "end": {
+          "x": 980,
+          "y": 330
+        },
+        "type": "internal",
+        "start": {
+          "x": 520,
+          "y": 330
+        }
+      },
+      {
+        "id": "w11",
+        "end": {
+          "x": 1335,
+          "y": 270
+        },
+        "type": "internal",
+        "start": {
+          "x": 980,
+          "y": 270
+        }
+      },
+      {
+        "id": "w12",
+        "end": {
+          "x": 1335,
+          "y": 410
+        },
+        "type": "internal",
+        "start": {
+          "x": 980,
+          "y": 410
+        }
+      },
+      {
+        "id": "w13",
+        "end": {
+          "x": 1710,
+          "y": 250
+        },
+        "type": "internal",
+        "start": {
+          "x": 1335,
+          "y": 250
+        }
+      },
+      {
+        "id": "w14",
+        "end": {
+          "x": 1710,
+          "y": 445
+        },
+        "type": "internal",
+        "start": {
+          "x": 1335,
+          "y": 445
+        }
+      },
+      {
+        "id": "w15",
+        "end": {
+          "x": 2022,
+          "y": 250
+        },
+        "type": "internal",
+        "start": {
+          "x": 1845,
+          "y": 250
+        }
+      },
+      {
+        "id": "w16",
+        "end": {
+          "x": 2022,
+          "y": 445
+        },
+        "type": "internal",
+        "start": {
+          "x": 1845,
+          "y": 445
+        }
+      },
+      {
+        "id": "w17",
+        "end": {
+          "x": 1710,
+          "y": 445
+        },
+        "type": "internal",
+        "start": {
+          "x": 1710,
+          "y": 250
+        }
+      },
+      {
+        "id": "w18",
+        "end": {
+          "x": 1845,
+          "y": 445
+        },
+        "type": "internal",
+        "start": {
+          "x": 1845,
+          "y": 250
+        }
+      },
+      {
+        "id": "w19",
+        "end": {
+          "x": 1845,
+          "y": 330
+        },
+        "type": "internal",
+        "start": {
+          "x": 1710,
+          "y": 330
+        }
+      },
+      {
+        "id": "w20",
+        "end": {
+          "x": 1845,
+          "y": 365
+        },
+        "type": "internal",
+        "start": {
+          "x": 1710,
+          "y": 365
+        }
+      }
+    ],
+    "openings": [
+      {
+        "id": "d1",
+        "end": {
+          "x": 940,
+          "y": 330
+        },
+        "type": "door",
+        "start": {
+          "x": 890,
+          "y": 330
+        },
+        "wallId": "w10",
+        "hingeSide": "start",
+        "heightMeters": null,
+        "swingDirection": "clockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d2",
+        "end": {
+          "x": 1080,
+          "y": 270
+        },
+        "type": "door",
+        "start": {
+          "x": 1030,
+          "y": 270
+        },
+        "wallId": "w11",
+        "hingeSide": "end",
+        "heightMeters": null,
+        "swingDirection": "counterclockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d3",
+        "end": {
+          "x": 1285,
+          "y": 270
+        },
+        "type": "door",
+        "start": {
+          "x": 1235,
+          "y": 270
+        },
+        "wallId": "w11",
+        "hingeSide": "start",
+        "heightMeters": null,
+        "swingDirection": "clockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d4",
+        "end": {
+          "x": 1460,
+          "y": 250
+        },
+        "type": "door",
+        "start": {
+          "x": 1410,
+          "y": 250
+        },
+        "wallId": "w13",
+        "hingeSide": "end",
+        "heightMeters": null,
+        "swingDirection": "counterclockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d5",
+        "end": {
+          "x": 1805,
+          "y": 330
+        },
+        "type": "door",
+        "start": {
+          "x": 1755,
+          "y": 330
+        },
+        "wallId": "w19",
+        "hingeSide": "end",
+        "heightMeters": null,
+        "swingDirection": "counterclockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d6",
+        "end": {
+          "x": 1940,
+          "y": 445
+        },
+        "type": "door",
+        "start": {
+          "x": 1890,
+          "y": 445
+        },
+        "wallId": "w16",
+        "hingeSide": "start",
+        "heightMeters": null,
+        "swingDirection": "clockwise",
+        "sillHeightMeters": null
+      },
+      {
+        "id": "d7",
+        "end": {
+          "x": 1940,
+          "y": 250
+        },
+        "type": "door",
+        "start": {
+          "x": 1890,
+          "y": 250
+        },
+        "wallId": "w15",
+        "hingeSide": "end",
+        "heightMeters": null,
+        "swingDirection": "counterclockwise",
+        "sillHeightMeters": null
+      }
+    ],
+    "footprint": [
+      {
+        "x": 190,
+        "y": 124
+      },
+      {
+        "x": 2032,
+        "y": 124
+      },
+      {
+        "x": 2032,
+        "y": 573
+      },
+      {
+        "x": 190,
+        "y": 573
+      }
+    ],
+    "confidence": 0.38,
+    "imageWidth": 2200,
+    "imageHeight": 679,
+    "measurements": [
+      {
+        "id": "m1",
+        "end": {
+          "x": 210,
+          "y": 557
+        },
+        "axis": "vertical",
+        "text": "500 cm",
+        "start": {
+          "x": 210,
+          "y": 140
+        },
+        "meters": 5
+      },
+      {
+        "id": "m2",
+        "end": {
+          "x": 2012,
+          "y": 557
+        },
+        "axis": "vertical",
+        "text": "500 cm",
+        "start": {
+          "x": 2012,
+          "y": 140
+        },
+        "meters": 5
+      },
+      {
+        "id": "m3",
+        "end": {
+          "x": 2022,
+          "y": 567
+        },
+        "axis": "horizontal",
+        "text": "2,110 cm",
+        "start": {
+          "x": 200,
+          "y": 567
+        },
+        "meters": 21.1
+      },
+      {
+        "id": "m4",
+        "end": {
+          "x": 360,
+          "y": 433
+        },
+        "axis": "vertical",
+        "text": "253.104 cm",
+        "start": {
+          "x": 360,
+          "y": 180
+        },
+        "meters": 2.53104
+      },
+      {
+        "id": "m5",
+        "end": {
+          "x": 1320,
+          "y": 130
+        },
+        "axis": "horizontal",
+        "text": "1,119.502 cm",
+        "start": {
+          "x": 200,
+          "y": 130
+        },
+        "meters": 11.19502
+      },
+      {
+        "id": "m6",
+        "end": {
+          "x": 1565,
+          "y": 130
+        },
+        "axis": "horizontal",
+        "text": "244.429 cm",
+        "start": {
+          "x": 1320,
+          "y": 130
+        },
+        "meters": 2.44429
+      },
+      {
+        "id": "m7",
+        "end": {
+          "x": 1805,
+          "y": 130
+        },
+        "axis": "horizontal",
+        "text": "240 cm",
+        "start": {
+          "x": 1565,
+          "y": 130
+        },
+        "meters": 2.4
+      },
+      {
+        "id": "m8",
+        "end": {
+          "x": 1930,
+          "y": 130
+        },
+        "axis": "horizontal",
+        "text": "124.751 cm",
+        "start": {
+          "x": 1805,
+          "y": 130
+        },
+        "meters": 1.24751
+      },
+      {
+        "id": "m9",
+        "end": {
+          "x": 1476,
+          "y": 215
+        },
+        "axis": "horizontal",
+        "text": "156.384 cm",
+        "start": {
+          "x": 1320,
+          "y": 215
+        },
+        "meters": 1.56384
+      },
+      {
+        "id": "m10",
+        "end": {
+          "x": 852,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "332.274 cm",
+        "start": {
+          "x": 520,
+          "y": 545
+        },
+        "meters": 3.32274
+      },
+      {
+        "id": "m11",
+        "end": {
+          "x": 1015,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "163 cm",
+        "start": {
+          "x": 852,
+          "y": 545
+        },
+        "meters": 1.63
+      },
+      {
+        "id": "m12",
+        "end": {
+          "x": 1447,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "431.541 cm",
+        "start": {
+          "x": 1015,
+          "y": 545
+        },
+        "meters": 4.31541
+      },
+      {
+        "id": "m13",
+        "end": {
+          "x": 1697,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "250 cm",
+        "start": {
+          "x": 1447,
+          "y": 545
+        },
+        "meters": 2.5
+      },
+      {
+        "id": "m14",
+        "end": {
+          "x": 1894,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "197.026 cm",
+        "start": {
+          "x": 1697,
+          "y": 545
+        },
+        "meters": 1.97026
+      },
+      {
+        "id": "m15",
+        "end": {
+          "x": 2214,
+          "y": 545
+        },
+        "axis": "horizontal",
+        "text": "319.867 cm",
+        "start": {
+          "x": 1894,
+          "y": 545
+        },
+        "meters": 3.19867
+      },
+      {
+        "id": "m16",
+        "end": {
+          "x": 2020,
+          "y": 535
+        },
+        "axis": "horizontal",
+        "text": "110 cm",
+        "start": {
+          "x": 1910,
+          "y": 535
+        },
+        "meters": 1.1
+      }
+    ],
+    "coordinateSpace": "image_pixels",
+    "wallHeightMeters": null
+  }
+}

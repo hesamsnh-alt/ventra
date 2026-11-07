@@ -17,7 +17,7 @@ export async function runPreviewAnalysis(start,{key,fetcher,storage,delay=wait,m
   response=await fetcher(`${endpoint}?jobId=${encodeURIComponent(id)}`,{cache:'no-store'});
   if(response.status===202)continue;
   // A transient service outage leaves the ID available for the next retry.
-  if([502,503].includes(response.status))continue;
+  if([502,503].includes(response.status)&&response.headers.get('X-Ventra-Analysis-Status')!=='failed')continue;
   if(!response.ok){try{storage?.removeItem(cacheKey);}catch{}}
   return response;
  }

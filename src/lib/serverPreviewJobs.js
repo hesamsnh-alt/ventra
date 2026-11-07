@@ -6,7 +6,7 @@ import {account,billingError} from './serverBilling';
 const table='ventra_preview_jobs';
 export const nonceHash=value=>createHash('sha256').update(value).digest('hex');
 export async function startPreviewJob(request,action='preview'){
- let db,id;
+ let db,id,created=false,fingerprint;
  try{
   const user=await account(request),raw=await request.text();
   if(raw.length>12*1024*1024)throw billingError('Analysis request exceeds 12 MB.',413);
@@ -15,23 +15,29 @@ export async function startPreviewJob(request,action='preview'){
   // Recover the exact same image for the same actor/project before reserving AI
   // usage. The fingerprint is computed from source bytes, never supplied by UI.
   if(action==='preview'&&body.mode==='schematic_analyze'){
-   const fingerprint=await previewImageFingerprint(body.imageUrl);
+   fingerprint=await previewImageFingerprint(body.imageUrl);
    const prior=await db.from(table).select('result').eq('actor_id',user.id).eq('project_id',body.projectId).eq('status','completed').eq('result->diagnostics->>imageHash',fingerprint.hash).eq('result->>routeVersion',fingerprint.version).gte('created_at',new Date(Date.now()-60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
    if(prior.error)throw billingError('Background analysis storage is unavailable.',503);
    if(prior.data?.result?.scene)return Response.json({...prior.data.result,recovered:true},{headers:{'Cache-Control':'no-store'}});
   }
   const origin=new URL(process.env.DEPLOY_URL||process.env.URL||'');
   if(origin.protocol!=='https:')throw billingError('Background analysis endpoint is not configured.',503);
-  const digest=nonceHash(`${user.id}:${raw}`);
+  const digest=nonceHash(fingerprint ? `${user.id}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
   id=`${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`;const nonce=randomBytes(32).toString('hex');
   const {error}=await db.from(table).insert({id,actor_id:user.id,project_id:body.projectId,status:'queued',nonce_hash:nonceHash(nonce),request_body:{...body,__backgroundAction:action}});
-  if(error?.code==='23505')return Response.json({jobId:id,status:'queued'},{status:202,headers:{'Cache-Control':'no-store'}});
+  if(error?.code==='23505'){
+   const prior=await db.from(table).select('status,result,http_status').eq('id',id).eq('actor_id',user.id).maybeSingle();
+   if(prior.error||!prior.data)throw billingError('Existing analysis job is unavailable.',503);
+   if(['completed','failed'].includes(prior.data.status))return Response.json(prior.data.result||{error:'Analysis failed.'},{status:prior.data.http_status||500,headers:{'Cache-Control':'no-store','X-Ventra-Analysis-Status':prior.data.status}});
+   return Response.json({jobId:id,status:prior.data.status},{status:202,headers:{'Cache-Control':'no-store'}});
+  }
   if(error)throw billingError('Background analysis storage is unavailable. Install the v89 SQL migration.',503);
+  created=true;
   const queued=await fetch(new URL('/.netlify/functions/preview-background',origin),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,nonce,authorization:request.headers.get('authorization')}),signal:AbortSignal.timeout(15000)});
   if(queued.status!==202)throw billingError('Could not start background analysis. Check the Netlify function deployment.',503);
   return Response.json({jobId:id,status:'queued'},{status:202,headers:{'Cache-Control':'no-store'}});
  }catch(error){
-  if(db&&id)await db.from(table).update({status:'failed',result:{error:error.message,code:'PREVIEW_QUEUE_FAILED'},http_status:503,request_body:null,nonce_hash:null}).eq('id',id).eq('status','queued');
+  if(created)await db.from(table).update({status:'failed',result:{error:error.message,code:'PREVIEW_QUEUE_FAILED'},http_status:503,request_body:null,nonce_hash:null}).eq('id',id).eq('status','queued');
   return commercialError(error);
  }
 }
@@ -43,7 +49,7 @@ export async function readPreviewJob(request){
   if(error)throw billingError('Background analysis storage is unavailable.',503);
   if(!data)throw billingError('Analysis job unavailable.',404);
   if(['queued','running'].includes(data.status)&&Date.now()-Date.parse(data.created_at)>16*60*1000)return Response.json({error:'Background analysis timed out. Retry the analysis.',code:'PREVIEW_JOB_TIMEOUT'},{status:504});
-  if(['completed','failed'].includes(data.status))return Response.json(data.result||{error:'Analysis failed.'},{status:data.http_status||500,headers:{'Cache-Control':'no-store'}});
+  if(['completed','failed'].includes(data.status))return Response.json(data.result||{error:'Analysis failed.'},{status:data.http_status||500,headers:{'Cache-Control':'no-store','X-Ventra-Analysis-Status':data.status}});
   return Response.json({jobId:id,status:data.status},{status:202,headers:{'Cache-Control':'no-store'}});
  }catch(error){return commercialError(error);}
 }

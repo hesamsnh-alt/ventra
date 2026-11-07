@@ -55,26 +55,48 @@ export const rasterPixelTraceSchema = object({
   measurements: rasterFloorplanSchema.properties.measurements,
 });
 
+// Constrain generation against the exact prepared image, rather than only
+// discovering an impossible coordinate after a paid response has completed.
+// Server-side normalization and image/topology checks remain mandatory.
+export function rasterPixelTraceSchemaForImage(imageWidth, imageHeight) {
+  if (![imageWidth, imageHeight].every(n => Number.isSafeInteger(n) && n > 0)) {
+    fail('IMAGE_SIZE_UNAVAILABLE', 'Image dimensions must be positive integers.');
+  }
+  const schema = JSON.parse(JSON.stringify(rasterPixelTraceSchema));
+  const visit = node => {
+    if (node.type === 'object' && node.properties?.x && node.properties?.y) {
+      node.properties.x = { type: 'number', minimum: 0, maximum: imageWidth };
+      node.properties.y = { type: 'number', minimum: 0, maximum: imageHeight };
+    }
+    if (node.properties) Object.values(node.properties).forEach(visit);
+    if (node.items) visit(node.items);
+  };
+  visit(schema);
+  schema.properties.imageWidth.enum = [imageWidth];
+  schema.properties.imageHeight.enum = [imageHeight];
+  return schema;
+}
+
 export function normalizeRasterPixelTrace(raw, { imageWidth, imageHeight }) {
   if (raw?.coordinateSpace !== "image_pixels" || raw.imageWidth !== imageWidth || raw.imageHeight !== imageHeight) {
     fail("COORDINATE_FRAME_MISMATCH", "The AI trace does not use the supplied image pixel frame.", { expected: { imageWidth, imageHeight }, actual: { imageWidth: raw?.imageWidth, imageHeight: raw?.imageHeight, coordinateSpace: raw?.coordinateSpace } });
   }
   if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) fail("IMAGE_SIZE_UNAVAILABLE", "Image dimensions must be positive.");
-  const convert = (p) => {
+  const convert = (p, path) => {
     const x = finite(p?.x, "pixel.x"), y = finite(p?.y, "pixel.y");
-    if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) fail("INVALID_COORDINATE", "A traced pixel lies outside the supplied image.");
+    if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) fail("INVALID_COORDINATE", "A traced pixel lies outside the supplied image.", { path, point: { x, y }, imageWidth, imageHeight });
     return { x: x * 1000 / imageWidth, y: y * 1000 / imageHeight };
   };
-  const poly = (p) => list(p, "polygon", 1000).map(convert);
-  const span = (s) => ({ ...s, start: convert(s.start), end: convert(s.end) });
+  const poly = (p, path) => list(p, "polygon", 1000).map((point, i) => convert(point, `${path}[${i}]`));
+  const span = (s, path) => ({ ...s, start: convert(s.start, `${path}.start`), end: convert(s.end, `${path}.end`) });
   return {
     title: raw.title, confidence: raw.confidence, wallHeightMeters: raw.wallHeightMeters,
-    footprint: poly(raw.footprint),
-    measurements: list(raw.measurements, "measurements", 80).map(span),
-    walls: list(raw.walls, "walls", 400).map(span),
-    openings: list(raw.openings, "openings", 150).map(span),
-    rooms: list(raw.rooms, "rooms", 100).map((r) => ({ ...r, polygon: poly(r.polygon) })),
-    holes: list(raw.holes, "holes", 50).map((h) => ({ ...h, polygon: poly(h.polygon) })),
+    footprint: poly(raw.footprint, 'footprint'),
+    measurements: list(raw.measurements, "measurements", 80).map((s, i) => span(s, `measurements[${i}]`)),
+    walls: list(raw.walls, "walls", 400).map((s, i) => span(s, `walls[${i}]`)),
+    openings: list(raw.openings, "openings", 150).map((s, i) => span(s, `openings[${i}]`)),
+    rooms: list(raw.rooms, "rooms", 100).map((r, i) => ({ ...r, polygon: poly(r.polygon, `rooms[${i}].polygon`) })),
+    holes: list(raw.holes, "holes", 50).map((h, i) => ({ ...h, polygon: poly(h.polygon, `holes[${i}].polygon`) })),
   };
 }
 
