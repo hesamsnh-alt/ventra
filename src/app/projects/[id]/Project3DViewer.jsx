@@ -7696,7 +7696,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
   let renderer;
   try { renderer = createPhysicalPreview(rendererOptions); }
-  catch { renderer = new THREE.WebGLRenderer(rendererOptions); }
+  catch {try{renderer = new THREE.WebGLRenderer(rendererOptions);}catch(cause){throw Object.assign(new Error('WebGL is unavailable in this browser. The saved model and geometry report are preserved. / نمایش WebGL در این مرورگر در دسترس نیست؛ مدل و گزارش هندسه محفوظ‌اند.'),{code:'WEBGL_UNAVAILABLE',cause});}}
   renderer.setPixelRatio(previewPixelRatio(width,height,window.devicePixelRatio || 1,rendererOptions.mobile));
   renderer.setSize(width, height, false);
   renderer.setClearColor(background, 1);
@@ -10399,10 +10399,10 @@ export default function Project3DViewer({ projectId }) {
               <LocalizedElement as="p">Standalone Three.js visualization. This mode is separate from Autodesk engineering quantities.</LocalizedElement>
               <LocalizedElement as="div" className="ventra-model-properties">
                 <LocalizedElement as="div"><LocalizedElement as="small">Style</LocalizedElement><LocalizedElement as="strong">{schematicPreset || schematicScene.style || "classic"}</LocalizedElement></LocalizedElement>
-                <LocalizedElement as="div"><LocalizedElement as="small">Room size</LocalizedElement><LocalizedElement as="strong">{Number(schematicModel?.width || 0).toFixed(2)} × {Number(schematicModel?.depth || 0).toFixed(2)} m</LocalizedElement></LocalizedElement>
-                <LocalizedElement as="div"><LocalizedElement as="small">Height</LocalizedElement><LocalizedElement as="strong">{Number(schematicModel?.height || 0).toFixed(2)} m</LocalizedElement></LocalizedElement>
-                <LocalizedElement as="div"><LocalizedElement as="small">Furniture / fixtures</LocalizedElement><LocalizedElement as="strong">{schematicModel?.assetCount || 0}</LocalizedElement></LocalizedElement>
-                <LocalizedElement as="div"><LocalizedElement as="small">Openings</LocalizedElement><LocalizedElement as="strong">{schematicModel?.openingCount || 0}</LocalizedElement></LocalizedElement>
+                <LocalizedElement as="div"><LocalizedElement as="small">Room size</LocalizedElement><LocalizedElement as="strong">{Number(schematicScene?.width ?? schematicModel?.width ?? 0).toFixed(2)} × {Number(schematicScene?.depth ?? schematicModel?.depth ?? 0).toFixed(2)} m</LocalizedElement></LocalizedElement>
+                <LocalizedElement as="div"><LocalizedElement as="small">Height</LocalizedElement><LocalizedElement as="strong">{Number(schematicScene?.height ?? schematicModel?.height ?? 0).toFixed(2)} m</LocalizedElement></LocalizedElement>
+                <LocalizedElement as="div"><LocalizedElement as="small">Furniture / fixtures</LocalizedElement><LocalizedElement as="strong">{schematicScene?.assets?.length ?? schematicModel?.assetCount ?? 0}</LocalizedElement></LocalizedElement>
+                <LocalizedElement as="div"><LocalizedElement as="small">Openings</LocalizedElement><LocalizedElement as="strong">{schematicScene?.openings?.length ?? schematicModel?.openingCount ?? 0}</LocalizedElement></LocalizedElement>
                 <LocalizedElement as="div"><LocalizedElement as="small">Camera</LocalizedElement><LocalizedElement as="strong">{schematicNavMode === "pan" ? "Pan" : "Orbit"}</LocalizedElement></LocalizedElement>
               </LocalizedElement>
             </>
