@@ -64,3 +64,10 @@ with ezdxf and the SVG parsed as XML. `scripts/qa-plan-studio.cjs` is an automat
 browser/export/reload check for an environment able to launch Chromium and reach
 its local server. A restricted executor can prevent browser IPC/local port access;
 record that blocker separately instead of treating a script's existence as a pass.
+
+Live browser verification confirmed command-line drawing, dimensions, text, plate,
+interlock hatch, temporary Shift ortho, a persisted seven-entity plan after reload,
+and completed JSON/DXF/JPG/PDF downloads. The cloud browser has WebGL disabled;
+its GPU preview could not be verified. The preview now retains the explanatory
+error instead of clearing it on document updates. Geometry generation is tested
+offline for every existing single catalog model.
