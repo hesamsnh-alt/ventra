@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 const tools = [
+  {icon:Ruler,title:"Plan Studio",desc:"Draw from scratch · 2D + live 3D"},
   {
     icon: FileSpreadsheet,
     title: "AI BOQ",
@@ -81,7 +82,7 @@ const tools = [
     desc: "Project analytics",
   },
 ];
-const destinations = ["boq", "quotation", "catalog", "schedule", "concrete", "steel", "area", "volume", "units", "mep", "estimate", "dashboard"];
+const destinations = ["plan-studio", "boq", "quotation", "catalog", "schedule", "concrete", "steel", "area", "volume", "units", "mep", "estimate", "dashboard"];
 
 export default function Toolbox() {
   return (
@@ -112,7 +113,7 @@ export default function Toolbox() {
 
           return (
             <LocalizedLink 
-              href={destinations[index] === "dashboard" ? "/dashboard" : `/tools/${destinations[index]}`}
+              href={destinations[index] === "plan-studio" ? "/plan-studio" : destinations[index] === "dashboard" ? "/dashboard" : `/tools/${destinations[index]}`}
               style={{ color: "inherit", textDecoration: "none" }}
               className="tool-card"
               key={tool.title}

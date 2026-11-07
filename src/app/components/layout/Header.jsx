@@ -22,6 +22,7 @@ import {
 import "./Header.css";
 
 const mainMenu = [
+  {label:"Plan Studio",href:"/plan-studio"},
   {label:"Demo",href:"/demo"},
   {label:"Billing",href:"/billing"},
   {label:"Help",href:"/support"},
