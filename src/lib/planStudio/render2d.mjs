@@ -1,3 +1,4 @@
+import {lineDash} from './lineTypes.mjs';
 import {segments,at,bounds,dist} from './geometry.mjs';
 import {styleFor,visibleEntities,displayLength} from './document.mjs';
 export const escapeXML=s=>String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
@@ -28,7 +29,7 @@ export function wallOutlineData(e){
  return '';
 }
 function renderEntitySVG(doc,e,{print=false,selected=false,screen=false}={}){
- const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&st.color.toLowerCase()==='#dce6ed'?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=st.dash==='dashed'?'.15 .09':st.dash==='center'?'.3 .08 .04 .08':'',attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+ const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&st.color.toLowerCase()==='#dce6ed'?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=lineDash(st.dash,screen),attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
  const outline=screen&&e.role==='wall'&&e.thickness?wallOutlineData(e):'';if(outline)return `<path d="${outline}" ${attrs.replace(' fill="none"','')} fill="${escapeXML(color)}" fill-opacity=".08"/>`;
  const path=pathData(e);if(path)return `<path d="${path}" ${attrs.replace(' fill="none"','')} fill="${e.hatch?`url(#hatch-${escapeXML(e.id)})`:'none'}"/>`;
  if(e.type==='text')return `<text transform="translate(${e.position.x},${e.position.y}) rotate(${e.rotation||0}) scale(1,-1)" fill="${color}" font-size="${e.textHeight}" font-family="Arial,sans-serif" direction="${/[\u0600-\u06ff]/.test(e.text)?'rtl':'ltr'}">${escapeXML(e.text)}</text>`;

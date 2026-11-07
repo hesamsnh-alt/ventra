@@ -1,3 +1,4 @@
+import {LINE_TYPES} from './lineTypes.mjs';
 import {point,dist,validPolygon,segments,at,sub,EPS} from './geometry.mjs';
 export const SCHEMA='ventra-plan-studio/1';
 export const HATCHES=['diagonal','cross','concrete','steel','brick','interlock','sand','insulation','solid'];
@@ -22,9 +23,9 @@ export function styleFor(doc,e){const l=doc.layers.find(l=>l.id===e.layer)||DEFA
 export function validateDocument(input){
  if(!input||input.schema!==SCHEMA||!Array.isArray(input.layers)||input.layers.length<1||input.layers.length>80||!Array.isArray(input.entities)||input.entities.length>2000)throw Error('Not a supported Ventra plan document. / فایل پلان معتبر نیست.');
  const d=structuredClone(input);d.lighting??={intensity:1,color:'#fff2d7'};if(!['cm','in'].includes(d.units)||![10,20,25,50,100,200,500].includes(d.printScale)||typeof d.name!=='string'||d.name.length>160||typeof d.id!=='string'||d.id.length>100)throw Error('Invalid drawing settings.');
- const ids=new Set(),layerIds=new Set();for(const l of d.layers){if(typeof l.id!=='string'||layerIds.has(l.id)||!/^#[0-9a-f]{6}$/i.test(l.color)||typeof l.name!=='string'||l.name.length>80||!['solid','dashed','center'].includes(l.dash)||!Number.isFinite(l.weight)||l.weight<.05||l.weight>2)throw Error('Invalid drawing layer.');l.visible=l.visible!==false;l.locked=l.locked===true;layerIds.add(l.id);}
+ const ids=new Set(),layerIds=new Set();for(const l of d.layers){if(typeof l.id!=='string'||layerIds.has(l.id)||!/^#[0-9a-f]{6}$/i.test(l.color)||typeof l.name!=='string'||l.name.length>80||!LINE_TYPES.some(t=>t.id===l.dash)||!Number.isFinite(l.weight)||l.weight<.05||l.weight>2)throw Error('Invalid drawing layer.');l.visible=l.visible!==false;l.locked=l.locked===true;layerIds.add(l.id);}
  for(const e of d.entities){
-  if(!e.id||ids.has(e.id)||!layerIds.has(e.layer))throw Error('Invalid entity ID or layer.');ids.add(e.id);if(e.color&&e.color!=='bylayer'&&!/^#[0-9a-f]{6}$/i.test(e.color))throw Error('Invalid entity color.');
+  if(!e.id||ids.has(e.id)||!layerIds.has(e.layer))throw Error('Invalid entity ID or layer.');ids.add(e.id);if(e.dash&&e.dash!=='bylayer'&&!LINE_TYPES.some(t=>t.id===e.dash))throw Error('Invalid entity line type.');if(e.color&&e.color!=='bylayer'&&!/^#[0-9a-f]{6}$/i.test(e.color))throw Error('Invalid entity color.');
   if(['line','dimension'].includes(e.type)){if(!point(e.a)||!point(e.b)||dist(e.a,e.b)<EPS)throw Error('Invalid line or dimension.');}
   else if(e.type==='polyline'){if(!Array.isArray(e.points)||e.points.length<2||e.points.length>300||e.points.some(p=>!point(p))||e.points.some((p,i)=>i>0&&dist(p,e.points[i-1])<EPS))throw Error('Invalid polyline.');if(e.closed&&!validPolygon(e.points))throw Error('Closed outline intersects itself or has zero area.');}
   else if(['arc','circle'].includes(e.type)){if(!point(e.center)||!Number.isFinite(e.radius)||e.radius<=.0001||e.radius>10000||!Number.isFinite(e.start)||!Number.isFinite(e.sweep)||Math.abs(e.sweep)>Math.PI*2+EPS||Math.abs(e.sweep)<EPS)throw Error('Invalid circle or arc.');}

@@ -1,8 +1,9 @@
+import {triangleShape,regularPolygonShape} from './shapes.mjs';
 import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document.mjs';
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
-export const ALIASES={L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
-export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
+export const ALIASES={TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
+export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
 export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
 }
@@ -23,7 +24,7 @@ export function startCommand(s,raw){
  return note({...s,command,phase,points:[],boundary:[],value:null,segmentLength:null,lastCommand:command},command+' → '+(phase||'first point'));
 }
 // Exact length is a transient drawing constraint, never a project/BOQ setting.
-export const LENGTH_COMMANDS=['LINE','WALL','PLINE','PIPE','FLOOR','MOVE','COPY'];
+export const LENGTH_COMMANDS=['LINE','WALL','PLINE','PIPE','FLOOR','MOVE','COPY','CIRCLE','POLYGON'];
 export function setSegmentLength(s,text,unit='m'){
  if(text===null||String(text).trim()==='')return{...s,segmentLength:null};
  if(!LENGTH_COMMANDS.includes(s.command))throw Error('Choose Line, Wall, Polyline, Pipe, Floor, Move or Copy first. / ابتدا ابزار ترسیم یا جابه‌جایی را انتخاب کن.');
@@ -82,6 +83,14 @@ export function clickPoint(s,raw,event={}){
   if(!n)return{...s,points:[p]};const last=s.points.at(-1);if(dist(last,p)<EPS)throw Error('Line length must be positive.');return{...add(s,[{type:'line',a:last,b:p,...drawRole(s)}],cmd),points:[...s.points,p]};
  }
  if(['PLINE','FLOOR','PIPE'].includes(cmd)){if(n>=3&&dist(p,s.points[0])<EPS)return submit(s,'C');return{...s,points:[...s.points,p]};}
+ if(cmd==='TRIANGLE'){
+  if(n<2)return{...s,points:[...s.points,p]};
+  return finish(add(s,[triangleShape([...s.points,p])],'TRIANGLE'));
+ }
+ if(cmd==='POLYGON'){
+  if(!n)return{...s,points:[p]};
+  return finish(add(s,[regularPolygonShape(s.points[0],p,s.options.polygonSides)],'POLYGON'));
+ }
  if(['RECTANG','CIRCLE','ARC','DIMLINEAR','DIST'].includes(cmd)){
   if(!n)return{...s,points:[p]};const a=s.points[0];if(cmd==='ARC'&&n===1)return{...s,points:[...s.points,p]};
   if(cmd==='DIST')return finish(note({...s,lastDistance:dist(a,p)},'DIST = '+dist(a,p).toFixed(6)+' m'));
@@ -103,7 +112,7 @@ export function submit(s,raw){
  if(['LINE','WALL','PLINE','PIPE','FLOOR'].includes(s.command)&&['C','CLOSE'].includes(upper)){
   if(s.points.length<3)throw Error('At least 3 points to close.');if(['LINE','WALL'].includes(s.command)){if(dist(s.points.at(-1),s.points[0])<EPS)return finish(s);const next=clickPoint(s,s.points[0],{raw:true});return finish(next);}return finish(add(s,[{type:'polyline',points:s.points,closed:true,...drawRole(s),...(s.command==='FLOOR'?{role:'floor',height:.12,hatch:s.options.hatch,hatchScale:s.options.hatchScale}: {})}],s.command+' Close'));
  }
- if(['LINE','WALL','PLINE','PIPE','FLOOR'].includes(s.command)&&upper==='U')return s.command==='LINE'||s.command==='WALL'?{...startCommand(s,'UNDO'),command:s.command,segmentLength:s.segmentLength,points:s.points.slice(0,-1)}:{...s,points:s.points.slice(0,-1)};
+ if(['LINE','WALL','PLINE','PIPE','FLOOR','TRIANGLE'].includes(s.command)&&upper==='U')return s.command==='LINE'||s.command==='WALL'?{...startCommand(s,'UNDO'),command:s.command,segmentLength:s.segmentLength,points:s.points.slice(0,-1)}:{...s,points:s.points.slice(0,-1)};
  if(!text){if(['PLINE','PIPE'].includes(s.command)&&s.points.length>=2)return finish(add(s,[{type:'polyline',points:s.points,closed:false,...drawRole(s)}],s.command));if(s.command==='FLOOR'&&s.points.length>=3)return submit(s,'C');return finish(s);}
  if(s.command==='OFFSET'&&s.phase==='distance'){const value=lengthValue(text,s.doc.units);if(value<=0)throw Error('Offset must be positive.');return{...s,value,phase:'object'};}
  if(['ROTATE','SCALE'].includes(s.command)&&s.points.length){const value=Number(text);if(!Number.isFinite(value))throw Error('Enter a number.');return transformSelection(s,s.command.toLowerCase(),value);}
