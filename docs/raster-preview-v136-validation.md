@@ -1,6 +1,24 @@
-# JPG geometry correction candidate — not deployed
+# JPG geometry correction — deployed, live extraction failed
 
-Based on main commit `c5d5687`. Candidate version: `verified-raster-preview-v136-20261108`.
+Based on main commit `c5d5687`. Version: `verified-raster-preview-v136-20261108`.
+
+## Live result — 8 November 2026, UAE
+
+Production deployment succeeded after explicit authorization to deploy and test:
+
+- Source commit: `21743718b2460cf862176183d6af1d1287ee4fe4`.
+- Netlify deploy: `6aef91ca80155c20d1151af0`; ready and published at `2026-11-07T21:03:01.523Z` (01:03 UAE on 8 November).
+- The deployed Git tree exactly matches the locally built/tested tree: `50c89f8824741e93694b93714fa63df6cf198ec7`.
+- Supplied `Untitled plan(3).jpg` was uploaded as `Ventra-JPG-Geometry-Test.jpg` to the existing TEST ONLY project QA-07. Image preparation used 2048 x 632 pixels.
+- Exactly one image-build job was started: `022f7386-a26e-31b8-e223-2de632c959fb`. It made two completed `gpt-5.1` model requests (initial extraction plus the one allowed correction); total server elapsed time was 50,404 ms. No further paid test was run.
+- Final status: HTTP 422 / `TRACE_IMAGE_MISMATCH`; no new scene accepted or saved.
+- The corrected trace stayed inside the image frame but returned only four exterior walls, zero rooms and zero openings. It also omitted the balcony from the apparent outer extent. This is incomplete recognition, not a usable 3D reconstruction.
+- The final image-support check rejected an unsupported bottom-wall span. Weakening that check would still leave an empty interior and is not a fix.
+- The browser displayed the completed rejection, both attempts and the source overlay. It did not remain stuck polling.
+- Both provider responses completed well below the output-token cap. This observed failure was not a transport timeout or output truncation.
+- Provider usage: 10,590 input tokens (3,712 cached) and 4,829 output tokens across both requests. No currency cost is asserted; account billing was not read.
+
+Conclusion: deployment and request lifecycle are verified, but JPG-to-3D recognition remains unresolved. Do not describe this release or its offline test count as evidence of correct architectural extraction.
 
 The observed JPG response contained a dimension endpoint at x=2214 in a 2200-pixel image. It also contained incorrectly located walls. Fixing the endpoint exception alone does not establish correct recognition of this plan.
 
@@ -18,10 +36,10 @@ Validation:
 - `npm run build`: successful.
 - Tests cover the observed out-of-frame response, all point-bearing schema collections, landscape/portrait/square images, bounded correction, eight distinct generated layouts, duplicate job recovery, version changes and terminal-versus-transient polling errors.
 - The coordinate-reference image was generated and visually inspected for the supplied JPG. This checks image preparation, not model recognition.
-- No paid model request, database write, deployment, or production configuration change was performed for this candidate.
+- These offline checks made no paid model requests. The separately authorized live test and production deployment are recorded above. No production configuration or database schema was changed.
 
-## Unverified and required before deployment
+## Remaining work
 
-The actual JPG has not been re-extracted with the modified model request. Its reconstructed walls, room boundaries, openings and measured scale must be compared against the source before accepting this candidate. Synthetic tests and a successful build are not evidence that this plan, or every arbitrary project, is now recognized correctly.
+The real test proves that bounding coordinates and adding a correction ruler are insufficient. The extractor must recover physical interior walls, all visible room zones, openings and the complete outer extent from image evidence. A whole-plan pixel trace produced by the current model cannot yet be treated as reliable. Synthetic tests and a successful build do not establish recognition quality for this or arbitrary projects.
 
-Next gate: one explicitly authorized, bounded local API extraction on the supplied JPG, with the trace and validation report retained for review. No deployment is needed for this test. Do not merge or deploy this branch before that gate passes.
+Retain this failure as an extraction regression. Compare future extracted geometry with independent source annotations and varied real plans; do not loosen image/structural validation to accept the current four-wall skeleton. Avoid additional paid retries without a concrete extractor change and an agreed test budget.
