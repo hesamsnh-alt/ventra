@@ -7,7 +7,7 @@ export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
 }
 const note=(s,message)=>({...s,log:[...s.log,message].slice(-50)});
-const finish=(s)=>({...s,command:'SELECT',phase:'',points:[],boundary:[]});
+const finish=(s)=>({...s,command:'SELECT',phase:'',points:[],boundary:[],segmentLength:null});
 function layerGuard(s,ids=s.selection){for(const e of s.doc.entities.filter(e=>ids.includes(e.id)))if(s.doc.layers.find(l=>l.id===e.layer)?.locked)throw Error('Unlock the layer first. / ابتدا لایه را باز کن.');}
 function add(s,entities,message){const l=s.doc.layers.find(l=>l.id===s.activeLayer);if(l?.locked)throw Error('Current layer is locked.');return commitDocument(s,{...s.doc,entities:[...s.doc.entities,...entities.map(e=>({id:id(),layer:s.activeLayer,color:s.options.color,...e}))]},message);}
 function reboundOpenings(target,fragments,children){return children.flatMap(o=>{const p=at(target,o.offset),fragment=fragments.find(f=>f.type==='line'&&f.role==='wall'&&(()=>{const n=nearest(f,p),l=dist(f.a,f.b);return n.distance<EPS&&n.t*l>=o.width/2-EPS&&(1-n.t)*l>=o.width/2-EPS;})());return fragment?[{...o,wall:fragment.id,offset:nearest(fragment,p).t}]:[];});}
@@ -20,20 +20,37 @@ export function startCommand(s,raw){
  if(command==='ERASE'){if(!s.selection.length)throw Error('Select objects first.');layerGuard(s);const ids=new Set(s.selection);for(const e of s.doc.entities)if(e.type==='opening'&&ids.has(e.wall))ids.add(e.id);return finish(commitDocument({...s,selection:[]},{...s.doc,entities:s.doc.entities.filter(e=>!ids.has(e.id))},'ERASE'));}
  if(['MOVE','COPY','ROTATE','SCALE'].includes(command)&&!s.selection.length)throw Error('Select objects before this command. / ابتدا اجسام را انتخاب کن.');
  let phase=['TRIM','EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':'';
- return note({...s,command,phase,points:[],boundary:[],value:null,lastCommand:command},command+' → '+(phase||'first point'));
+ return note({...s,command,phase,points:[],boundary:[],value:null,segmentLength:null,lastCommand:command},command+' → '+(phase||'first point'));
+}
+// Exact length is a transient drawing constraint, never a project/BOQ setting.
+export const LENGTH_COMMANDS=['LINE','WALL','PLINE','PIPE','FLOOR','MOVE','COPY'];
+export function setSegmentLength(s,text,unit='m'){
+ if(text===null||String(text).trim()==='')return{...s,segmentLength:null};
+ if(!LENGTH_COMMANDS.includes(s.command))throw Error('Choose Line, Wall, Polyline, Pipe, Floor, Move or Copy first. / ابتدا ابزار ترسیم یا جابه‌جایی را انتخاب کن.');
+ if(!['m','cm','mm','in'].includes(unit))throw Error('Unsupported length unit.');
+ const value=lengthValue(String(text).replace(/٫/g,'.'),unit);
+ if(value<=0)throw Error('Length must be positive. / طول باید بیشتر از صفر باشد.');
+ return{...s,segmentLength:value};
+}
+function exactEndpoint(s,p){
+ const from=s.points.at(-1),length=s.segmentLength;
+ if(!from||!length||!LENGTH_COMMANDS.includes(s.command))return p;
+ const d=dist(from,p);if(d<EPS)return p;
+ return{x:from.x+(p.x-from.x)/d*length,y:from.y+(p.y-from.y)/d*length};
 }
 export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
  const from=s.points.at(-1);if((shift||s.ortho)&&from){const dx=Math.abs(p.x-from.x),dy=Math.abs(p.y-from.y);p=dx>=dy?{x:p.x,y:from.y}:{x:from.x,y:p.y};}
- if(!s.snap)return p;let candidates=[];const visible=s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false);
+ if(!s.snap)return exactEndpoint(s,p);let candidates=[];const visible=s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false);
  for(const e of visible)for(const seg of segments(e)){candidates.push(at(seg,0),at(seg,1),at(seg,.5));if(seg.type!=='line')candidates.push(seg.center);}
  // Intersection snap is bounded to nearby curves; large drawings do not do O(n²) every move.
  const near=visible.filter(e=>(nearest(e,p)?.distance??Infinity)<tolerance*3).slice(0,32);for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++)for(const a of segments(near[i]))for(const b of segments(near[j]))candidates.push(...curveIntersections(a,b));
- candidates=candidates.filter(q=>dist(q,p)<tolerance&&(!(shift||s.ortho)||!from||Math.abs(q.x-from.x)<EPS||Math.abs(q.y-from.y)<EPS));if(candidates.length)return candidates.sort((a,b)=>dist(a,p)-dist(b,p))[0];return p;
+ candidates=candidates.filter(q=>dist(q,p)<tolerance&&(!(shift||s.ortho)||!from||Math.abs(q.x-from.x)<EPS||Math.abs(q.y-from.y)<EPS));if(candidates.length)p=candidates.sort((a,b)=>dist(a,p)-dist(b,p))[0];return exactEndpoint(s,p);
 }
 export function hitEntity(s,p,tolerance=.15){return s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false).map(e=>{const n=nearest(e,p);let distance=n?.distance??Infinity;if(e.center){distance=Math.min(distance,dist(e.center,p));if(['asset','plate'].includes(e.type)){const a=-(e.rotation||0)*Math.PI/180,dx=p.x-e.center.x,dy=p.y-e.center.y;if(Math.abs(dx*Math.cos(a)-dy*Math.sin(a))<=e.width/2&&Math.abs(dx*Math.sin(a)+dy*Math.cos(a))<=e.depth/2)distance=0;}}if(e.position)distance=dist(e.position,p);if(e.type==='dimension')distance=nearest({type:'line',a:e.a,b:e.b},p)?.distance??Infinity;return{e,distance};}).filter(x=>x.distance<=tolerance).sort((a,b)=>a.distance-b.distance)[0]?.e;}
 function drawRole(s){return s.command==='WALL'?{role:'wall',height:s.options.wallHeight,thickness:s.options.thickness,z:s.options.z}:s.command==='PIPE'?{role:'pipe',diameter:s.options.diameter,z:s.options.z}:{role:'line'};}
 export function clickPoint(s,raw,event={}){
  if(!point(raw))throw Error('Invalid point.');const p=event.raw?raw:snappedPoint(s,raw,event),cmd=s.command,hit=event.entityId?s.doc.entities.find(e=>e.id===event.entityId):hitEntity(s,p,event.tolerance),n=s.points.length;
+ if(!point(p))throw Error('Coordinates outside drawing range. / نقطه خارج از محدودهٔ ترسیم است.');
  if(cmd==='SELECT'){const selection=hit?(event.shift?(s.selection.includes(hit.id)?s.selection.filter(i=>i!==hit.id):[...s.selection,hit.id]):[hit.id]):[];return{...s,selection};}
  if(['TRIM','EXTEND'].includes(cmd)){
   if(s.phase==='boundary'){if(!hit)return note(s,'Select cutting/boundary edge, then Enter (or Enter for all).');return{...s,boundary:[...new Set([...s.boundary,hit.id])]};}
@@ -86,7 +103,7 @@ export function submit(s,raw){
  if(['LINE','WALL','PLINE','PIPE','FLOOR'].includes(s.command)&&['C','CLOSE'].includes(upper)){
   if(s.points.length<3)throw Error('At least 3 points to close.');if(['LINE','WALL'].includes(s.command)){if(dist(s.points.at(-1),s.points[0])<EPS)return finish(s);const next=clickPoint(s,s.points[0],{raw:true});return finish(next);}return finish(add(s,[{type:'polyline',points:s.points,closed:true,...drawRole(s),...(s.command==='FLOOR'?{role:'floor',height:.12,hatch:s.options.hatch,hatchScale:s.options.hatchScale}: {})}],s.command+' Close'));
  }
- if(['LINE','WALL','PLINE','PIPE','FLOOR'].includes(s.command)&&upper==='U')return s.command==='LINE'||s.command==='WALL'?{...startCommand(s,'UNDO'),command:s.command,points:s.points.slice(0,-1)}:{...s,points:s.points.slice(0,-1)};
+ if(['LINE','WALL','PLINE','PIPE','FLOOR'].includes(s.command)&&upper==='U')return s.command==='LINE'||s.command==='WALL'?{...startCommand(s,'UNDO'),command:s.command,segmentLength:s.segmentLength,points:s.points.slice(0,-1)}:{...s,points:s.points.slice(0,-1)};
  if(!text){if(['PLINE','PIPE'].includes(s.command)&&s.points.length>=2)return finish(add(s,[{type:'polyline',points:s.points,closed:false,...drawRole(s)}],s.command));if(s.command==='FLOOR'&&s.points.length>=3)return submit(s,'C');return finish(s);}
  if(s.command==='OFFSET'&&s.phase==='distance'){const value=lengthValue(text,s.doc.units);if(value<=0)throw Error('Offset must be positive.');return{...s,value,phase:'object'};}
  if(['ROTATE','SCALE'].includes(s.command)&&s.points.length){const value=Number(text);if(!Number.isFinite(value))throw Error('Enter a number.');return transformSelection(s,s.command.toLowerCase(),value);}
