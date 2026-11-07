@@ -50,3 +50,12 @@
  .ps-length-control button,.ps-length-control select,.ps-length-control input{min-height:44px}
  .ps-length-control output{flex-basis:100%;font-size:10px}
 }
+.ps-transfer{position:relative}
+.ps-transfer-panel{position:absolute;top:calc(100% + 8px);inset-inline-start:0;width:min(380px,calc(100vw - 24px));padding:15px;background:#162535;border:1px solid #60788e;border-radius:8px;box-shadow:0 10px 30px #0009;z-index:55;max-height:75dvh;overflow:auto}
+.ps-transfer-panel p{font-size:12px;line-height:1.7;color:#c1d1df}
+.ps-transfer-panel label{display:block;margin:12px 0;font-size:12px}
+.ps-transfer-panel select{display:block;width:100%;max-width:100%;margin-top:5px;min-height:44px}
+.ps-transfer-panel button{min-height:44px;margin:4px}
+.ps-transfer-panel a{color:#ffdc52;display:block;margin:8px 0}
+.ps-transfer-open{padding:10px;border:1px solid #ffdc52;border-radius:5px;text-align:center}
+@media(max-width:680px){.ps-transfer-panel{position:fixed;top:12dvh;inset-inline:12px;width:auto;max-height:70dvh}}

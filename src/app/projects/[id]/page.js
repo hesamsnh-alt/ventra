@@ -4,7 +4,7 @@ import LocalizedLink from "@/app/components/i18n/LocalizedLink";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import SignOutButton from "../../components/SignOutButton";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -406,8 +406,9 @@ export default function ProjectWorkspacePage() {
         aria-label="Project workspace sections"
       >
         {PROJECT_TABS.map((tab) => (
+          <Fragment key={tab.id}>
+          {tab.id === "model3d" && <LocalizedLink className="project-tab" style={{textDecoration:"none",display:"inline-flex",alignItems:"center"}} href={`/plan-studio?project=${encodeURIComponent(project.id)}`}>Plan Studio</LocalizedLink>}
           <LocalizedElement as="button"
-            key={tab.id}
             type="button"
             className={`project-tab ${
               activeTab === tab.id
@@ -420,6 +421,7 @@ export default function ProjectWorkspacePage() {
           >
             {tab.label}
           </LocalizedElement>
+          </Fragment>
         ))}
       </LocalizedElement>
 
