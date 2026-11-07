@@ -1,3 +1,5 @@
+import {openingPlanGeometry} from './openings.mjs';
+import {shaftOuter} from './structures.mjs';
 import {at,segments,curveIntersections,param,bounds,inside,EPS} from './geometry.mjs';
 import {dimensionGeometry} from './render2d.mjs';
 import {hatchContains} from './hatchBoundary.mjs';
@@ -5,7 +7,8 @@ function geometry(e,doc){
  let curves=segments(e),points=[],fill=null;
  if(e.role==='wall'&&e.type==='line'&&e.thickness){const length=Math.hypot(e.b.x-e.a.x,e.b.y-e.a.y),nx=-(e.b.y-e.a.y)/length*e.thickness/2,ny=(e.b.x-e.a.x)/length*e.thickness/2,ring=[{x:e.a.x+nx,y:e.a.y+ny},{x:e.b.x+nx,y:e.b.y+ny},{x:e.b.x-nx,y:e.b.y-ny},{x:e.a.x-nx,y:e.a.y-ny}];curves=segments({type:'polyline',points:ring,closed:true});fill=p=>inside(p,ring);}
  if(e.role==='wall'&&e.type==='arc'&&e.thickness){const outer={...e,radius:e.radius+e.thickness/2},inner={...e,radius:e.radius-e.thickness/2};curves=[outer,inner,{type:'line',a:at(outer,0),b:at(inner,0)},{type:'line',a:at(outer,1),b:at(inner,1)}];fill=p=>{const radius=Math.hypot(p.x-e.center.x,p.y-e.center.y);return radius>=inner.radius&&radius<=outer.radius&&param(e,p)<=1+EPS;};}
- if(e.type==='opening'){const wall=doc.entities.find(w=>w.id===e.wall);if(wall){const center=at(wall,e.offset),angle=Math.atan2(wall.b.y-wall.a.y,wall.b.x-wall.a.x),ring=[[-e.width/2,0],[e.width/2,0],[e.width/2,e.kind==='window'?wall.thickness:e.width],[-e.width/2,e.kind==='window'?wall.thickness:e.width]].map(([x,y])=>({x:center.x+x*Math.cos(angle)-y*Math.sin(angle),y:center.y+x*Math.sin(angle)+y*Math.cos(angle)}));curves=segments({type:'polyline',points:ring,closed:true});fill=p=>inside(p,ring);}}
+ if(e.role==='shaft'){curves=segments({type:'polyline',points:shaftOuter(e),closed:true});fill=p=>inside(p,shaftOuter(e));}
+ if(e.type==='opening'){const g=openingPlanGeometry(doc,e);if(g){curves=g.curves;points.push(...g.footprint);fill=p=>inside(p,g.footprint);}}
  if(e.type==='dimension'){const g=dimensionGeometry(e);curves=[{type:'line',a:e.a,b:g.a},{type:'line',a:e.b,b:g.b},{type:'line',a:g.a,b:g.b}];}
  if(['asset','plate','text'].includes(e.type)){
   if(e.type==='text'){const b=bounds([e]);points=[{x:b.x,y:b.y},{x:b.x+b.width,y:b.y},{x:b.x+b.width,y:b.y+b.height},{x:b.x,y:b.y+b.height}];}

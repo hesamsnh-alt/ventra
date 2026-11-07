@@ -1,3 +1,5 @@
+import {shaftOuter} from './structures.mjs';
+import {openingPlanGeometry,wallOpeningSegments} from './openings.mjs';
 import {LINE_TYPES,lineType} from './lineTypes.mjs';
 import {validateDocument,visibleEntities,styleFor,displayLength} from './document.mjs';
 import {drawingSVG,dimensionGeometry,plateHoles} from './render2d.mjs';
@@ -10,7 +12,7 @@ export function exportDXF(document){
  pair(0,'TABLE');pair(2,'LAYER');pair(5,'2');pair(330,'0');pair(100,'AcDbSymbolTable');pair(70,doc.layers.length);for(const l of doc.layers){pair(0,'LAYER');pair(5,(nextHandle.value++).toString(16));pair(2,clean(l.id));pair(70,l.locked?4:0);pair(62,l.visible?7:-7);pair(420,parseInt(l.color.slice(1),16));pair(6,lineType(l.dash).dxf);pair(370,Math.round(l.weight*100));}pair(0,'ENDTAB');pair(0,'ENDSEC');pair(0,'SECTION');pair(2,'ENTITIES');
  function polygon(points,e,closed=true){entity('LWPOLYLINE',e);pair(100,'AcDbEntity');pair(100,'AcDbPolyline');pair(90,points.length);pair(70,closed?1:0);pair(38,e.z||0);for(const p of points){pair(10,p.x);pair(20,p.y);}}
  function emit(e){
-  if(e.type==='line')line(e.a,e.b,e);
+  if(e.type==='line'){if(e.role==='wall')wallOpeningSegments(doc,e).forEach(p=>line(p.a,p.b,e));else line(e.a,e.b,e);}
   if(e.type==='polyline'&&e.role!=='hatch')polygon(e.points,e,e.closed);
   if(e.type==='circle'||e.type==='arc'){entity(e.type==='circle'?'CIRCLE':'ARC',e);pair(10,e.center.x);pair(20,e.center.y);pair(30,e.z||0);pair(40,e.radius);if(e.type==='arc'){pair(50,(e.start+(e.sweep<0?e.sweep:0))*180/Math.PI);pair(51,(e.start+(e.sweep>0?e.sweep:0))*180/Math.PI);}}
   if(e.type==='text')text(e.position,e.text,e.textHeight,e.rotation,e);
@@ -18,7 +20,8 @@ export function exportDXF(document){
   if(e.type==='plate'){const a=(e.rotation||0)*Math.PI/180,convert=p=>({x:e.center.x+p.x*Math.cos(a)-p.y*Math.sin(a),y:e.center.y+p.x*Math.sin(a)+p.y*Math.cos(a)});polygon([[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>convert({x:x*e.width/2,y:y*e.depth/2})),e);for(const p of plateHoles(e))emit({...e,type:'circle',center:convert(p),radius:e.boltDiameter/2});}
   if(e.type==='asset'){const a=(e.rotation||0)*Math.PI/180;polygon([[-1,-1],[1,-1],[1,1],[-1,1]].map(([x,y])=>({x:e.center.x+x*e.width/2*Math.cos(a)-y*e.depth/2*Math.sin(a),y:e.center.y+x*e.width/2*Math.sin(a)+y*e.depth/2*Math.cos(a)})),e);text(e.center,e.catalogId,.1,0,e);}
   if(e.type==='light')emit({...e,type:'circle',radius:.12});
-  if(e.type==='opening'){const w=doc.entities.find(x=>x.id===e.wall);if(w)text(at(w,e.offset),e.kind+' '+displayLength(e.width,doc.units),.1,0,e);}
+  if(e.type==='opening')for(const curve of openingPlanGeometry(doc,e)?.curves||[])emit({...e,...curve,type:curve.type,wall:undefined,dash:'solid'});
+  if(e.role==='shaft'){polygon(shaftOuter(e),e);line(e.points[0],e.points[2],e);line(e.points[1],e.points[3],e);}
   if(e.hatch&&(e.type==='circle'||e.type==='polyline'&&e.closed)){
    const ps=e.type==='circle'?Array.from({length:96},(_,i)=>at(e,i/96)):e.points;
    entity('HATCH',e);pair(100,'AcDbEntity');pair(100,'AcDbHatch');pair(10,0);pair(20,0);pair(30,0);pair(210,0);pair(220,0);pair(230,1);pair(2,e.hatch==='solid'?'SOLID':'USERDEFINED');pair(70,e.hatch==='solid'?1:0);pair(71,0);pair(91,1+(e.hatchHoles||[]).length);for(const [index,ring]of [ps,...(e.hatchHoles||[])].entries()){pair(92,index===0?3:2);pair(72,0);pair(73,1);pair(93,ring.length);for(const p of ring){pair(10,p.x);pair(20,p.y);}pair(97,0);}pair(75,0);pair(76,0);

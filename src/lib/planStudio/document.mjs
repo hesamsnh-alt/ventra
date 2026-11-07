@@ -1,3 +1,5 @@
+import {shaftOuter,shaftFitsFloor,shaftProblem} from './structures.mjs';
+import {openingProblem} from './openings.mjs';
 import {LINE_TYPES} from './lineTypes.mjs';
 import {point,dist,validPolygon,segments,at,sub,EPS,inside,curveIntersections} from './geometry.mjs';
 export const SCHEMA='ventra-plan-studio/1';
@@ -33,7 +35,9 @@ export function validateDocument(input){
   else if(['asset','plate','light'].includes(e.type)){if(!point(e.center))throw Error('Invalid object position.');if(e.type==='asset'&&(typeof e.catalogId!=='string'||![e.width,e.depth,e.height].every(n=>Number.isFinite(n)&&n>0&&n<=50)))throw Error('Invalid furniture size.');if(e.type==='plate'){if(![e.width,e.depth,e.thickness,e.boltDiameter,e.edge].every(n=>Number.isFinite(n)&&n>0)||e.width>20||e.depth>20||e.thickness>1||e.edge<=e.boltDiameter/2||e.edge+e.boltDiameter/2>=Math.min(e.width,e.depth)/2)throw Error('Base plate holes do not fit within the plate. / ابعاد سوراخ‌ها یا فاصلهٔ لبهٔ بیس‌پلیت معتبر نیست.');}}
   else if(e.type==='opening'){if(!d.entities.some(w=>w.id===e.wall&&w.role==='wall'&&w.type==='line')||!Number.isFinite(e.offset)||e.offset<0||e.offset>1||![e.width,e.height].every(n=>Number.isFinite(n)&&n>0)||!['door','window','arched'].includes(e.kind))throw Error('Invalid wall opening.');}
   else throw Error('Unsupported plan entity.');
-  if(e.type==='opening'){const w=d.entities.find(x=>x.id===e.wall),length=dist(w.a,w.b);if(e.offset*length<e.width/2-EPS||(1-e.offset)*length<e.width/2-EPS||e.height+(e.z||0)>w.height+EPS||e.width/2>e.height&&e.kind==='arched')throw Error('Opening does not fit inside the wall.');const overlaps=d.entities.some(o=>o.id!==e.id&&o.type==='opening'&&o.wall===e.wall&&Math.abs(o.offset-e.offset)*length<(o.width+e.width)/2-EPS);if(overlaps)throw Error('Wall openings overlap.');}
+  if(e.role==='shaft'){const problem=shaftProblem(e);if(problem)throw Error(problem);}
+  if(e.structure!==undefined&&!(e.structure==='shear'&&e.role==='wall'))throw Error('Invalid structural wall.');
+  if(e.type==='opening'){const problem=openingProblem(d,e,{overlap:false});if(problem)throw Error(problem);}
   if(e.hatchHoles!==undefined){
    if(!Array.isArray(e.hatchHoles)||e.hatchHoles.length>32||e.hatchHoles.reduce((sum,r)=>sum+(Array.isArray(r)?r.length:2001),0)>2000||!['circle','polyline'].includes(e.type)||e.type==='polyline'&&!e.closed)throw Error('Invalid hatch islands.');
    for(const ring of e.hatchHoles){if(!Array.isArray(ring)||ring.length>300||!validPolygon(ring)||ring.some(p=>e.type==='circle'?dist(p,e.center)>=e.radius:!inside(p,e.points)))throw Error('Hatch island must be a closed outline inside its boundary.');if(e.type==='polyline'&&segments({type:'polyline',points:ring,closed:true}).some(a=>segments(e).some(b=>curveIntersections(a,b).length)))throw Error('Hatch island crosses its boundary.');}
@@ -44,11 +48,13 @@ export function validateDocument(input){
   if(e.role==='wall'&&e.type==='arc'&&e.radius<=e.thickness/2)throw Error('Curved wall radius must exceed half its thickness.');
   if(e.role==='wall'&&(!(e.height>0&&e.height<=30)||!(e.thickness>=.02&&e.thickness<=2)))throw Error('Wall height/thickness outside supported range.');if(e.role==='floor'&&(e.type!=='polyline'||!e.closed))throw Error('Floor needs a closed outline.');if(e.hatch&&!HATCHES.includes(e.hatch))throw Error('Unknown hatch pattern.');if(e.hatchScale!==undefined&&!(e.hatchScale>=.01&&e.hatchScale<=10))throw Error('Invalid hatch scale.');
  }
+ for(const e of d.entities.filter(e=>e.type==='opening')){const problem=openingProblem(d,e);if(problem)throw Error(problem);}
+ const shafts=d.entities.filter(e=>e.role==='shaft');for(const shaft of shafts){const outer=shaftOuter(shaft);for(const floor of d.entities.filter(e=>e.role==='floor'&&Math.abs((e.z||0)-(shaft.z||0))<1e-6)){const touching=outer.some(p=>inside(p,floor.points))||floor.points.some(p=>inside(p,outer))||segments({type:'polyline',points:outer,closed:true}).some(a=>segments(floor).some(b=>curveIntersections(a,b).length));if(touching&&!shaftFitsFloor(shaft,floor))throw Error('Shaft must fit entirely inside the floor or remain outside it. / چاله باید کاملاً داخل محدوده کف یا بیرون آن باشد.');}for(const other of shafts){if(other.id<=shaft.id||Math.abs((other.z||0)-(shaft.z||0))>1e-6)continue;const ring=shaftOuter(other);if(outer.some(p=>inside(p,ring))||ring.some(p=>inside(p,outer))||segments({type:'polyline',points:outer,closed:true}).some(a=>segments({type:'polyline',points:ring,closed:true}).some(b=>curveIntersections(a,b).length)))throw Error('Elevator shafts overlap. / چاله‌های آسانسور تداخل دارند.');}}
  if(d.lighting&&(!Number.isFinite(d.lighting.intensity)||d.lighting.intensity<0||d.lighting.intensity>5||!/^#[0-9a-f]{6}$/i.test(d.lighting.color)))throw Error('Invalid lighting.');return d;
 }
 export function transformEntity(e,kind,base,value){
  const convert=p=>{const v=sub(p,base);if(kind==='move'||kind==='copy')return{x:p.x+value.x,y:p.y+value.y};if(kind==='rotate'){const a=value*Math.PI/180;return{x:base.x+v.x*Math.cos(a)-v.y*Math.sin(a),y:base.y+v.x*Math.sin(a)+v.y*Math.cos(a)};}return{x:base.x+v.x*value,y:base.y+v.y*value};};
  const n=structuredClone(e);for(const key of ['a','b','center','position'])if(n[key])n[key]=convert(n[key]);if(n.points)n.points=n.points.map(convert);if(n.hatchHoles)n.hatchHoles=n.hatchHoles.map(r=>r.map(convert));if(kind==='rotate'){n.rotation=(n.rotation||0)+value;if(['arc','circle'].includes(n.type))n.start+=value*Math.PI/180;}
- if(kind==='scale'){if(!Number.isFinite(value)||value<=.001||value>1000)throw Error('Use a positive scale factor.');for(const key of ['radius','width','depth','height','thickness','boltDiameter','edge','diameter','textHeight','offsetDistance','hatchScale'])if(n[key]!==undefined)n[key]*=value;}
+ if(kind==='scale'){if(!Number.isFinite(value)||value<=.001||value>1000)throw Error('Use a positive scale factor.');for(const key of ['radius','width','depth','height','pitDepth','thickness','boltDiameter','edge','diameter','textHeight','offsetDistance','hatchScale'])if(n[key]!==undefined)n[key]*=value;}
  return n;
 }

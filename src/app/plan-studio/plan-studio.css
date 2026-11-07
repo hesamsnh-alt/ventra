@@ -64,3 +64,5 @@
 .ps-view-scale i{display:block;height:7px;border:1px solid #d5e1ed;border-top:0;margin-bottom:4px}
 .ps-view-scale small{font-size:10px;white-space:nowrap;margin-top:4px}
 @media(max-width:680px){.ps-desktop-zoom{display:none}.ps-view-scale{bottom:8px;inset-inline-start:8px;font-size:10px;padding:5px 7px}}
+
+.ps-app fieldset{min-width:0;margin:10px 0;padding:10px;border:1px solid #34475b;border-radius:7px}.ps-app legend{color:#ffdb4e;padding:0 4px}
