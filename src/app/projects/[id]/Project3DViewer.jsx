@@ -1,7 +1,7 @@
 "use client";
 import {createFurnitureFinishMaterial} from '@/lib/furnitureFinishes.mjs';
 import {previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
-import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
+import {apsGeometryNodes,selectApsGeometry,isPlanCadUrn} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
 import DwgFloorPanel from "./DwgFloorPanel";
 import ToolDrawer from "./ToolDrawer";
@@ -8921,7 +8921,7 @@ export default function Project3DViewer({ projectId }) {
 
         const preferredIndex = Math.max(
           0,
-          available.findIndex((item) => item.is3D)
+          available.findIndex((item) => item.node===selectApsGeometry(doc.getRoot(),{prefer2D:isPlanCadUrn(urn)}))
         );
 
         const preferred = available[preferredIndex];

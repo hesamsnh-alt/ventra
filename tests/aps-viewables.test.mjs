@@ -51,3 +51,15 @@ test('a Layout child does not inherit model-space identity from its generic pare
  const parent={data:{name:'Model'}},sheet={data:{type:'geometry',role:'2d',name:'Layout1'},parent},actual={data:{type:'geometry',role:'2d',name:'*Model_Space'}};parent.children=[sheet];
  assert.equal(selectApsGeometry({children:[parent,actual]}),actual);
 });
+
+test('actual project 3D initialization uses Model space for DXF and native 3D for IFC',async()=>{
+ const [{readFileSync},vm,parser]=await Promise.all([import('node:fs'),import('node:vm'),import('@babel/parser')]);
+ const source=readFileSync('src/app/projects/[id]/Project3DViewer.jsx','utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});let initializer;
+ function visit(n){if(!n||typeof n!=='object')return;if(n.type==='VariableDeclarator'&&n.id?.name==='preferredIndex')initializer=n.init;for(const v of Object.values(n))if(Array.isArray(v))v.forEach(visit);else if(v&&typeof v==='object')visit(v);}visit(ast);assert.ok(initializer);
+ const sheet={data:{type:'geometry',role:'2d',name:'Layout1'}},model={data:{type:'geometry',role:'2d',name:'Model'}},native={data:{type:'geometry',role:'3d',name:'3D'}};
+ const available=[sheet,model,native].map((node,index)=>({node,index,is3D:node===native}));
+ for(const [ext,expected]of [['dxf',1],['dwg',1],['ifc',2],['rvt',2]]){
+  const context=vm.createContext({available,doc:{getRoot:()=>({children:[sheet,model,native]})},urn:Buffer.from(`urn:adsk.objects:os.object:bucket/file.${ext}`).toString('base64url'),selectApsGeometry,isPlanCadUrn});
+  assert.equal(vm.runInContext(source.slice(initializer.start,initializer.end),context),expected);
+ }
+});
