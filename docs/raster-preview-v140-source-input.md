@@ -27,3 +27,9 @@ On the associated source graph, compact source-data JSON shrank from 84,803 to 6
 All 1,592 offline tests passed with no failures/skips, including three paper-padding variants, measured thick-band coverage, candidate detail labels, CAD Model/Layout ordering, source identity and APS isolation. The production build passed. No OpenAI request or new APS translation was executed for these local checks.
 
 Full live JPG wall/room classification and 3D output remain unverified. A successfully rendered CAD model is also unverified in the cloud browser, where WebGL was previously disabled. Do not treat this patch's tests or door matches as a completed end-to-end acceptance.
+
+## Isolated preview
+
+PR #3 contains these fixes; production main was not changed. Preview deploy `6af083a10fbb00878bd2b226` is ready on commit `f1474eea385d29d771350554a3ca2fecbe9f1f35`. The actual project 3D initializer also uses the Model-space selection helper; 33 focused CAD/source/control tests passed after that integration, and the final build passed.
+
+Secure sign-in on the preview was submitted but the site returned `Invalid login credentials`. Public compiled auth configuration on production and preview points to the same Supabase project. No credential values were read, retained or printed. Live image analysis did not start, and no OpenAI request/new APS translation was executed during this repair attempt. Authentication must be completed before live acceptance; do not merge this PR as a proven end-to-end fix.
