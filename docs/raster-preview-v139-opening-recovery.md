@@ -31,3 +31,11 @@ Automated fixtures cover independent sizes and rotations, faint strokes, corner 
 Final offline suite: 1,561 passed, zero failures or skipped tests. Production build and zero-API handler bundling check passed.
 
 The previous v138 production failure remains valid. A successful local opening check is not a verified full reconstruction of this JPG. Sliding, folding and double-leaf symbols still require additional recognizers or review. No public-source image or full diagnostic payload is included here.
+
+## v139 live verification — not a complete reconstruction
+
+Production commit `1ac47cd482593f554a5a0c970da3e962d2a9b619`, deploy `6af046987cb5c982253f5109`, published 8 November 2026 at 09:54:22 UTC (13:54:22 Dubai). One image-only test ran on the existing JPG in QA-07. No repeated paid test was made.
+
+The server recovered 239 source segments and all six doors. The model selected all six measured door IDs with the expected swing directions, and reported two visible windows. It returned `complete:false`, confidence 0.47, because some wall/furniture/dimension classifications and exact window jamb mappings remained unresolved. The result was `INCOMPLETE_PIXEL_CLASSIFICATION`; no new 3D scene was saved and region classification was not reached.
+
+One gpt-5.1 response completed, using 35,940 input and 5,612 output tokens (1,918 reasoning tokens), total 41,552. Server elapsed time: 73,003 ms. No monetary charge is asserted. The implemented door improvement was observed live, but the complete JPG-to-3D goal remains unresolved.

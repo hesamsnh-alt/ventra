@@ -26,7 +26,7 @@ import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource,selectedDrawingSync,selectDrawingDocument} from '@/lib/schematicStorage.mjs';
+import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource,selectedDrawingSync,selectedDrawingDetailsSync,selectDrawingDocument} from '@/lib/schematicStorage.mjs';
 import {drawingSourceBinding,selectPdfStorey} from '@/lib/pdfPlanScene.mjs';
 import {readTakeoffSync,readPersistedTakeoff,persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import {resolveDwgCalibration,dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
@@ -8628,7 +8628,7 @@ export default function Project3DViewer({ projectId }) {
       const savedEngineering=readTakeoffSync(projectId,'engineering');
       if(requestedSource==='dwg-interior')storedScene=savedDwgInterior(savedEngineering);
       if(requestedSource==='aps'||requestedSource==='dwg-interior')takeoff=chooseEngineeringTakeoff(takeoff,savedEngineering);
-      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:chooseEngineeringTakeoff(takeoff,savedEngineering),source:requestedSource,scene:storedScene});
+      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:chooseEngineeringTakeoff(takeoff,savedEngineering),source:requestedSource,scene:storedScene});
       storedScene=binding.scene;
       const resolvedUrn=binding.engineeringAllowed?(engineeringUrn(takeoff)||engineeringUrn(savedEngineering)):'';
 
@@ -8650,7 +8650,7 @@ export default function Project3DViewer({ projectId }) {
         );
 
       const resolvedSource=binding.source==='dwg-interior'&&storedScene?'dwg-interior':binding.source==='aps'?'aps':'schematic';
-      if(!storedScene&&!binding.engineeringAllowed){setStatus('missing');setMessage('No 3D preview for the selected drawing. Open Drawings and use Build / open 3D from PDF. The other CAD model remains saved.');}
+      if(!storedScene&&!binding.engineeringAllowed){setStatus('missing');setMessage(binding.source==='aps'?'No engineering model is linked to this CAD drawing. Open Drawings and use Build / open 3D with APS without AI.':'No 3D preview for the selected drawing. Open Drawings and use its image or PDF 3D action.');}
 
       setTakeoff(takeoff);
       setSchematicScene(
@@ -9082,7 +9082,7 @@ export default function Project3DViewer({ projectId }) {
     })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
       if(cancelled)return;
       const selectedEngineering=reconcileEngineering(engineering,latest);
-      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:selectedEngineering,source:source||(engineeringUrn(selectedEngineering)?'aps':'schematic'),scene});
+      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:selectedEngineering,source:source||(engineeringUrn(selectedEngineering)?'aps':'schematic'),scene});
       const resolvedUrn=binding.engineeringAllowed?engineeringUrn(selectedEngineering):'';
       scene=binding.scene;
       const selectedSource=binding.source;
@@ -9093,7 +9093,7 @@ export default function Project3DViewer({ projectId }) {
       if(interior)setInteriorView(true);
       schematicBaseSceneRef.current=interior||(scene?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&base?.pdfStoreys?selectPdfStorey(base,scene.sourcePage):base)||scene||null;
       setSchematicPreset(scene?.variant || 'classic');
-      if(!resolvedUrn&&!scene){setStatus('missing');setMessage('No 3D model is linked to the selected drawing. Open Drawings and use Build / open 3D from PDF, or analyze a supported image/CAD drawing.');}
+      if(!resolvedUrn&&!scene){setStatus('missing');setMessage(selectedSource==='aps'?'No engineering model is linked to this CAD drawing. Open Drawings and use Build / open 3D with APS without AI.':'No 3D model is linked to the selected image or PDF. Open Drawings and use its 3D build action.');}
       else if(selectedSource==='aps'&&!resolvedUrn){setStatus('missing');setMessage('No engineering model is saved for this project. Analyze the DWG in Drawings again to restore its Autodesk source and calibrated geometry.');}
     }).catch(error=>{if(!cancelled){setStatus('error');setMessage(`Could not load saved drawing geometry: ${error.message}`);}});
     return()=>{cancelled=true;};
@@ -9103,7 +9103,7 @@ export default function Project3DViewer({ projectId }) {
     const updated=event=>{
       if(event.detail?.projectId!==projectId)return;
       const latest=reconcileEngineering(readTakeoffSync(projectId,'engineering'),readTakeoffSync(projectId));
-      if(active3DSource==='aps'&&engineeringUrn(latest)&&drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),engineering:latest}).engineeringAllowed){
+      if(active3DSource==='aps'&&engineeringUrn(latest)&&drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:latest}).engineeringAllowed){
         setTakeoff(latest);setUrn(engineeringUrn(latest));
       }
     };
@@ -9993,7 +9993,7 @@ export default function Project3DViewer({ projectId }) {
         <small>پیش‌نمایش نیازمند بررسی؛ پله و مدل کامل ساختمان بازسازی نشده‌اند. / Review required; no assembled building or stair mesh.</small>
       </div>}
       <LocalizedElement as="div" className="ventra-model-toolbar">
-        <LocalizedElement as="button" type="button" aria-pressed={active3DSource==='aps'} onClick={()=>{const engineering=readTakeoffSync(projectId,'engineering');if(engineering?.document_id)selectDrawingDocument(projectId,engineering.document_id);void saveActiveSource(projectId,'aps').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('aps');}}>DWG / Engineering</LocalizedElement>
+        <LocalizedElement as="button" type="button" aria-pressed={active3DSource==='aps'} onClick={()=>{const engineering=readTakeoffSync(projectId,'engineering');if(engineering?.document_id)selectDrawingDocument(projectId,engineering.document_id,undefined,engineering.document_name);void saveActiveSource(projectId,'aps').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('aps');}}>DWG / Engineering</LocalizedElement>
         <LocalizedElement as="button" type="button" disabled={!readSchematicSync(projectId)} aria-pressed={active3DSource==='schematic'} onClick={()=>{void saveActiveSource(projectId,'schematic').catch(error=>setMessage(error.message));refreshProject3DSourceFromStorage('schematic');}}>PDF / JPG / Image</LocalizedElement>
         <LocalizedElement as="button" type="button" disabled={designBusy||dwgFurnitureBusy||(!reconstruction&&!dwgFloorIndices(takeoff).length)} aria-pressed={active3DSource==='dwg-interior'} onClick={()=>openDwgInterior()}>DWG Interior / داخل طبقه / داخل الطابق</LocalizedElement>
         <LocalizedElement as="button" type="button" onClick={fitModel} disabled={status !== "ready"}>

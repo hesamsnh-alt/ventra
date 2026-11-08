@@ -17,9 +17,20 @@ export function drawingSceneMatches(id,scene,storage=local()) {
   const selected=selectedDrawingSync(id,storage);
   return !selected || scene?.documentId===selected;
 }
-export function selectDrawingDocument(id,documentId,storage=local()) {
+export function selectedDrawingDetailsSync(id,storage=local()){
+  const key=keyFor(id,'selected-drawing-details');let details;
+  if(unsavedSelections.has(key))details=unsavedSelections.get(key);
+  else{try{details=JSON.parse(storage?.getItem(key)||'null');}catch{}details=details||cache.get(key);}
+  return details?.documentId===selectedDrawingSync(id,storage)?details:null;
+}
+export function selectDrawingDocument(id,documentId,storage=local(),fileName=null) {
   const previous=selectedDrawingSync(id,storage);
   const key=keyFor(id,'selected-drawing');
+  if(fileName||previous!==documentId||!documentId){
+    const detailsKey=keyFor(id,'selected-drawing-details'),details=documentId&&fileName?{documentId,fileName}:null;
+    cache.set(detailsKey,details);
+    try{if(details)storage?.setItem(detailsKey,JSON.stringify(details));else storage?.removeItem(detailsKey);unsavedSelections.delete(detailsKey);}catch{unsavedSelections.set(detailsKey,details);}
+  }
   if(!documentId){cache.delete(key);unsavedSelections.set(key,null);try{storage?.removeItem(key);unsavedSelections.delete(key);}catch{}return;}
   cache.set(key,documentId);
   try{storage?.setItem(key,documentId);unsavedSelections.delete(key);}catch{unsavedSelections.set(key,documentId); /* Session selection still isolates scenes. */ }

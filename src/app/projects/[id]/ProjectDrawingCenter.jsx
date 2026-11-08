@@ -1728,7 +1728,7 @@ export default function ProjectDrawingCenter({
             loadedDocuments,selectedDrawingSync(projectId),savedDocumentId
           );
           setSelectedDocumentId(resolvedId);
-          selectDrawingDocument(projectId,resolvedId);
+          selectDrawingDocument(projectId,resolvedId,undefined,loadedDocuments.find(d=>d.id===resolvedId)?.file_name);
           resolvedDocument=loadedDocuments.find(d=>d.id===resolvedId)||null;
         }
 
@@ -2042,7 +2042,7 @@ export default function ProjectDrawingCenter({
 
       if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)
         throw Object.assign(new Error('Analysis completed for another selected drawing. Select the analyzed drawing and press Analyze to recover its saved result.'),{code:'PREVIEW_SELECTION_CHANGED'});
-      selectDrawingDocument(projectId,document.id);
+      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
       await saveSchematic(projectId,scene,{preserveBase:false});
       await saveActiveSource(projectId,'schematic');
       acknowledgePreviewJob(`${projectId}:${document.id||document.file_name}`,window.sessionStorage);
@@ -2167,7 +2167,7 @@ export default function ProjectDrawingCenter({
       }
 
       setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id);
+      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
       setTakeoffResult(null);
 
@@ -2281,7 +2281,7 @@ export default function ProjectDrawingCenter({
         scene=await buildNativePdfScene({bytes:new Uint8Array(await response.arrayBuffer()),projectId,documentId:source.id,documentName:source.file_name});
       }
       if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)throw new Error('Selected drawing changed. Select the original PDF and try again.');
-      selectDrawingDocument(projectId,source.id);
+      selectDrawingDocument(projectId,source.id,undefined,source.file_name);
       scene=await saveSchematic(projectId,scene,{preserveBase:!!existing&&existing.documentId===source.id});
       await saveActiveSource(projectId,'schematic');
       window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
@@ -2388,7 +2388,7 @@ export default function ProjectDrawingCenter({
       );
     }
 
-    selectDrawingDocument(projectId,selectedDocument.id);
+    selectDrawingDocument(projectId,selectedDocument.id,undefined,selectedDocument.file_name);
 
     analysisRunIdRef.current = crypto.randomUUID();
     setAnalysisRunId(analysisRunIdRef.current);
@@ -2793,7 +2793,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
 
         if (selectedDocumentId === document.id) {
           setSelectedDocumentId(remaining[0]?.id || null);
-          selectDrawingDocument(projectId,remaining[0]?.id || null);
+          selectDrawingDocument(projectId,remaining[0]?.id || null,undefined,remaining[0]?.file_name);
         }
 
         return remaining;
@@ -6130,7 +6130,7 @@ async function handleApsGeometryExtracted(analysis) {
                   tabIndex={0}
                   onClick={() => {
                     setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id);
+      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                     if (typeof window !== "undefined") {
                       void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
@@ -6147,7 +6147,7 @@ async function handleApsGeometryExtracted(analysis) {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id);
+      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
       if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
                       if (typeof window !== "undefined") {
                         void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))

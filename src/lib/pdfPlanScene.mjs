@@ -58,8 +58,13 @@ export function selectPdfStorey(scene,page){
 
 // Source selection may never turn another drawing's engineering model into
 // this drawing's preview. Switching back to CAD is an explicit document switch.
-export function drawingSourceBinding({selectedDocumentId,engineering,source='aps',scene}){
+export function drawingSourceBinding({selectedDocumentId,selectedDocumentName,engineering,source='aps',scene}){
  const mismatch=!!selectedDocumentId&&engineering?.document_id!==selectedDocumentId;
  const validScene=scene&&(!selectedDocumentId||scene.documentId===selectedDocumentId)?scene:null;
- return {source:mismatch&&(source==='aps'||source==='dwg-interior')?'schematic':source,scene:validScene,engineeringAllowed:!mismatch};
+ const extension=String(selectedDocumentName||'').split('.').pop().toLowerCase();
+ const cad=['dwg','dxf','ifc','rvt'].includes(extension),image=['pdf','jpg','jpeg','png','webp'].includes(extension);
+ // A missing or different model denies access to that geometry. It must not
+ // silently change an explicitly selected CAD file into an image workflow.
+ const selectedSource=cad?(source==='dwg-interior'&&!mismatch?'dwg-interior':'aps'):image?'schematic':mismatch&&engineering&&(source==='aps'||source==='dwg-interior')?'schematic':source;
+ return {source:selectedSource,scene:cad&&selectedSource!=='dwg-interior'?null:validScene,engineeringAllowed:!mismatch&&!image};
 }
