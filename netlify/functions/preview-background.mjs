@@ -2124,6 +2124,13 @@ async function runPixelGraphPipeline({ buffer, classify, diagnostics = {} }) {
   return { scene, diagnostics, validation: scene.geometryValidation, mode: "analyze", source: "pixel-graph-with-semantic-classification", routeVersion: VERIFIED_PREVIEW_VERSION, needsManualReview: true, warning: "Geometry coordinates come from source pixels. Source-line classification, hatch context and opening completeness require visual review; unannotated heights remain assumptions." };
 }
 
+// src/lib/previewAIConfig.mjs
+function previewAIKeyStatus(value) {
+  if (typeof value !== "string" || !value.trim()) return "missing";
+  if (value !== value.trim() || /[^\x21-\x7e]/.test(value) || /^\*+$/.test(value)) return "unusable_header";
+  return "header_ready";
+}
+
 // src/lib/serverPixelGraphPreview.js
 async function runPixelGraphPreview(body) {
   const diagnostics = { transportAttempts: [], transport: { stage: "preparing_image" } }, started = Date.now(), model = process.env.OPENAI_FLOORPLAN_GEOMETRY_MODEL || process.env.OPENAI_DRAWING_MODEL || "gpt-5.1";
@@ -2135,6 +2142,7 @@ async function runPixelGraphPreview(body) {
     const buffer = await sharp6(Buffer.from(await response.arrayBuffer())).rotate().resize({ width: 2200, height: 2200, fit: "inside", withoutEnlargement: true }).flatten({ background: "#fff" }).sharpen({ sigma: 0.6 }).jpeg({ quality: 92, chromaSubsampling: "4:4:4" }).toBuffer();
     let calls = 0;
     const payload = await runPixelGraphPipeline({ buffer, diagnostics, classify: async (task) => {
+      if (previewAIKeyStatus(process.env.OPENAI_API_KEY) !== "header_ready") throw Object.assign(Error("OpenAI is not configured with a usable key for this deploy. Set OPENAI_API_KEY securely in Netlify. No AI request was made."), { code: "OPENAI_CREDENTIAL_CONFIGURATION", status: 503 });
       if (++calls > 2) throw Error("Pixel graph classification budget exceeded.");
       const remaining = 24e4 - (Date.now() - started);
       if (remaining <= 0) throw Object.assign(Error("Image analysis exceeded its total time limit."), { code: "RASTER_VISION_TIMEOUT" });
@@ -2158,7 +2166,7 @@ SOURCE DATA: ${JSON.stringify(task.data)}` }, { type: "input_image", image_url: 
     diagnostics.elapsedMs = Date.now() - started;
     diagnostics.accepted = false;
     diagnostics.failure = { code: error2.code || "PIXEL_GRAPH_FAILED", message: error2.message, details: error2.details };
-    return NextResponse.json({ error: error2.message, code: error2.code || "PIXEL_GRAPH_FAILED", diagnostics, routeVersion: VERIFIED_PREVIEW_VERSION, needsManualReview: true }, { status: error2.code === "RASTER_VISION_TIMEOUT" ? 504 : String(error2.code || "").startsWith("RASTER_VISION_") ? 502 : error2.status === 429 ? 429 : 422 });
+    return NextResponse.json({ error: error2.message, code: error2.code || "PIXEL_GRAPH_FAILED", diagnostics, routeVersion: VERIFIED_PREVIEW_VERSION, needsManualReview: true }, { status: error2.code === "OPENAI_CREDENTIAL_CONFIGURATION" ? 503 : error2.code === "RASTER_VISION_TIMEOUT" ? 504 : String(error2.code || "").startsWith("RASTER_VISION_") ? 502 : error2.status === 429 ? 429 : 422 });
   }
 }
 

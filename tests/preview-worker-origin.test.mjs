@@ -15,13 +15,14 @@ test('a mismatched worker build cannot reach paid analysis',async()=>{
 test('deployed background bundle must carry the same raster version as the app',async()=>{
  const {VERIFIED_PREVIEW_VERSION}=await import('../src/lib/verifiedPreview.mjs'),bundle=fs.readFileSync('netlify/functions/preview-background.mjs','utf8');assert.ok(bundle.includes(JSON.stringify(VERIFIED_PREVIEW_VERSION)));assert.match(bundle,/PREVIEW_WORKER_BUILD_MISMATCH/);
 });
-for(const matches of [true,false])test(`real queue checks preview deployment before paid dispatch (${matches})`,async()=>{
+for(const {matches,keyStatus} of [{matches:true},{matches:false},{matches:true,keyStatus:"unusable_header"}])test(`real queue checks preview deployment before paid dispatch (${matches}, ${keyStatus||"legacy"})`,async()=>{
+ const allowed=matches&&!keyStatus;
  const source=fs.readFileSync('src/lib/serverPreviewJobs.js','utf8'),calls=[],insertions=[];
  const q={select(){return q},eq(){return q},gte(){return q},order(){return q},limit(){return q},maybeSingle:async()=>({data:null}),insert:async row=>{insertions.push(row);return{}}};
  const {createHash,randomBytes}=await import('node:crypto');
- const ctx=vm.createContext({previewWorkerOrigin,table:'jobs',process:{env},account:async()=>({id:'actor'}),commercialContext:async()=>({db:{from:()=>q}}),previewImageFingerprint:async()=>({hash:'source',version:'v140'}),nonceHash:v=>createHash('sha256').update(v).digest('hex'),randomBytes,URL,Response,Date,AbortSignal,billingError:(m,status)=>Object.assign(Error(m),{status}),commercialError:e=>Response.json({error:e.message},{status:e.status||500}),fetch:async(url,options)=>{calls.push({url:String(url),options});return String(url).endsWith('preview-build')?Response.json({routeVersion:matches?'v140':'old'}):new Response(null,{status:202})}});
+ const ctx=vm.createContext({previewWorkerOrigin,table:'jobs',process:{env},account:async()=>({id:'actor'}),commercialContext:async()=>({db:{from:()=>q}}),previewImageFingerprint:async()=>({hash:'source',version:'v140'}),nonceHash:v=>createHash('sha256').update(v).digest('hex'),randomBytes,URL,Response,Date,AbortSignal,billingError:(m,status)=>Object.assign(Error(m),{status}),commercialError:e=>Response.json({error:e.message},{status:e.status||500}),fetch:async(url,options)=>{calls.push({url:String(url),options});return String(url).endsWith('preview-build')?Response.json({routeVersion:matches?'v140':'old',...(keyStatus?{aiKeyStatus:keyStatus}:{})}):new Response(null,{status:202})}});
  vm.runInContext(source.slice(source.indexOf('export async function startPreviewJob'),source.indexOf('export async function readPreviewJob')).replace('export async function','async function')+'\nthis.start=startPreviewJob;',ctx);
  const r=await ctx.start({url:'https://deploy-preview-3--ventra.netlify.app/api/ai/design-3d-preview',headers:new Headers({authorization:'Bearer test'}),text:async()=>JSON.stringify({projectId:'p',mode:'schematic_analyze',imageUrl:'source'})});
- assert.equal(r.status,matches?202:503);assert.equal(insertions.length,matches?1:0);assert.equal(calls.length,matches?2:1);assert.ok(calls.every(c=>c.url.startsWith('https://deploy-preview-3--ventra.netlify.app/')));
- if(matches)assert.equal(insertions[0].request_body.__expectedRasterBuild,'v140');
+ assert.equal(r.status,allowed?202:503);assert.equal(insertions.length,allowed?1:0);assert.equal(calls.length,allowed?2:1);assert.ok(calls.every(c=>c.url.startsWith('https://deploy-preview-3--ventra.netlify.app/')));
+ if(allowed)assert.equal(insertions[0].request_body.__expectedRasterBuild,'v140');
 });

@@ -28,6 +28,7 @@ export async function startPreviewJob(request,action='preview'){
    const check=await fetch(new URL('/.netlify/functions/preview-build',origin),{cache:'no-store',signal:AbortSignal.timeout(10000)});
    const build=check.ok?await check.json():null;
    if(build?.routeVersion!==fingerprint.version)throw billingError('The background analysis deployment is not the requesting build. No AI request was made.',503);
+   if(build.aiKeyStatus&&build.aiKeyStatus!=='header_ready')throw billingError('OpenAI is not configured with a usable key for this deploy. Set OPENAI_API_KEY securely for this deploy context in Netlify. No AI request was made.',503);
   }
   const digest=nonceHash(fingerprint ? `${user.id}:${origin.origin}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
   id=`${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`;const nonce=randomBytes(32).toString('hex');
