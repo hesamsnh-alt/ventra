@@ -37,7 +37,7 @@ export function compactPixelClassificationInput(graph,sourceOpenings){
   candidates:graph.candidates.map(c=>({id:c.id,kind:c.kind,start:c.start,end:c.end,sourceIds:c.sourceIds||[c.id],...(c.thicknessPixels?{thicknessPixels:c.thicknessPixels}:{}),...(c.colorEvidence?{colorEvidence:true}:{}),...(c.filledBandRatio!==undefined?{filledBandRatio:c.filledBandRatio}:{})})),
   gaps:graph.gaps.map(g=>({id:g.id,a:g.a,b:g.b,start:g.start,end:g.end,support:g.support,...(g.endpointHosts?{endpointHosts:g.endpointHosts}:{}),...(g.sourceDoor?{sourceDoor:g.sourceDoor}:{})})),
   sourceDoors:sourceOpenings.doors,requiredSourceBandIds:requiredSourceBands(graph).map(c=>c.id),measuredWallAlternatives:measuredWallAlternatives(graph),
-  selectionContract:'complete=true explicitly confirms all unselected alternatives are non-architectural or redundant. List nonWalls for furniture enclosures and any required source band not represented by selected walls.'};
+  selectionContract:'Assign exactly one candidateRoles value for every candidate ID. Use alternative_face for redundant representations, furniture for furniture enclosures and unresolved for unclear roles. complete=true confirms the whole source was reviewed.'};
 }
 export function validateSourceBandCoverage(graph,selection){
  const selectedIds=new Set(selection.walls.map(w=>w.candidateId)),selected=graph.candidates.filter(c=>selectedIds.has(c.id)),reviewed=new Set((selection.nonWalls||[]).map(c=>c.candidateId));

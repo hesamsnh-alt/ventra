@@ -2,6 +2,8 @@
 
 Status: local implementation and offline validation complete; live image-to-3D acceptance is unverified. Do not promote this change as a completed reconstruction fix.
 
+Live follow-up: v141 was deployed only to PR #3's preview and the user-authorized single JPG test completed. Authentication succeeded. The classifier returned `complete: true` but selected `solid_band5` both as an internal wall and as furniture. The original validator correctly rejected this with `INVALID_PIXEL_SELECTION`; no scene was saved. This is not evidence of successful reconstruction. No production change was made.
+
 The authorized v140 live test authenticated successfully but returned `complete: false` and three missing-feature explanations. No scene was saved. Replaying its selected source IDs through the local topology assembler independently rejects overlapping alternatives (`solid_band1` and `pair103_109`). Both use the same source face, but the prior compact request omitted `sourceIds` for solid bands.
 
 Changes:

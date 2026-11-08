@@ -916,7 +916,7 @@ function requireRasterImageEvidence(result) {
 }
 
 // src/lib/verifiedPreview.mjs
-var VERIFIED_PREVIEW_VERSION = "pixel-graph-preview-v141-separated-evidence-20261109";
+var VERIFIED_PREVIEW_VERSION = "pixel-graph-preview-v142-single-role-20261109";
 
 // src/lib/rasterCoordinateReference.mjs
 import sharp2 from "sharp";
@@ -1991,12 +1991,36 @@ function compactPixelClassificationInput(graph, sourceOpenings) {
     sourceDoors: sourceOpenings.doors,
     requiredSourceBandIds: requiredSourceBands(graph).map((c) => c.id),
     measuredWallAlternatives: measuredWallAlternatives(graph),
-    selectionContract: "complete=true explicitly confirms all unselected alternatives are non-architectural or redundant. List nonWalls for furniture enclosures and any required source band not represented by selected walls."
+    selectionContract: "Assign exactly one candidateRoles value for every candidate ID. Use alternative_face for redundant representations, furniture for furniture enclosures and unresolved for unclear roles. complete=true confirms the whole source was reviewed."
   };
 }
 function validateSourceBandCoverage(graph, selection) {
   const selectedIds = new Set(selection.walls.map((w) => w.candidateId)), selected = graph.candidates.filter((c) => selectedIds.has(c.id)), reviewed = new Set((selection.nonWalls || []).map((c) => c.candidateId));
   return requiredSourceBands(graph).filter((c) => !reviewed.has(c.id) && measuredSpanCoverage(c, selected) < 0.9).map((c) => c.id);
+}
+
+// src/lib/rasterCandidateRoles.mjs
+var PIXEL_CANDIDATE_ROLES = ["external_wall", "internal_wall", "alternative_face", "furniture", "door_symbol", "window_symbol", "text", "dimension", "noise", "unresolved"];
+function pixelCandidateRolesSchema(graph) {
+  const ids = graph.candidates.map((c) => c.id);
+  return { type: "object", properties: Object.fromEntries(ids.map((id) => [id, { $ref: "#/$defs/pixelCandidateRole" }])), required: ids, additionalProperties: false };
+}
+function normalizePixelCandidateRoles(graph, selection) {
+  if (!Object.hasOwn(selection, "candidateRoles")) return selection;
+  const roles = selection.candidateRoles, ids = new Set(graph.candidates.map((c) => c.id));
+  const invalid = () => {
+    throw Object.assign(Error("Every source candidate needs exactly one recognized role."), { code: "INVALID_PIXEL_SELECTION" });
+  };
+  if (!roles || typeof roles !== "object" || Array.isArray(roles) || Object.keys(roles).length !== ids.size) invalid();
+  if (["walls", "nonWalls", "unresolvedCandidateIds"].some((k) => Object.hasOwn(selection, k))) invalid();
+  const walls = [], nonWalls = [], unresolvedCandidateIds = [];
+  for (const [candidateId, role] of Object.entries(roles)) {
+    if (!ids.has(candidateId) || !PIXEL_CANDIDATE_ROLES.includes(role)) invalid();
+    if (role === "external_wall" || role === "internal_wall") walls.push({ candidateId, type: role === "external_wall" ? "external" : "internal" });
+    else if (role === "unresolved") unresolvedCandidateIds.push(candidateId);
+    else nonWalls.push({ candidateId, reason: role });
+  }
+  return { ...selection, walls, nonWalls, unresolvedCandidateIds };
 }
 
 // src/lib/rasterGraphPipeline.mjs
@@ -2010,19 +2034,18 @@ var fail3 = (code, message, details = {}) => {
   throw Object.assign(Error(message), { name: "PixelGraphError", code, details });
 };
 function pixelWallClassificationSchema(graph) {
-  const candidateId = graph.candidates.length + graph.gaps.length <= 900 ? choice2(...graph.candidates.map((c) => c.id)) : text2;
-  return object2({
+  const schema = object2({
     complete: { type: "boolean" },
     confidence: number2,
     title: text2,
-    walls: array2(object2({ candidateId, type: choice2("external", "internal") })),
-    nonWalls: array2(object2({ candidateId: text2, reason: choice2("alternative_face", "furniture", "door_symbol", "window_symbol", "text", "dimension", "noise") })),
-    unresolvedCandidateIds: array2(text2),
+    candidateRoles: pixelCandidateRolesSchema(graph),
     openings: array2(object2({ gapId: graph.gaps.length ? choice2(...graph.gaps.map((g) => g.id)) : text2, type: choice2("door", "window"), hingeSide: choice2("start", "end", "unknown"), swingDirection: choice2("clockwise", "counterclockwise", "unknown") })),
     rejectedSourceDoors: array2(object2({ sourceDoorId: graph.gaps.some((g) => g.sourceDoor) ? choice2(...graph.gaps.filter((g) => g.sourceDoor).map((g) => g.id)) : text2, reason: choice2("furniture", "text", "dimension", "unreadable"), evidence: text2 })),
     inventory: object2({ enclosedSpaceNames: array2(text2), doorCount: number2, windowCount: number2 }),
     missingFeatures: array2(text2)
   });
+  schema.$defs = { pixelCandidateRole: { type: "string", enum: PIXEL_CANDIDATE_ROLES } };
+  return schema;
 }
 function pixelRegionClassificationSchema(topology, anchors) {
   const regionId = choice2(...topology.regions.map((r) => r.id)), anchorId = anchors.length <= 400 ? choice2(...anchors.map((a) => a.id)) : text2;
@@ -2128,15 +2151,17 @@ async function runPixelGraphPipeline({ buffer, classify, diagnostics = {} }) {
   diagnostics.imageHash = createHash("sha256").update(buffer).digest("hex").slice(0, 16);
   if (graph.candidates.length < 3) fail3("NO_PIXEL_STRUCTURE", "No supported building lines were extracted. No model request was made.");
   const original = `data:image/jpeg;base64,${buffer.toString("base64")}`;
-  const selection = await classify({
+  const rawSelection = await classify({
     stage: "classify_source_lines",
     schema: pixelWallClassificationSchema(graph),
     original,
     image: await labelledImage(buffer, pixelGraphOverlay(graph)),
     images: await pixelClassificationDetailViews(buffer, graph),
     data: { ...compactPixelClassificationInput(graph, sourceOpenings), detailViews: pixelClassificationViewLayout(graph) },
-    prompt: "Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Select physical wall runs, not every alternative representation. complete=true confirms you reviewed the whole source and every unselected candidate is non-architectural or redundant; do not enumerate hundreds of redundant negatives. In nonWalls explicitly list furniture enclosure boundary strokes as furniture, and each requiredSourceBandId not covered by selected walls with its visible non-wall reason; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image labels original ink/solid-band IDs. Following detail crops separate raw strokes, filled wall centres, face-pairs and fragments into DIFFERENT images so alternative representations never share a label layer. detailViews lists each crop in image order with its full-source pixel viewport and candidate IDs. measuredWallAlternatives explicitly lists incompatible overlapping representations: if selecting candidateId, do not also select any of its overlappingAlternativeIds. Alternatives may cover different extents; use their non-overlapping remainder fragments where a real wall continues. A solid_band sourceIds list includes its original boundary faces: these represent ONE physical wall, not extra partitions. A face_pair uses two measured faces; two raw faces do not become two physical walls. Review the clean original when a label or leader overlaps a fixture. Missing room-use semantics or furniture identification belong to the second stage; this first stage must still identify furniture boundary strokes as nonWalls and never silently omit a physical wall. These generated IDs and leader lines are not source geometry. SOURCE DATA coordinates locate candidates in the full original image, not within crop coordinates."
+    prompt: "Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Select physical wall runs, not every alternative representation. candidateRoles requires EXACTLY ONE role for EVERY candidate ID: external_wall, internal_wall, alternative_face, furniture, door_symbol, window_symbol, text, dimension, noise or unresolved. Classify redundant representations as alternative_face; never classify both a measured band and one of its overlapping alternatives as a wall. Classify furniture enclosure boundary strokes as furniture. complete=true confirms you reviewed the whole source. A requiredSourceBandId not represented by a wall still needs its explicit visible non-wall role; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image labels original ink/solid-band IDs. Following detail crops separate raw strokes, filled wall centres, face-pairs and fragments into DIFFERENT images so alternative representations never share a label layer. detailViews lists each crop in image order with its full-source pixel viewport and candidate IDs. measuredWallAlternatives explicitly lists incompatible overlapping representations: if selecting candidateId, do not also select any of its overlappingAlternativeIds. Alternatives may cover different extents; use their non-overlapping remainder fragments where a real wall continues. A solid_band sourceIds list includes its original boundary faces: these represent ONE physical wall, not extra partitions. A face_pair uses two measured faces; two raw faces do not become two physical walls. Review the clean original when a label or leader overlaps a fixture. Missing room-use semantics or furniture identification belong to the second stage; this first stage must still assign furniture roles to their boundary strokes and never silently omit a physical wall. These generated IDs and leader lines are not source geometry. SOURCE DATA coordinates locate candidates in the full original image, not within crop coordinates."
   });
+  diagnostics.wallClassification = rawSelection;
+  const selection = normalizePixelCandidateRoles(graph, rawSelection);
   diagnostics.wallClassification = selection;
   validatePixelClassification(graph, selection);
   const topology = assemblePixelTopology(graph, selection);
