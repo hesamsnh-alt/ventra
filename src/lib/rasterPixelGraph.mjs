@@ -241,9 +241,34 @@ export function assemblePixelTopology(graph,selection){
   return{nodes,edges,regions,enclosures:cycles.filter(f=>f.signedArea<0).map((f,i)=>({id:`symbol${i+1}`,polygon:[...f.polygon].reverse()})),footprint:[...exterior.polygon].reverse(),lines,openings};
 }
 
-export function pixelGraphOverlay(graph,{layer='source'}={}){
+// Clip only the annotation's anchor, never the measured source coordinates.
+// Long walls crossing a crop must retain a visible ID in that crop.
+export function pixelCandidateLabelAnchor(candidate,viewport){
+  let low=0,high=1;const {start:a,end:b}=candidate;
+  for(const [origin,delta,min,max]of [[a.x,b.x-a.x,viewport.left,viewport.right],[a.y,b.y-a.y,viewport.top,viewport.bottom]]){
+    if(Math.abs(delta)<1e-9){if(origin<min||origin>max)return null;continue;}
+    const p=(min-origin)/delta,q=(max-origin)/delta;low=Math.max(low,Math.min(p,q));high=Math.min(high,Math.max(p,q));
+    if(low>high)return null;
+  }
+  return at(a,b,(low+high)/2);
+}
+export function pixelGraphOverlay(graph,{layer='source',viewport={left:0,top:0,right:graph.imageWidth,bottom:graph.imageHeight}}={}){
   const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;');
-  const segments=graph.candidates.filter(c=>layer==='alternatives'?!['stroke','solid_band'].includes(c.kind):['stroke','solid_band'].includes(c.kind)).map((c,i)=>{const x=(c.start.x+c.end.x)/2,y=(c.start.y+c.end.y)/2,offset=layer==='alternatives'?-10-(i%4)*13:-3;return `<g stroke="${c.kind==='solid_band'?'#e08012':'#087bbf'}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/>${layer==='alternatives'?`<path d="M${x} ${y}L${x} ${y+offset}" stroke-width=".5"/>`:''}<text x="${x}" y="${y+offset}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`;}).join('');
+  const occupied=[];
+  const segments=graph.candidates.filter(c=>layer==='all'||(layer==='alternatives'?!['stroke','solid_band'].includes(c.kind):['stroke','solid_band'].includes(c.kind))).map(c=>{
+    const anchor=pixelCandidateLabelAnchor(c,viewport);if(!anchor)return'';
+    const width=Math.min(viewport.right-viewport.left-4,String(c.id).length*6+4);
+    let label;
+    for(let step=0;step<100;step++){
+      const offset=step===0?-4:(step%2?1:-1)*Math.ceil(step/2)*14;
+      const x=Math.max(viewport.left+2,Math.min(viewport.right-width-2,anchor.x)),y=Math.max(viewport.top+12,Math.min(viewport.bottom-2,anchor.y+offset));
+      const box={left:x,right:x+width,top:y-11,bottom:y+2};
+      if(!occupied.some(b=>box.left<b.right&&box.right>b.left&&box.top<b.bottom&&box.bottom>b.top)){label={x,y,box};break;}
+    }
+    label??={x:Math.max(viewport.left+2,Math.min(viewport.right-width-2,anchor.x)),y:Math.max(viewport.top+12,Math.min(viewport.bottom-2,anchor.y-4))};
+    if(label.box)occupied.push(label.box);
+    return `<g stroke="${c.kind==='solid_band'?'#e08012':'#087bbf'}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/><path d="M${anchor.x} ${anchor.y}L${label.x} ${label.y}" stroke-width=".5"/><text x="${label.x}" y="${label.y}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`;
+  }).join('');
   const doors=graph.gaps.filter(g=>g.sourceDoor).map(g=>{
     const d=g.sourceDoor,h=d.start,dx=d.end.x-h.x,dy=d.end.y-h.y,theta=(d.swingDirection==='clockwise'?1:-1)*d.angleDegrees*Math.PI/180,tip={x:h.x+dx*Math.cos(theta)-dy*Math.sin(theta),y:h.y+dx*Math.sin(theta)+dy*Math.cos(theta)};
     return `<g stroke="#008030" stroke-width="2"><path d="M${h.x} ${h.y}L${d.end.x} ${d.end.y}M${h.x} ${h.y}L${tip.x} ${tip.y}M${d.end.x} ${d.end.y}A${d.widthPixels} ${d.widthPixels} 0 0 ${theta>0?1:0} ${tip.x} ${tip.y}"/><circle cx="${h.x}" cy="${h.y}" r="3" fill="#008030"/><text x="${h.x+4}" y="${h.y-6}" fill="#008030" stroke="white" stroke-width="2" paint-order="stroke" font-size="13">${esc(g.id)}</text></g>`;

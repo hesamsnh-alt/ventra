@@ -916,7 +916,7 @@ function requireRasterImageEvidence(result) {
 }
 
 // src/lib/verifiedPreview.mjs
-var VERIFIED_PREVIEW_VERSION = "pixel-graph-preview-v140-source-input-20261108";
+var VERIFIED_PREVIEW_VERSION = "pixel-graph-preview-v141-separated-evidence-20261109";
 
 // src/lib/rasterCoordinateReference.mjs
 import sharp2 from "sharp";
@@ -1349,11 +1349,41 @@ function assemblePixelTopology(graph, selection) {
   if (!exterior || !regions.length) throw error("OPEN_PIXEL_TOPOLOGY", "Selected pixel segments do not enclose usable floor regions. Missing walls/openings must be reviewed, not filled with a bounding box.", { nodeCount: nodes.length, edgeCount: edges2.length });
   return { nodes, edges: edges2, regions, enclosures: cycles.filter((f) => f.signedArea < 0).map((f, i) => ({ id: `symbol${i + 1}`, polygon: [...f.polygon].reverse() })), footprint: [...exterior.polygon].reverse(), lines, openings };
 }
-function pixelGraphOverlay(graph, { layer = "source" } = {}) {
+function pixelCandidateLabelAnchor(candidate, viewport) {
+  let low = 0, high = 1;
+  const { start: a, end: b } = candidate;
+  for (const [origin, delta, min, max] of [[a.x, b.x - a.x, viewport.left, viewport.right], [a.y, b.y - a.y, viewport.top, viewport.bottom]]) {
+    if (Math.abs(delta) < 1e-9) {
+      if (origin < min || origin > max) return null;
+      continue;
+    }
+    const p = (min - origin) / delta, q = (max - origin) / delta;
+    low = Math.max(low, Math.min(p, q));
+    high = Math.min(high, Math.max(p, q));
+    if (low > high) return null;
+  }
+  return at(a, b, (low + high) / 2);
+}
+function pixelGraphOverlay(graph, { layer = "source", viewport = { left: 0, top: 0, right: graph.imageWidth, bottom: graph.imageHeight } } = {}) {
   const esc = (s) => String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;");
-  const segments = graph.candidates.filter((c) => layer === "alternatives" ? !["stroke", "solid_band"].includes(c.kind) : ["stroke", "solid_band"].includes(c.kind)).map((c, i) => {
-    const x = (c.start.x + c.end.x) / 2, y = (c.start.y + c.end.y) / 2, offset = layer === "alternatives" ? -10 - i % 4 * 13 : -3;
-    return `<g stroke="${c.kind === "solid_band" ? "#e08012" : "#087bbf"}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/>${layer === "alternatives" ? `<path d="M${x} ${y}L${x} ${y + offset}" stroke-width=".5"/>` : ""}<text x="${x}" y="${y + offset}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`;
+  const occupied = [];
+  const segments = graph.candidates.filter((c) => layer === "all" || (layer === "alternatives" ? !["stroke", "solid_band"].includes(c.kind) : ["stroke", "solid_band"].includes(c.kind))).map((c) => {
+    const anchor = pixelCandidateLabelAnchor(c, viewport);
+    if (!anchor) return "";
+    const width = Math.min(viewport.right - viewport.left - 4, String(c.id).length * 6 + 4);
+    let label;
+    for (let step = 0; step < 100; step++) {
+      const offset = step === 0 ? -4 : (step % 2 ? 1 : -1) * Math.ceil(step / 2) * 14;
+      const x = Math.max(viewport.left + 2, Math.min(viewport.right - width - 2, anchor.x)), y = Math.max(viewport.top + 12, Math.min(viewport.bottom - 2, anchor.y + offset));
+      const box = { left: x, right: x + width, top: y - 11, bottom: y + 2 };
+      if (!occupied.some((b) => box.left < b.right && box.right > b.left && box.top < b.bottom && box.bottom > b.top)) {
+        label = { x, y, box };
+        break;
+      }
+    }
+    label ??= { x: Math.max(viewport.left + 2, Math.min(viewport.right - width - 2, anchor.x)), y: Math.max(viewport.top + 12, Math.min(viewport.bottom - 2, anchor.y - 4)) };
+    if (label.box) occupied.push(label.box);
+    return `<g stroke="${c.kind === "solid_band" ? "#e08012" : "#087bbf"}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/><path d="M${anchor.x} ${anchor.y}L${label.x} ${label.y}" stroke-width=".5"/><text x="${label.x}" y="${label.y}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`;
   }).join("");
   const doors = graph.gaps.filter((g) => g.sourceDoor).map((g) => {
     const d = g.sourceDoor, h = d.start, dx = d.end.x - h.x, dy = d.end.y - h.y, theta = (d.swingDirection === "clockwise" ? 1 : -1) * d.angleDegrees * Math.PI / 180, tip = { x: h.x + dx * Math.cos(theta) - dy * Math.sin(theta), y: h.y + dx * Math.sin(theta) + dy * Math.cos(theta) };
@@ -1937,12 +1967,30 @@ function measuredSpanCoverage(source2, lines) {
 function requiredSourceBands(graph) {
   return graph.candidates.filter((c) => c.kind === "solid_band" && c.thicknessPixels >= 5 && distance5(c.start, c.end) >= 6);
 }
+function measuredWallAlternatives(graph) {
+  const sources = new Map((graph.ink || []).map((s) => [s.id, s]));
+  return graph.candidates.filter((c) => c.kind === "solid_band").map((band5) => ({ candidateId: band5.id, overlappingAlternativeIds: graph.candidates.filter((c) => {
+    if (c.id === band5.id) return false;
+    return (band5.sourceIds || []).some((id) => {
+      if (!c.sourceIds?.includes(id)) return false;
+      const source2 = sources.get(id);
+      if (!source2) return false;
+      const dx = source2.end.x - source2.start.x, dy = source2.end.y - source2.start.y, length = distance5(source2.start, source2.end);
+      if (!length) return false;
+      const project3 = (p) => ((p.x - source2.start.x) * dx + (p.y - source2.start.y) * dy) / length;
+      const a = [project3(band5.start), project3(band5.end)].sort((a2, b2) => a2 - b2), b = [project3(c.start), project3(c.end)].sort((a2, b2) => a2 - b2);
+      return Math.min(a[1], b[1]) - Math.max(a[0], b[0]) > 2;
+    });
+  }).map((c) => c.id) })).filter((g) => g.overlappingAlternativeIds.length);
+}
 function compactPixelClassificationInput(graph, sourceOpenings) {
   return {
-    candidates: graph.candidates.map((c) => ({ id: c.id, kind: c.kind, start: c.start, end: c.end, ...c.thicknessPixels ? { thicknessPixels: c.thicknessPixels } : {}, ...c.colorEvidence ? { colorEvidence: true } : {}, ...c.filledBandRatio !== void 0 ? { filledBandRatio: c.filledBandRatio } : {}, ...c.kind === "face_pair" || c.kind === "stroke_fragment" || c.kind === "observed_wall_fragment" ? { sourceIds: c.sourceIds } : {} })),
+    imageFrame: { width: graph.imageWidth, height: graph.imageHeight, coordinateSpace: "full_source_pixels" },
+    candidates: graph.candidates.map((c) => ({ id: c.id, kind: c.kind, start: c.start, end: c.end, sourceIds: c.sourceIds || [c.id], ...c.thicknessPixels ? { thicknessPixels: c.thicknessPixels } : {}, ...c.colorEvidence ? { colorEvidence: true } : {}, ...c.filledBandRatio !== void 0 ? { filledBandRatio: c.filledBandRatio } : {} })),
     gaps: graph.gaps.map((g) => ({ id: g.id, a: g.a, b: g.b, start: g.start, end: g.end, support: g.support, ...g.endpointHosts ? { endpointHosts: g.endpointHosts } : {}, ...g.sourceDoor ? { sourceDoor: g.sourceDoor } : {} })),
     sourceDoors: sourceOpenings.doors,
     requiredSourceBandIds: requiredSourceBands(graph).map((c) => c.id),
+    measuredWallAlternatives: measuredWallAlternatives(graph),
     selectionContract: "complete=true explicitly confirms all unselected alternatives are non-architectural or redundant. List nonWalls for furniture enclosures and any required source band not represented by selected walls."
   };
 }
@@ -1998,8 +2046,15 @@ function pixelRegionClassificationSchema(topology, anchors) {
     measurements: array2(object2({ text: text2, startAnchorId: anchorId, endAnchorId: anchorId, meters: number2 }))
   });
 }
-function validateClassification(graph, selection) {
-  if (!selection.complete || selection.missingFeatures?.length || selection.unresolvedCandidateIds?.length) fail3("INCOMPLETE_PIXEL_CLASSIFICATION", "The physical source lines are not fully classified; no replacement room grid was invented.");
+function validatePixelClassification(graph, selection) {
+  if (!selection.complete || selection.missingFeatures?.length || selection.unresolvedCandidateIds?.length) fail3("INCOMPLETE_PIXEL_CLASSIFICATION", "The physical source lines are not fully classified; no replacement room grid was invented.", {
+    complete: selection.complete === true,
+    missingFeatures: selection.missingFeatures || [],
+    unresolvedCandidateIds: selection.unresolvedCandidateIds || [],
+    selectedWallCount: selection.walls?.length || 0,
+    candidateCount: graph.candidates.length,
+    uncoveredBands: validateSourceBandCoverage(graph, { walls: selection.walls || [], nonWalls: selection.nonWalls || [] })
+  });
   const ids = new Set(graph.candidates.map((c) => c.id)), seen = /* @__PURE__ */ new Set();
   for (const item of [...selection.walls || [], ...selection.nonWalls || []]) {
     if (!ids.has(item.candidateId) || seen.has(item.candidateId)) fail3("INVALID_PIXEL_SELECTION", "Candidate classification contains unknown or repeated IDs.");
@@ -2028,13 +2083,29 @@ async function labelledImage(buffer, overlay) {
   const data = await sharp5(buffer).composite([{ input: Buffer.from(overlay) }]).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
   return `data:image/jpeg;base64,${data.toString("base64")}`;
 }
-async function pixelClassificationDetailViews(buffer, graph) {
-  if (!graph.candidates.some((c) => !["stroke", "solid_band"].includes(c.kind))) return [];
-  const labelled = await sharp5(buffer).composite([{ input: Buffer.from(pixelGraphOverlay(graph, { layer: "alternatives" })) }]).png().toBuffer(), images = [];
+function pixelClassificationViewLayout(graph) {
+  const views = [];
   const extent = graph.contentExtent || { left: 0, top: 0, width: graph.imageWidth, height: graph.imageHeight };
-  const columns = Math.ceil(extent.width / 850), rows = Math.ceil(extent.height / 850);
-  for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
+  const groups = ["stroke", "solid_band", "face_pair", "fragments"].map((kind) => graph.candidates.filter((c) => kind === "fragments" ? ["stroke_fragment", "observed_wall_fragment"].includes(c.kind) : c.kind === kind)).filter((g) => g.length);
+  if (!groups.length) return views;
+  const budget = Math.floor(9 / groups.length);
+  let columns = Math.min(Math.ceil(extent.width / 850), budget), rows = Math.min(Math.ceil(extent.height / 850), Math.max(1, Math.floor(budget / columns)));
+  if (extent.height > extent.width) {
+    rows = Math.min(Math.ceil(extent.height / 850), budget);
+    columns = Math.min(Math.ceil(extent.width / 850), Math.max(1, Math.floor(budget / rows)));
+  }
+  for (const candidates of groups) for (let row = 0; row < rows; row++) for (let col = 0; col < columns; col++) {
     const left = Math.max(0, extent.left + Math.floor(col * extent.width / columns) - 35), top = Math.max(0, extent.top + Math.floor(row * extent.height / rows) - 35), right = Math.min(graph.imageWidth, extent.left + Math.ceil((col + 1) * extent.width / columns) + 35), bottom = Math.min(graph.imageHeight, extent.top + Math.ceil((row + 1) * extent.height / rows) + 35);
+    const viewport = { left, top, right, bottom };
+    views.push({ kind: candidates[0].kind, viewport, candidateIds: candidates.map((c) => c.id) });
+  }
+  return views;
+}
+async function pixelClassificationDetailViews(buffer, graph) {
+  const images = [];
+  for (const view of pixelClassificationViewLayout(graph)) {
+    const ids = new Set(view.candidateIds), { left, top, right, bottom } = view.viewport;
+    const labelled = await sharp5(buffer).composite([{ input: Buffer.from(pixelGraphOverlay({ ...graph, candidates: graph.candidates.filter((c) => ids.has(c.id)), gaps: [] }, { layer: "all", viewport: view.viewport })) }]).png().toBuffer();
     const data = await sharp5(labelled).extract({ left, top, width: right - left, height: bottom - top }).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
     images.push(`data:image/jpeg;base64,${data.toString("base64")}`);
   }
@@ -2063,11 +2134,11 @@ async function runPixelGraphPipeline({ buffer, classify, diagnostics = {} }) {
     original,
     image: await labelledImage(buffer, pixelGraphOverlay(graph)),
     images: await pixelClassificationDetailViews(buffer, graph),
-    data: compactPixelClassificationInput(graph, sourceOpenings),
-    prompt: "Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Select physical wall runs, not every alternative representation. complete=true confirms you reviewed the whole source and every unselected candidate is non-architectural or redundant; do not enumerate hundreds of redundant negatives. In nonWalls explicitly list furniture enclosure boundary strokes as furniture, and each requiredSourceBandId not covered by selected walls with its visible non-wall reason; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image labels original ink/solid-band IDs. Following detail crops separately label EVERY face-pair, fragment and wall-fragment ID, previously invisible in the overview. These generated IDs and leader lines are not source geometry. SOURCE DATA coordinates locate candidates in the full original image, not within crop coordinates."
+    data: { ...compactPixelClassificationInput(graph, sourceOpenings), detailViews: pixelClassificationViewLayout(graph) },
+    prompt: "Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Select physical wall runs, not every alternative representation. complete=true confirms you reviewed the whole source and every unselected candidate is non-architectural or redundant; do not enumerate hundreds of redundant negatives. In nonWalls explicitly list furniture enclosure boundary strokes as furniture, and each requiredSourceBandId not covered by selected walls with its visible non-wall reason; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image labels original ink/solid-band IDs. Following detail crops separate raw strokes, filled wall centres, face-pairs and fragments into DIFFERENT images so alternative representations never share a label layer. detailViews lists each crop in image order with its full-source pixel viewport and candidate IDs. measuredWallAlternatives explicitly lists incompatible overlapping representations: if selecting candidateId, do not also select any of its overlappingAlternativeIds. Alternatives may cover different extents; use their non-overlapping remainder fragments where a real wall continues. A solid_band sourceIds list includes its original boundary faces: these represent ONE physical wall, not extra partitions. A face_pair uses two measured faces; two raw faces do not become two physical walls. Review the clean original when a label or leader overlaps a fixture. Missing room-use semantics or furniture identification belong to the second stage; this first stage must still identify furniture boundary strokes as nonWalls and never silently omit a physical wall. These generated IDs and leader lines are not source geometry. SOURCE DATA coordinates locate candidates in the full original image, not within crop coordinates."
   });
   diagnostics.wallClassification = selection;
-  validateClassification(graph, selection);
+  validatePixelClassification(graph, selection);
   const topology = assemblePixelTopology(graph, selection);
   diagnostics.pixelTopology = topology;
   const furniture = selection.nonWalls.filter((s) => s.reason === "furniture");
