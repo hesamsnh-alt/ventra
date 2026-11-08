@@ -61,9 +61,11 @@ export default function RasterTraceReview({ report, imageUrl, fileName }) {
       {pixelGraph&&<div role="status">
         <p>{label('خطوط مستقیماً از پیکسل‌های نقشه استخراج شده‌اند؛ تشخیص دیوار، هاشور و کمد هنوز باید با تصویر تطبیق داده شود.','Lines were measured directly from source pixels; wall, hatch and wardrobe classifications still need visual review.','تم قياس الخطوط من بكسلات المصدر؛ يلزم التحقق بصرياً من تصنيف الجدران والتظليل والخزائن.')}</p>
         <p>{collection(pixelGraph.ink).length} {label('خط نامزد','source segments','خطوط مرشحة')} · {collection(report.pixelTopology?.regions).length} {label('فضای بسته','enclosed regions','مساحات مغلقة')}</p>
+        {report.sourceOpeningDiscovery&&<p>{collection(report.sourceOpeningDiscovery.doors).length} {label('در از قوس و لنگهٔ تصویر پیدا شد؛ این عدد به‌تنهایی تأیید مدل سه‌بعدی نیست.','doors found from source arcs and leaves; this count alone does not verify the 3D model.','أبواب تم اكتشافها من الأقواس والأوراق؛ العدد وحده لا يؤكد صحة النموذج ثلاثي الأبعاد.')}</p>}
         {!report.trace&&<svg role="img" aria-label="Source pixel segments before semantic classification" viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{width:'100%',aspectRatio:`${report.imageWidth} / ${report.imageHeight}`}}>
           <image href={imageUrl} width="1000" height="1000" preserveAspectRatio="none"/>
           {collection(pixelGraph.ink).map(s=>{const a=pixelPoint(s.start),b=pixelPoint(s.end);return validPoint(a)&&validPoint(b)?<line key={s.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#1597cf" strokeWidth="1"><title>{s.id}</title></line>:null;})}
+          {collection(report.sourceOpeningDiscovery?.doors).map(d=>{const a=pixelPoint(d.start),b=pixelPoint(d.end);return validPoint(a)&&validPoint(b)?<g key={d.id} stroke="#00a040"><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth="3"/><circle cx={a.x} cy={a.y} r="3" fill="#00a040"/><title>{d.id}</title></g>:null;})}
         </svg>}
       </div>}
       {collection(report.spaceInterpretations).length>0&&<ul aria-label={label('تفسیر هاشور و فضای بسته','Hatch and enclosed-space interpretations','تفسير التظليل والمساحات المغلقة')}>

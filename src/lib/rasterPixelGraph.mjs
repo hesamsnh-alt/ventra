@@ -2,7 +2,7 @@
 // All coordinates originate in source pixels; classifiers only select IDs.
 import sharp from 'sharp';
 import {rasterInkContrast} from './rasterInkContrast.mjs';
-export const PIXEL_GRAPH_VERSION='pixel-line-graph-v2-contrast';
+export const PIXEL_GRAPH_VERSION='pixel-line-graph-v3-openings';
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const cross=(a,b)=>a.x*b.y-a.y*b.x;
 const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y});
@@ -74,10 +74,30 @@ export async function extractRasterPixelGraph(buffer){
   for(let i=0;i<tone.length;i++){const r=data[i*channels],g=data[i*channels+1],b=data[i*channels+2];chroma[i]=Math.max(r,g,b)-Math.min(r,g,b);tone[i]=Math.round((r+g+b)/3);}
   const contrast=rasterInkContrast(tone,width,height);
   for(let i=0;i<mask.length;i++){mask[i]=chroma[i]<55&&contrast.mask[i]?1:0;coloredMask[i]=chroma[i]>=55&&(tone[i]<210||contrast.strokeMask[i])?1:0;}
-  const ink=[...detectInkSegments(mask,width,height),...detectInkSegments(coloredMask,width,height).map(s=>({...s,id:`color_${s.id}`,colorEvidence:true}))],candidates=ink.map(s=>({...s,sourceIds:[s.id],kind:'stroke'}));
+  const ink=[...detectInkSegments(mask,width,height),...detectInkSegments(coloredMask,width,height).map(s=>({...s,id:`color_${s.id}`,colorEvidence:true}))];
+  // Long-line voting misses short door jambs and can pair unrelated faces.
+  // Erosion suppresses thin strokes; measure filled bands in original pixels.
+  const eroded=new Uint8Array(mask.length),maximumBand=Math.max(12,Math.min(width,height)*.035);
+  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){const i=y*width+x;let full=true;for(let dy=-1;dy<=1&&full;dy++)for(let dx=-1;dx<=1;dx++)if(!mask[i+dy*width+dx]){full=false;break;}eroded[i]=full?1:0;}
+  const bands=[];
+  for(const s of detectInkSegments(eroded,width,height,{minLength:6,maxLines:512}).sort((a,b)=>b.lengthPixels-a.lengthPixels)){
+    const length=dist(s.start,s.end),nx=-(s.end.y-s.start.y)/length,ny=(s.end.x-s.start.x)/length,offsets=[],thicknesses=[];
+    const hit=(p,n)=>{const x=Math.round(p.x+nx*n),y=Math.round(p.y+ny*n);return x>=0&&y>=0&&x<width&&y<height&&mask[y*width+x];};
+    for(const t of [.2,.4,.6,.8]){const p=at(s.start,s.end,t);let low=0,high=0;if(!hit(p,0))continue;while(low>-maximumBand&&hit(p,low-1))low--;while(high<maximumBand&&hit(p,high+1))high++;offsets.push((low+high)/2);thicknesses.push(high-low+1);}
+    if(offsets.length!==4||thicknesses.some(v=>v<3||v>maximumBand)||Math.max(...thicknesses)-Math.min(...thicknesses)>3)continue;
+    const shift=offsets.reduce((a,b)=>a+b,0)/4,start=round({x:s.start.x+nx*shift,y:s.start.y+ny*shift}),end=round({x:s.end.x+nx*shift,y:s.end.y+ny*shift}),thicknessPixels=thicknesses.reduce((a,b)=>a+b,0)/4;
+    const ux=(s.end.x-s.start.x)/length,uy=(s.end.y-s.start.y)/length;
+    for(const [p,sign]of [[start,-1],[end,1]])for(let extension=0;extension<Math.ceil(thicknessPixels);extension++){const x=Math.round(p.x+sign*ux),y=Math.round(p.y+sign*uy);if(x<0||y<0||x>=width||y>=height||!mask[y*width+x])break;p.x+=sign*ux;p.y+=sign*uy;}
+    if(bands.some(b=>{const a=project(start,b.start,b.end),z=project(end,b.start,b.end);return a.distance<2&&z.distance<2&&Math.min(a.t,z.t)>=-.02&&Math.max(a.t,z.t)<=1.02;}))continue;
+    const boundarySourceIds=ink.filter(b=>{if(b.colorEvidence)return false;const a=project(start,b.start,b.end),z=project(end,b.start,b.end);return Math.abs(cross(sub(end,start),sub(b.end,b.start)))/(dist(start,end)*dist(b.start,b.end))<.012&&a.distance<thicknessPixels/2+2&&z.distance<thicknessPixels/2+2&&Math.min(a.t,z.t)>=-.05&&Math.max(a.t,z.t)<=1.05;}).map(s=>s.id);
+    bands.push({id:`solid_band${bands.length+1}`,start:round(start),end:round(end),lengthPixels:Math.round(dist(start,end)),thicknessPixels,boundarySourceIds,centerlineEvidence:true,support:'measured_solid_band'});
+  }
+  ink.push(...bands);
+  const candidates=ink.map(s=>({...s,sourceIds:[s.id,...(s.boundarySourceIds||[])],kind:s.centerlineEvidence?'solid_band':'stroke'}));
   const maxThickness=Math.max(12,Math.min(width,height)*.035),sourceCuts=new Map(ink.map(s=>[s.id,[0,1]])),pairOptions=[];
   for(let i=0;i<ink.length;i++)for(let j=i+1;j<ink.length;j++){
     const a=ink[i],b=ink[j],u=sub(a.end,a.start),v=sub(b.end,b.start),length=dist(a.start,a.end);
+    if(a.centerlineEvidence||b.centerlineEvidence)continue;
     if(Math.abs(cross(u,v))/(length*dist(b.start,b.end))>.012)continue;
     const separation=project(b.start,a.start,a.end).distance;if(separation<3||separation>maxThickness)continue;
     const t0=project(b.start,a.start,a.end).t,t1=project(b.end,a.start,a.end).t,lo=Math.max(0,Math.min(t0,t1)),hi=Math.min(1,Math.max(t0,t1));
@@ -90,6 +110,9 @@ export async function extractRasterPixelGraph(buffer){
   const preferred=new Map(ink.map(s=>[s.id,pairOptions.filter(p=>p.candidate.sourceIds.includes(s.id)).sort((a,b)=>b.score-a.score).slice(0,2)]));
   for(const pair of pairOptions){
     const{a,b,lo,hi,ba,bb}=pair;if(!preferred.get(a.id).includes(pair)||!preferred.get(b.id).includes(pair))continue;
+    const c=pair.candidate,length=dist(c.start,c.end),nx=-(c.end.y-c.start.y)/length,ny=(c.end.x-c.start.x)/length;let filled=0,total=0;
+    for(const t of [.15,.35,.65,.85]){const p=at(c.start,c.end,t);for(let n=-Math.floor(c.thicknessPixels/2);n<=Math.floor(c.thicknessPixels/2);n++){const x=Math.round(p.x+nx*n),y=Math.round(p.y+ny*n);if(x>=0&&y>=0&&x<width&&y<height){total++;filled+=mask[y*width+x];}}}
+    c.filledBandRatio=Math.round(100*filled/Math.max(1,total))/100;
     candidates.push(pair.candidate);sourceCuts.get(a.id).push(lo,hi);sourceCuts.get(b.id).push(project(ba,b.start,b.end).t,project(bb,b.start,b.end).t);
   }
   // A short thick wall may share one face with a longer thin balcony edge.
@@ -160,9 +183,20 @@ export function assemblePixelTopology(graph,selection){
   const openings=[];
   for(const item of selection.openings||[]){
     const gap=graph.gaps.find(g=>g.id===item.gapId);
-    if(!gap||!chosen.has(gap.a)||!chosen.has(gap.b)||openings.some(o=>o.id===gap.id)||!['door','window'].includes(item.type))throw error('INVALID_PIXEL_OPENING','An opening must join two selected, observed collinear wall segments.',{id:item.gapId});
-    if(lines.find(s=>s.id===gap.a).type!==lines.find(s=>s.id===gap.b).type)throw error('INVALID_PIXEL_OPENING','Opening hosts disagree.');
-    lines.push({...gap,type:lines.find(s=>s.id===gap.a).type,kind:'opening',id:gap.id});openings.push({...gap,type:item.type,hingeSide:item.hingeSide||'unknown',swingDirection:item.swingDirection||'unknown'});
+    if(!gap||openings.some(o=>o.id===gap.id)||!['door','window'].includes(item.type))throw error('INVALID_PIXEL_OPENING','An opening must have selected source wall hosts.',{id:item.gapId});
+    let hosts;
+    if(gap.support==='observed_arc_and_leaf'){
+      if(item.type!=='door')throw error('INVALID_PIXEL_OPENING','A source door arc cannot become a window.');
+      const start=gap.endpointHosts.start.filter(id=>chosen.has(id)),end=gap.endpointHosts.end.filter(id=>chosen.has(id));
+      hosts=[...new Set([...start,...end])].map(id=>lines.find(s=>s.id===id));
+      const u=sub(gap.end,gap.start),parallel=hosts.some(h=>{const v=sub(h.end,h.start);return Math.abs(cross(u,v))/(dist(gap.start,gap.end)*dist(h.start,h.end))<.05;});
+      if(!hosts.length||!parallel&&(!start.length||!end.length))throw error('INVALID_PIXEL_OPENING','A discovered door needs a selected parallel host or selected wall junctions at both jambs.',{id:item.gapId});
+    }else{
+      if(!chosen.has(gap.a)||!chosen.has(gap.b))throw error('INVALID_PIXEL_OPENING','An opening must join two selected, observed collinear wall segments.',{id:item.gapId});
+      hosts=[lines.find(s=>s.id===gap.a),lines.find(s=>s.id===gap.b)];
+    }
+    if(hosts.some(h=>h.type!==hosts[0].type))throw error('INVALID_PIXEL_OPENING','Opening hosts disagree.');
+    lines.push({...gap,type:hosts[0].type,kind:'opening',id:gap.id});openings.push({...gap,type:item.type,hingeSide:gap.sourceDoor?.hingeSide||item.hingeSide||'unknown',swingDirection:gap.sourceDoor?.swingDirection||item.swingDirection||'unknown'});
   }
   if(lines.length<3)throw error('INCOMPLETE_PIXEL_SELECTION','Fewer than three supported wall runs were selected.');
   const tolerance=Math.max(2,Math.min(6,Math.max(Math.min(graph.imageWidth,graph.imageHeight)*.004,...lines.map(s=>(s.thicknessPixels||0)/2))));
@@ -185,12 +219,17 @@ export function assemblePixelTopology(graph,selection){
   }
   const adjacency=nodes.map(()=>[]);edges.forEach((e,i)=>{adjacency[e.a].push({to:e.b,index:i});adjacency[e.b].push({to:e.a,index:i});});
   adjacency.forEach((list,i)=>list.sort((a,b)=>Math.atan2(nodes[a.to].y-nodes[i].y,nodes[a.to].x-nodes[i].x)-Math.atan2(nodes[b.to].y-nodes[i].y,nodes[b.to].x-nodes[i].x)));
+  // Open branches (for example a door at a wall end) do not enclose a new
+  // room. Trim them only from face walking, retaining every source edge for
+  // wall/opening rendering and validation.
+  const faceAdjacency=adjacency.map(list=>[...list]);let changed=true;
+  while(changed){changed=false;for(let i=0;i<faceAdjacency.length;i++)if(faceAdjacency[i].length===1){const other=faceAdjacency[i][0].to;faceAdjacency[i]=[];faceAdjacency[other]=faceAdjacency[other].filter(e=>e.to!==i);changed=true;}}
   const seen=new Set(),cycles=[];
-  for(let i=0;i<nodes.length;i++)for(const adjacent of adjacency[i]){
+  for(let i=0;i<nodes.length;i++)for(const adjacent of faceAdjacency[i]){
     const first=`${i}:${adjacent.to}`;if(seen.has(first))continue;let a=i,b=adjacent.to,points=[],ids=[],closed=false;
     for(let steps=0;steps<edges.length*2+2;steps++){
       const key=`${a}:${b}`;if(seen.has(key)){closed=key===first;break;}seen.add(key);points.push(nodes[a]);ids.push(a);
-      const list=adjacency[b],reverse=list.findIndex(e=>e.to===a),next=list[(reverse+list.length-1)%list.length];if(!next)break;[a,b]=[b,next.to];
+      const list=faceAdjacency[b],reverse=list.findIndex(e=>e.to===a),next=list[(reverse+list.length-1)%list.length];if(!next)break;[a,b]=[b,next.to];
     }
     if(closed&&points.length>=3&&new Set(ids).size===ids.length&&Math.abs(area(points))>16)cycles.push({polygon:points.map(({x,y})=>({x,y})),signedArea:area(points)});
   }
@@ -202,5 +241,10 @@ export function assemblePixelTopology(graph,selection){
 
 export function pixelGraphOverlay(graph){
   const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${graph.imageWidth}" height="${graph.imageHeight}" viewBox="0 0 ${graph.imageWidth} ${graph.imageHeight}"><g fill="none" stroke="#087bbf" stroke-width="1.2">${graph.candidates.filter(c=>c.kind==='stroke').map(c=>`<path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/><text x="${(c.start.x+c.end.x)/2}" y="${(c.start.y+c.end.y)/2-3}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-family="sans-serif" font-size="10">${esc(c.id)}</text>`).join('')}</g></svg>`;
+  const segments=graph.candidates.filter(c=>['stroke','solid_band'].includes(c.kind)).map(c=>`<g stroke="${c.kind==='solid_band'?'#e08012':'#087bbf'}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/><text x="${(c.start.x+c.end.x)/2}" y="${(c.start.y+c.end.y)/2-3}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`).join('');
+  const doors=graph.gaps.filter(g=>g.sourceDoor).map(g=>{
+    const d=g.sourceDoor,h=d.start,dx=d.end.x-h.x,dy=d.end.y-h.y,theta=(d.swingDirection==='clockwise'?1:-1)*d.angleDegrees*Math.PI/180,tip={x:h.x+dx*Math.cos(theta)-dy*Math.sin(theta),y:h.y+dx*Math.sin(theta)+dy*Math.cos(theta)};
+    return `<g stroke="#008030" stroke-width="2"><path d="M${h.x} ${h.y}L${d.end.x} ${d.end.y}M${h.x} ${h.y}L${tip.x} ${tip.y}M${d.end.x} ${d.end.y}A${d.widthPixels} ${d.widthPixels} 0 0 ${theta>0?1:0} ${tip.x} ${tip.y}"/><circle cx="${h.x}" cy="${h.y}" r="3" fill="#008030"/><text x="${h.x+4}" y="${h.y-6}" fill="#008030" stroke="white" stroke-width="2" paint-order="stroke" font-size="13">${esc(g.id)}</text></g>`;
+  }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${graph.imageWidth}" height="${graph.imageHeight}" viewBox="0 0 ${graph.imageWidth} ${graph.imageHeight}"><g fill="none" stroke-width="1.2" font-family="sans-serif">${segments}${doors}</g></svg>`;
 }
