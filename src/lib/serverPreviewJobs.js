@@ -3,6 +3,8 @@ import {previewImageFingerprint} from './serverPreviewAnalysis';
 import {createHash,randomBytes} from 'node:crypto';
 import {commercialContext,commercialAdmin,commercialError} from './serverCommercial';
 import {account,billingError} from './serverBilling';
+import {previewWorkerOrigin} from './previewWorkerOrigin.mjs';
+import {VERIFIED_PREVIEW_VERSION} from './verifiedPreview.mjs';
 const table='ventra_preview_jobs';
 export const nonceHash=value=>createHash('sha256').update(value).digest('hex');
 export async function startPreviewJob(request,action='preview'){
@@ -20,11 +22,16 @@ export async function startPreviewJob(request,action='preview'){
    if(prior.error)throw billingError('Background analysis storage is unavailable.',503);
    if(prior.data?.result?.scene)return Response.json({...prior.data.result,recovered:true},{headers:{'Cache-Control':'no-store'}});
   }
-  const origin=new URL(process.env.DEPLOY_URL||process.env.URL||'');
+  const origin=previewWorkerOrigin(request.url,process.env);
   if(origin.protocol!=='https:')throw billingError('Background analysis endpoint is not configured.',503);
-  const digest=nonceHash(fingerprint ? `${user.id}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
+  if(fingerprint){
+   const check=await fetch(new URL('/.netlify/functions/preview-build',origin),{cache:'no-store',signal:AbortSignal.timeout(10000)});
+   const build=check.ok?await check.json():null;
+   if(build?.routeVersion!==fingerprint.version)throw billingError('The background analysis deployment is not the requesting build. No AI request was made.',503);
+  }
+  const digest=nonceHash(fingerprint ? `${user.id}:${origin.origin}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
   id=`${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`;const nonce=randomBytes(32).toString('hex');
-  const {error}=await db.from(table).insert({id,actor_id:user.id,project_id:body.projectId,status:'queued',nonce_hash:nonceHash(nonce),request_body:{...body,__backgroundAction:action}});
+  const {error}=await db.from(table).insert({id,actor_id:user.id,project_id:body.projectId,status:'queued',nonce_hash:nonceHash(nonce),request_body:{...body,__backgroundAction:action,...(fingerprint?{__expectedRasterBuild:fingerprint.version}:{})}});
   if(error?.code==='23505'){
    const prior=await db.from(table).select('status,result,http_status').eq('id',id).eq('actor_id',user.id).maybeSingle();
    if(prior.error||!prior.data)throw billingError('Existing analysis job is unavailable.',503);
@@ -60,12 +67,13 @@ export async function executePreviewJob(input,run){
  if(error)throw error;if(!job)return;
  let result,httpStatus=500;
  try{
-  const {__backgroundAction='preview',...body}=job.request_body;
+  const {__backgroundAction='preview',__expectedRasterBuild,...body}=job.request_body;
   if(!['preview','boq'].includes(__backgroundAction))throw billingError('Invalid analysis action.',400);
   const request=new Request(`https://ventra.internal/api/ai/${__backgroundAction==='boq'?'generate-boq':'design-3d-preview'}`,{method:'POST',headers:{authorization:input.authorization,'content-type':'application/json'},body:JSON.stringify(body)});
   const user=await account(request);if(user.id!==job.actor_id)throw billingError('Analysis job access denied.',403);
+  if(__expectedRasterBuild&&__expectedRasterBuild!==VERIFIED_PREVIEW_VERSION)throw Object.assign(billingError('The background analysis build differs from the requesting build. No AI request was made.',503),{code:'PREVIEW_WORKER_BUILD_MISMATCH'});
   const response=await run(request,__backgroundAction);httpStatus=response.status;result=await response.json();
- }catch(error){result={error:error.status?error.message:'Background analysis failed. Retry or contact support.',code:'PREVIEW_BACKGROUND_FAILED'};httpStatus=error.status||500;}
+ }catch(error){result={error:error.status?error.message:'Background analysis failed. Retry or contact support.',code:error.code||'PREVIEW_BACKGROUND_FAILED'};httpStatus=error.status||500;}
  const saved=await db.from(table).update({status:httpStatus<400?'completed':'failed',http_status:httpStatus,result,request_body:null,nonce_hash:null,updated_at:new Date().toISOString()}).eq('id',input.id).eq('status','running');
  if(saved.error)throw saved.error;
 }

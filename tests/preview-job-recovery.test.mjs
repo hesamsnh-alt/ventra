@@ -1,3 +1,4 @@
+import {previewWorkerOrigin} from '../src/lib/previewWorkerOrigin.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -25,11 +26,11 @@ function harness(){
       then(resolve){updates.push(change);for(const row of jobs.values())if(filters.every(([key,value])=>row[key]===value))Object.assign(row,change);resolve({})}
     };return q;
   }};
-  const sandbox={console,db,table:'jobs',process:{env:{URL:'https://example.netlify.app'}},Response,URL,Date,AbortSignal,
+  const sandbox={previewWorkerOrigin,console,db,table:'jobs',process:{env:{URL:'https://example.netlify.app'}},Response,URL,Date,AbortSignal,
     account:async()=>({id:'actor'}),commercialContext:async()=>({db}),
     previewImageFingerprint:async()=>({hash:'same-source',version}),
     nonceHash:value=>createHash('sha256').update(value).digest('hex'),randomBytes:()=>Buffer.alloc(32,1),
-    fetch:async()=>{dispatches++;return new Response(null,{status:dispatchStatus})},
+    fetch:async url=>{if(String(url).endsWith('/preview-build'))return Response.json({routeVersion:version});dispatches++;return new Response(null,{status:dispatchStatus})},
     billingError:(message,status)=>Object.assign(Error(message),{status}),commercialError:error=>Response.json({error:error.message},{status:error.status||500})};
   vm.createContext(sandbox);vm.runInContext(code,sandbox);
   const request=()=>new Request('https://example.netlify.app/api/ai/design-3d-preview',{method:'POST',headers:{authorization:'Bearer fixture'},body:JSON.stringify({projectId:'project',mode:'schematic_analyze',imageUrl:'same-image'})});
