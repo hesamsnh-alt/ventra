@@ -7,6 +7,7 @@ import {prepareRasterImageEvidence,inspectRasterImageEvidence,requireRasterImage
 import {VERIFIED_PREVIEW_VERSION} from './verifiedPreview.mjs';
 import {applyRasterDoorSymbols} from './rasterDoorSymbols.mjs';
 import {discoverRasterOpenings,sourceDoorGapCandidates} from './rasterOpeningDiscovery.mjs';
+import {compactPixelClassificationInput,validateSourceBandCoverage} from './rasterClassificationInput.mjs';
 const object=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const array=items=>({type:'array',items});
 const text={type:'string'},number={type:'number'},nullableNumber={type:['number','null']};
@@ -40,7 +41,8 @@ function validateClassification(graph,selection){
   for(const item of [...(selection.walls||[]),...(selection.nonWalls||[])]){
     if(!ids.has(item.candidateId)||seen.has(item.candidateId))fail('INVALID_PIXEL_SELECTION','Candidate classification contains unknown or repeated IDs.');seen.add(item.candidateId);
   }
-  if(seen.size!==ids.size)fail('INCOMPLETE_PIXEL_CLASSIFICATION','Visible source candidates were silently omitted from classification.');
+  const uncoveredBands=validateSourceBandCoverage(graph,selection);
+  if(uncoveredBands.length)fail('INCOMPLETE_PIXEL_CLASSIFICATION','Measured thick source bands need selected wall coverage or an explicit non-wall interpretation.',{uncoveredBands});
   const doors=selection.openings.filter(o=>o.type==='door').length,windows=selection.openings.filter(o=>o.type==='window').length;
   if(doors!==selection.inventory?.doorCount||windows!==selection.inventory?.windowCount)fail('INCOMPLETE_OPENING_INVENTORY','Visible opening inventory does not agree with selected source gaps.');
   const rejected=new Map();for(const item of selection.rejectedSourceDoors||[]){
@@ -55,6 +57,18 @@ function regionOverlay(graph,topology,anchors){
 }
 async function labelledImage(buffer,overlay){const data=await sharp(buffer).composite([{input:Buffer.from(overlay)}]).jpeg({quality:90,chromaSubsampling:'4:4:4'}).toBuffer();return`data:image/jpeg;base64,${data.toString('base64')}`;}
 
+export async function pixelClassificationDetailViews(buffer,graph){
+  if(!graph.candidates.some(c=>!['stroke','solid_band'].includes(c.kind)))return[];
+  const labelled=await sharp(buffer).composite([{input:Buffer.from(pixelGraphOverlay(graph,{layer:'alternatives'}))}]).png().toBuffer(),images=[];
+  const extent=graph.contentExtent||{left:0,top:0,width:graph.imageWidth,height:graph.imageHeight};
+  const columns=Math.ceil(extent.width/850),rows=Math.ceil(extent.height/850);
+  for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){
+    const left=Math.max(0,extent.left+Math.floor(col*extent.width/columns)-35),top=Math.max(0,extent.top+Math.floor(row*extent.height/rows)-35),right=Math.min(graph.imageWidth,extent.left+Math.ceil((col+1)*extent.width/columns)+35),bottom=Math.min(graph.imageHeight,extent.top+Math.ceil((row+1)*extent.height/rows)+35);
+    const data=await sharp(labelled).extract({left,top,width:right-left,height:bottom-top}).jpeg({quality:90,chromaSubsampling:'4:4:4'}).toBuffer();images.push(`data:image/jpeg;base64,${data.toString('base64')}`);
+  }
+  return images;
+}
+
 // Two specific semantic tasks at most. There is no free-coordinate trace call,
 // no model-generated rectangle, and no retry after a paid classification fails.
 export async function runPixelGraphPipeline({buffer,classify,diagnostics={}}){
@@ -67,8 +81,8 @@ export async function runPixelGraphPipeline({buffer,classify,diagnostics={}}){
   diagnostics.pixelGraph=graph;diagnostics.imageWidth=graph.imageWidth;diagnostics.imageHeight=graph.imageHeight;diagnostics.imageHash=createHash('sha256').update(buffer).digest('hex').slice(0,16);
   if(graph.candidates.length<3)fail('NO_PIXEL_STRUCTURE','No supported building lines were extracted. No model request was made.');
   const original=`data:image/jpeg;base64,${buffer.toString('base64')}`;
-  const selection=await classify({stage:'classify_source_lines',schema:pixelWallClassificationSchema(graph),original,image:await labelledImage(buffer,pixelGraphOverlay(graph)),data:{candidates:graph.candidates,gaps:graph.gaps,sourceDoors:sourceOpenings.doors},
-    prompt:'Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Classify every unselected candidate in nonWalls; for a furniture enclosure mark its actual boundary strokes as furniture and mark redundant face alternatives as alternative_face; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image is the original with generated blue IDs; those labels are not original drawing text.'});
+  const selection=await classify({stage:'classify_source_lines',schema:pixelWallClassificationSchema(graph),original,image:await labelledImage(buffer,pixelGraphOverlay(graph)),images:await pixelClassificationDetailViews(buffer,graph),data:compactPixelClassificationInput(graph,sourceOpenings),
+    prompt:'Do not discard a visible line solely because it is faint, gray, thin or lower contrast. Classify its architectural role using continuity, junctions and source context; faint text, dimensions and furniture are still non-walls. Classify the provided SOURCE-PIXEL candidate IDs. Coordinates are already measured; never write or invent coordinates. Select every actual physical wall, including thin outlined walls and all exterior balcony/recess boundaries. Measured solid_band candidates already represent the filled wall centre and retain short jambs. Prefer them when the source wall is filled; do not also select overlapping face alternatives. Face-pair candidates represent one wall between two visible faces: choose the pair OR its raw face strokes, never both. Select physical wall runs, not every alternative representation. complete=true confirms you reviewed the whole source and every unselected candidate is non-architectural or redundant; do not enumerate hundreds of redundant negatives. In nonWalls explicitly list furniture enclosure boundary strokes as furniture, and each requiredSourceBandId not covered by selected walls with its visible non-wall reason; ignore furniture/cabinet/wardrobe edges, door leaves/arcs, labels and dimension lines. sourceDoors are local pixel observations with arc and thin radial-leaf support, not AI guesses. Inspect each observed_arc_and_leaf gap and preserve its source ID when it represents a real door. Every local source-door observation must be selected or explicitly reviewed in rejectedSourceDoors with visible non-door evidence; never silently omit it. Its endpointHosts permit a door at a wall end or perpendicular junction: select a parallel host or hosts at both jambs; a leaf must not be selected as a wall. Other opening gaps are hypotheses, not walls: select only visibly supported door/window gaps with BOTH host candidates selected. Inventory all visible doors/windows and enclosed space names before returning. Report complete=false for missing geometry; do not simplify the drawing to its exterior rectangle. An image with real interior rooms requires its interior wall topology. The second image labels original ink/solid-band IDs. Following detail crops separately label EVERY face-pair, fragment and wall-fragment ID, previously invisible in the overview. These generated IDs and leader lines are not source geometry. SOURCE DATA coordinates locate candidates in the full original image, not within crop coordinates.'});
   diagnostics.wallClassification=selection;validateClassification(graph,selection);
   const topology=assemblePixelTopology(graph,selection);diagnostics.pixelTopology=topology;
   const furniture=selection.nonWalls.filter(s=>s.reason==='furniture');topology.symbolEnclosures=[];

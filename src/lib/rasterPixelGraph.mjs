@@ -2,7 +2,8 @@
 // All coordinates originate in source pixels; classifiers only select IDs.
 import sharp from 'sharp';
 import {rasterInkContrast} from './rasterInkContrast.mjs';
-export const PIXEL_GRAPH_VERSION='pixel-line-graph-v3-openings';
+import {rasterContentExtent} from './rasterContentExtent.mjs';
+export const PIXEL_GRAPH_VERSION='pixel-line-graph-v4-content-extent';
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const cross=(a,b)=>a.x*b.y-a.y*b.x;
 const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y});
@@ -74,10 +75,11 @@ export async function extractRasterPixelGraph(buffer){
   for(let i=0;i<tone.length;i++){const r=data[i*channels],g=data[i*channels+1],b=data[i*channels+2];chroma[i]=Math.max(r,g,b)-Math.min(r,g,b);tone[i]=Math.round((r+g+b)/3);}
   const contrast=rasterInkContrast(tone,width,height);
   for(let i=0;i<mask.length;i++){mask[i]=chroma[i]<55&&contrast.mask[i]?1:0;coloredMask[i]=chroma[i]>=55&&(tone[i]<210||contrast.strokeMask[i])?1:0;}
-  const ink=[...detectInkSegments(mask,width,height),...detectInkSegments(coloredMask,width,height).map(s=>({...s,id:`color_${s.id}`,colorEvidence:true}))];
+  const contentExtent=rasterContentExtent(Uint8Array.from(mask,(v,i)=>v||coloredMask[i]),width,height),scalePixels=contentExtent.scalePixels;
+  const ink=[...detectInkSegments(mask,width,height,{minLength:Math.max(18,scalePixels*.035)}),...detectInkSegments(coloredMask,width,height,{minLength:Math.max(18,scalePixels*.035)}).map(s=>({...s,id:`color_${s.id}`,colorEvidence:true}))];
   // Long-line voting misses short door jambs and can pair unrelated faces.
   // Erosion suppresses thin strokes; measure filled bands in original pixels.
-  const eroded=new Uint8Array(mask.length),maximumBand=Math.max(12,Math.min(width,height)*.035);
+  const eroded=new Uint8Array(mask.length),maximumBand=Math.max(12,scalePixels*.035);
   for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){const i=y*width+x;let full=true;for(let dy=-1;dy<=1&&full;dy++)for(let dx=-1;dx<=1;dx++)if(!mask[i+dy*width+dx]){full=false;break;}eroded[i]=full?1:0;}
   const bands=[];
   for(const s of detectInkSegments(eroded,width,height,{minLength:6,maxLines:512}).sort((a,b)=>b.lengthPixels-a.lengthPixels)){
@@ -94,7 +96,7 @@ export async function extractRasterPixelGraph(buffer){
   }
   ink.push(...bands);
   const candidates=ink.map(s=>({...s,sourceIds:[s.id,...(s.boundarySourceIds||[])],kind:s.centerlineEvidence?'solid_band':'stroke'}));
-  const maxThickness=Math.max(12,Math.min(width,height)*.035),sourceCuts=new Map(ink.map(s=>[s.id,[0,1]])),pairOptions=[];
+  const maxThickness=Math.max(12,scalePixels*.035),sourceCuts=new Map(ink.map(s=>[s.id,[0,1]])),pairOptions=[];
   for(let i=0;i<ink.length;i++)for(let j=i+1;j<ink.length;j++){
     const a=ink[i],b=ink[j],u=sub(a.end,a.start),v=sub(b.end,b.start),length=dist(a.start,a.end);
     if(a.centerlineEvidence||b.centerlineEvidence)continue;
@@ -157,13 +159,13 @@ export async function extractRasterPixelGraph(buffer){
     const a=candidates[i],b=candidates[j];if(a.sourceIds.some(id=>b.sourceIds.includes(id)))continue;
     if(project(b.start,a.start,a.end).distance>2.5||project(b.end,a.start,a.end).distance>2.5)continue;
     const options=[[a.start,b.start],[a.start,b.end],[a.end,b.start],[a.end,b.end]].sort((p,q)=>dist(...p)-dist(...q)),[start,end]=options[0],length=dist(start,end);
-    if(length<6||length>Math.min(width,height)*.4)continue;
+    if(length<6||length>scalePixels*.4)continue;
     const ta=project(start,a.start,a.end).t,tb=project(end,a.start,a.end).t;
     if(Math.min(ta,tb)<1-.01&&Math.max(ta,tb)>.01&&tb>=0&&tb<=1)continue;
     gaps.push({id:`gap${gaps.length+1}`,a:a.id,b:b.id,start,end,lengthPixels:Math.round(length),support:'opening_hypothesis_not_wall'});
   }
   if(candidates.length>700||gaps.length>700)throw error('PIXEL_GRAPH_TOO_COMPLEX','Opening hypotheses exceed the classification budget; nothing was truncated.');
-  return{version:PIXEL_GRAPH_VERSION,imageWidth:width,imageHeight:height,ink,candidates,gaps};
+  return{version:PIXEL_GRAPH_VERSION,imageWidth:width,imageHeight:height,contentExtent,ink,candidates,gaps};
 }
 
 // Assemble a planar graph only from explicitly selected candidates/gaps.
@@ -199,7 +201,7 @@ export function assemblePixelTopology(graph,selection){
     lines.push({...gap,type:hosts[0].type,kind:'opening',id:gap.id});openings.push({...gap,type:item.type,hingeSide:gap.sourceDoor?.hingeSide||item.hingeSide||'unknown',swingDirection:gap.sourceDoor?.swingDirection||item.swingDirection||'unknown'});
   }
   if(lines.length<3)throw error('INCOMPLETE_PIXEL_SELECTION','Fewer than three supported wall runs were selected.');
-  const tolerance=Math.max(2,Math.min(6,Math.max(Math.min(graph.imageWidth,graph.imageHeight)*.004,...lines.map(s=>(s.thicknessPixels||0)/2))));
+  const tolerance=Math.max(2,Math.min(6,Math.max((graph.contentExtent?.scalePixels||Math.min(graph.imageWidth,graph.imageHeight))*.004,...lines.map(s=>(s.thicknessPixels||0)/2))));
   const cuts=lines.map(s=>[{t:0,p:s.start},{t:1,p:s.end}]);
   for(let i=0;i<lines.length;i++)for(let j=i+1;j<lines.length;j++){
     const a=lines[i],b=lines[j],u=sub(a.end,a.start),v=sub(b.end,b.start),den=cross(u,v);
@@ -239,9 +241,9 @@ export function assemblePixelTopology(graph,selection){
   return{nodes,edges,regions,enclosures:cycles.filter(f=>f.signedArea<0).map((f,i)=>({id:`symbol${i+1}`,polygon:[...f.polygon].reverse()})),footprint:[...exterior.polygon].reverse(),lines,openings};
 }
 
-export function pixelGraphOverlay(graph){
+export function pixelGraphOverlay(graph,{layer='source'}={}){
   const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;');
-  const segments=graph.candidates.filter(c=>['stroke','solid_band'].includes(c.kind)).map(c=>`<g stroke="${c.kind==='solid_band'?'#e08012':'#087bbf'}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/><text x="${(c.start.x+c.end.x)/2}" y="${(c.start.y+c.end.y)/2-3}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`).join('');
+  const segments=graph.candidates.filter(c=>layer==='alternatives'?!['stroke','solid_band'].includes(c.kind):['stroke','solid_band'].includes(c.kind)).map((c,i)=>{const x=(c.start.x+c.end.x)/2,y=(c.start.y+c.end.y)/2,offset=layer==='alternatives'?-10-(i%4)*13:-3;return `<g stroke="${c.kind==='solid_band'?'#e08012':'#087bbf'}"><path d="M${c.start.x} ${c.start.y}L${c.end.x} ${c.end.y}"/>${layer==='alternatives'?`<path d="M${x} ${y}L${x} ${y+offset}" stroke-width=".5"/>`:''}<text x="${x}" y="${y+offset}" fill="#075a8a" stroke="white" stroke-width="2" paint-order="stroke" font-size="10">${esc(c.id)}</text></g>`;}).join('');
   const doors=graph.gaps.filter(g=>g.sourceDoor).map(g=>{
     const d=g.sourceDoor,h=d.start,dx=d.end.x-h.x,dy=d.end.y-h.y,theta=(d.swingDirection==='clockwise'?1:-1)*d.angleDegrees*Math.PI/180,tip={x:h.x+dx*Math.cos(theta)-dy*Math.sin(theta),y:h.y+dx*Math.sin(theta)+dy*Math.cos(theta)};
     return `<g stroke="#008030" stroke-width="2"><path d="M${h.x} ${h.y}L${d.end.x} ${d.end.y}M${h.x} ${h.y}L${tip.x} ${tip.y}M${d.end.x} ${d.end.y}A${d.widthPixels} ${d.widthPixels} 0 0 ${theta>0?1:0} ${tip.x} ${tip.y}"/><circle cx="${h.x}" cy="${h.y}" r="3" fill="#008030"/><text x="${h.x+4}" y="${h.y-6}" fill="#008030" stroke="white" stroke-width="2" paint-order="stroke" font-size="13">${esc(g.id)}</text></g>`;

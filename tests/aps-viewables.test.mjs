@@ -29,3 +29,25 @@ test('only DWG and DXF extraction prefer sheets; IFC and RVT retain native 3D pr
  for(const ext of ['dwg','dxf','ifc','rvt']){const urn=Buffer.from(`urn:adsk.objects:os.object:bucket/owner%2Fproject%2Fplan.${ext}`).toString('base64url');assert.equal(isPlanCadUrn(urn),['dwg','dxf'].includes(ext));}
  assert.equal(isPlanCadUrn('garbage'),false);
 });
+
+test('CAD model space wins over an earlier blank paper layout',()=>{
+ const layout={data:{type:'geometry',role:'2d',name:'Layout1'}},model={data:{type:'geometry',role:'2d',name:'Model'}};
+ assert.equal(selectApsGeometry({children:[layout,model]}),model);
+});
+test('CAD model space can be named on a parent SDK view node',()=>{
+ const parent={data:{name:'*Model_Space'}},model={data:{type:'geometry',role:'2d',name:'Top'},parent},layout={data:{type:'geometry',role:'2d',name:'Layout1'}};parent.children=[model];
+ assert.equal(selectApsGeometry({children:[layout,parent]}),model);
+});
+test('a partial SDK search cannot hide a model-space default behind a sheet',()=>{
+ const layout={data:{type:'geometry',role:'2d',name:'Layout1'}},model={data:{type:'geometry',role:'2d',name:'Model'}};
+ assert.equal(selectApsGeometry({search:()=>[layout],getDefaultGeometry:()=>model}),model);
+});
+test('native 3D priority and sheet-only drawings remain loadable',()=>{
+ const sheet={data:{type:'geometry',role:'2d',name:'Sheet1'}},model={data:{type:'geometry',role:'2d',name:'Model'}},native={data:{type:'geometry',role:'3d',name:'Default'}};
+ assert.equal(selectApsGeometry({children:[sheet,model,native]},{prefer2D:false}),native);
+ assert.equal(selectApsGeometry({children:[sheet]}),sheet);
+});
+test('a Layout child does not inherit model-space identity from its generic parent',()=>{
+ const parent={data:{name:'Model'}},sheet={data:{type:'geometry',role:'2d',name:'Layout1'},parent},actual={data:{type:'geometry',role:'2d',name:'*Model_Space'}};parent.children=[sheet];
+ assert.equal(selectApsGeometry({children:[parent,actual]}),actual);
+});

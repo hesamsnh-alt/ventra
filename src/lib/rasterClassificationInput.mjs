@@ -1,0 +1,31 @@
+// Semantic selection operates on measured source geometry. Alternative faces
+// are not independent physical walls and do not need hundreds of negative IDs.
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function intervalOn(line,source){
+ const dx=source.end.x-source.start.x,dy=source.end.y-source.start.y,length=distance(source.start,source.end);
+ if(!length||!distance(line.start,line.end))return null;
+ const project=p=>({t:((p.x-source.start.x)*dx+(p.y-source.start.y)*dy)/(length*length),d:Math.abs((p.x-source.start.x)*dy-(p.y-source.start.y)*dx)/length});
+ const a=project(line.start),b=project(line.end),angle=Math.abs((line.end.x-line.start.x)*dy-(line.end.y-line.start.y)*dx)/(length*distance(line.start,line.end));
+ if(angle>.025||Math.max(a.d,b.d)>Math.max(2.5,(source.thicknessPixels||0)/2+1.5))return null;
+ return[Math.max(0,Math.min(a.t,b.t)),Math.min(1,Math.max(a.t,b.t))];
+}
+export function measuredSpanCoverage(source,lines){
+ const spans=lines.map(line=>intervalOn(line,source)).filter(s=>s&&s[1]>s[0]).sort((a,b)=>a[0]-b[0]);let covered=0,end=0;
+ for(const [a,b]of spans){covered+=Math.max(0,b-Math.max(a,end));end=Math.max(end,b);}return covered;
+}
+export function requiredSourceBands(graph){
+ // Thin lettering and frame strokes are not promoted to mandatory walls.
+ // Thick observations still need a wall selection OR an explicit non-wall
+ // explanation; completeness alone cannot silently throw them away.
+ return graph.candidates.filter(c=>c.kind==='solid_band'&&c.thicknessPixels>=5&&distance(c.start,c.end)>=6);
+}
+export function compactPixelClassificationInput(graph,sourceOpenings){
+ return{candidates:graph.candidates.map(c=>({id:c.id,kind:c.kind,start:c.start,end:c.end,...(c.thicknessPixels?{thicknessPixels:c.thicknessPixels}:{}),...(c.colorEvidence?{colorEvidence:true}:{}),...(c.filledBandRatio!==undefined?{filledBandRatio:c.filledBandRatio}:{}),...(c.kind==='face_pair'||c.kind==='stroke_fragment'||c.kind==='observed_wall_fragment'?{sourceIds:c.sourceIds}:{})})),
+  gaps:graph.gaps.map(g=>({id:g.id,a:g.a,b:g.b,start:g.start,end:g.end,support:g.support,...(g.endpointHosts?{endpointHosts:g.endpointHosts}:{}),...(g.sourceDoor?{sourceDoor:g.sourceDoor}:{})})),
+  sourceDoors:sourceOpenings.doors,requiredSourceBandIds:requiredSourceBands(graph).map(c=>c.id),
+  selectionContract:'complete=true explicitly confirms all unselected alternatives are non-architectural or redundant. List nonWalls for furniture enclosures and any required source band not represented by selected walls.'};
+}
+export function validateSourceBandCoverage(graph,selection){
+ const selectedIds=new Set(selection.walls.map(w=>w.candidateId)),selected=graph.candidates.filter(c=>selectedIds.has(c.id)),reviewed=new Set((selection.nonWalls||[]).map(c=>c.candidateId));
+ return requiredSourceBands(graph).filter(c=>!reviewed.has(c.id)&&measuredSpanCoverage(c,selected)<.9).map(c=>c.id);
+}

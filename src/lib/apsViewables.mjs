@@ -15,14 +15,33 @@ export function apsGeometryNodes(root){
  // Search and default are SDK compatibility fallbacks, not alternatives to
  // traversing the tree. A partial/empty search must not hide a populated layout.
  try{for(const n of root.search?.({type:'geometry'})||[])add(n);}catch{}
- if(!found.size){try{add(root.getDefaultGeometry?.());}catch{}}
+ try{add(root.getDefaultGeometry?.());}catch{}
  return [...found].filter(n=>{
   const parents=new Set();for(let p=n?.parent;p&&!parents.has(p);p=p.parent){parents.add(p);if(['failed','timeout'].includes(String(data(p).status||'').toLowerCase()))return false;}return true;
  });
 }
 export function selectApsGeometry(root,{prefer2D=true}={}){
  const nodes=apsGeometryNodes(root);
- return nodes.find(n=>role(n)===(prefer2D?'2d':'3d'))||nodes[0]||null;
+ const preferred=prefer2D?'2d':'3d';
+ // CAD model space contains drawing entities. The first 2D geometry can
+ // instead be an empty print layout (a successfully loaded white sheet).
+ // Native IFC/RVT selection keeps its existing 3D-first ordering.
+ if(prefer2D){
+  const modelNodes=nodes.filter(apsIsModelSpace);
+  const model=modelNodes.find(n=>role(n)===preferred)||modelNodes[0];
+  if(model)return model;
+ }
+ return nodes.find(n=>role(n)===preferred)||nodes[0]||null;
+}
+export function apsIsModelSpace(node){
+ const seen=new Set();
+ for(let n=node;n&&!seen.has(n);n=n.parent){
+  seen.add(n);const d=data(n),name=String(d.name||'').trim();
+  if(/^(?:\*?model[ _-]*space|model|模型空间|模型空間)$/i.test(name)||d.isModelSpace===true)return true;
+  // Do not let a generic parent called Model override a named paper layout.
+  if(/^(?:layout(?:[ _-]*\d+)?|\*?paper[ _-]*space(?:\d+)?|sheet(?:[ _-]*\d+)?)$/i.test(name))return false;
+ }
+ return false;
 }
 export function apsManifestGeometry(manifest){
  const views=[],messages=[];const visit=(n,blocked=false)=>{
