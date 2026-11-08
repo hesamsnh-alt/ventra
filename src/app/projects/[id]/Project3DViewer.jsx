@@ -6246,7 +6246,8 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
     ? (swingValue === "clockwise" ? -1 : 1)
     : ["right", "clockwise", "cw", "out"].includes(swingValue) ? -1 : 1;
   const requestedAngle = Number(opening.openAngleDegrees);
-  const angleDegrees = Number.isFinite(requestedAngle) ? Math.max(0,Math.min(90,requestedAngle)) : preserveTrace ? 60 : 0;
+  const maximumAngle=preserveTrace&&opening.swingEvidence?.status==='observed'?170:90;
+  const angleDegrees = Number.isFinite(requestedAngle) ? Math.max(0,Math.min(maximumAngle,requestedAngle)) : preserveTrace ? 60 : 0;
   const openAngle = closedAngle + sign * angleDegrees * Math.PI / 180;
 
   const leafWidth = preserveTrace || opening.preserveSourceDimensions ? openingWidth * 0.94 : Math.max(0.52, openingWidth * 0.94);

@@ -12,6 +12,15 @@ test('source scene immutable; beds retain position and dimensions',()=>{const or
 test('presentation is idempotent and rug not duplicated',()=>{const once=c.ventraPresentationAssets(scene);const twice=c.ventraPresentationAssets({...scene,assets:once});assert.equal(JSON.stringify(once),JSON.stringify(twice));});
 test('each uploaded bedroom receives one compact dressing table with mirror',()=>{const out=c.ventraPresentationAssets(scene);const v=out.filter(a=>a.type==='dressing_table');assert.equal(v.length,2);assert.equal(new Set(v.map(a=>a.roomId)).size,2);});
 test('display adds no unsolicited armchair and leaves original seating untouched',()=>{const out=c.ventraPresentationAssets(scene);assert.equal(out.filter(a=>a.type==='armchair').length,scene.assets.filter(a=>a.type==='armchair').length);});
+test('observed raster swing reaches the actual Three door leaf with the single image-Y reflection',()=>{
+ for(const hinge of ['start','end'])for(const swing of ['clockwise','counterclockwise']){
+  const opening={start:{x:0,y:0},end:{x:1,y:0},height:2.1,hinge,swing,preserveRasterTrace:true,openAngleDegrees:120,swingEvidence:{status:'observed'}};
+  const group=c.ventraCreateDoorLeafVisual({THREE,opening,material:new THREE.MeshBasicMaterial(),wallHeight:3.2}),leaf=group.children.find(m=>m.userData.ventraType==='schematic_door_panel');
+  const expected=(hinge==='end'?Math.PI:0)+(swing==='clockwise'?-1:1)*120*Math.PI/180;
+  assert.ok(Math.abs(leaf.rotation.z-expected)<1e-9);
+  const hingeX=hinge==='end'?1:0;assert.ok(Math.abs(leaf.position.x-(hingeX+Math.cos(expected)*.47))<1e-9);assert.ok(Math.abs(leaf.position.y-Math.sin(expected)*.47)<1e-9);
+ }
+});
 test('viewer has no geometry repair call on load, refresh or render',()=>{assert.doesNotMatch(source,/repairOpenPlanScene/);});
 
 const current=JSON.parse(readFileSync(new URL('fixtures/source-20260927-110042.json',import.meta.url)));
