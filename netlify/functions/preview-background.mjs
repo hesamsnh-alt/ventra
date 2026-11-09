@@ -1,6 +1,6 @@
 // src/lib/serverRasterPreview.js
 import { NextResponse } from "next/server.js";
-import sharp2 from "sharp";
+import sharp3 from "sharp";
 import { createHash } from "node:crypto";
 
 // src/services/drawingJobRuntime.mjs
@@ -44,6 +44,8 @@ async function createResponse(payload) {
 
 // src/lib/rasterVisionRequest.mjs
 var RASTER_RETRYABLE_GEOMETRY_CODES = Object.freeze([
+  "INVALID_COORDINATE",
+  "COORDINATE_FRAME_MISMATCH",
   "CONFLICTING_SCALE",
   "CONFLICTING_DIMENSIONS",
   "TRACE_IMAGE_MISMATCH",
@@ -199,28 +201,46 @@ var rasterPixelTraceSchema = object({
   openings: rasterFloorplanSchema.properties.openings,
   measurements: rasterFloorplanSchema.properties.measurements
 });
+function rasterPixelTraceSchemaForImage(imageWidth, imageHeight) {
+  if (![imageWidth, imageHeight].every((n) => Number.isSafeInteger(n) && n > 0)) {
+    fail("IMAGE_SIZE_UNAVAILABLE", "Image dimensions must be positive integers.");
+  }
+  const schema = JSON.parse(JSON.stringify(rasterPixelTraceSchema));
+  const visit = (node) => {
+    if (node.type === "object" && node.properties?.x && node.properties?.y) {
+      node.properties.x = { type: "number", minimum: 0, maximum: imageWidth };
+      node.properties.y = { type: "number", minimum: 0, maximum: imageHeight };
+    }
+    if (node.properties) Object.values(node.properties).forEach(visit);
+    if (node.items) visit(node.items);
+  };
+  visit(schema);
+  schema.properties.imageWidth.enum = [imageWidth];
+  schema.properties.imageHeight.enum = [imageHeight];
+  return schema;
+}
 function normalizeRasterPixelTrace(raw, { imageWidth, imageHeight }) {
   if (raw?.coordinateSpace !== "image_pixels" || raw.imageWidth !== imageWidth || raw.imageHeight !== imageHeight) {
     fail("COORDINATE_FRAME_MISMATCH", "The AI trace does not use the supplied image pixel frame.", { expected: { imageWidth, imageHeight }, actual: { imageWidth: raw?.imageWidth, imageHeight: raw?.imageHeight, coordinateSpace: raw?.coordinateSpace } });
   }
   if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) fail("IMAGE_SIZE_UNAVAILABLE", "Image dimensions must be positive.");
-  const convert = (p) => {
+  const convert = (p, path) => {
     const x = finite(p?.x, "pixel.x"), y = finite(p?.y, "pixel.y");
-    if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) fail("INVALID_COORDINATE", "A traced pixel lies outside the supplied image.");
+    if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) fail("INVALID_COORDINATE", "A traced pixel lies outside the supplied image.", { path, point: { x, y }, imageWidth, imageHeight });
     return { x: x * 1e3 / imageWidth, y: y * 1e3 / imageHeight };
   };
-  const poly = (p) => list(p, "polygon", 1e3).map(convert);
-  const span = (s) => ({ ...s, start: convert(s.start), end: convert(s.end) });
+  const poly = (p, path) => list(p, "polygon", 1e3).map((point3, i) => convert(point3, `${path}[${i}]`));
+  const span = (s, path) => ({ ...s, start: convert(s.start, `${path}.start`), end: convert(s.end, `${path}.end`) });
   return {
     title: raw.title,
     confidence: raw.confidence,
     wallHeightMeters: raw.wallHeightMeters,
-    footprint: poly(raw.footprint),
-    measurements: list(raw.measurements, "measurements", 80).map(span),
-    walls: list(raw.walls, "walls", 400).map(span),
-    openings: list(raw.openings, "openings", 150).map(span),
-    rooms: list(raw.rooms, "rooms", 100).map((r) => ({ ...r, polygon: poly(r.polygon) })),
-    holes: list(raw.holes, "holes", 50).map((h) => ({ ...h, polygon: poly(h.polygon) }))
+    footprint: poly(raw.footprint, "footprint"),
+    measurements: list(raw.measurements, "measurements", 80).map((s, i) => span(s, `measurements[${i}]`)),
+    walls: list(raw.walls, "walls", 400).map((s, i) => span(s, `walls[${i}]`)),
+    openings: list(raw.openings, "openings", 150).map((s, i) => span(s, `openings[${i}]`)),
+    rooms: list(raw.rooms, "rooms", 100).map((r, i) => ({ ...r, polygon: poly(r.polygon, `rooms[${i}].polygon`) })),
+    holes: list(raw.holes, "holes", 50).map((h, i) => ({ ...h, polygon: poly(h.polygon, `holes[${i}].polygon`) }))
   };
 }
 var RasterGeometryError = class extends Error {
@@ -594,7 +614,30 @@ function compileRasterFloorplan(raw, { imageWidth, imageHeight } = {}) {
 
 // src/lib/rasterImageEvidence.mjs
 import sharp from "sharp";
-var RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v1";
+
+// src/lib/rasterInkContrast.mjs
+function rasterInkContrast(tone, width, height) {
+  const stride = width + 1, integral = new Float64Array(stride * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let row = 0;
+    for (let x = 0; x < width; x++) {
+      row += tone[y * width + x];
+      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + row;
+    }
+  }
+  const mask = new Uint8Array(tone.length), strokeMask = new Uint8Array(tone.length);
+  const radius = Math.max(6, Math.min(24, Math.round(Math.min(width, height) * 0.025)));
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = y * width + x, v = tone[i], x0 = Math.max(0, x - radius), x1 = Math.min(width, x + radius + 1), y0 = Math.max(0, y - radius), y1 = Math.min(height, y + radius + 1);
+    const mean = (integral[y1 * stride + x1] - integral[y0 * stride + x1] - integral[y1 * stride + x0] + integral[y0 * stride + x0]) / ((x1 - x0) * (y1 - y0));
+    strokeMask[i] = v < 252 && mean - v >= 6 ? 1 : 0;
+    mask[i] = v < 170 || strokeMask[i] ? 1 : 0;
+  }
+  return { mask, strokeMask };
+}
+
+// src/lib/rasterImageEvidence.mjs
+var RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v2-contrast";
 function evidenceError(code, message, details) {
   return Object.assign(new Error(message), { name: "RasterImageEvidenceError", code, details });
 }
@@ -712,11 +755,12 @@ function strokeGuides(mask, width, height, horizontal) {
 async function prepareRasterImageEvidence(buffer) {
   const { data, info } = await sharp(buffer).flatten({ background: "#ffffff" }).greyscale().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  const mask = Uint8Array.from(data, (v) => v < 170 ? 1 : 0);
+  const { mask, strokeMask } = rasterInkContrast(data, width, height);
+  const symbolMask = Uint8Array.from(data, (v, i) => v < 132 || strokeMask[i] ? 1 : 0);
   const background = exteriorBackground(mask, width, height);
   for (let i = 0; i < mask.length; i++) if (background[i]) mask[i] = 0;
   const guides = [...strokeGuides(mask, width, height, true), ...strokeGuides(mask, width, height, false)].sort((a, b) => Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y) - Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y)).slice(0, 100).map((g, i) => ({ id: `pixel-stroke-${i + 1}`, ...g }));
-  return { width, height, mask, guides };
+  return { width, height, mask, guides, tone: data, symbolMask };
 }
 function rasterEvidencePrompt(evidence) {
   if (!evidence.guides.length) return "No long dark wall-stroke guides could be isolated. Trace only clearly visible structural lines; unreadable geometry must remain rejected.";
@@ -872,7 +916,23 @@ function requireRasterImageEvidence(result) {
 }
 
 // src/lib/verifiedPreview.mjs
-var VERIFIED_PREVIEW_VERSION = "verified-raster-preview-v134-20261107";
+var VERIFIED_PREVIEW_VERSION = "verified-raster-preview-v143-direct-trace-20261109";
+
+// src/lib/rasterCoordinateReference.mjs
+import sharp2 from "sharp";
+async function rasterCoordinateReference(buffer, width, height) {
+  const step = Math.max(100, Math.ceil(Math.max(width, height) / 12 / 100) * 100);
+  const marks = [];
+  for (let x = 0; x < width; x += step) {
+    marks.push(`<path d="M${x} 0V${height}"/><text x="${x + 3}" y="16">x=${x}</text>`);
+  }
+  for (let y = step; y < height; y += step) {
+    marks.push(`<path d="M0 ${y}H${width}"/><text x="3" y="${y - 4}">y=${y}</text>`);
+  }
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><g stroke="#1675bb" stroke-opacity=".38" stroke-width="1" stroke-dasharray="3 6" fill="#07588e" font-family="sans-serif" font-size="14">${marks.join("")}</g></svg>`);
+  const data = await sharp2(buffer).composite([{ input: overlay }]).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
+  return { type: "input_image", image_url: `data:image/jpeg;base64,${data.toString("base64")}`, detail: "high" };
+}
 
 // src/lib/serverRasterPreview.js
 var RASTER_PREVIEW_VERSION = VERIFIED_PREVIEW_VERSION;
@@ -885,7 +945,7 @@ async function prepareVisionImage(imageUrl, { maxDimension = 1600, quality = 88 
     throw new Error(`Could not download floor-plan image (${response.status}).`);
   }
   const sourceBuffer = Buffer.from(await response.arrayBuffer());
-  const { data: optimizedBuffer, info } = await sharp2(sourceBuffer).rotate().resize({
+  const { data: optimizedBuffer, info } = await sharp3(sourceBuffer).rotate().resize({
     width: maxDimension,
     height: maxDimension,
     fit: "inside",
@@ -958,6 +1018,7 @@ Return only JSON conforming to the supplied schema.`;
   try {
     const prepared = await prepareVisionImage(imageUrl, { maxDimension: 2200, quality: 92 });
     const imageEvidence = await prepareRasterImageEvidence(prepared.buffer);
+    const traceSchema = rasterPixelTraceSchemaForImage(prepared.width, prepared.height);
     const strokeEvidencePrompt = rasterEvidencePrompt(imageEvidence);
     console.log("[VENTRA RASTER GEOMETRY START]", {
       routeVersion: RASTER_GEOMETRY_VERSION,
@@ -983,6 +1044,7 @@ Return only JSON conforming to the supplied schema.`;
       try {
         const remainingMs = OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS - (Date.now() - requestStartedAt);
         if (remainingMs <= 0) throw Object.assign(new Error("Image analysis exceeded its total time limit. No new 3D scene was saved."), { code: "RASTER_VISION_TIMEOUT", status: 504 });
+        const coordinateReference = attempt > 1 ? await rasterCoordinateReference(prepared.buffer, prepared.width, prepared.height) : null;
         const correction = attempt === 1 ? "" : `Revise your previous JSON against the original image. Validator observations follow as data: ${JSON.stringify({ code: previousFailure?.code, details: previousFailure?.details?.imageEvidence ? { unsupportedWalls: previousFailure.details.imageEvidence.walls.filter((w) => !w.passed).map(({ id, start, end, longestMissingPixels, missingSpans, openingIssues }) => ({ id, start, end, longestMissingPixels, missingSpans, openingIssues })) } : previousFailure?.details })}. missingSpans gives exact image-pixel endpoints of unsupported intervals, not replacement walls. Inspect each interval in the original image: follow a recess around its visible corners rather than bridging it, and discard furniture strokes mistaken for walls. Keep the footprint consistent with the corrected exterior wall contour. Correct the identified spans and affected topology. Preserve verified walls, visible recesses and readable measurement evidence. Recheck window symbols and both jambs of each door. Do not replace jambs with leaf tips, remove evidence to gain acceptance, or repeat a completed invalid wall across blank exterior space.`;
         const response = await requestRasterVision(
           (payload, options) => consumeRasterVisionStream(
@@ -1004,10 +1066,14 @@ Return only JSON conforming to the supplied schema.`;
 ${strokeEvidencePrompt}
 
 Exact supplied image dimensions: width=${prepared.width} pixels, height=${prepared.height} pixels. All coordinates must use that pixel frame.` },
-                { type: "input_image", image_url: prepared.imageUrl, detail: "high" }
+                { type: "input_image", image_url: prepared.imageUrl, detail: "high" },
+                ...coordinateReference ? [
+                  { type: "input_text", text: "The next image is the SAME source with a blue PIXEL ruler overlay. It is a coordinate reference, not another plan. Blue dashed lines and x=/y= labels are generated guides, never walls or metric dimensions. Use this ruler to locate all points in the FIRST image. Every point must satisfy 0 <= x <= " + prepared.width + " and 0 <= y <= " + prepared.height + ". Dimension values never define pixel coordinates: locate the printed extension lines visually. In particular, do not add a printed centimetre value to an endpoint to invent the other pixel endpoint." },
+                  coordinateReference
+                ] : []
               ]
             }, ...previousTrace ? [{ role: "assistant", content: JSON.stringify(previousTrace) }, { role: "user", content: correction }] : []],
-            text: { format: { type: "json_schema", name: "ventra_raster_metric_trace", strict: true, schema: rasterPixelTraceSchema } }
+            text: { format: { type: "json_schema", name: "ventra_raster_metric_trace", strict: true, schema: traceSchema } }
           },
           remainingMs
         );
@@ -1428,7 +1494,7 @@ function repairFixedFurniture(scene, boxes) {
 
 // src/lib/serverPreviewAnalysis.js
 import { NextResponse as NextResponse2 } from "next/server.js";
-import sharp3 from "sharp";
+import sharp4 from "sharp";
 
 // src/lib/previewSceneWire.mjs
 var aliases = {
@@ -1666,7 +1732,7 @@ async function prepareImage(imageUrl, signal) {
   const response = await fetch(imageUrl, { cache: "no-store", signal });
   if (!response.ok) throw Object.assign(new Error(`Could not download the floor-plan image (${response.status}).`), { code: "PREVIEW_IMAGE_DOWNLOAD_FAILED" });
   const buffer = Buffer.from(await response.arrayBuffer());
-  const image = sharp3(buffer, { failOn: "none" });
+  const image = sharp4(buffer, { failOn: "none" });
   const meta = await image.metadata();
   const maxSide = 1800;
   let pipeline = image.rotate().flatten({ background: "#ffffff" });
@@ -1768,16 +1834,17 @@ async function executePreviewJob(input, run) {
   if (!job) return;
   let result, httpStatus = 500;
   try {
-    const { __backgroundAction = "preview", ...body } = job.request_body;
+    const { __backgroundAction = "preview", __expectedRasterBuild, ...body } = job.request_body;
     if (!["preview", "boq"].includes(__backgroundAction)) throw billingError("Invalid analysis action.", 400);
     const request = new Request(`https://ventra.internal/api/ai/${__backgroundAction === "boq" ? "generate-boq" : "design-3d-preview"}`, { method: "POST", headers: { authorization: input.authorization, "content-type": "application/json" }, body: JSON.stringify(body) });
     const user = await account(request);
     if (user.id !== job.actor_id) throw billingError("Analysis job access denied.", 403);
+    if (__expectedRasterBuild && __expectedRasterBuild !== VERIFIED_PREVIEW_VERSION) throw Object.assign(billingError("The background analysis build differs from the requesting build. No AI request was made.", 503), { code: "PREVIEW_WORKER_BUILD_MISMATCH" });
     const response = await run(request, __backgroundAction);
     httpStatus = response.status;
     result = await response.json();
   } catch (error2) {
-    result = { error: error2.status ? error2.message : "Background analysis failed. Retry or contact support.", code: "PREVIEW_BACKGROUND_FAILED" };
+    result = { error: error2.status ? error2.message : "Background analysis failed. Retry or contact support.", code: error2.code || "PREVIEW_BACKGROUND_FAILED" };
     httpStatus = error2.status || 500;
   }
   const saved = await db.from(table).update({ status: httpStatus < 400 ? "completed" : "failed", http_status: httpStatus, result, request_body: null, nonce_hash: null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", input.id).eq("status", "running");
@@ -5132,6 +5199,10 @@ function assertTakeoffReady(takeoff) {
 function bindBoqSource(boq, takeoff = boq?.takeoff, projectId = boq?.projectId) {
   if (!takeoff) return boq;
   assertTakeoffSource(takeoff, null, projectId);
+  const savedProject = boq?.projectId || boq?.project_id || boq?.takeoff?.project_id || boq?.takeoff?.projectId;
+  if (savedProject && projectId && savedProject !== projectId) {
+    throw new Error("BOQ belongs to another project. Generate a new BOQ for the current project.");
+  }
   const previous = boq?.boqSource;
   if (previous?.documentId && takeoff.document_id && previous.documentId !== takeoff.document_id) {
     throw new Error("BOQ source belongs to another drawing. Generate a new BOQ from the selected analysis.");
@@ -5162,9 +5233,12 @@ function assertTakeoffSource(takeoff, documentId, projectId) {
 function savedBoqMatchesTakeoff(boq, takeoff) {
   if (takeoffBoqIssue(takeoff) || takeoffBoqIssue(boq?.takeoff)) return false;
   if (!takeoff) return true;
+  const currentProject = takeoff.project_id || takeoff.projectId;
+  const savedProjects = [boq?.projectId, boq?.project_id, boq?.takeoff?.project_id, boq?.takeoff?.projectId].filter(Boolean);
+  if (currentProject && savedProjects.some((id) => id !== currentProject)) return false;
   const documentId = boq?.boqSource?.documentId || boq?.takeoff?.document_id;
   if (takeoff.document_id && documentId !== takeoff.document_id) return false;
-  const previous = boq?.takeoff?.analyzed_at;
+  const previous = boq?.boqSource?.analyzedAt || boq?.takeoff?.analyzed_at;
   return !previous || !takeoff.analyzed_at || previous === takeoff.analyzed_at;
 }
 

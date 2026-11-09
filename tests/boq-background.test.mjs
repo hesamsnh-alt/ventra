@@ -1,3 +1,4 @@
+import {previewWorkerOrigin} from '../src/lib/previewWorkerOrigin.mjs';
 import {assertTakeoffReady,bindBoqSource} from '../src/lib/takeoffSource.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +10,7 @@ const source=fs.readFileSync(new URL('../src/lib/serverPreviewJobs.js',import.me
 test('BOQ queue skips image processing and stores the server-selected action',async()=>{
  let stored,dispatched;
  const db={from:()=>({insert:async value=>{stored=value;return{};}})};
- const context=vm.createContext({table:'jobs',nonceHash:v=>createHash('sha256').update(v).digest('hex'),randomBytes,process:{env:{URL:'https://site.netlify.app'}},Response,URL,Date,AbortSignal,account:async()=>({id:'actor'}),commercialContext:async()=>({db}),previewImageFingerprint:()=>{throw Error('BOQ has no image')},commercialError:e=>{throw e},billingError:(m,status)=>Object.assign(Error(m),{status}),fetch:async(url,options)=>{dispatched=JSON.parse(options.body);return new Response(null,{status:202});}});
+ const context=vm.createContext({previewWorkerOrigin,table:'jobs',nonceHash:v=>createHash('sha256').update(v).digest('hex'),randomBytes,process:{env:{URL:'https://site.netlify.app'}},Response,URL,Date,AbortSignal,account:async()=>({id:'actor'}),commercialContext:async()=>({db}),previewImageFingerprint:()=>{throw Error('BOQ has no image')},commercialError:e=>{throw e},billingError:(m,status)=>Object.assign(Error(m),{status}),fetch:async(url,options)=>{dispatched=JSON.parse(options.body);return new Response(null,{status:202});}});
  vm.runInContext(source.slice(source.indexOf('export async function startPreviewJob'),source.indexOf('export async function readPreviewJob')).replace('export async function','async function')+'\nthis.start=startPreviewJob;',context);
  const r=await context.start({headers:new Headers({authorization:'Bearer token'}),text:async()=>JSON.stringify({projectId:'project',takeoff:{floor_area:100}})},'boq');
  assert.equal(r.status,202);assert.equal(stored.request_body.__backgroundAction,'boq');assert.equal(stored.request_body.takeoff.floor_area,100);assert.equal(dispatched.id,stored.id);assert.equal(dispatched.nonce.length,64);

@@ -40,8 +40,9 @@ export async function discoverRasterOpenings(buffer,graph,{includeComponentDiagn
  const{data,info}=await sharp(buffer).flatten({background:'#fff'}).removeAlpha().raw().toBuffer({resolveWithObject:true}),{width,height,channels}=info,tone=new Uint8Array(width*height),chroma=new Uint8Array(width*height);
  for(let i=0;i<tone.length;i++){const r=data[i*channels],g=data[i*channels+1],b=data[i*channels+2];tone[i]=Math.round((r+g+b)/3);chroma[i]=Math.max(r,g,b)-Math.min(r,g,b);}
  const{strokeMask}=rasterInkContrast(tone,width,height),mask=Uint8Array.from(tone,(v,i)=>chroma[i]<30&&(v<132||strokeMask[i])?1:0),curves=mask.slice();
+ const scalePixels=graph.contentExtent?.scalePixels||Math.min(width,height);
  const angle=s=>Math.atan2(s.end.y-s.start.y,s.end.x-s.start.x),angleDistance=(a,b)=>Math.acos(Math.min(1,Math.abs(Math.cos(a-b))));
- const directionGroups=[];for(const s of [...graph.ink].filter(s=>!s.colorEvidence&&s.lengthPixels>Math.min(width,height)*.18).sort((a,b)=>b.lengthPixels-a.lengthPixels)){const a=angle(s),group=directionGroups.find(g=>angleDistance(a,g.angle)<.06);if(group)group.weight+=s.lengthPixels;else directionGroups.push({angle:a,weight:s.lengthPixels});}
+ const directionGroups=[];for(const s of [...graph.ink].filter(s=>!s.colorEvidence&&s.lengthPixels>scalePixels*.18).sort((a,b)=>b.lengthPixels-a.lengthPixels)){const a=angle(s),group=directionGroups.find(g=>angleDistance(a,g.angle)<.06);if(group)group.weight+=s.lengthPixels;else directionGroups.push({angle:a,weight:s.lengthPixels});}
  const maxWeight=Math.max(0,...directionGroups.map(g=>g.weight)),directions=directionGroups.filter(g=>g.weight>=maxWeight*.15).map(g=>g.angle);
  // Remove measured straight wall/leaf strokes only in observed dominant
  // directions. Oblique fragments approximating an arc are not erased.
@@ -53,11 +54,11 @@ export async function discoverRasterOpenings(buffer,graph,{includeComponentDiagn
  for(let seed=0;seed<curves.length;seed++){
   if(!curves[seed]||visited[seed])continue;const queue=[seed],points=[];visited[seed]=1;
   for(let at=0;at<queue.length;at++){const i=queue[at],x=i%width,y=Math.floor(i/width);points.push({x,y});for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){if(!dx&&!dy)continue;const xx=x+dx,yy=y+dy,j=yy*width+xx;if(xx>=0&&yy>=0&&xx<width&&yy<height&&curves[j]&&!visited[j]){visited[j]=1;queue.push(j);}}}
-  if(points.length<6||points.length>Math.min(width,height)*5)continue;
+  if(points.length<6||points.length>scalePixels*5)continue;
   const box={x0:Math.min(...points.map(p=>p.x)),y0:Math.min(...points.map(p=>p.y)),x1:Math.max(...points.map(p=>p.x)),y1:Math.max(...points.map(p=>p.y))};clusters.push(box);
-  if(points.length<16)continue;const initial=fitCircle(points),circles=initial&&initial.residual<=1.5?[initial]:robustArcs(points,Math.min(width,height)*.28);
+  if(points.length<16)continue;const initial=fitCircle(points),circles=initial&&initial.residual<=1.5?[initial]:robustArcs(points,scalePixels*.28);
   if(includeComponentDiagnostics)componentDiagnostics.push({count:points.length,box,circles});
-  for(const circle of circles){if(!circle||circle.radius<12||circle.radius>Math.min(width,height)*.28||circle.residual>1.5||circle.span<Math.PI*.2||circle.span>Math.PI*.85)continue;arcs.push({...circle,pixelCount:circle.pixelCount||points.length});}
+  for(const circle of circles){if(!circle||circle.radius<12||circle.radius>scalePixels*.28||circle.residual>1.5||circle.span<Math.PI*.2||circle.span>Math.PI*.85)continue;arcs.push({...circle,pixelCount:circle.pixelCount||points.length});}
  }
  const near=(p,r=1)=>{for(let dx=-r;dx<=r;dx++)for(let dy=-r;dy<=r;dy++){const x=Math.round(p.x+dx),y=Math.round(p.y+dy);if(x>=0&&y>=0&&x<width&&y<height&&mask[y*width+x])return true;}return false;};
  const doors=[],symbolDiagnostics=[],optionDiagnostics=[];
