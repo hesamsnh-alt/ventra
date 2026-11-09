@@ -1,0 +1,29 @@
+name: Ventra image-to-3D isolated QA
+on:
+  push:
+    branches:
+      - fix/raster-complexity-diagnostics-20261109
+  workflow_dispatch:
+jobs:
+  image-raster-offline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ''
+      APS_CLIENT_SECRET: ''
+      STRIPE_SECRET_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Image graph regression tests
+        run: node --test tests/raster-photo-rescue.test.mjs tests/raster-single-role-classification.test.mjs tests/preview-image-origin.test.mjs
+      - name: All existing offline tests
+        run: npm run test:offline
+      - name: Production compilation (not deployment)
+        run: npm run build -- --webpack
