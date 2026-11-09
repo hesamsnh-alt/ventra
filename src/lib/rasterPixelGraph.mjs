@@ -71,7 +71,7 @@ export function detectInkSegments(mask,width,height,{minLength=Math.max(18,Math.
 // A fallback for photographed plans whose uneven illumination is mistaken for
 // thousands of physical strokes. Keep the exact source pixel frame; never
 // remove or invent a wall based on the generated candidate count.
-function photographedInkMasks(tone,chroma,width,height){
+export function photographedInkMasks(tone,chroma,width,height){
   const stride=width+1,integral=new Float64Array(stride*(height+1));
   for(let y=0;y<height;y++){
     let sum=0;
