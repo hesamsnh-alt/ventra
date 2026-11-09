@@ -9,6 +9,8 @@ import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,drawingTakeoffMatches,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
+import {engineeringForDrawing} from "@/lib/engineeringRestore.mjs";
+import {PDF_SCENE_VERSION} from "@/lib/pdfPlanScene.mjs";
 import {assertVerifiedPreview} from '@/lib/verifiedPreview.mjs';
 import {saveSchematic,saveActiveSource,selectSchematicDrawing,selectDrawingDocument,selectedDrawingSync,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
 import {collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
@@ -16,7 +18,7 @@ import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
+import {persistTakeoff,readPersistedTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
 import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
@@ -2272,10 +2274,21 @@ export default function ProjectDrawingCenter({
     analysisInFlightRef.current=true;setAnalyzing(true);clearMessages();
     report('working',language==='fa'?'در حال خواندن فایل PDF و ساخت پیش‌نمایش؛ بدون مصرف AI.':'Reading the PDF and building the preview, without AI requests.');
     try {
-      const {buildNativePdfScene}=await import('@/services/pdfPlanSceneService.mjs');
       const existing=await import('@/lib/schematicStorage.mjs').then(m=>m.readSchematic(projectId));
-      let scene=existing?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&existing.documentId===source.id?existing:null;
+      const matches=scene=>scene?.nativePdfGeometryVersion===PDF_SCENE_VERSION&&scene.documentId===source.id&&Array.isArray(scene.pdfStoreys)&&scene.pdfStoreys.length>0;
+      let scene=matches(existing)?existing:null;
+      let restored=false;
       if(!scene){
+        const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
+        try {
+          const cloud=await restoreCloud3DState(projectId,'schematic',source.id);
+          if(matches(cloud.schematic)){scene=cloud.schematic;restored=true;}
+        } catch(error){
+          console.warn('[VENTRA PDF 3D] Could not read saved model; building from the PDF.',error.message);
+        }
+      }
+      if(!scene){
+        const {buildNativePdfScene}=await import('@/services/pdfPlanSceneService.mjs');
         setMessage(language==='fa'?'خواندن خطوط و ابعاد PDF برای 3D؛ بدون مصرف AI.':'Reading PDF vectors and dimensions for 3D, without AI requests.');
         const {url,error}=await downloadProjectDocument(source);
         if(error||!url)throw error||new Error('Could not download the selected PDF.');
@@ -2286,11 +2299,13 @@ export default function ProjectDrawingCenter({
       }
       if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)throw new Error('Selected drawing changed. Select the original PDF and try again.');
       selectDrawingDocument(projectId,source.id,undefined,source.file_name);
-      scene=await saveSchematic(projectId,scene,{preserveBase:!!existing&&existing.documentId===source.id});
+      if(scene!==existing)scene=await saveSchematic(projectId,scene,{preserveBase:!restored&&existing?.documentId===source.id,syncCloud:!restored});
       await saveActiveSource(projectId,'schematic');
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)return;
       window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
       report('success',language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه ذخیره شد؛ تب «3D Model» بالای صفحه را باز کنید.`:`${scene.pdfStoreys.length} floor previews saved. Open the 3D Model tab at the top of this page.`);
       setMessage(language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه آماده است. وارد تب 3D شوید و طبقه را انتخاب کنید. این نمایش طبقات جداست؛ مدل کامل اجرایی ساختمان نیست.`:`${scene.pdfStoreys.length} floor previews ready. Open 3D and choose a floor. Separate storey views, not a complete construction model.`);
+      onOpen3D?.();
     }catch(error){report('error',(language==='fa'?'ساخت 3D انجام نشد: ':'PDF 3D could not be built: ')+(error?.message||String(error)));setErrorMessage((language==='fa'?'ساخت 3D از PDF متوقف شد؛ صحنه قبلی حفظ شد. این مسیر فقط پلان برداری با ابعاد و جداول هماهنگ را می‌پذیرد. جزئیات: ':'PDF 3D stopped; saved scene preserved. ')+(error?.message||String(error)));}
     finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
   }
@@ -2344,6 +2359,41 @@ export default function ProjectDrawingCenter({
       analysisInFlightRef.current = false;
       setOpeningSavedModel(false);
     }
+  }
+
+  function hasNativeCad3D(record,extension) {
+    return ['ifc','rvt'].includes(extension)&&apsManifestGeometry(record.manifest).views.some(view=>view.role.toLowerCase()==='3d');
+  }
+
+  async function openCad3D(document) {
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)return;
+    await saveActiveSource(projectId,'aps');
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)return;
+    setMessage(language==='fa'?'مدل Autodesk آمادهٔ نمایش است.':'The Autodesk model is ready to open.');
+    onOpen3D?.();
+  }
+
+  async function resumeSavedCad3D(document,extension) {
+    const saved=await readPersistedTakeoff(projectId,'engineering',{documentId:document.id});
+    let record=engineeringForDrawing(takeoffResultRef.current,saved,document.id);
+    if(!isSelectedApsDrawing(record,document)||(record.aps_status!=='ready'&&!hasNativeCad3D(record,extension)&&!dwgReconstructionReadiness(record,record.aps_urn).ready)){
+      const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      const cloud=await restoreCloud3DState(projectId,'engineering',document.id);
+      record=engineeringForDrawing(null,cloud.engineering,document.id);
+    }
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)
+      throw new Error('Selected drawing changed. Select the original CAD file and try again.');
+    if(!isSelectedApsDrawing(record,document))return false;
+    const ready=hasNativeCad3D(record,extension)||dwgReconstructionReadiness(record,record.aps_urn).ready;
+    if(!ready&&record.aps_status!=='ready')return false;
+    await persistTakeoff(projectId,record,{kind:'engineering'});
+    if(ready)await openCad3D(document);
+    else if(analysisSelectionRef.current?.projectId===projectId&&analysisSelectionRef.current?.documentId===document.id){
+      takeoffResultRef.current=record;
+      setTakeoffResult(record);
+      setMessage(language==='fa'?'در حال استخراج هندسه از ترجمهٔ ذخیره‌شدهٔ Autodesk.':'Extracting geometry from the existing Autodesk translation.');
+    }
+    return true;
   }
 
   async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false,apsGeometryOnly = false} = {}) {
@@ -2668,6 +2718,11 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         return;
       }
 
+      if(apsGeometryOnly&&await resumeSavedCad3D(selectedDocument,extension)){
+        analysisSucceeded=true;
+        return;
+      }
+
       // Start a new analysis scope. OCR cache must never leak from an old
       // translation/viewer run into the newly uploaded drawing.
       analysisRunIdRef.current =
@@ -2749,10 +2804,15 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         manifest,
       };
 
+      await persistTakeoff(projectId,apsResult);
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==selectedDocument.id)return;
+      if(apsGeometryOnly&&hasNativeCad3D(apsResult,extension)){
+        await openCad3D(selectedDocument);
+        analysisSucceeded=true;
+        return;
+      }
       takeoffResultRef.current=apsResult;
       setTakeoffResult(apsResult);
-
-      await persistTakeoff(projectId,apsResult);
 
       setMessage(
         "Autodesk translation completed. The model is ready for Viewer and geometry extraction."
