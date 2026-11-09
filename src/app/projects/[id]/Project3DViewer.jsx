@@ -9980,6 +9980,7 @@ export default function Project3DViewer({ projectId }) {
 
       {schematicScene && active3DSource==='schematic' && (
         <LocalizedElement as="p" role="status" style={{ padding: "12px 16px", border: "1px solid #a58a36", borderRadius: 8 }}>
+          {schematicScene.documentName && <><OriginalText>{schematicScene.documentName}</OriginalText><br /></>}
           {rasterReview?.report?.status === "analyzing"
             ? "Image analysis is still running. The model shown here is from an earlier analysis."
             : rasterReview?.report?.accepted === false

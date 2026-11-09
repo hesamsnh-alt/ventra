@@ -9,6 +9,8 @@ import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,drawingTakeoffMatches,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
+import {engineeringForDrawing} from "@/lib/engineeringRestore.mjs";
+import {PDF_SCENE_VERSION} from "@/lib/pdfPlanScene.mjs";
 import {assertVerifiedPreview} from '@/lib/verifiedPreview.mjs';
 import {saveSchematic,saveActiveSource,selectSchematicDrawing,selectDrawingDocument,selectedDrawingSync,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
 import {collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
@@ -16,7 +18,7 @@ import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
+import {persistTakeoff,readPersistedTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
 import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
@@ -1599,6 +1601,7 @@ export default function ProjectDrawingCenter({
   const [analysisRunId,setAnalysisRunId]=useState('initial');
   const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
   const pdfPreviewInFlightRef=useRef(false);
+  const [openingSavedModel, setOpeningSavedModel] = useState(false);
   const apsPreviewOnlyRef=useRef(null);
   const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(true);
   const [printedRoomHeight,setPrintedRoomHeight]=useState('');
@@ -2166,17 +2169,7 @@ export default function ProjectDrawingCenter({
         setImagePreviewLoading(false);
       }
 
-      setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-      setTakeoffResult(null);
-
-      if (typeof window !== "undefined") {
-        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(file.name))
-            ? "schematic"
-            : "aps"
-        ).catch(error=>setMessage(error.message));
-      }
+      handleSelectDrawing(document);
 
       if (typeof window !== "undefined") {
         await rememberEngineeringTakeoff(window.localStorage,projectId,readTakeoffSync(projectId));
@@ -2247,6 +2240,19 @@ export default function ProjectDrawingCenter({
     fileInputRef.current?.click();
   }
 
+  function handleSelectDrawing(drawing) {
+    const extension = getFileExtension(drawing.file_name);
+    const isImage = ["jpg", "jpeg", "png", "webp"].includes(extension);
+    setSelectedDocumentId(drawing.id);
+    selectDrawingDocument(projectId, drawing.id, undefined, drawing.file_name);
+    if (isImage) selectSchematicDrawing(projectId, drawing.id);
+    if (typeof window !== "undefined") {
+      const source = isImage || extension === "pdf" ? "schematic" : "aps";
+      void saveActiveSource(projectId, source).catch(error => setMessage(error.message));
+    }
+    if (takeoffResult?.document_id !== drawing.id) setTakeoffResult(null);
+  }
+
   async function handleBuildPdf3D() {
     const source=selectedDocumentForPreview;
     const report=(kind,text)=>setPdfPreviewStatus({kind,text,documentId:source?.id});
@@ -2268,10 +2274,21 @@ export default function ProjectDrawingCenter({
     analysisInFlightRef.current=true;setAnalyzing(true);clearMessages();
     report('working',language==='fa'?'در حال خواندن فایل PDF و ساخت پیش‌نمایش؛ بدون مصرف AI.':'Reading the PDF and building the preview, without AI requests.');
     try {
-      const {buildNativePdfScene}=await import('@/services/pdfPlanSceneService.mjs');
       const existing=await import('@/lib/schematicStorage.mjs').then(m=>m.readSchematic(projectId));
-      let scene=existing?.nativePdfGeometryVersion==='native-pdf-plan-v162'&&existing.documentId===source.id?existing:null;
+      const matches=scene=>scene?.nativePdfGeometryVersion===PDF_SCENE_VERSION&&scene.documentId===source.id&&Array.isArray(scene.pdfStoreys)&&scene.pdfStoreys.length>0;
+      let scene=matches(existing)?existing:null;
+      let restored=false;
       if(!scene){
+        const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
+        try {
+          const cloud=await restoreCloud3DState(projectId,'schematic',source.id);
+          if(matches(cloud.schematic)){scene=cloud.schematic;restored=true;}
+        } catch(error){
+          console.warn('[VENTRA PDF 3D] Could not read saved model; building from the PDF.',error.message);
+        }
+      }
+      if(!scene){
+        const {buildNativePdfScene}=await import('@/services/pdfPlanSceneService.mjs');
         setMessage(language==='fa'?'خواندن خطوط و ابعاد PDF برای 3D؛ بدون مصرف AI.':'Reading PDF vectors and dimensions for 3D, without AI requests.');
         const {url,error}=await downloadProjectDocument(source);
         if(error||!url)throw error||new Error('Could not download the selected PDF.');
@@ -2282,11 +2299,13 @@ export default function ProjectDrawingCenter({
       }
       if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)throw new Error('Selected drawing changed. Select the original PDF and try again.');
       selectDrawingDocument(projectId,source.id,undefined,source.file_name);
-      scene=await saveSchematic(projectId,scene,{preserveBase:!!existing&&existing.documentId===source.id});
+      if(scene!==existing)scene=await saveSchematic(projectId,scene,{preserveBase:!restored&&existing?.documentId===source.id,syncCloud:!restored});
       await saveActiveSource(projectId,'schematic');
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==source.id)return;
       window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
       report('success',language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه ذخیره شد؛ تب «3D Model» بالای صفحه را باز کنید.`:`${scene.pdfStoreys.length} floor previews saved. Open the 3D Model tab at the top of this page.`);
       setMessage(language==='fa'?`پیش‌نمایش ${scene.pdfStoreys.length} طبقه آماده است. وارد تب 3D شوید و طبقه را انتخاب کنید. این نمایش طبقات جداست؛ مدل کامل اجرایی ساختمان نیست.`:`${scene.pdfStoreys.length} floor previews ready. Open 3D and choose a floor. Separate storey views, not a complete construction model.`);
+      onOpen3D?.();
     }catch(error){report('error',(language==='fa'?'ساخت 3D انجام نشد: ':'PDF 3D could not be built: ')+(error?.message||String(error)));setErrorMessage((language==='fa'?'ساخت 3D از PDF متوقف شد؛ صحنه قبلی حفظ شد. این مسیر فقط پلان برداری با ابعاد و جداول هماهنگ را می‌پذیرد. جزئیات: ':'PDF 3D stopped; saved scene preserved. ')+(error?.message||String(error)));}
     finally{pdfPreviewInFlightRef.current=false;analysisInFlightRef.current=false;setAnalyzing(false);finishDrawingWorkflow(projectId,token,true);}
   }
@@ -2303,18 +2322,78 @@ export default function ProjectDrawingCenter({
     }catch(error){setErrorMessage(error.message);}
   }
 
-  async function handleOpenSaved3D() {
+  async function handleOpenSaved3D({latest = false} = {}) {
+    if (analysisInFlightRef.current || analyzing || generatingBoq || uploading) return;
+    const source = selectedDocumentForPreview;
+    const selection = analysisSelectionRef.current;
+    const selectionChanged = () => analysisSelectionRef.current?.projectId !== selection?.projectId ||
+      analysisSelectionRef.current?.documentId !== selection?.documentId;
+    analysisInFlightRef.current = true;
+    setOpeningSavedModel(true);
     clearMessages();
     try {
-      const source=selectedDocumentForPreview;
-      if(!source?.id)throw Error('Select a drawing first.');
-      const {readSchematic}=await import('@/lib/schematicStorage.mjs');
-      const scene=await readSchematic(projectId);
-      if(!scene||scene.documentId!==source.id)throw Error('No saved 3D scene for this drawing. Use its 3D build action first. Opening a saved scene makes no AI request.');
-      await saveActiveSource(projectId,'schematic');
-      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
+      if (!latest && !source?.id) throw Error(language === 'fa' ? 'ابتدا فایل نقشه را انتخاب کنید.' : 'Select a drawing first.');
+      const {readSchematic} = await import('@/lib/schematicStorage.mjs');
+      let scene = latest ? null : await readSchematic(projectId);
+      if (!scene || scene.documentId !== source?.id) {
+        const {restoreCloud3DState} = await import('@/lib/cloud3DState.mjs');
+        const cloud = await restoreCloud3DState(projectId, 'schematic', latest ? null : source.id);
+        scene = cloud.schematic;
+        if (!scene || !(Number(scene.width) > 0 && Number(scene.depth) > 0) || !Array.isArray(scene.rooms) || (!latest && scene.documentId !== source.id)) {
+          throw Error(latest
+            ? (language === 'fa' ? 'مدل ابری قابل نمایش برای این پروژه پیدا نشد.' : 'No viewable cloud model was found for this project.')
+            : (language === 'fa' ? 'برای این فایل هنوز مدل سه‌بعدی ذخیره نشده است.' : 'There is no saved 3D model for this drawing yet.'));
+        }
+        if (selectionChanged()) return;
+        scene = await saveSchematic(projectId, scene, {syncCloud: false});
+      }
+      if (selectionChanged()) return;
+      if (latest) selectDrawingDocument(projectId, scene.documentId || null, undefined, scene.documentName);
+      await saveActiveSource(projectId, 'schematic', {syncCloud: false});
+      if (selectionChanged()) return;
+      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated', {detail: {projectId, source: 'schematic', scene}}));
       onOpen3D?.();
-    } catch(error){setErrorMessage(error.message);}
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      analysisInFlightRef.current = false;
+      setOpeningSavedModel(false);
+    }
+  }
+
+  function hasNativeCad3D(record,extension) {
+    return ['ifc','rvt'].includes(extension)&&apsManifestGeometry(record.manifest).views.some(view=>view.role.toLowerCase()==='3d');
+  }
+
+  async function openCad3D(document) {
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)return;
+    await saveActiveSource(projectId,'aps');
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)return;
+    setMessage(language==='fa'?'مدل Autodesk آمادهٔ نمایش است.':'The Autodesk model is ready to open.');
+    onOpen3D?.();
+  }
+
+  async function resumeSavedCad3D(document,extension) {
+    const saved=await readPersistedTakeoff(projectId,'engineering',{documentId:document.id});
+    let record=engineeringForDrawing(takeoffResultRef.current,saved,document.id);
+    if(!isSelectedApsDrawing(record,document)||(record.aps_status!=='ready'&&!hasNativeCad3D(record,extension)&&!dwgReconstructionReadiness(record,record.aps_urn).ready)){
+      const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
+      const cloud=await restoreCloud3DState(projectId,'engineering',document.id);
+      record=engineeringForDrawing(null,cloud.engineering,document.id);
+    }
+    if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==document.id)
+      throw new Error('Selected drawing changed. Select the original CAD file and try again.');
+    if(!isSelectedApsDrawing(record,document))return false;
+    const ready=hasNativeCad3D(record,extension)||dwgReconstructionReadiness(record,record.aps_urn).ready;
+    if(!ready&&record.aps_status!=='ready')return false;
+    await persistTakeoff(projectId,record,{kind:'engineering'});
+    if(ready)await openCad3D(document);
+    else if(analysisSelectionRef.current?.projectId===projectId&&analysisSelectionRef.current?.documentId===document.id){
+      takeoffResultRef.current=record;
+      setTakeoffResult(record);
+      setMessage(language==='fa'?'در حال استخراج هندسه از ترجمهٔ ذخیره‌شدهٔ Autodesk.':'Extracting geometry from the existing Autodesk translation.');
+    }
+    return true;
   }
 
   async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false,apsGeometryOnly = false} = {}) {
@@ -2639,6 +2718,11 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         return;
       }
 
+      if(apsGeometryOnly&&await resumeSavedCad3D(selectedDocument,extension)){
+        analysisSucceeded=true;
+        return;
+      }
+
       // Start a new analysis scope. OCR cache must never leak from an old
       // translation/viewer run into the newly uploaded drawing.
       analysisRunIdRef.current =
@@ -2720,10 +2804,15 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
         manifest,
       };
 
+      await persistTakeoff(projectId,apsResult);
+      if(analysisSelectionRef.current?.projectId!==projectId||analysisSelectionRef.current?.documentId!==selectedDocument.id)return;
+      if(apsGeometryOnly&&hasNativeCad3D(apsResult,extension)){
+        await openCad3D(selectedDocument);
+        analysisSucceeded=true;
+        return;
+      }
       takeoffResultRef.current=apsResult;
       setTakeoffResult(apsResult);
-
-      await persistTakeoff(projectId,apsResult);
 
       setMessage(
         "Autodesk translation completed. The model is ready for Viewer and geometry extraction."
@@ -5437,7 +5526,38 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       </LocalizedElement>
 
-      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoffResult} fileName={selectedDocumentForPreview?.file_name||''} disabled={analysisProgress?.status==='running'}/>
+      <section className="takeoff-result drawing-3d-actions" aria-labelledby="drawing-3d-heading">
+        <h3 id="drawing-3d-heading">{language==='fa'?'ساخت و باز کردن مدل سه‌بعدی':language==='ar'?'إنشاء النموذج ثلاثي الأبعاد وفتحه':'Build and open 3D'}</h3>
+        <label className="drawing-3d-file-picker">
+          <span>{language==='fa'?'فایل نقشه':language==='ar'?'ملف المخطط':'Drawing file'}</span>
+          <select value={selectedDocumentForPreview?.id||''} onChange={event=>{
+            const drawing=documents.find(item=>item.id===event.target.value);
+            if(drawing) handleSelectDrawing(drawing);
+          }} disabled={!documents.length||analyzing||generatingBoq||uploading||openingSavedModel}>
+            {!documents.length&&<option value="">{language==='fa'?'ابتدا یک نقشه بارگذاری کنید':language==='ar'?'حمّل مخططاً أولاً':'Upload a drawing first'}</option>}
+            {documents.map(drawing=><option key={drawing.id} value={drawing.id}>{drawing.file_name}</option>)}
+          </select>
+        </label>
+        <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
+        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<button type="button" disabled={analyzing||generatingBoq} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>}
+        {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
+        {selectedDocumentIsImage&&<>
+          <button type="button" disabled={analyzing||generatingBoq||uploading} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}} onClick={()=>handleAnalyzeDrawing({previewOnly:true})}>{language==='fa'?'ساخت سه‌بعدی از همین تصویر (با AI)':'Build image 3D preview (separate from quantity takeoff)'}</button>
+          <button type="button" disabled={analyzing||generatingBoq||openingSavedModel} onClick={()=>handleOpenSaved3D()}>{language==='fa'?'باز کردن مدل ذخیره‌شدهٔ همین فایل':'Open saved model for this drawing'}</button>
+          <p><label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label></p>
+        </>}
+        <button type="button" disabled={analyzing||generatingBoq||openingSavedModel} onClick={()=>handleOpenSaved3D({latest:true})}>
+          {openingSavedModel
+            ? (language==='fa'?'در حال باز کردن مدل ذخیره‌شده…':'Opening saved model…')
+            : (language==='fa'?'باز کردن آخرین مدل ذخیره‌شدهٔ ابری پروژه':'Open the project’s latest saved cloud model')}
+        </button>
+        {pdfPreviewStatus&&pdfPreviewStatus.documentId===selectedDocumentForPreview?.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
+          {pdfPreviewStatus.text}
+          {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
+        </div>}
+        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>}
+      </section>
+
       {analysisProgress&&<DrawingAnalysisProgress progress={analysisProgress} language={language} onResume={()=>handleAnalyzeDrawing({resumeExistingOnly:true,resumeDocumentId:analysisProgress.documentId})}/>}
       {message && !["running","interrupted","failed"].includes(analysisProgress?.status) && (
         <LocalizedElement as="div" className="drawing-message drawing-message-success">
@@ -5447,22 +5567,16 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
-      <div className="takeoff-result" aria-label="3D drawing actions">
-        <p><strong>{selectedDocumentForPreview?.file_name||'Select a drawing from Uploaded Drawings'}</strong></p>
-        <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
-        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<button type="button" disabled={analyzing||generatingBoq} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>}
-        {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
-        {selectedDocumentIsImage&&<>
-          <button type="button" disabled={analyzing||generatingBoq||uploading} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}} onClick={()=>handleAnalyzeDrawing({previewOnly:true})}>{language==='fa'?'ساخت سه‌بعدی از همین تصویر (با AI)':'Build image 3D preview (separate from quantity takeoff)'}</button>
-          <button type="button" disabled={analyzing||generatingBoq} onClick={handleOpenSaved3D}>{language==='fa'?'باز کردن 3D ذخیره‌شده بدون AI':'Open saved 3D without AI'}</button>
-          <p><label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label></p>
-        </>}
-        {pdfPreviewStatus&&pdfPreviewStatus.documentId===selectedDocumentForPreview?.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
-          {pdfPreviewStatus.text}
-          {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
-        </div>}
-        {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>}
-      </div>
+      {errorMessage && (
+        <LocalizedElement as="div" className="drawing-message drawing-message-error">
+          <AlertCircle size={18} />
+
+          <LocalizedElement as="span">{errorMessage}</LocalizedElement>
+        </LocalizedElement>
+      )}
+
+      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoffResult} fileName={selectedDocumentForPreview?.file_name||''} disabled={analysisProgress?.status==='running'}/>
+
       {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
         <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
         <p>{language==='fa'?'صفحات پلان از جدول‌ها و جزئیات جدا شده‌اند. مقادیر AI نیاز به بررسی دارند.':language==='ar'?'تم فصل المخططات عن الجداول والتفاصيل. تحتاج كميات AI إلى المراجعة.':'Floor plans are reconciled separately from schedules and details. AI quantities require review.'}</p>
@@ -5472,14 +5586,6 @@ async function handleApsGeometryExtracted(analysis) {
         <button type="button" disabled={analyzing} onClick={async()=>{if(analysisInFlightRef.current)return;try{const report=await latestPdfReportForExport({projectId,visible:takeoffResultRef.current,readLatest:getLatestProjectTakeoff,workflow:drawingWorkflowState});takeoffResultRef.current=report;setTakeoffResult(report);const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ventra-pdf-analysis-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setErrorMessage(error?.message||'Could not export the saved PDF report.');}}}>{language==='fa'?'دانلود گزارش تحلیل PDF':language==='ar'?'تنزيل تقرير PDF':'Download PDF analysis report'}</button>
       </details>}
       {rasterReview && <RasterTraceReview {...rasterReview} />}
-
-      {errorMessage && (
-        <LocalizedElement as="div" className="drawing-message drawing-message-error">
-          <AlertCircle size={18} />
-
-          <LocalizedElement as="span">{errorMessage}</LocalizedElement>
-        </LocalizedElement>
-      )}
 
       <LocalizedElement as="div" id="drawing-upload" tabIndex={-1}
         className={`drawing-upload-zone ${
@@ -6128,37 +6234,11 @@ async function handleApsGeometryExtracted(analysis) {
                   key={document.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => {
-                    setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-                    if (typeof window !== "undefined") {
-                      void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
-                          ? "schematic"
-                          : "aps"
-                      ).catch(error=>setMessage(error.message));
-                    }
-
-                    if (takeoffResult?.document_id !== document.id) {
-                      setTakeoffResult(null);
-                    }
-                  }}
+                  onClick={() => handleSelectDrawing(document)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                       event.preventDefault();
-                      setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-                      if (typeof window !== "undefined") {
-                        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
-                            ? "schematic"
-                            : "aps"
-                        ).catch(error=>setMessage(error.message));
-                      }
-
-                      if (takeoffResult?.document_id !== document.id) {
-                        setTakeoffResult(null);
-                      }
+                      handleSelectDrawing(document);
                     }
                   }}
                 >

@@ -24,6 +24,18 @@ async function fixture({wardrobe=false,voidCore=false,bad=false,omit=false}={}){
 test('real image bytes go through local lines, two ID-only semantic tasks, pixel checks and scene compiler',async()=>{
  const f=await fixture(),out=await runPixelGraphPipeline(f);assert.equal(f.calls,2);assertVerifiedPreview(out);assert.equal(out.scene.rooms.length,2);assert.equal(out.scene.geometryValidation.coordinateAuthority,'source_pixel_graph');assert.ok(Math.abs(out.scene.width-5)<.03);assert.equal(out.scene.holes.length,0);
 });
+test('single-role wire output goes through the actual graph and scene compiler',async()=>{
+ const f=await fixture(),classify=f.classify;
+ f.classify=async task=>{
+  const result=await classify(task);if(task.stage!=='classify_source_lines')return result;
+  const {walls,nonWalls,unresolvedCandidateIds,...rest}=result;
+  const candidateRoles=Object.fromEntries(task.data.candidates.map(c=>[c.id,'alternative_face']));
+  for(const w of walls)candidateRoles[w.candidateId]=`${w.type}_wall`;
+  for(const c of nonWalls)candidateRoles[c.candidateId]=c.reason;
+  return{...rest,candidateRoles};
+ };
+ const out=await runPixelGraphPipeline(f);assertVerifiedPreview(out);assert.equal(out.scene.rooms.length,2);assert.equal(f.calls,2);
+});
 test('actual pipeline excludes a marked entrance core from floor and keeps its walls',async()=>{
  const f=await fixture({voidCore:true}),out=await runPixelGraphPipeline(f);assertVerifiedPreview(out);assert.equal(out.scene.holes.length,1);assert.equal(out.scene.rooms.length,1);assert.ok(out.scene.walls.some(w=>w.type==='internal'));
 });

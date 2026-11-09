@@ -135,6 +135,31 @@ cursor:pointer;
     );
 }
 
+.drawing-3d-actions {
+  margin: 0 0 18px;
+}
+
+.drawing-3d-actions h3 {
+  margin: 0 0 12px;
+}
+
+.drawing-3d-file-picker {
+  display: grid;
+  gap: 6px;
+  max-width: 32rem;
+}
+
+.drawing-3d-file-picker select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: inherit;
+  background: #181818;
+  border: 1px solid #555;
+  border-radius: 8px;
+  font: inherit;
+}
+
 .takeoff-result-grid {
   display: grid;
   grid-template-columns:

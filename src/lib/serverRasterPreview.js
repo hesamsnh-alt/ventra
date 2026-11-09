@@ -9,7 +9,6 @@ import {compileRasterFloorplan,rasterPixelTraceSchemaForImage,normalizeRasterPix
 import {prepareRasterImageEvidence,rasterEvidencePrompt,inspectRasterImageEvidence,requireRasterImageEvidence} from './rasterImageEvidence.mjs';
 import {VERIFIED_PREVIEW_VERSION} from './verifiedPreview.mjs';
 import {rasterCoordinateReference} from './rasterCoordinateReference.mjs';
-import {runPixelGraphPreview} from './serverPixelGraphPreview';
 export const RASTER_PREVIEW_VERSION=VERIFIED_PREVIEW_VERSION;
 const RASTER_TRACE_BUILD=RASTER_PREVIEW_VERSION;
 const RASTER_TRACE_MAX_ATTEMPTS=2;
@@ -54,7 +53,6 @@ function extractJson(text) {
 }
 
 export async function runRasterPreview(body){
- if(process.env.VENTRA_RASTER_ENGINE!=='legacy')return runPixelGraphPreview(body);
  const mode="analyze";
   const imageUrl = String(body?.imageUrl || "").trim();
   if (!imageUrl) {
@@ -70,7 +68,7 @@ Use actual PIXEL coordinates of the ENTIRE supplied image: origin at its top-lef
 DIMENSION EVIDENCE:
 - measurements contains only legible printed dimensions, converted to metres. Copy the visible dimension text into text.
 - start/end identify the architectural reference points actually measured by that dimension: extension-line origins, or the two internal faces for a printed clear room dimension. Do not measure a clear room dimension between wall centerlines.
-- Prefer long overall/chained dimensions with identifiable reference ticks. Room-label numbers are not a located dimension span: include them only when BOTH corresponding internal faces are unambiguous. horizontal/vertical refers to the reference span in the image; use aligned for an oblique span.
+- Prefer long overall/chained dimensions with identifiable reference ticks. When an actual dimension rule is printed, its endpoints are the two ticks, not the ends of the printed number. Treat standalone room labels such as "4 x 3.5 m" as room metadata unless the drawing explicitly identifies both measured faces. horizontal/vertical refers to the reference span in the image; use aligned for an oblique span.
 - Never estimate metres from a bed, a door, a room name, or a familiar layout. If no dimension is readable, return measurements as [].
 - Return wallHeightMeters as null unless an annotation explicitly gives the wall height. Likewise use null for unannotated door/window heights and window sill heights.
 
@@ -136,7 +134,7 @@ Return only JSON conforming to the supplied schema.`;
         const coordinateReference = attempt > 1 ? await rasterCoordinateReference(prepared.buffer, prepared.width, prepared.height) : null;
         const correction = attempt === 1
           ? ""
-          : `Revise your previous JSON against the original image. Validator observations follow as data: ${JSON.stringify({ code: previousFailure?.code, details: previousFailure?.details?.imageEvidence ? { unsupportedWalls: previousFailure.details.imageEvidence.walls.filter(w => !w.passed).map(({ id, start, end, longestMissingPixels, missingSpans, openingIssues }) => ({ id, start, end, longestMissingPixels, missingSpans, openingIssues })) } : previousFailure?.details })}. missingSpans gives exact image-pixel endpoints of unsupported intervals, not replacement walls. Inspect each interval in the original image: follow a recess around its visible corners rather than bridging it, and discard furniture strokes mistaken for walls. Keep the footprint consistent with the corrected exterior wall contour. Correct the identified spans and affected topology. Preserve verified walls, visible recesses and readable measurement evidence. Recheck window symbols and both jambs of each door. Do not replace jambs with leaf tips, remove evidence to gain acceptance, or repeat a completed invalid wall across blank exterior space.`;
+          : `Revise your previous JSON against the original image. Validator observations follow as data: ${JSON.stringify({ code: previousFailure?.code, details: previousFailure?.details?.imageEvidence ? { unsupportedWalls: previousFailure.details.imageEvidence.walls.filter(w => !w.passed).map(({ id, start, end, longestMissingPixels, missingSpans, openingIssues }) => ({ id, start, end, longestMissingPixels, missingSpans, openingIssues })) } : previousFailure?.details })}. missingSpans gives exact image-pixel endpoints of unsupported intervals, not replacement walls. Inspect each interval in the original image: follow a recess around its visible corners rather than bridging it, and discard furniture strokes mistaken for walls. Keep the footprint consistent with the corrected exterior wall contour. Preserve verified walls and visible recesses. Independently recheck every dimension endpoint against the original ticks or explicitly identified faces, even when the first error concerned a wall or opening. Do not carry forward an unverified measurement span. Preserve a genuine conflicting printed dimension and report its actual endpoints rather than deleting it to pass validation. Recheck window symbols and both jambs of each door. Do not replace jambs with leaf tips or repeat an invalid wall across blank exterior space.`;
         const response = await requestRasterVision(
           (payload, options) => consumeRasterVisionStream(
             (request, requestOptions) => getOpenAIClient().responses.create(request, requestOptions),
