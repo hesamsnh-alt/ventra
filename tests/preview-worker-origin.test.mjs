@@ -12,8 +12,10 @@ test('a mismatched worker build cannot reach paid analysis',async()=>{
  let calls=0;await ctx.run({id:'12345678-1234-1234-1234-123456789012',nonce:'a'.repeat(64),authorization:'Bearer test'},()=>{calls++;throw Error('must not run')});assert.equal(calls,0);assert.equal(updates[1].result.code,'PREVIEW_WORKER_BUILD_MISMATCH');
 });
 
-test('deployed background bundle must carry the same raster version as the app',async()=>{
+test('background bundle carries the same direct-trace engine and version as the app',async()=>{
  const {VERIFIED_PREVIEW_VERSION}=await import('../src/lib/verifiedPreview.mjs'),bundle=fs.readFileSync('netlify/functions/preview-background.mjs','utf8');assert.ok(bundle.includes(JSON.stringify(VERIFIED_PREVIEW_VERSION)));assert.match(bundle,/PREVIEW_WORKER_BUILD_MISMATCH/);
+ assert.match(bundle,/ventra_raster_metric_trace/);
+ assert.doesNotMatch(bundle,/classify_source_lines|PIXEL_GRAPH_TOO_COMPLEX/);
 });
 for(const {matches,keyStatus} of [{matches:true},{matches:false},{matches:true,keyStatus:"unusable_header"}])test(`real queue checks preview deployment before paid dispatch (${matches}, ${keyStatus||"legacy"})`,async()=>{
  const allowed=matches&&!keyStatus;

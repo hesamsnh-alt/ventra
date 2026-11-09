@@ -9,7 +9,6 @@ import {compileRasterFloorplan,rasterPixelTraceSchemaForImage,normalizeRasterPix
 import {prepareRasterImageEvidence,rasterEvidencePrompt,inspectRasterImageEvidence,requireRasterImageEvidence} from './rasterImageEvidence.mjs';
 import {VERIFIED_PREVIEW_VERSION} from './verifiedPreview.mjs';
 import {rasterCoordinateReference} from './rasterCoordinateReference.mjs';
-import {runPixelGraphPreview} from './serverPixelGraphPreview';
 export const RASTER_PREVIEW_VERSION=VERIFIED_PREVIEW_VERSION;
 const RASTER_TRACE_BUILD=RASTER_PREVIEW_VERSION;
 const RASTER_TRACE_MAX_ATTEMPTS=2;
@@ -54,7 +53,6 @@ function extractJson(text) {
 }
 
 export async function runRasterPreview(body){
- if(process.env.VENTRA_RASTER_ENGINE!=='legacy')return runPixelGraphPreview(body);
  const mode="analyze";
   const imageUrl = String(body?.imageUrl || "").trim();
   if (!imageUrl) {
