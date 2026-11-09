@@ -3191,7 +3191,7 @@ async function handleCommercialRequest(request) {
     return response.clone();
   }
 
-  const task = runRasterPreview(body);
+  const task = runPreview(body);
   previewInFlight.set(cacheKey, task);
   try {
     const response = await task;
@@ -3204,4 +3204,12 @@ async function handleCommercialRequest(request) {
 
 export async function runPreviewRequest(request){return commercialRun(request,'preview',handleCommercialRequest);}
 
-export async function previewImageFingerprint(imageUrl){return rasterPreviewFingerprint(imageUrl);}
+// The v133 visual-preview fingerprint must match the engine that produced the scene.
+// It is intentionally different from the strict raster/APS verification fingerprint.
+export async function previewImageFingerprint(imageUrl){
+ const prepared=await prepareImage(imageUrl,AbortSignal.timeout(12000));
+ return {hash:createHash('sha256').update(prepared.buffer).digest('hex').slice(0,16),version:VERSION};
+}
+
+// Standalone 3D endpoint uses the same historical visual-preview engine.
+export async function runLegacyInteractivePreview(body){return runPreview(body);}
