@@ -59,10 +59,26 @@ async function labelledImage(buffer,overlay){const data=await sharp(buffer).comp
 // no model-generated rectangle, and no retry after a paid classification fails.
 export async function runPixelGraphPipeline({buffer,classify,diagnostics={}}){
   diagnostics.format='ventra-raster-diagnostic-v1';diagnostics.build=VERIFIED_PREVIEW_VERSION;diagnostics.accepted=false;diagnostics.trace=null;diagnostics.attempts=[];
-  const graph=await extractRasterPixelGraph(buffer);
-  const sourceOpenings=await discoverRasterOpenings(buffer,graph);
-  graph.gaps.push(...sourceDoorGapCandidates(graph,sourceOpenings));
-  if(graph.gaps.length>700)fail('PIXEL_GRAPH_TOO_COMPLEX','Opening observations exceed the classification budget. No model request was made.');
+  // Retry ONLY local pixel extraction when the source complexity limit is hit.
+  // The original image, image frame, source validation and AI request count
+  // remain unchanged. If the photo cleanup is still ambiguous, fail closed.
+  const prepareGraph=async photoRescue=>{
+    const candidate=await extractRasterPixelGraph(buffer,{photoRescue});
+    const openings=await discoverRasterOpenings(buffer,candidate);
+    candidate.gaps.push(...sourceDoorGapCandidates(candidate,openings));
+    if(candidate.gaps.length>700)fail('PIXEL_GRAPH_TOO_COMPLEX','Opening observations exceed the classification budget. No model request was made.',{gapCount:candidate.gaps.length,candidateCount:candidate.candidates.length});
+    return{graph:candidate,sourceOpenings:openings};
+  };
+  let prepared;
+  try{
+    prepared=await prepareGraph(false);
+  }catch(error){
+    if(error.code!=='PIXEL_GRAPH_TOO_COMPLEX')throw error;
+    diagnostics.pixelGraphRescue={mode:'photographed_local_contrast',originalFailure:{code:error.code,message:error.message,details:error.details||{}}};
+    prepared=await prepareGraph(true);
+    diagnostics.pixelGraphRescue.result={inkCount:prepared.graph.ink.length,candidateCount:prepared.graph.candidates.length,gapCount:prepared.graph.gaps.length};
+  }
+  const {graph,sourceOpenings}=prepared;
   diagnostics.sourceOpeningDiscovery=sourceOpenings;
   diagnostics.pixelGraph=graph;diagnostics.imageWidth=graph.imageWidth;diagnostics.imageHeight=graph.imageHeight;diagnostics.imageHash=createHash('sha256').update(buffer).digest('hex').slice(0,16);
   if(graph.candidates.length<3)fail('NO_PIXEL_STRUCTURE','No supported building lines were extracted. No model request was made.');
