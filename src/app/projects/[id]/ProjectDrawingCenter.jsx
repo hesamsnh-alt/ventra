@@ -1599,6 +1599,7 @@ export default function ProjectDrawingCenter({
   const [analysisRunId,setAnalysisRunId]=useState('initial');
   const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
   const pdfPreviewInFlightRef=useRef(false);
+  const [openingSavedModel, setOpeningSavedModel] = useState(false);
   const apsPreviewOnlyRef=useRef(null);
   const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(true);
   const [printedRoomHeight,setPrintedRoomHeight]=useState('');
@@ -2306,18 +2307,43 @@ export default function ProjectDrawingCenter({
     }catch(error){setErrorMessage(error.message);}
   }
 
-  async function handleOpenSaved3D() {
+  async function handleOpenSaved3D({latest = false} = {}) {
+    if (analysisInFlightRef.current || analyzing || generatingBoq || uploading) return;
+    const source = selectedDocumentForPreview;
+    const selection = analysisSelectionRef.current;
+    const selectionChanged = () => analysisSelectionRef.current?.projectId !== selection?.projectId ||
+      analysisSelectionRef.current?.documentId !== selection?.documentId;
+    analysisInFlightRef.current = true;
+    setOpeningSavedModel(true);
     clearMessages();
     try {
-      const source=selectedDocumentForPreview;
-      if(!source?.id)throw Error('Select a drawing first.');
-      const {readSchematic}=await import('@/lib/schematicStorage.mjs');
-      const scene=await readSchematic(projectId);
-      if(!scene||scene.documentId!==source.id)throw Error('No saved 3D scene for this drawing. Use its 3D build action first. Opening a saved scene makes no AI request.');
-      await saveActiveSource(projectId,'schematic');
-      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
+      if (!latest && !source?.id) throw Error(language === 'fa' ? 'ابتدا فایل نقشه را انتخاب کنید.' : 'Select a drawing first.');
+      const {readSchematic} = await import('@/lib/schematicStorage.mjs');
+      let scene = latest ? null : await readSchematic(projectId);
+      if (!scene || scene.documentId !== source?.id) {
+        const {restoreCloud3DState} = await import('@/lib/cloud3DState.mjs');
+        const cloud = await restoreCloud3DState(projectId, 'schematic', latest ? null : source.id);
+        scene = cloud.schematic;
+        if (!scene || !(Number(scene.width) > 0 && Number(scene.depth) > 0) || !Array.isArray(scene.rooms) || (!latest && scene.documentId !== source.id)) {
+          throw Error(latest
+            ? (language === 'fa' ? 'مدل ابری قابل نمایش برای این پروژه پیدا نشد.' : 'No viewable cloud model was found for this project.')
+            : (language === 'fa' ? 'برای این فایل هنوز مدل سه‌بعدی ذخیره نشده است.' : 'There is no saved 3D model for this drawing yet.'));
+        }
+        if (selectionChanged()) return;
+        scene = await saveSchematic(projectId, scene, {syncCloud: false});
+      }
+      if (selectionChanged()) return;
+      if (latest) selectDrawingDocument(projectId, scene.documentId || null, undefined, scene.documentName);
+      await saveActiveSource(projectId, 'schematic', {syncCloud: false});
+      if (selectionChanged()) return;
+      window.dispatchEvent(new CustomEvent('ventra:3d-source-updated', {detail: {projectId, source: 'schematic', scene}}));
       onOpen3D?.();
-    } catch(error){setErrorMessage(error.message);}
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      analysisInFlightRef.current = false;
+      setOpeningSavedModel(false);
+    }
   }
 
   async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false,apsGeometryOnly = false} = {}) {
@@ -5447,7 +5473,7 @@ async function handleApsGeometryExtracted(analysis) {
           <select value={selectedDocumentForPreview?.id||''} onChange={event=>{
             const drawing=documents.find(item=>item.id===event.target.value);
             if(drawing) handleSelectDrawing(drawing);
-          }} disabled={!documents.length||analyzing||generatingBoq||uploading}>
+          }} disabled={!documents.length||analyzing||generatingBoq||uploading||openingSavedModel}>
             {!documents.length&&<option value="">{language==='fa'?'ابتدا یک نقشه بارگذاری کنید':language==='ar'?'حمّل مخططاً أولاً':'Upload a drawing first'}</option>}
             {documents.map(drawing=><option key={drawing.id} value={drawing.id}>{drawing.file_name}</option>)}
           </select>
@@ -5457,9 +5483,14 @@ async function handleApsGeometryExtracted(analysis) {
         {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
         {selectedDocumentIsImage&&<>
           <button type="button" disabled={analyzing||generatingBoq||uploading} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}} onClick={()=>handleAnalyzeDrawing({previewOnly:true})}>{language==='fa'?'ساخت سه‌بعدی از همین تصویر (با AI)':'Build image 3D preview (separate from quantity takeoff)'}</button>
-          <button type="button" disabled={analyzing||generatingBoq} onClick={handleOpenSaved3D}>{language==='fa'?'باز کردن 3D ذخیره‌شده بدون AI':'Open saved 3D without AI'}</button>
+          <button type="button" disabled={analyzing||generatingBoq||openingSavedModel} onClick={()=>handleOpenSaved3D()}>{language==='fa'?'باز کردن مدل ذخیره‌شدهٔ همین فایل':'Open saved model for this drawing'}</button>
           <p><label><input type="checkbox" checked={buildImageAfterAnalysis} onChange={event=>setBuildImageAfterAnalysis(event.target.checked)} />{language==='fa'?'پس از تحلیل تصویر، پیش‌نمایش 3D هم ساخته شود (درخواست جداگانه AI)':'Also build image 3D after analysis (separate AI request)'}</label></p>
         </>}
+        <button type="button" disabled={analyzing||generatingBoq||openingSavedModel} onClick={()=>handleOpenSaved3D({latest:true})}>
+          {openingSavedModel
+            ? (language==='fa'?'در حال باز کردن مدل ذخیره‌شده…':'Opening saved model…')
+            : (language==='fa'?'باز کردن آخرین مدل ذخیره‌شدهٔ ابری پروژه':'Open the project’s latest saved cloud model')}
+        </button>
         {pdfPreviewStatus&&pdfPreviewStatus.documentId===selectedDocumentForPreview?.id&&<div role={pdfPreviewStatus.kind==='error'?'alert':'status'} aria-live="polite" style={{padding:'12px 0',whiteSpace:'pre-wrap'}}>
           {pdfPreviewStatus.text}
           {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
