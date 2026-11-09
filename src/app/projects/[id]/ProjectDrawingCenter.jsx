@@ -2166,17 +2166,7 @@ export default function ProjectDrawingCenter({
         setImagePreviewLoading(false);
       }
 
-      setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-      setTakeoffResult(null);
-
-      if (typeof window !== "undefined") {
-        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(file.name))
-            ? "schematic"
-            : "aps"
-        ).catch(error=>setMessage(error.message));
-      }
+      handleSelectDrawing(document);
 
       if (typeof window !== "undefined") {
         await rememberEngineeringTakeoff(window.localStorage,projectId,readTakeoffSync(projectId));
@@ -2245,6 +2235,19 @@ export default function ProjectDrawingCenter({
 
   function openFilePicker() {
     fileInputRef.current?.click();
+  }
+
+  function handleSelectDrawing(drawing) {
+    const extension = getFileExtension(drawing.file_name);
+    const isImage = ["jpg", "jpeg", "png", "webp"].includes(extension);
+    setSelectedDocumentId(drawing.id);
+    selectDrawingDocument(projectId, drawing.id, undefined, drawing.file_name);
+    if (isImage) selectSchematicDrawing(projectId, drawing.id);
+    if (typeof window !== "undefined") {
+      const source = isImage || extension === "pdf" ? "schematic" : "aps";
+      void saveActiveSource(projectId, source).catch(error => setMessage(error.message));
+    }
+    if (takeoffResult?.document_id !== drawing.id) setTakeoffResult(null);
   }
 
   async function handleBuildPdf3D() {
@@ -5437,18 +5440,18 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       </LocalizedElement>
 
-      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoffResult} fileName={selectedDocumentForPreview?.file_name||''} disabled={analysisProgress?.status==='running'}/>
-      {analysisProgress&&<DrawingAnalysisProgress progress={analysisProgress} language={language} onResume={()=>handleAnalyzeDrawing({resumeExistingOnly:true,resumeDocumentId:analysisProgress.documentId})}/>}
-      {message && !["running","interrupted","failed"].includes(analysisProgress?.status) && (
-        <LocalizedElement as="div" className="drawing-message drawing-message-success">
-          <CheckCircle2 size={18} />
-
-          <LocalizedElement as="span">{message}</LocalizedElement>
-        </LocalizedElement>
-      )}
-
-      <div className="takeoff-result" aria-label="3D drawing actions">
-        <p><strong>{selectedDocumentForPreview?.file_name||'Select a drawing from Uploaded Drawings'}</strong></p>
+      <section className="takeoff-result drawing-3d-actions" aria-labelledby="drawing-3d-heading">
+        <h3 id="drawing-3d-heading">{language==='fa'?'ساخت و باز کردن مدل سه‌بعدی':language==='ar'?'إنشاء النموذج ثلاثي الأبعاد وفتحه':'Build and open 3D'}</h3>
+        <label className="drawing-3d-file-picker">
+          <span>{language==='fa'?'فایل نقشه':language==='ar'?'ملف المخطط':'Drawing file'}</span>
+          <select value={selectedDocumentForPreview?.id||''} onChange={event=>{
+            const drawing=documents.find(item=>item.id===event.target.value);
+            if(drawing) handleSelectDrawing(drawing);
+          }} disabled={!documents.length||analyzing||generatingBoq||uploading}>
+            {!documents.length&&<option value="">{language==='fa'?'ابتدا یک نقشه بارگذاری کنید':language==='ar'?'حمّل مخططاً أولاً':'Upload a drawing first'}</option>}
+            {documents.map(drawing=><option key={drawing.id} value={drawing.id}>{drawing.file_name}</option>)}
+          </select>
+        </label>
         <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
         {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<button type="button" disabled={analyzing||generatingBoq} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>}
         {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
@@ -5462,7 +5465,27 @@ async function handleApsGeometryExtracted(analysis) {
           {pdfPreviewStatus.kind==='success'&&onOpen3D&&<p><button type="button" onClick={onOpen3D} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}}>{language==='fa'?'باز کردن 3D':'Open 3D'}</button></p>}
         </div>}
         {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<p>{language==='fa'?'پلان برداری و اندازه‌دار با جدول بازشوهای هماهنگ؛ طبقات جداگانه. فایل اسکن‌شده در این مسیر پشتیبانی نمی‌شود.':'Dimensioned vector plans with coordinated opening schedules; separate floor views. Scanned drawings are not supported by this path.'}</p>}
-      </div>
+      </section>
+
+      {analysisProgress&&<DrawingAnalysisProgress progress={analysisProgress} language={language} onResume={()=>handleAnalyzeDrawing({resumeExistingOnly:true,resumeDocumentId:analysisProgress.documentId})}/>}
+      {message && !["running","interrupted","failed"].includes(analysisProgress?.status) && (
+        <LocalizedElement as="div" className="drawing-message drawing-message-success">
+          <CheckCircle2 size={18} />
+
+          <LocalizedElement as="span">{message}</LocalizedElement>
+        </LocalizedElement>
+      )}
+
+      {errorMessage && (
+        <LocalizedElement as="div" className="drawing-message drawing-message-error">
+          <AlertCircle size={18} />
+
+          <LocalizedElement as="span">{errorMessage}</LocalizedElement>
+        </LocalizedElement>
+      )}
+
+      <BoqScopePanel projectId={projectId} language={language} takeoff={takeoffResult} fileName={selectedDocumentForPreview?.file_name||''} disabled={analysisProgress?.status==='running'}/>
+
       {takeoffResult?.pdf_analysis&&<details className="takeoff-result" open>
         <summary>{language==='fa'?'گزارش تحلیل صفحات PDF':language==='ar'?'تقرير تحليل صفحات PDF':'PDF page analysis report'}</summary>
         <p>{language==='fa'?'صفحات پلان از جدول‌ها و جزئیات جدا شده‌اند. مقادیر AI نیاز به بررسی دارند.':language==='ar'?'تم فصل المخططات عن الجداول والتفاصيل. تحتاج كميات AI إلى المراجعة.':'Floor plans are reconciled separately from schedules and details. AI quantities require review.'}</p>
@@ -5472,14 +5495,6 @@ async function handleApsGeometryExtracted(analysis) {
         <button type="button" disabled={analyzing} onClick={async()=>{if(analysisInFlightRef.current)return;try{const report=await latestPdfReportForExport({projectId,visible:takeoffResultRef.current,readLatest:getLatestProjectTakeoff,workflow:drawingWorkflowState});takeoffResultRef.current=report;setTakeoffResult(report);const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ventra-pdf-analysis-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setErrorMessage(error?.message||'Could not export the saved PDF report.');}}}>{language==='fa'?'دانلود گزارش تحلیل PDF':language==='ar'?'تنزيل تقرير PDF':'Download PDF analysis report'}</button>
       </details>}
       {rasterReview && <RasterTraceReview {...rasterReview} />}
-
-      {errorMessage && (
-        <LocalizedElement as="div" className="drawing-message drawing-message-error">
-          <AlertCircle size={18} />
-
-          <LocalizedElement as="span">{errorMessage}</LocalizedElement>
-        </LocalizedElement>
-      )}
 
       <LocalizedElement as="div" id="drawing-upload" tabIndex={-1}
         className={`drawing-upload-zone ${
@@ -6128,37 +6143,11 @@ async function handleApsGeometryExtracted(analysis) {
                   key={document.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => {
-                    setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-                    if (typeof window !== "undefined") {
-                      void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
-                          ? "schematic"
-                          : "aps"
-                      ).catch(error=>setMessage(error.message));
-                    }
-
-                    if (takeoffResult?.document_id !== document.id) {
-                      setTakeoffResult(null);
-                    }
-                  }}
+                  onClick={() => handleSelectDrawing(document)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                       event.preventDefault();
-                      setSelectedDocumentId(document.id);
-      selectDrawingDocument(projectId,document.id,undefined,document.file_name);
-      if(["jpg","jpeg","png","webp"].includes(getFileExtension(document.file_name)))selectSchematicDrawing(projectId,document.id);
-                      if (typeof window !== "undefined") {
-                        void saveActiveSource(projectId,["jpg", "jpeg", "png", "webp"].includes(getFileExtension(document.file_name))
-                            ? "schematic"
-                            : "aps"
-                        ).catch(error=>setMessage(error.message));
-                      }
-
-                      if (takeoffResult?.document_id !== document.id) {
-                        setTakeoffResult(null);
-                      }
+                      handleSelectDrawing(document);
                     }
                   }}
                 >
