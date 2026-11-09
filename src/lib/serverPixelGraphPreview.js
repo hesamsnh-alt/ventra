@@ -19,7 +19,7 @@ export async function runPixelGraphPreview(body){
       const transport={stage:task.stage,attempt:calls};diagnostics.transport=transport;diagnostics.transportAttempts.push(transport);
       const result=await requestRasterVision((payload,options)=>consumeRasterVisionStream((p,o)=>getOpenAIClient().responses.create(p,o),payload,options,transport),{
         model,reasoning:{effort:'low'},max_output_tokens:16000,
-        input:[{role:'user',content:[{type:'input_text',text:`${task.prompt}\nSOURCE DATA: ${JSON.stringify(task.data)}`},{type:'input_image',image_url:task.original,detail:'high'},{type:'input_image',image_url:task.image,detail:'high'}]}],
+        input:[{role:'user',content:[{type:'input_text',text:`${task.prompt}\nSOURCE DATA: ${JSON.stringify(task.data)}`},{type:'input_image',image_url:task.original,detail:'high'},{type:'input_image',image_url:task.image,detail:'high'},...(task.images||[]).map(image_url=>({type:'input_image',image_url,detail:'high'}))]}],
         text:{format:{type:'json_schema',name:task.stage,strict:true,schema:task.schema}},
       },remaining);
       if(result.status!=='completed'||!result.output_text)throw Object.assign(Error('No complete semantic classification was returned.'),{code:'RASTER_VISION_INCOMPLETE'});

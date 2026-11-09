@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {createHash} from 'node:crypto';
+import {previewWorkerOrigin} from '../src/lib/previewWorkerOrigin.mjs';
 
 const source=fs.readFileSync(new URL('../src/lib/serverPreviewJobs.js',import.meta.url),'utf8');
 const code=source.slice(source.indexOf('export async function startPreviewJob'),source.indexOf('export async function readPreviewJob')).replace('export async function','async function')+'\nthis.start=startPreviewJob;';
@@ -25,7 +26,7 @@ function harness(){
       then(resolve){updates.push(change);for(const row of jobs.values())if(filters.every(([key,value])=>row[key]===value))Object.assign(row,change);resolve({})}
     };return q;
   }};
-  const sandbox={console,db,table:'jobs',process:{env:{URL:'https://example.netlify.app'}},Response,URL,Date,AbortSignal,
+  const sandbox={previewWorkerOrigin,console,db,table:'jobs',process:{env:{URL:'https://example.netlify.app'}},Response,URL,Date,AbortSignal,
     account:async()=>({id:'actor'}),commercialContext:async()=>({db}),
     previewImageFingerprint:async()=>({hash:'same-source',version}),
     nonceHash:value=>createHash('sha256').update(value).digest('hex'),randomBytes:()=>Buffer.alloc(32,1),

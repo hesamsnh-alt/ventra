@@ -68,12 +68,43 @@ export function detectInkSegments(mask,width,height,{minLength=Math.max(18,Math.
   return segments.sort((a,b)=>a.start.y-b.start.y||a.start.x-b.start.x||b.lengthPixels-a.lengthPixels).map((s,i)=>({id:`ink${i+1}`,...s}));
 }
 
-export async function extractRasterPixelGraph(buffer){
-  const {data,info}=await sharp(buffer).flatten({background:'#fff'}).removeAlpha().raw().toBuffer({resolveWithObject:true});
+// A fallback for photographed plans whose uneven illumination is mistaken for
+// thousands of physical strokes. Keep the exact source pixel frame; never
+// remove or invent a wall based on the generated candidate count.
+export function photographedInkMasks(tone,chroma,width,height){
+  const stride=width+1,integral=new Float64Array(stride*(height+1));
+  for(let y=0;y<height;y++){
+    let sum=0;
+    for(let x=0;x<width;x++){
+      sum+=tone[y*width+x];
+      integral[(y+1)*stride+x+1]=integral[y*stride+x+1]+sum;
+    }
+  }
+  const radius=Math.max(6,Math.min(24,Math.round(Math.min(width,height)*.025)));
+  const dark=new Uint8Array(tone.length),colored=new Uint8Array(tone.length);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,v=tone[i];
+    if(v>=252)continue;
+    const x0=Math.max(0,x-radius),x1=Math.min(width,x+radius+1);
+    const y0=Math.max(0,y-radius),y1=Math.min(height,y+radius+1);
+    const mean=(integral[y1*stride+x1]-integral[y0*stride+x1]-integral[y1*stride+x0]+integral[y0*stride+x0])/((x1-x0)*(y1-y0));
+    if(mean-v<15)continue;
+    if(chroma[i]<55)dark[i]=1;
+    else colored[i]=1;
+  }
+  return{dark,colored};
+}
+
+export async function extractRasterPixelGraph(buffer,{photoRescue=false}={}){
+  const source=sharp(buffer).flatten({background:'#fff'}).removeAlpha();
+  const {data,info}=await (photoRescue?source.median(3):source).raw().toBuffer({resolveWithObject:true});
   const {width,height,channels}=info,tone=new Uint8Array(width*height),chroma=new Uint8Array(width*height),mask=new Uint8Array(width*height),coloredMask=new Uint8Array(width*height);
   for(let i=0;i<tone.length;i++){const r=data[i*channels],g=data[i*channels+1],b=data[i*channels+2];chroma[i]=Math.max(r,g,b)-Math.min(r,g,b);tone[i]=Math.round((r+g+b)/3);}
   const contrast=rasterInkContrast(tone,width,height);
-  for(let i=0;i<mask.length;i++){mask[i]=chroma[i]<55&&contrast.mask[i]?1:0;coloredMask[i]=chroma[i]>=55&&(tone[i]<210||contrast.strokeMask[i])?1:0;}
+  if(photoRescue){
+    const clean=photographedInkMasks(tone,chroma,width,height);
+    mask.set(clean.dark);coloredMask.set(clean.colored);
+  }else for(let i=0;i<mask.length;i++){mask[i]=chroma[i]<55&&contrast.mask[i]?1:0;coloredMask[i]=chroma[i]>=55&&(tone[i]<210||contrast.strokeMask[i])?1:0;}
   const ink=[...detectInkSegments(mask,width,height),...detectInkSegments(coloredMask,width,height).map(s=>({...s,id:`color_${s.id}`,colorEvidence:true}))];
   // Long-line voting misses short door jambs and can pair unrelated faces.
   // Erosion suppresses thin strokes; measure filled bands in original pixels.
@@ -162,7 +193,7 @@ export async function extractRasterPixelGraph(buffer){
     if(Math.min(ta,tb)<1-.01&&Math.max(ta,tb)>.01&&tb>=0&&tb<=1)continue;
     gaps.push({id:`gap${gaps.length+1}`,a:a.id,b:b.id,start,end,lengthPixels:Math.round(length),support:'opening_hypothesis_not_wall'});
   }
-  if(candidates.length>700||gaps.length>700)throw error('PIXEL_GRAPH_TOO_COMPLEX','Opening hypotheses exceed the classification budget; nothing was truncated.');
+  if(candidates.length>700||gaps.length>700)throw error('PIXEL_GRAPH_TOO_COMPLEX','Opening hypotheses exceed the classification budget; nothing was truncated.',{candidateCount:candidates.length,gapCount:gaps.length,inkCount:ink.length,candidateBudget:700,gapBudget:700});
   return{version:PIXEL_GRAPH_VERSION,imageWidth:width,imageHeight:height,ink,candidates,gaps};
 }
 
