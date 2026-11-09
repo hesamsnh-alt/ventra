@@ -1,4 +1,3 @@
-import {runRasterPreview,rasterPreviewFingerprint} from '@/lib/serverRasterPreview';
 import { createPrintedDimensionAlignment, mapPrintedDimensionPoint } from '@/lib/printedDimensionAlignment.mjs';
 import { prepareObservedOpeningWalls } from '@/lib/sourceOpeningWalls.mjs';
 import {outdoorBoundaries,observedDoorOrientation} from '@/lib/schematicBoundaries.mjs';
