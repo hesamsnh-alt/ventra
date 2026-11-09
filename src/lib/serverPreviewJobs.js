@@ -3,6 +3,7 @@ import {previewImageFingerprint} from './serverPreviewAnalysis';
 import {createHash,randomBytes} from 'node:crypto';
 import {commercialContext,commercialAdmin,commercialError} from './serverCommercial';
 import {account,billingError} from './serverBilling';
+import {previewWorkerOrigin} from './previewWorkerOrigin.mjs';
 const table='ventra_preview_jobs';
 export const nonceHash=value=>createHash('sha256').update(value).digest('hex');
 export async function startPreviewJob(request,action='preview'){
@@ -20,9 +21,9 @@ export async function startPreviewJob(request,action='preview'){
    if(prior.error)throw billingError('Background analysis storage is unavailable.',503);
    if(prior.data?.result?.scene)return Response.json({...prior.data.result,recovered:true},{headers:{'Cache-Control':'no-store'}});
   }
-  const origin=new URL(process.env.DEPLOY_URL||process.env.URL||'');
+  const origin=action==='preview'&&body.mode==='schematic_analyze'?previewWorkerOrigin(request.url,process.env):new URL(process.env.DEPLOY_URL||process.env.URL||'');
   if(origin.protocol!=='https:')throw billingError('Background analysis endpoint is not configured.',503);
-  const digest=nonceHash(fingerprint ? `${user.id}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
+  const digest=nonceHash(fingerprint ? `${user.id}:${origin.origin}:${fingerprint.version}:${raw}` : `${user.id}:${raw}`);
   id=`${digest.slice(0,8)}-${digest.slice(8,12)}-${digest.slice(12,16)}-${digest.slice(16,20)}-${digest.slice(20,32)}`;const nonce=randomBytes(32).toString('hex');
   const {error}=await db.from(table).insert({id,actor_id:user.id,project_id:body.projectId,status:'queued',nonce_hash:nonceHash(nonce),request_body:{...body,__backgroundAction:action}});
   if(error?.code==='23505'){
