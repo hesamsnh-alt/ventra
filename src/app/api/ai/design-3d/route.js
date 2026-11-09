@@ -1,4 +1,4 @@
-import {runRasterPreview} from '@/lib/serverRasterPreview';
+import {runLegacyInteractivePreview} from '@/lib/serverPreviewAnalysis';
 import {commercialRun} from '@/lib/serverCommercial';
 import { NextResponse } from "next/server";
 import { createResponse, getOpenAIClient } from "@/services/openaiClient";
@@ -3389,7 +3389,7 @@ async function handleSchematicRequest(body) {
     }
   }
 
-  return runRasterPreview(body);
+  return runLegacyInteractivePreview(body);
 }
 
 async function handleCommercialRequest(request) {
