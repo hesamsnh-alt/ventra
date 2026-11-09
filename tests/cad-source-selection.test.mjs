@@ -1,4 +1,3 @@
-import {engineeringForDrawing} from '../src/lib/engineeringRestore.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import parser from '@babel/parser';
 import {drawingSourceBinding} from '../src/lib/pdfPlanScene.mjs';
 import {selectDrawingDocument,selectedDrawingDetailsSync,selectedDrawingSync} from '../src/lib/schematicStorage.mjs';
@@ -29,7 +28,7 @@ const source=fs.readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.j
 function find(node,name){if(!node||typeof node!=='object')return null;if(node.type==='FunctionDeclaration'&&node.id?.name===name)return node;for(const value of Object.values(node)){if(Array.isArray(value)){for(const item of value){const found=find(item,name);if(found)return found;}}else if(value&&typeof value==='object'){const found=find(value,name);if(found)return found;}}return null;}
 const refresh=find(ast,'refreshProject3DSourceFromStorage');
 test('actual viewer refresh retains selected DXF despite stale image preference and missing geometry',()=>{
- const state={},context=vm.createContext({projectId:'p',window:{},readTakeoffSync:()=>null,readSchematicSync:()=>({documentId:'old-image',width:10,depth:5}),selectedDrawingSync:()=> 'cad',selectedDrawingDetailsSync:()=>({documentId:'cad',fileName:'plan.dxf'}),drawingSceneMatches:()=>false,activeSourceSync:()=> 'schematic',engineeringForDrawing,chooseEngineeringTakeoff,engineeringUrn,drawingSourceBinding,
+ const state={},context=vm.createContext({projectId:'p',window:{},readTakeoffSync:()=>null,readSchematicSync:()=>({documentId:'old-image',width:10,depth:5}),selectedDrawingSync:()=> 'cad',selectedDrawingDetailsSync:()=>({documentId:'cad',fileName:'plan.dxf'}),drawingSceneMatches:()=>false,activeSourceSync:()=> 'schematic',chooseEngineeringTakeoff,engineeringUrn,drawingSourceBinding,
   setStatus:v=>state.status=v,setMessage:v=>state.message=v,setTakeoff:v=>state.takeoff=v,setSchematicScene:v=>state.scene=v,setUrn:v=>state.urn=v,setActive3DSource:v=>state.source=v,console:{log(){},error(e){throw e;}}});
  vm.runInContext(source.slice(refresh.start,refresh.end)+';refreshProject3DSourceFromStorage();',context);
  assert.equal(state.source,'aps');assert.equal(state.scene,null);assert.equal(state.urn,'');assert.equal(state.status,'missing');assert.match(state.message,/CAD drawing/);assert.match(state.message,/APS without AI/);

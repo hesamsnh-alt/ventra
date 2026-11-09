@@ -11,10 +11,6 @@ export function reconcileEngineering(local,remote){
  if(engineeringUrn(local)===engineeringUrn(remote))return chooseEngineeringTakeoff(local,remote);
  return timestamp(remote)>timestamp(local)?remote:local;
 }
-export function engineeringForDrawing(current,saved,documentId){
- if(documentId){if(current?.document_id!==documentId)current=null;if(saved?.document_id!==documentId)saved=null;}
- return chooseEngineeringTakeoff(current,saved);
-}
 
 export async function restoreEngineeringSnapshot(projectId,remote,{read,persist}){
  // Read after the network request: an upload may have completed during that request.

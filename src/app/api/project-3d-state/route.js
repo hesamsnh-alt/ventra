@@ -4,7 +4,6 @@ import {commercialAdmin,commercialError} from '@/lib/serverCommercial';
 import {validProjectId} from '@/lib/commercialAccess.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
-const modelDocumentId=(kind,value)=>kind==='engineering'?value?.document_id:kind==='schematic'?value?.documentId:null;
 async function access(request,projectId,write=false){
  const user=await account(request);if(!validProjectId(projectId))throw billingError('Invalid project ID.',400);
  const db=commercialAdmin(),{data,error}=await db.from('projects').select('user_id').eq('id',projectId).maybeSingle();
@@ -19,19 +18,12 @@ async function access(request,projectId,write=false){
 }
 export async function GET(request){
  try{const {db,path}=await access(request,new URL(request.url).searchParams.get('projectId'));
- const documentId=new URL(request.url).searchParams.get('documentId');
- if(documentId&&!validProjectId(documentId))throw billingError('Invalid drawing identity.',400);
  const requestedKind=new URL(request.url).searchParams.get('kind');
  if(requestedKind&&!['schematic','engineering','selection','render'].includes(requestedKind))throw billingError('Invalid 3D state kind.',400);
  const result={};for(const kind of requestedKind?[requestedKind]:['schematic','engineering','selection']){
-  const locations=documentId&&['schematic','engineering'].includes(kind)?[`${path}/documents/${documentId}/${kind}.json`,`${path}/${kind}.json`]:[`${path}/${kind}.json`];
-  for(const location of locations){
-   const {data,error}=await db.storage.from('project-files').download(location);
-   if(error){if([400,404].includes(Number(error.statusCode||error.status))&&/not found|does not exist/i.test(error.message))continue;throw billingError('Cloud 3D storage is unavailable.',503);}
-   const value=JSON.parse(await data.text());
-   if(documentId&&['schematic','engineering'].includes(kind)&&modelDocumentId(kind,value)!==documentId)continue;
-   result[kind]=value;break;
-  }
+  const {data,error}=await db.storage.from('project-files').download(`${path}/${kind}.json`);
+  if(error){if([400,404].includes(Number(error.statusCode||error.status))&&/not found|does not exist/i.test(error.message))continue;throw billingError('Cloud 3D storage is unavailable.',503);}
+  result[kind]=JSON.parse(await data.text());
  }return Response.json(result,{headers:{'Cache-Control':'no-store'}});
  }catch(error){return commercialError(error);}
 }
@@ -43,24 +35,6 @@ export async function PUT(request){
  if(kind==='schematic'&&!(Number(value.width)>0&&Number(value.depth)>0&&Array.isArray(value.rooms)))throw billingError('Invalid schematic.',400);
  if(kind==='render'&&(value.kind!=='concept_render'||value.pipelineVersion!==47||value.layoutReview?.method!=='ai_visual_comparison'||!/^data:image\/jpeg;base64,/.test(value.imageUrl||'')))throw billingError('Invalid reviewed render.',400);
  if(kind==='engineering'){const urn=value.aps_urn||value.apsUrn||value.urn||value.advanced_takeoff?.aps_urn||value.raw_result?.aps_urn;if(urn)await apsModelAccess(request,urn,projectId);}
- const documentId=modelDocumentId(kind,value);
- if(documentId){
-  if(!validProjectId(documentId))throw billingError('Invalid drawing identity.',400);
-  const snapshot=await db.storage.from('project-files').upload(`${path}/documents/${documentId}/${kind}.json`,JSON.stringify(value),{contentType:'application/json',upsert:true});
-  if(snapshot.error)throw billingError('Could not save drawing-specific 3D state.',503);
-  const prior=await db.storage.from('project-files').download(`${path}/${kind}.json`);
-  if(prior.data){
-   const previous=JSON.parse(await prior.data.text()),priorId=modelDocumentId(kind,previous);
-   if(priorId&&priorId!==documentId&&validProjectId(priorId)){
-    const priorPath=`${path}/documents/${priorId}/${kind}.json`,existing=await db.storage.from('project-files').download(priorPath);
-    if(!existing.data){
-     if(existing.error&&!([400,404].includes(Number(existing.error.statusCode||existing.error.status))&&/not found|does not exist/i.test(existing.error.message)))throw billingError('Cloud 3D storage is unavailable.',503);
-     const archived=await db.storage.from('project-files').upload(priorPath,JSON.stringify(previous),{contentType:'application/json',upsert:true});
-     if(archived.error)throw billingError('Could not preserve the previous drawing model.',503);
-    }
-   }
-  }else if(prior.error&&!([400,404].includes(Number(prior.error.statusCode||prior.error.status))&&/not found|does not exist/i.test(prior.error.message)))throw billingError('Cloud 3D storage is unavailable.',503);
- }
  const {error}=await db.storage.from('project-files').upload(`${path}/${kind}.json`,JSON.stringify(value),{contentType:'application/json',upsert:true});
  if(error)throw billingError('Could not save 3D cloud state.',503);return Response.json({success:true});
  }catch(error){return commercialError(error);}

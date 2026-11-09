@@ -52,12 +52,13 @@ test('APS-only callback branch activates the existing APS renderer and never rea
   assert.deepEqual(calls,ready?['aps','message','open']:['error']);
  }
 });
-test('opening a matching local image model requires no cloud lookup or regeneration',async()=>{
+test('saved image 3D opens only the selected document and performs no request or regeneration',async()=>{
  const f=find(ast,n=>n.type==='FunctionDeclaration'&&n.id?.name==='handleOpenSaved3D');assert.ok(f);
- const calls=[],context={projectId:'p',selectedDocumentForPreview:{id:'doc'},analysisInFlightRef:{current:false},analysisSelectionRef:{current:{projectId:'p',documentId:'doc'}},analyzing:false,generatingBoq:false,uploading:false,
-  clearMessages(){},setOpeningSavedModel(){},loadModule:async name=>{assert.match(name,/schematicStorage/);return{readSchematic:async()=>({documentId:'doc'})};},saveActiveSource:async(_id,_source,options)=>{assert.equal(options.syncCloud,false);calls.push('activate');},window:{dispatchEvent:()=>calls.push('event')},CustomEvent:class{},onOpen3D:()=>calls.push('open'),setErrorMessage:()=>calls.push('error')};
- await vm.runInNewContext('('+center.slice(f.start,f.end).replaceAll('import(','loadModule(')+')()',context);
- assert.deepEqual(calls,['activate','event','open']);
+ for(const id of ['doc','other']){
+  const calls=[],context={projectId:'p',selectedDocumentForPreview:{id:'doc'},clearMessages(){},loadModule:async()=>({readSchematic:async()=>({documentId:id})}),saveActiveSource:async()=>calls.push('activate'),window:{dispatchEvent:()=>calls.push('event')},CustomEvent:class{},onOpen3D:()=>calls.push('open'),setErrorMessage:()=>calls.push('error')};
+  await vm.runInNewContext('('+center.slice(f.start,f.end).replaceAll('import(','loadModule(')+')()',context);
+  assert.deepEqual(calls,id==='doc'?['activate','event','open']:['error']);
+ }
 });
 
 test('generic wood floor uses an explicitly configured existing policy; specialized wood does not inherit it',()=>{

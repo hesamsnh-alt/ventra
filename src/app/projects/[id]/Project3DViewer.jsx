@@ -1,7 +1,7 @@
 "use client";
 import {createFurnitureFinishMaterial} from '@/lib/furnitureFinishes.mjs';
 import {previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
-import {apsGeometryNodes,selectApsGeometry,isPlanCadUrn} from "@/lib/apsViewables.mjs";
+import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
 import DwgFloorPanel from "./DwgFloorPanel";
 import ToolDrawer from "./ToolDrawer";
@@ -26,13 +26,13 @@ import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource,selectedDrawingSync,selectedDrawingDetailsSync,selectDrawingDocument,subscribeDrawingSelection} from '@/lib/schematicStorage.mjs';
+import {readSchematicSync,readSchematic,saveSchematic,drawingSceneMatches,activeSourceSync,readActiveSource,saveActiveSource,selectedDrawingSync,selectedDrawingDetailsSync,selectDrawingDocument} from '@/lib/schematicStorage.mjs';
 import {drawingSourceBinding,selectPdfStorey} from '@/lib/pdfPlanScene.mjs';
 import {readTakeoffSync,readPersistedTakeoff,persistTakeoff} from "@/lib/takeoffStorage.mjs";
 import {resolveDwgCalibration,dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
 import {bindProjectCameraInputs} from '@/lib/projectCameraInputs.mjs';
 import {applySceneStyle,engineeringUrn,rememberEngineeringTakeoff,chooseEngineeringTakeoff} from '@/lib/sceneStyle.mjs';
-import {reconcileEngineering,restoreEngineeringSnapshot,engineeringForDrawing} from '@/lib/engineeringRestore.mjs';
+import {reconcileEngineering,restoreEngineeringSnapshot} from '@/lib/engineeringRestore.mjs';
 import {orbitOffset, cameraFitDistance, namedCameraOffset} from "@/lib/orbitCamera.mjs";
 import {commercialFetch,commercialHeaders} from '@/lib/commercialFetch';
 import { sourcePresentationAssets, restoreWallContactFurniture } from "@/lib/sourceFurniture.mjs";
@@ -43,7 +43,7 @@ import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import {watermarkJpegCapture} from "@/lib/brandWatermark.mjs";
 import { arrangeLivingFurniture } from "@/lib/interiorPresentation.mjs";
 
-import { useEffect, useRef, useState, useSyncExternalStore, useEffectEvent, useCallback } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useEffectEvent } from "react";
 import { getRasterReview, subscribeRasterReview } from "@/lib/rasterReviewSession.mjs";
 import "./Project3DViewer.css";
 
@@ -8548,8 +8548,6 @@ function ventraSceneToMetricDxf(scene) {
 
 
 export default function Project3DViewer({ projectId }) {
-  const subscribeDocument=useCallback(notify=>subscribeDrawingSelection(projectId,notify),[projectId]);
-  const activeDrawingDocumentId=useSyncExternalStore(subscribeDocument,()=>selectedDrawingSync(projectId),()=>null);
   const rasterReview = useSyncExternalStore(subscribeRasterReview, () => getRasterReview(projectId), () => null);
   const containerRef = useRef(null);
   const apsContainerRef = useRef(null);
@@ -8590,7 +8588,7 @@ export default function Project3DViewer({ projectId }) {
   const [active3DSource, setActive3DSource] = useState("aps");
   useEffect(() => { currentPromptSceneRef.current = {scene: schematicScene, source: active3DSource}; }, [schematicScene, active3DSource]);
   function currentSceneMatches(scene){
-    return scene?.source==='dwg-engineering-interior'?dwgInteriorMatches(scene,readTakeoffSync(projectId,'engineering',undefined,selectedDrawingSync(projectId))):drawingSceneMatches(projectId,scene);
+    return scene?.source==='dwg-engineering-interior'?dwgInteriorMatches(scene,readTakeoffSync(projectId,'engineering')):drawingSceneMatches(projectId,scene);
   }
 
   function refreshProject3DSourceFromStorage(
@@ -8627,10 +8625,10 @@ export default function Project3DViewer({ projectId }) {
         activeSourceSync(projectId) ||
         "aps";
 
-      const savedEngineering=readTakeoffSync(projectId,'engineering',undefined,selectedDrawingSync(projectId));
+      const savedEngineering=readTakeoffSync(projectId,'engineering');
       if(requestedSource==='dwg-interior')storedScene=savedDwgInterior(savedEngineering);
-      if(requestedSource==='aps'||requestedSource==='dwg-interior')takeoff=engineeringForDrawing(takeoff,savedEngineering,selectedDrawingSync(projectId));
-      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:engineeringForDrawing(takeoff,savedEngineering,selectedDrawingSync(projectId)),source:requestedSource,scene:storedScene});
+      if(requestedSource==='aps'||requestedSource==='dwg-interior')takeoff=chooseEngineeringTakeoff(takeoff,savedEngineering);
+      const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:chooseEngineeringTakeoff(takeoff,savedEngineering),source:requestedSource,scene:storedScene});
       storedScene=binding.scene;
       const resolvedUrn=binding.engineeringAllowed?(engineeringUrn(takeoff)||engineeringUrn(savedEngineering)):'';
 
@@ -8780,7 +8778,7 @@ export default function Project3DViewer({ projectId }) {
           "project-takeoff"
         )
       ) {
-        try{await Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)}),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)]);refreshSourceFromEffect();}catch(error){setMessage(`Could not refresh drawing geometry: ${error.message}`);}
+        try{await Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)]);refreshSourceFromEffect();}catch(error){setMessage(`Could not refresh drawing geometry: ${error.message}`);}
       }
     }
 
@@ -8923,7 +8921,7 @@ export default function Project3DViewer({ projectId }) {
 
         const preferredIndex = Math.max(
           0,
-          available.findIndex((item) => item.node===selectApsGeometry(doc.getRoot(),{prefer2D:isPlanCadUrn(urn)}))
+          available.findIndex((item) => item.is3D)
         );
 
         const preferred = available[preferredIndex];
@@ -9064,11 +9062,10 @@ export default function Project3DViewer({ projectId }) {
     if(!projectId)return;
     let cancelled=false;
     (async()=>{
-      const localScene=await readSchematic(projectId),localEngineering=await readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)});
-      if(cancelled||activeDrawingDocumentId!==selectedDrawingSync(projectId))return;
+      const localScene=await readSchematic(projectId),localEngineering=await readPersistedTakeoff(projectId,'engineering');
       const {restoreCloud3DState}=await import('@/lib/cloud3DState.mjs');
       let cloud;
-      try{cloud=await restoreCloud3DState(projectId,null,activeDrawingDocumentId);}catch(error){if(localScene||engineeringUrn(localEngineering)){window.dispatchEvent(new CustomEvent('ventra:3d-cloud-error',{detail:{projectId,message:error.message}}));return;}throw error;}
+      try{cloud=await restoreCloud3DState(projectId);}catch(error){if(localScene||engineeringUrn(localEngineering)){window.dispatchEvent(new CustomEvent('ventra:3d-cloud-error',{detail:{projectId,message:error.message}}));return;}throw error;}
       if(cancelled)return;
       const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
       // Migrate each missing source independently, without overwriting existing cloud data.
@@ -9079,12 +9076,12 @@ export default function Project3DViewer({ projectId }) {
         if(selectedSource)await writeCloud3DState(projectId,'selection',{source:selectedSource});
       }
       if(cancelled)return;
-      await restoreEngineeringSnapshot(projectId,cloud.engineering,{read:(id,kind)=>readPersistedTakeoff(id,kind,{documentId:activeDrawingDocumentId}),persist:persistTakeoff});
+      await restoreEngineeringSnapshot(projectId,cloud.engineering,{read:readPersistedTakeoff,persist:persistTakeoff});
       if(cloud.schematic)await saveSchematic(projectId,cloud.schematic,{preserveBase:false,syncCloud:false});
       if(cloud.selection?.source)await saveActiveSource(projectId,cloud.selection.source,{syncCloud:false});
-    })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)}),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
+    })().then(()=>Promise.all([readPersistedTakeoff(projectId),readPersistedTakeoff(projectId,'engineering'),readSchematic(projectId),readSchematic(projectId,'schematic3d-base'),readActiveSource(projectId)])).then(([latest,engineering,scene,base,source])=>{
       if(cancelled)return;
-      const selectedEngineering=engineeringForDrawing(engineering,latest,selectedDrawingSync(projectId));
+      const selectedEngineering=reconcileEngineering(engineering,latest);
       const binding=drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:selectedEngineering,source:source||(engineeringUrn(selectedEngineering)?'aps':'schematic'),scene});
       const resolvedUrn=binding.engineeringAllowed?engineeringUrn(selectedEngineering):'';
       scene=binding.scene;
@@ -9100,12 +9097,12 @@ export default function Project3DViewer({ projectId }) {
       else if(selectedSource==='aps'&&!resolvedUrn){setStatus('missing');setMessage('No engineering model is saved for this project. Analyze the DWG in Drawings again to restore its Autodesk source and calibrated geometry.');}
     }).catch(error=>{if(!cancelled){setStatus('error');setMessage(`Could not load saved drawing geometry: ${error.message}`);}});
     return()=>{cancelled=true;};
-  },[projectId,activeDrawingDocumentId]);
+  },[projectId]);
 
   useEffect(()=>{
     const updated=event=>{
       if(event.detail?.projectId!==projectId)return;
-      const latest=engineeringForDrawing(readTakeoffSync(projectId,'engineering',undefined,selectedDrawingSync(projectId)),readTakeoffSync(projectId),selectedDrawingSync(projectId));
+      const latest=reconcileEngineering(readTakeoffSync(projectId,'engineering'),readTakeoffSync(projectId));
       if(active3DSource==='aps'&&engineeringUrn(latest)&&drawingSourceBinding({selectedDocumentId:selectedDrawingSync(projectId),selectedDocumentName:selectedDrawingDetailsSync(projectId)?.fileName,engineering:latest}).engineeringAllowed){
         setTakeoff(latest);setUrn(engineeringUrn(latest));
       }
@@ -9118,7 +9115,7 @@ export default function Project3DViewer({ projectId }) {
     const viewer=viewerRef.current;
     if(status!=='ready'||active3DSource!=='aps'||!viewer||reconstruction||activeViewIndex<0||viewables[activeViewIndex]?.is3D)return;
     let cancelled=false;
-    readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)}).then(saved=>{
+    readPersistedTakeoff(projectId,'engineering').then(saved=>{
       if(cancelled||viewerRef.current!==viewer)return;
       const latest=chooseEngineeringTakeoff(takeoffFromEffect(),saved,urn),check=dwgReconstructionReadiness(latest,urn);
       if(!check.ready){setMessage(`DWG source sheet loaded. ${check.reason}`);return;}
@@ -9162,7 +9159,7 @@ export default function Project3DViewer({ projectId }) {
   async function persistSchematicScene(nextScene, { preserveBase = true } = {}) {
     if (!projectId || !nextScene) return;
     if(nextScene.source==='dwg-engineering-interior'){
-      let latest=await readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)});
+      let latest=await readPersistedTakeoff(projectId,'engineering');
       const next=updateDwgInterior(latest,applyDesignDefaults(nextScene));
       await persistTakeoff(projectId,next,{kind:'engineering'});
       const {writeCloud3DState}=await import('@/lib/cloud3DState.mjs');
@@ -9361,7 +9358,7 @@ export default function Project3DViewer({ projectId }) {
     try {
       const fresh = readTakeoffSync(projectId);
       if (fresh && typeof fresh === "object") {
-        const saved=readTakeoffSync(projectId,'engineering',undefined,selectedDrawingSync(projectId));
+        const saved=readTakeoffSync(projectId,'engineering');
         return active3DSource==='aps'||active3DSource==='dwg-interior'?chooseEngineeringTakeoff(fresh,saved,urn):fresh;
       }
     } catch (error) {
@@ -9394,7 +9391,7 @@ export default function Project3DViewer({ projectId }) {
     try {
       setReconstructing(true);
       // Await IndexedDB: synchronous localStorage data can contain only a pointer/summary.
-      const reads=await Promise.allSettled([readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)}),readPersistedTakeoff(projectId)]);
+      const reads=await Promise.allSettled([readPersistedTakeoff(projectId,'engineering'),readPersistedTakeoff(projectId)]);
       const [saved,latest]=reads.map(r=>r.status==='fulfilled'?r.value:null);
       if(viewerRef.current!==viewer||viewer.model!==expectedModel)return;
       const latestTakeoff=chooseEngineeringTakeoff(chooseEngineeringTakeoff(getFreshProjectTakeoff(),latest,urn),saved,urn);
@@ -9631,7 +9628,7 @@ export default function Project3DViewer({ projectId }) {
     if(dwgFurnitureBusyRef.current)return;
     dwgFurnitureBusyRef.current=true;setDwgFurnitureBusy(true);
     try{
-      let latest=await readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)});
+      let latest=await readPersistedTakeoff(projectId,'engineering');
       if(engineeringUrn(latest)!==urn)throw new Error('The selected DWG changed. Reconstruct its current geometry first.');
       const presentation=latest.geometry?.dwgPresentation;
       const index=region??reconstruction?._runtime?.storeyFrames?.[0]?.sourceRegionIndex??presentation?.activeRegion??0;
@@ -9703,7 +9700,7 @@ export default function Project3DViewer({ projectId }) {
     if(dwgFurnitureBusyRef.current)return;
     dwgFurnitureBusyRef.current=true;setDwgFurnitureBusy(true);
     try {
-      const latest=await readPersistedTakeoff(projectId,'engineering',{documentId:selectedDrawingSync(projectId)});
+      const latest=await readPersistedTakeoff(projectId,'engineering');
       if(!latest||engineeringUrn(latest)!==urn)throw new Error("The selected DWG source changed. Reconstruct the current source first.");
       renderDwgFurniture(viewerRef.current,reconstruction,dwgRoomUses);
       const next=patchDwgPresentation(latest,{roomUses:dwgRoomUses,furnished:true});
@@ -9980,7 +9977,6 @@ export default function Project3DViewer({ projectId }) {
 
       {schematicScene && active3DSource==='schematic' && (
         <LocalizedElement as="p" role="status" style={{ padding: "12px 16px", border: "1px solid #a58a36", borderRadius: 8 }}>
-          {schematicScene.documentName && <><OriginalText>{schematicScene.documentName}</OriginalText><br /></>}
           {rasterReview?.report?.status === "analyzing"
             ? "Image analysis is still running. The model shown here is from an earlier analysis."
             : rasterReview?.report?.accepted === false

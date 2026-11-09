@@ -9,9 +9,9 @@ export async function writeCloud3DState(projectId,kind,value){
   return {saved:true};
  }catch(error){window.dispatchEvent(new CustomEvent('ventra:3d-cloud-error',{detail:{projectId,message:error.message,kind}}));return {saved:false,error:error.message};}
 }
-export async function restoreCloud3DState(projectId,kind=null,documentId=null){
+export async function restoreCloud3DState(projectId,kind=null){
  const {commercialFetch}=await import('./commercialFetch.js');
- const response=await commercialFetch(`/api/project-3d-state?projectId=${encodeURIComponent(projectId)}${kind?`&kind=${encodeURIComponent(kind)}`:''}${documentId?`&documentId=${encodeURIComponent(documentId)}`:''}`,{cache:'no-store',signal:typeof AbortSignal.timeout==='function'?AbortSignal.timeout(15000):undefined});
+ const response=await commercialFetch(`/api/project-3d-state?projectId=${encodeURIComponent(projectId)}${kind?`&kind=${encodeURIComponent(kind)}`:''}`,{cache:'no-store',signal:typeof AbortSignal.timeout==='function'?AbortSignal.timeout(15000):undefined});
  const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load cloud 3D state.');
  return data;
 }

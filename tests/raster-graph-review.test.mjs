@@ -11,18 +11,8 @@ test('review distinguishes white floor holes, retained wardrobe floors and measu
  const html=renderToStaticMarkup(React.createElement(component.default,{report,imageUrl:'source.jpg',fileName:'plan.jpg'}));
  assert.ok(html.includes('Excluded void; no floor'));assert.ok(html.includes('Wardrobe; bedroom floor retained'));assert.ok(html.includes('Clockwise'));assert.ok(html.includes('Inward to'));assert.ok(html.includes('fill="#fff"'));assert.ok(html.includes('<path d="M'));
 });
-test('the old engine flag cannot reactivate pixel-graph classification',async()=>{
- const source=fs.readFileSync('src/lib/serverRasterPreview.js','utf8'),start=source.indexOf('export async function runRasterPreview('),end=source.indexOf('\nexport async function rasterPreviewFingerprint(');
- const images=[];
- const context=vm.createContext({
-  process:{env:{VENTRA_RASTER_ENGINE:'pixel'}},
-  RASTER_TRACE_BUILD:'direct-trace',RASTER_PREVIEW_VERSION:'direct-trace',
-  RasterGeometryError:class extends Error{},console:{error(){}},
-  NextResponse:{json:(body,options)=>({body,status:options.status})},
-  prepareVisionImage:async url=>{images.push(url);throw Error('Fixture stops at image preparation');},
-  runPixelGraphPreview:()=>assert.fail('The pixel-graph engine must be disconnected'),
- });
- vm.runInContext(source.slice(start,end).replace('export async function','async function'),context);
- const result=await context.runRasterPreview({imageUrl:'test-only'});
- assert.deepEqual(images,['test-only']);assert.equal(result.status,422);assert.equal(result.body.routeVersion,'direct-trace');
+test('production image handler chooses measured pixel graph unless legacy mode is explicitly selected',async()=>{
+ const source=fs.readFileSync('src/lib/serverRasterPreview.js','utf8'),start=source.indexOf('export async function runRasterPreview('),end=source.indexOf('\nexport async function rasterPreviewFingerprint(');let called=0;
+ const context=vm.createContext({process:{env:{}},runPixelGraphPreview:async body=>{called++;return{graph:true,body}}});vm.runInContext(source.slice(start,end).replace('export async function','async function'),context);
+ const result=await context.runRasterPreview({imageUrl:'test-only'});assert.equal(result.graph,true);assert.equal(called,1);
 });
