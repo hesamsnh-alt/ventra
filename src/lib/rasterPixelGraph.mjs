@@ -162,7 +162,7 @@ export async function extractRasterPixelGraph(buffer){
     if(Math.min(ta,tb)<1-.01&&Math.max(ta,tb)>.01&&tb>=0&&tb<=1)continue;
     gaps.push({id:`gap${gaps.length+1}`,a:a.id,b:b.id,start,end,lengthPixels:Math.round(length),support:'opening_hypothesis_not_wall'});
   }
-  if(candidates.length>700||gaps.length>700)throw error('PIXEL_GRAPH_TOO_COMPLEX','Opening hypotheses exceed the classification budget; nothing was truncated.');
+  if(candidates.length>700||gaps.length>700)throw error('PIXEL_GRAPH_TOO_COMPLEX','Opening hypotheses exceed the classification budget; nothing was truncated.',{candidateCount:candidates.length,gapCount:gaps.length,inkCount:ink.length,candidateBudget:700,gapBudget:700});
   return{version:PIXEL_GRAPH_VERSION,imageWidth:width,imageHeight:height,ink,candidates,gaps};
 }
 
