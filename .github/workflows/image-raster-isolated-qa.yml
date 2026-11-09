@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - fix/raster-complexity-diagnostics-20261109
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 jobs:
   image-raster-offline:
