@@ -2,6 +2,8 @@
 // A single bounded correction pass is allowed after a completed but invalid
 // geometry trace. Transport/provider failures are never retried here.
 export const RASTER_RETRYABLE_GEOMETRY_CODES = Object.freeze([
+  "INVALID_COORDINATE",
+  "COORDINATE_FRAME_MISMATCH",
   "CONFLICTING_SCALE",
   "CONFLICTING_DIMENSIONS",
   "TRACE_IMAGE_MISMATCH",

@@ -1,8 +1,9 @@
 // Raster-only pixel checks. These observations constrain the trace; they never
 // move a wall, invent a boundary, choose a room template, or change scale.
 import sharp from "sharp";
+import {rasterInkContrast} from './rasterInkContrast.mjs';
 
-export const RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v1";
+export const RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v2-contrast";
 
 function evidenceError(code, message, details) {
   return Object.assign(new Error(message), { name: "RasterImageEvidenceError", code, details });
@@ -104,13 +105,14 @@ function strokeGuides(mask, width, height, horizontal) {
 export async function prepareRasterImageEvidence(buffer) {
   const { data, info } = await sharp(buffer).flatten({ background: "#ffffff" }).greyscale().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  const mask = Uint8Array.from(data, v => v < 170 ? 1 : 0);
+  const {mask,strokeMask}=rasterInkContrast(data,width,height);
+  const symbolMask=Uint8Array.from(data,(v,i)=>v<132||strokeMask[i]?1:0);
   const background = exteriorBackground(mask, width, height);
   for (let i = 0; i < mask.length; i++) if (background[i]) mask[i] = 0;
   const guides = [...strokeGuides(mask, width, height, true), ...strokeGuides(mask, width, height, false)]
     .sort((a, b) => Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y) - Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y))
     .slice(0, 100).map((g, i) => ({ id: `pixel-stroke-${i + 1}`, ...g }));
-  return { width, height, mask, guides };
+  return { width, height, mask, guides, tone:data, symbolMask };
 }
 
 export function rasterEvidencePrompt(evidence) {

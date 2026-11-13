@@ -1,3 +1,4 @@
+import {runRasterPreview,rasterPreviewFingerprint} from '@/lib/serverRasterPreview';
 import { createPrintedDimensionAlignment, mapPrintedDimensionPoint } from '@/lib/printedDimensionAlignment.mjs';
 import { prepareObservedOpeningWalls } from '@/lib/sourceOpeningWalls.mjs';
 import {outdoorBoundaries,observedDoorOrientation} from '@/lib/schematicBoundaries.mjs';
@@ -3190,7 +3191,7 @@ async function handleCommercialRequest(request) {
     return response.clone();
   }
 
-  const task = runPreview(body);
+  const task = runRasterPreview(body);
   previewInFlight.set(cacheKey, task);
   try {
     const response = await task;
@@ -3203,7 +3204,4 @@ async function handleCommercialRequest(request) {
 
 export async function runPreviewRequest(request){return commercialRun(request,'preview',handleCommercialRequest);}
 
-export async function previewImageFingerprint(imageUrl){
- const prepared=await prepareImage(imageUrl,AbortSignal.timeout(12000));
- return {hash:createHash('sha256').update(prepared.buffer).digest('hex').slice(0,16),version:VERSION};
-}
+export async function previewImageFingerprint(imageUrl){return rasterPreviewFingerprint(imageUrl);}

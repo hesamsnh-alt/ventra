@@ -1,3 +1,4 @@
+import {assertVerifiedPreview} from '../src/lib/verifiedPreview.mjs';
 import {runPreviewAnalysis,acknowledgePreviewJob} from '../src/lib/previewJobClient.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -249,9 +250,10 @@ test("a failed raster request stops quiet Analyze and leaves existing persistenc
 
 test("successful raster Analyze commits scene and original before publishing the source event", async () => {
   const writes = [];
-  const scene = compileRasterFloorplan(fixture(), size);
+  const scene = compileRasterFloorplan(fixture(), size);scene.geometryValidation.pixelSupport='passed';
   const storage={setItem:(...args)=>writes.push(args),getItem:()=>null,removeItem(){}};
   const sandbox = {
+    assertVerifiedPreview,
     applyDesignDefaults: (await import('../src/lib/designDefaults.mjs')).applyDesignDefaults,
     drawingSceneMatches:()=>false,
     saveSchematic:(id,scene,options)=>saveSchematic(id,scene,{...options,storage}),
@@ -260,7 +262,7 @@ test("successful raster Analyze commits scene and original before publishing the
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail;}}, window: { dispatchEvent(){},localStorage: { setItem: (...args) => writes.push(args) } },
     projectId: "test-project", getFileExtension: () => "png", downloadProjectDocument: async () => ({ url: "https://example.invalid/fixture.png" }),
     runPreviewAnalysis, acknowledgePreviewJob, selectDrawingDocument:()=>{}, analysisSelectionRef:{current:{projectId:'test-project',documentId:'d1'}}, commercialFetch:()=>{},
-    ventraFetchWithTransientRetry: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ scene }) }),
+    ventraFetchWithTransientRetry: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ scene,diagnostics:{accepted:true,trace:fixture()} }) }),
     console: { error() {}, warn() {} }, setMessage() {}, setErrorMessage() {}, setRasterReview() {}, updateRasterReview() {}, getRasterReview:()=>null,
   };
   vm.createContext(sandbox); vm.runInContext(generationSource, sandbox);

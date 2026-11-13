@@ -1,747 +1,7 @@
-// src/lib/printedDimensionAlignment.mjs
-var bounds = (poly) => ({ minX: Math.min(...poly.map((p) => p.x)), maxX: Math.max(...poly.map((p) => p.x)), minY: Math.min(...poly.map((p) => p.y)), maxY: Math.max(...poly.map((p) => p.y)) });
-var area = (poly) => Math.abs(poly.reduce((s, p, i) => {
-  const q = poly[(i + 1) % poly.length];
-  return s + p.x * q.y - q.x * p.y;
-}, 0)) / 2;
-var orthogonal = (poly) => poly.every((p, i) => {
-  const q = poly[(i + 1) % poly.length];
-  return Math.abs(p.x - q.x) < 0.01 || Math.abs(p.y - q.y) < 0.01;
-});
-function solveAxis(rooms, axis, extent) {
-  const entries = rooms.filter((r) => r.polygon?.length >= 4).map((room) => ({ room, b: bounds(room.polygon) }));
-  const key0 = axis === "x" ? "minX" : "minY", key1 = axis === "x" ? "maxX" : "maxY";
-  const values = [0, extent, ...entries.flatMap((e) => [e.b[key0], e.b[key1]])].sort((a, b) => a - b);
-  const groups = [];
-  for (const n of values) {
-    const last = groups.at(-1);
-    if (last && n - last[0] <= 0.025) last.push(n);
-    else groups.push([n]);
-  }
-  const nodes = groups.map((g) => ({ initial: g.reduce((a, b) => a + b, 0) / g.length }));
-  nodes[0].initial = 0;
-  nodes.at(-1).initial = extent;
-  const nearest = (v) => nodes.reduce((best, n, i) => Math.abs(n.initial - v) < Math.abs(nodes[best].initial - v) ? i : best, 0);
-  const adjacency = nodes.map(() => []), constraints = [];
-  for (const { room, b } of entries) {
-    if (Math.abs(area(room.polygon) - (b.maxX - b.minX) * (b.maxY - b.minY)) > 0.02) continue;
-    const target = Number(axis === "x" ? room.printedWidthMeters : room.printedDepthMeters);
-    if (!(target > 0)) continue;
-    const current = b[key1] - b[key0], i = nearest(b[key0]), j = nearest(b[key1]);
-    if (i === j || target > extent + 5e-3 || Math.abs(current - target) > Math.max(0.08, current * 0.05)) return { applied: false, reason: "printed_dimension_outside_refinement_range", roomId: room.id };
-    constraints.push({ roomId: room.id, i, j, target });
-    adjacency[i].push([j, target]);
-    adjacency[j].push([i, -target]);
-  }
-  if (!constraints.length) return { applied: false, reason: "no_printed_dimensions" };
-  const positions = new Array(nodes.length), visited = /* @__PURE__ */ new Set();
-  for (let seed = 0; seed < nodes.length; seed++) {
-    if (visited.has(seed)) continue;
-    const relative = /* @__PURE__ */ new Map([[seed, 0]]), queue = [seed];
-    for (let q = 0; q < queue.length; q++) {
-      const i = queue[q];
-      visited.add(i);
-      for (const [j, delta] of adjacency[i]) {
-        const proposed = relative.get(i) + delta;
-        if (relative.has(j)) {
-          if (Math.abs(relative.get(j) - proposed) > 5e-3) return { applied: false, reason: "conflicting_printed_dimensions" };
-        } else {
-          relative.set(j, proposed);
-          queue.push(j);
-        }
-      }
-    }
-    const anchors = queue.filter((i) => i === 0 || i === nodes.length - 1).map((i) => nodes[i].initial - relative.get(i));
-    if (anchors.length > 1 && Math.abs(anchors[0] - anchors[1]) > 5e-3) return { applied: false, reason: "printed_dimensions_conflict_with_extent" };
-    const origin = anchors.length ? anchors[0] : queue.reduce((sum, i) => sum + nodes[i].initial - relative.get(i), 0) / queue.length;
-    for (const i of queue) positions[i] = origin + relative.get(i);
-  }
-  const maxShift = Math.max(...positions.map((n, i) => Math.abs(n - nodes[i].initial)));
-  if (maxShift > Math.min(0.25, extent * 0.02)) return { applied: false, reason: "excessive_dimension_adjustment", maxShift };
-  for (let i = 1; i < positions.length; i++) if (positions[i] - positions[i - 1] < 0.025) return { applied: false, reason: "dimension_grid_order_conflict" };
-  const maxError = Math.max(...constraints.map((c) => Math.abs(positions[c.j] - positions[c.i] - c.target)));
-  return { applied: true, reason: "consistent_printed_dimension_grid", nodes: nodes.map((n, i) => ({ ...n, value: positions[i] })), constraintCount: constraints.length, maxShift, maxError };
-}
-function createPrintedDimensionAlignment(rooms, width, depth, footprint = []) {
-  if (![footprint, ...rooms.map((r) => r.polygon || [])].every(orthogonal)) return { applied: false, reason: "non_orthogonal_source_preserved" };
-  const x = solveAxis(rooms, "x", width), y = solveAxis(rooms, "y", depth);
-  return { version: "printed_dimension_alignment_v54", applied: x.applied || y.applied, x, y };
-}
-function mapPrintedDimensionPoint(point2, alignment) {
-  const axis = (value, solution) => {
-    if (!solution?.applied || !Number.isFinite(value)) return value;
-    const nodes = solution.nodes;
-    for (let i = 1; i < nodes.length; i++) if (value <= nodes[i].initial) {
-      const a = nodes[i - 1], b = nodes[i], t = (value - a.initial) / (b.initial - a.initial);
-      return a.value + t * (b.value - a.value);
-    }
-    return value + (nodes.at(-1).value - nodes.at(-1).initial);
-  };
-  return { x: axis(point2.x, alignment?.x), y: axis(point2.y, alignment?.y) };
-}
-
-// src/lib/sourceOpeningWalls.mjs
-var EPS = 5e-3;
-var vector = (edge) => {
-  const dx = edge.end.x - edge.start.x, dy = edge.end.y - edge.start.y, length = Math.hypot(dx, dy);
-  return length > EPS ? { x: edge.start.x, y: edge.start.y, ux: dx / length, uy: dy / length, length } : null;
-};
-var along = (g, p) => (p.x - g.x) * g.ux + (p.y - g.y) * g.uy;
-var separation = (g, p) => Math.abs((p.x - g.x) * g.uy - (p.y - g.y) * g.ux);
-var at = (g, t) => ({ x: g.x + g.ux * t, y: g.y + g.uy * t });
-var axisMatches = (g, axis) => axis === "horizontal" ? Math.abs(g.uy) <= 0.2 : axis === "vertical" ? Math.abs(g.ux) <= 0.2 : axis === "diagonal" ? Math.abs(g.ux) > 0.2 && Math.abs(g.uy) > 0.2 : true;
-var edges = (room) => (room.polygon || []).map((start, i, poly) => ({ start, end: poly[(i + 1) % poly.length] }));
-function prepareObservedOpeningWalls(walls, rooms, observations, relationships = [], { distanceTolerance = 0.12 } = {}) {
-  const output = [...walls], added = [];
-  for (const observation of observations) {
-    if (observation.type !== "door") continue;
-    const center = observation.center, width = Number(observation.widthMeters);
-    if (!Number.isFinite(center?.x) || !Number.isFinite(center?.y) || !(width > 0)) continue;
-    const fits = (edge) => {
-      const g = vector(edge);
-      if (!g || !axisMatches(g, observation.wallAxis) || separation(g, center) > distanceTolerance) return false;
-      const t = along(g, center);
-      return t - width / 2 >= -EPS && t + width / 2 <= g.length + EPS;
-    };
-    if (output.some(fits)) continue;
-    let best = null;
-    for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) {
-      const a = rooms[i], b = rooms[j];
-      const relation = relationships.find((r) => r.roomAId === a.id && r.roomBId === b.id || r.roomAId === b.id && r.roomBId === a.id);
-      if (relation && ["open", "separate"].includes(relation.relation) && relation.confidence >= 0.6) continue;
-      for (const ea of edges(a)) {
-        const g = vector(ea);
-        if (!g || !axisMatches(g, observation.wallAxis) || separation(g, center) > distanceTolerance) continue;
-        for (const eb of edges(b)) {
-          const h = vector(eb), faceTolerance = Math.min(0.12, distanceTolerance);
-          if (!h || Math.abs(g.ux * h.uy - g.uy * h.ux) > 0.02 || separation(g, eb.start) > faceTolerance || separation(g, eb.end) > faceTolerance) continue;
-          const lo = Math.max(0, Math.min(along(g, eb.start), along(g, eb.end))), hi = Math.min(g.length, Math.max(along(g, eb.start), along(g, eb.end)));
-          const t = along(g, center);
-          if (t - width / 2 < lo - EPS || t + width / 2 > hi + EPS) continue;
-          const distance3 = separation(g, center);
-          if (!best || distance3 < best.distance) best = { start: at(g, lo), end: at(g, hi), distance: distance3, roomIds: [a.id, b.id] };
-        }
-      }
-    }
-    if (best) {
-      const wall = { id: `opening_support_${observation.id}`.slice(0, 100), type: "internal", provenance: "observed_opening_shared_boundary", start: best.start, end: best.end };
-      output.push(wall);
-      added.push({ wallId: wall.id, openingId: observation.id, roomIds: best.roomIds, sourceDistance: best.distance });
-    }
-  }
-  return { walls: output, added };
-}
-
-// src/lib/roomSemantics.mjs
-function canonicalRoomType(room) {
-  const selected = room?.semanticType || room?.type;
-  if (room?.roomUseSource === "user_confirmed" && ["bathroom", "bedroom", "kitchen", "kitchen_dining", "living", "dining", "balcony", "laundry", "storage", "office", "circulation", "room", "unknown"].includes(selected)) return selected === "unknown" ? "room" : selected;
-  const name2 = String(room?.name || "").normalize("NFKC").replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/ي/g, "\u06CC").replace(/ك/g, "\u06A9").toLowerCase();
-  const text = `${name2} ${room?.type || ""} ${room?.semanticType || ""}`.toLowerCase();
-  if (/(balcony|terrace|patio|تراس|بالکن|ایوان|شرفة|شرفه|بلكونة|بلکونة)/.test(text)) return "balcony";
-  if (/(laundry|washing room|رخت.?شوی|لباس.?شوی|غرفة\s*غسیل|غرفه\s*غسیل)/.test(text)) return "laundry";
-  if (/(bath|toilet|\bwc\b|\bb\s*[/.-]\s*r\b|shower|washroom|powder|سرویس|حمام|توالت|دستشویی|دستشوئی|دورة\s*المیاه|مرحاض)/.test(text)) return "bathroom";
-  if (/(store|storage|closet|utility|pantry|انبار|مخزن)/.test(text)) return "storage";
-  const kitchen = /(kitchen|آشپزخانه|اشپزخانه|مطبخ)/.test(text);
-  const dining = /(dining|dinning|ناهار|غذاخوری|طعام)/.test(text);
-  if (kitchen && dining) return "kitchen_dining";
-  if (kitchen) return "kitchen";
-  if (/(living|lounge|family|majlis|پذیرایی|پذیرائی|نشیمن|مجلس|معیشة|معیشه)/.test(text)) return "living";
-  if (dining) return "dining";
-  if (/(bed|bedroom|master|guest room|kids room|children|خواب|غرفة\s*نوم|غرفه\s*نوم)/.test(text)) return "bedroom";
-  if (/(office|study|work|دفتر|مطالعه|مکتب)/.test(text)) return "office";
-  if (/(circulation|corridor|hallway|\bhall\b|راهرو|ممر)/.test(text)) return "circulation";
-  return "room";
-}
-
-// src/lib/schematicBoundaries.mjs
-var lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-var project = (p, a, b) => ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / ((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-function edgeIntervals(wall, room) {
-  const a = wall.start, b = wall.end, len = Math.hypot(b.x - a.x, b.y - a.y), ranges = [];
-  if (len < 0.01) return ranges;
-  const tolerance = 0.12;
-  const distance3 = (p) => Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / len;
-  const poly = room.polygon || [];
-  for (let i = 0; i < poly.length; i++) {
-    const p = poly[i], q = poly[(i + 1) % poly.length];
-    if (distance3(p) > tolerance || distance3(q) > tolerance) continue;
-    const low = Math.max(0, Math.min(project(p, a, b), project(q, a, b)));
-    const high = Math.min(1, Math.max(project(p, a, b), project(q, a, b)));
-    if ((high - low) * len > 0.05) ranges.push([low, high]);
-  }
-  return ranges;
-}
-function outdoorBoundaries(walls, rooms, openings) {
-  const output = [], mapped = [];
-  for (const wall of walls) {
-    if (wall.type !== "external") {
-      output.push(wall);
-      mapped.push(...openings.filter((o) => o.wallId === wall.id));
-      continue;
-    }
-    const outdoor = rooms.filter((r) => canonicalRoomType(r) === "balcony").flatMap((r) => edgeIntervals(wall, r));
-    const indoor = rooms.filter((r) => canonicalRoomType(r) !== "balcony").flatMap((r) => edgeIntervals(wall, r));
-    if (!outdoor.length) {
-      output.push(wall);
-      mapped.push(...openings.filter((o) => o.wallId === wall.id));
-      continue;
-    }
-    const cuts = [.../* @__PURE__ */ new Set([0, 1, ...outdoor.flat(), ...indoor.flat()])].sort((a, b) => a - b);
-    const pieces = [];
-    for (let i = 0; i < cuts.length - 1; i++) {
-      const lo = cuts[i], hi = cuts[i + 1], mid = (lo + hi) / 2;
-      if (hi - lo < 1e-6) continue;
-      const railing = outdoor.some(([a, b]) => mid >= a && mid <= b) && !indoor.some(([a, b]) => mid >= a && mid <= b);
-      const prior = pieces.at(-1);
-      if (prior && prior.railing === railing) prior.hi = hi;
-      else pieces.push({ lo, hi, railing });
-    }
-    for (const [i, p] of pieces.entries()) output.push({ ...wall, id: pieces.length === 1 ? wall.id : `${wall.id}_outdoor_${i}`, start: lerp(wall.start, wall.end, p.lo), end: lerp(wall.start, wall.end, p.hi), ...p.railing ? { type: "railing", height: 1.1, heightSource: "visual_default_not_measured" } : {} });
-    for (const opening of openings.filter((o) => o.wallId === wall.id)) {
-      const t = Number(opening.offset), i = pieces.findIndex((p2) => t >= p2.lo - 1e-6 && t <= p2.hi + 1e-6);
-      if (i < 0) continue;
-      const p = pieces[i];
-      mapped.push({ ...opening, wallId: pieces.length === 1 ? wall.id : `${wall.id}_outdoor_${i}`, offset: (t - p.lo) / (p.hi - p.lo) });
-    }
-  }
-  return { walls: output, openings: mapped };
-}
-function observedDoorOrientation(opening, wall) {
-  const side = String(opening.hingeSide || "unknown").toLowerCase();
-  const a = wall.start, b = wall.end;
-  const first = side === "left" ? a.x <= b.x : side === "right" ? a.x >= b.x : side === "top" ? a.y >= b.y : side === "bottom" ? a.y <= b.y : null;
-  const direction = String(opening.swingDirection || "unknown").toLowerCase();
-  const swing = direction === "clockwise" ? "counterclockwise" : direction === "counterclockwise" ? "clockwise" : "unknown";
-  return { hinge: first === null ? "unknown" : first ? "start" : "end", swing, orientationSource: "source_image_y_down", openAngleDegrees: first === null || swing === "unknown" ? 0 : 90 };
-}
-
-// src/lib/operatorAllowance.mjs
-function isOperator(owner, env) {
-  return !!env.VENTRA_FREE_USER_ID && owner === env.VENTRA_FREE_USER_ID;
-}
-function operatorAllowance(owner, baseLimit, env) {
-  return isOperator(owner, env) ? 2147483647 : baseLimit;
-}
-
-// src/lib/serverCommercial.js
-import { createHash } from "node:crypto";
-import { createClient as createClient2 } from "@supabase/supabase-js";
-
-// src/lib/serverBilling.js
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
-function billingError(message, status) {
-  return Object.assign(new Error(message), { status });
-}
-function provider() {
-  if (!process.env.STRIPE_SECRET_KEY) throw billingError("Billing has not been configured by the site operator.", 503);
-  return new Stripe(process.env.STRIPE_SECRET_KEY);
-}
-async function account(request) {
-  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  if (!token) throw billingError("Please sign in to manage billing.", 401);
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key2 = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key2) throw billingError("Account authentication is not configured.", 503);
-  const db = createClient(url, key2, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await db.auth.getUser(token);
-  if (error || !data.user) throw billingError("Please sign in again.", 401);
-  return data.user;
-}
-async function customerFor(stripe, user, create = false) {
-  if (!/^[a-f0-9-]{36}$/i.test(user.id)) throw billingError("Invalid account identifier.", 400);
-  const result = await stripe.customers.search({ query: `metadata['supabase_user_id']:'${user.id}'`, limit: 10 });
-  if (result.has_more || result.data.length > 1) throw billingError("Multiple billing profiles found. Contact support.", 409);
-  let customer = result.data[0];
-  if (!customer && user.email) {
-    const legacy = await stripe.customers.list({ email: user.email, limit: 100 });
-    if (legacy.has_more) throw billingError("Billing profile needs support review.", 409);
-    for (const candidate of legacy.data) {
-      const subscriptions = await stripe.subscriptions.list({ customer: candidate.id, status: "all", limit: 100 });
-      if (subscriptions.data.some((row) => row.metadata?.supabase_user_id === user.id)) {
-        if (customer) throw billingError("Multiple billing profiles found. Contact support.", 409);
-        customer = await stripe.customers.update(candidate.id, { metadata: { supabase_user_id: user.id } });
-      }
-    }
-  }
-  if (!customer && create) customer = await stripe.customers.create({ email: user.email, metadata: { supabase_user_id: user.id } }, { idempotencyKey: `ventra-customer-${user.id}` });
-  return customer;
-}
-async function subscriptionFor(stripe, customer) {
-  if (!customer) return null;
-  const rows = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 100 });
-  return rows.data.sort((a, b) => Number(["active", "trialing", "past_due", "unpaid", "incomplete"].includes(b.status)) - Number(["active", "trialing", "past_due", "unpaid", "incomplete"].includes(a.status)) || b.created - a.created)[0] || null;
-}
-
-// src/lib/commercialAccess.mjs
-var COMMERCIAL_LIMITS = { active: 30, trialing: 5 };
-function subscriptionAccess(subscription, priceId) {
-  if (!priceId) throw Object.assign(new Error("The operator must configure the subscription price."), { status: 503 });
-  const eligible = subscription && Object.hasOwn(COMMERCIAL_LIMITS, subscription.status) && subscription.items?.data?.some((item) => item.price?.id === priceId);
-  if (!eligible) throw Object.assign(new Error("An active Ventra subscription or trial is required. Open Billing."), { status: 402, code: "SUBSCRIPTION_REQUIRED" });
-  return { status: subscription.status, limit: COMMERCIAL_LIMITS[subscription.status] };
-}
-function validProjectId(id) {
-  return typeof id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
-}
-
-// src/lib/serverCommercial.js
-var fail = (message, status = 503, code = "COMMERCIAL_UNAVAILABLE") => Object.assign(new Error(message), { status, code });
-function commercialAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key2 = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key2) throw fail("Commercial services are not configured. Contact support.");
-  return createClient2(url, key2, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-async function commercialContext(request, projectId, verifiedUser = null) {
-  const user = verifiedUser || await account(request);
-  if (!validProjectId(projectId)) throw fail("A valid project ID is required.", 400, "PROJECT_REQUIRED");
-  const db = commercialAdmin();
-  const { data: project2, error } = await db.from("projects").select("user_id").eq("id", projectId).maybeSingle();
-  if (error) throw fail("Could not verify project access.");
-  if (!project2) throw fail("Project unavailable.", 403, "PROJECT_ACCESS_DENIED");
-  if (project2.user_id !== user.id) {
-    const member = await db.from("ventra_project_members").select("role").eq("project_id", projectId).eq("user_id", user.id).maybeSingle();
-    if (member.error || !["manager", "supervisor"].includes(member.data?.role)) throw fail("You cannot run analysis for this project.", 403, "PROJECT_ACCESS_DENIED");
-  }
-  if (isOperator(project2.user_id, process.env)) return { user, db, owner: project2.user_id, status: "operator", limit: operatorAllowance(project2.user_id, 0, process.env) };
-  const stripe = provider(), customer = await customerFor(stripe, { id: project2.user_id, email: project2.user_id === user.id ? user.email : void 0 });
-  const subscription = await subscriptionFor(stripe, customer);
-  const access = subscriptionAccess(subscription, process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID);
-  return { user, db, owner: project2.user_id, ...access, limit: operatorAllowance(project2.user_id, access.limit, process.env) };
-}
-function commercialError(error) {
-  return Response.json({ success: false, error: error.status ? error.message : "Commercial service unavailable. Try later.", code: error.code || "COMMERCIAL_UNAVAILABLE" }, { status: error.status || 503 });
-}
-var running = /* @__PURE__ */ new Map();
-var done = /* @__PURE__ */ new Map();
-async function commercialRun(request, action, handler2) {
-  try {
-    const user = await account(request);
-    const raw = await request.clone().text();
-    if (raw.length > 12 * 1024 * 1024) throw fail("Analysis request exceeds 12 MB.", 413, "REQUEST_TOO_LARGE");
-    let body;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      throw fail("Invalid JSON request.", 400, "BAD_REQUEST");
-    }
-    const context = await commercialContext(request, body.projectId, user);
-    const digest = createHash("sha256").update(raw).digest("hex");
-    const suppliedId = String(request.headers.get("x-ventra-request-id") || body.requestId || digest).slice(0, 180);
-    const key2 = `${user.id}:${action}:${suppliedId}:${digest}`;
-    for (const [id, row] of done) if (row.until < Date.now()) done.delete(id);
-    if (done.has(key2)) return done.get(key2).response.clone();
-    if (running.has(key2)) return (await running.get(key2)).clone();
-    const task = (async () => {
-      let reserved = false;
-      async function release() {
-        if (!reserved) return;
-        reserved = false;
-        try {
-          const { error } = await context.db.rpc("ventra_release_analysis", { p_owner: context.owner, p_actor: user.id, p_project: body.projectId, p_action: action, p_request: suppliedId, p_hash: digest });
-          if (error) throw error;
-        } catch {
-          console.error("[VENTRA USAGE RELEASE] Failed to release unsuccessful analysis; operator reconciliation required.", { projectId: body.projectId, action, requestId: suppliedId });
-        }
-      }
-      if (action !== "boq") {
-        if (!process.env.OPENAI_API_KEY) throw fail("AI analysis is not configured. Contact support.");
-        if (!isOperator(context.owner, process.env)) {
-          const { data, error } = await context.db.rpc("ventra_consume_analysis", { p_owner: context.owner, p_actor: user.id, p_project: body.projectId, p_action: action, p_request: suppliedId, p_hash: digest, p_limit: context.limit });
-          if (error) throw fail("Usage tracking is unavailable. Contact support.");
-          if (!data?.accepted) throw fail(data?.duplicate ? "This analysis was already submitted. Check the project result before retrying." : "Monthly analysis allowance reached. Open Billing.", data?.duplicate ? 409 : 429, data?.duplicate ? "ANALYSIS_ALREADY_SUBMITTED" : "ANALYSIS_LIMIT_REACHED");
-        }
-      }
-      reserved = action !== "boq" && !isOperator(context.owner, process.env);
-      try {
-        body.requestId = key2;
-        const headers2 = new Headers(request.headers);
-        headers2.set("x-ventra-request-id", key2);
-        headers2.delete("content-length");
-        const scoped = new Request(request.url, { method: "POST", headers: headers2, body: JSON.stringify(body), signal: request.signal });
-        let response;
-        response = await handler2(scoped);
-        if (!response.ok) await release();
-        if (response.ok) {
-          if (done.size >= 50) done.delete(done.keys().next().value);
-          done.set(key2, { response: response.clone(), until: Date.now() + 3e5 });
-        }
-        return response;
-      } catch (error) {
-        await release();
-        throw error;
-      }
-    })();
-    running.set(key2, task);
-    try {
-      return await task;
-    } finally {
-      if (running.get(key2) === task) running.delete(key2);
-    }
-  } catch (error) {
-    return commercialError(error);
-  }
-}
-
-// src/lib/interiorPresentation.mjs
-var xy = (a, s) => ({ x: Number.isFinite(a.xMeters) ? a.xMeters : Number(a.x ?? 0.5) * s.width, y: Number.isFinite(a.yMeters) ? a.yMeters : Number(a.y ?? 0.5) * s.depth });
-var shape = (a, s, pad = 0) => {
-  const p = xy(a, s), t = (Number(a.rotation) || 0) * Math.PI / 180;
-  return { ...p, u: { x: Math.cos(t), y: Math.sin(t) }, v: { x: -Math.sin(t), y: Math.cos(t) }, hx: (Number(a.width) || 0.8) / 2 + pad, hy: (Number(a.depth) || 0.8) / 2 + pad };
-};
-var dot = (a, b) => a.x * b.x + a.y * b.y;
-function furnitureOverlaps(a, b, s, gap = 0) {
-  const x = shape(a, s, gap / 2), y = shape(b, s, gap / 2), d = { x: y.x - x.x, y: y.y - x.y };
-  return [x.u, x.v, y.u, y.v].every((n) => Math.abs(dot(d, n)) < x.hx * Math.abs(dot(x.u, n)) + x.hy * Math.abs(dot(x.v, n)) + y.hx * Math.abs(dot(y.u, n)) + y.hy * Math.abs(dot(y.v, n)) - 1e-6);
-}
-
-// src/lib/sourceFurniture.mjs
-var inside = (p, poly) => {
-  let hit = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
-  }
-  return hit;
-};
-var heights = { sofa: 0.82, bed: 0.82, armchair: 0.85, chair: 0.88, dining_table: 0.76, coffee_table: 0.42, rug: 0.018, kitchen_counter: 0.88, sink: 0.86, stove: 0.9, refrigerator: 1.82, wardrobe: 2.05, tv_unit: 0.58, toilet: 0.78, shower: 2.05, washing_machine: 0.88, desk: 0.76, nightstand: 0.5, cabinet: 1.4, plant: 0.9 };
-function tuckedChairPair(a, b) {
-  const chair = a.type === "chair" ? a : b.type === "chair" ? b : null;
-  const table3 = a.type === "dining_table" ? a : b.type === "dining_table" ? b : null;
-  if (!chair || !table3 || chair.roomId !== table3.roomId) return false;
-  const r = chair.rotation * Math.PI / 180, fx = -Math.sin(r), fy = Math.cos(r);
-  const tx = table3.xMeters - chair.xMeters, ty = table3.yMeters - chair.yMeters;
-  if (tx * fx + ty * fy <= 0) return false;
-  const cut = Math.min(0.18, chair.depth * 0.45);
-  const rear = { ...chair, depth: chair.depth - cut, xMeters: chair.xMeters - fx * cut / 2, yMeters: chair.yMeters - fy * cut / 2 };
-  return !furnitureOverlaps(rear, table3, { width: 0, depth: 0 }, 0);
-}
-function compileSourceFurniture(observations, footprint, rooms, walls = []) {
-  const assets = [], rejected = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const [index, o] of (observations || []).entries()) {
-    const reject = (reason) => rejected.push({ id: o.id || String(index), reason });
-    const room = rooms.find((r) => r.id === o.roomId);
-    if (!(o.type in heights) || !room) {
-      reject("unknown_type_or_room");
-      continue;
-    }
-    if (o.id && seen.has(o.id)) {
-      reject("duplicate_observation_id");
-      continue;
-    }
-    if (o.id) seen.add(o.id);
-    let a = o.backLeft, b = o.backRight;
-    const f = o.frontCenter;
-    if (![a, b, f].every((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) || !Number.isFinite(o.confidence) || o.confidence < 0.65) {
-      reject("uncertain_observation");
-      continue;
-    }
-    let dx = b.x - a.x, dy = b.y - a.y;
-    const width = Math.hypot(dx, dy);
-    if (width < 0.12 || width > 6) {
-      reject("invalid_width");
-      continue;
-    }
-    let nx = -dy / width, ny = dx / width;
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    let depth = (f.x - mx) * nx + (f.y - my) * ny;
-    if (depth < 0) {
-      [a, b] = [b, a];
-      dx = -dx;
-      dy = -dy;
-      nx = -nx;
-      ny = -ny;
-      depth = -depth;
-    }
-    if (depth < 0.1 || depth > 4 || Math.abs((f.x - mx) * dx / width + (f.y - my) * dy / width) > 0.15) {
-      reject("invalid_front_axis");
-      continue;
-    }
-    let rearInset = 0;
-    if (["kitchen_counter", "cabinet", "wardrobe", "tv_unit"].includes(o.type)) for (const w of walls) {
-      const wx = w.end.x - w.start.x, wy = w.end.y - w.start.y, wl = Math.hypot(wx, wy);
-      if (!wl || Math.abs((wx * dy - wy * dx) / (wl * width)) > 0.01) continue;
-      const distance3 = (p) => Math.abs((p.x - w.start.x) * wy - (p.y - w.start.y) * wx) / wl;
-      const along2 = (p) => ((p.x - w.start.x) * wx + (p.y - w.start.y) * wy) / wl;
-      if (distance3(a) > 0.015 || distance3(b) > 0.015 || Math.min(along2(a), along2(b)) < -0.01 || Math.max(along2(a), along2(b)) > wl + 0.01) continue;
-      const thickness = Number(w.thickness) || 0.12;
-      if (thickness <= 0 || thickness > 0.3) continue;
-      rearInset = Math.max(rearInset, thickness / 2 + 5e-3);
-    }
-    if (rearInset) {
-      if (depth - rearInset < 0.1) {
-        reject("insufficient_depth_at_wall");
-        continue;
-      }
-      a = { x: a.x + nx * rearInset, y: a.y + ny * rearInset };
-      b = { x: b.x + nx * rearInset, y: b.y + ny * rearInset };
-      depth -= rearInset;
-    }
-    const corners = [a, b, { x: b.x + nx * depth, y: b.y + ny * depth }, { x: a.x + nx * depth, y: a.y + ny * depth }];
-    const center = { x: mx + nx * (rearInset + depth / 2), y: my + ny * (rearInset + depth / 2) };
-    if (!corners.map((p) => ({ x: p.x * 0.98 + center.x * 0.02, y: p.y * 0.98 + center.y * 0.02 })).every((p) => inside(p, footprint))) {
-      reject("outside_footprint");
-      continue;
-    }
-    if (room.polygon?.length >= 3 && !corners.map((p) => ({ x: p.x * 0.98 + center.x * 0.02, y: p.y * 0.98 + center.y * 0.02 })).every((p) => inside(p, room.polygon))) {
-      reject("outside_assigned_room");
-      continue;
-    }
-    const forwardPositive = ["sofa", "bed", "armchair", "chair"].includes(o.type);
-    const asset = { id: o.id, groupId: o.groupId, roomId: o.roomId, type: o.type, xMeters: center.x, yMeters: center.y, width, depth, height: heights[o.type], rotation: Math.atan2(dy, dx) * 180 / Math.PI + (forwardPositive ? 0 : 180), placementSource: "source_image_observation_v1", sourceConfidence: o.confidence, embeddedInCounter: !!o.embeddedInCounter };
-    if (rearInset) asset.sourceAdjustment = { reason: "rear_face_wall_contact", rearInsetMeters: rearInset, frontPreserved: true };
-    const embeddedPair = (a2, b2) => a2.embeddedInCounter && b2.type === "kitchen_counter" || b2.embeddedInCounter && a2.type === "kitchen_counter";
-    if (o.type !== "rug" && assets.some((a2) => a2.type !== "rug" && !embeddedPair(a2, asset) && !tuckedChairPair(a2, asset) && furnitureOverlaps(a2, asset, { width: 0, depth: 0 }, -0.03))) {
-      reject("overlapping_furniture");
-      continue;
-    }
-    if (o.type !== "rug" && walls.some((w) => {
-      const dx2 = w.end.x - w.start.x, dy2 = w.end.y - w.start.y;
-      const wall = { xMeters: (w.start.x + w.end.x) / 2, yMeters: (w.start.y + w.end.y) / 2, width: Math.hypot(dx2, dy2), depth: Number(w.thickness) || 0.12, rotation: Math.atan2(dy2, dx2) * 180 / Math.PI };
-      return furnitureOverlaps(asset, wall, { width: 0, depth: 0 }, -0.04);
-    })) {
-      reject("intersects_wall");
-      continue;
-    }
-    assets.push(asset);
-  }
-  return { assets, rejected };
-}
-
-// src/lib/fixedFurnitureRepair.mjs
-function repairFixedFurniture(scene, boxes) {
-  const review = scene?.furnishingReview, p = scene?.geometryValidation?.sourceProjection, b = p?.sourceBounds;
-  if (review?.observationCoordinateMode !== "scene_meters_y_up" || !b || !(b.maxX > b.minX) || !(b.maxY > b.minY)) throw new Error("This scene has no source alignment for furniture repair.");
-  const original = review.observations || [], rejected = new Set((review.rejected || []).map((x) => x.id));
-  const map = (q) => ({ x: (q.x - b.minX) / (b.maxX - b.minX) * scene.width, y: (b.maxY - q.y) / (b.maxY - b.minY) * scene.depth });
-  const replacements = /* @__PURE__ */ new Map();
-  for (const box of boxes || []) {
-    const old = original.find((o) => o.id === box.id);
-    if (!old || !rejected.has(box.id) || replacements.has(box.id)) continue;
-    const { left: l, right: r, top: t, bottom: d, front } = box;
-    if (![l, r, t, d, box.confidence].every(Number.isFinite) || l < 0 || t < 0 || r > 1 || d > 1 || l >= r || t >= d || box.confidence < 0.65 || !["left", "right", "top", "bottom"].includes(front)) continue;
-    let a, c, f;
-    if (front === "right") {
-      a = { x: l, y: t };
-      c = { x: l, y: d };
-      f = { x: r, y: (t + d) / 2 };
-    }
-    if (front === "left") {
-      a = { x: r, y: t };
-      c = { x: r, y: d };
-      f = { x: l, y: (t + d) / 2 };
-    }
-    if (front === "bottom") {
-      a = { x: l, y: t };
-      c = { x: r, y: t };
-      f = { x: (l + r) / 2, y: d };
-    }
-    if (front === "top") {
-      a = { x: l, y: d };
-      c = { x: r, y: d };
-      f = { x: (l + r) / 2, y: t };
-    }
-    replacements.set(box.id, { ...old, backLeft: map(a), backRight: map(c), frontCenter: map(f), confidence: box.confidence });
-  }
-  const ordered = [...original.filter((o) => !rejected.has(o.id)), ...original.filter((o) => rejected.has(o.id)).map((o) => replacements.get(o.id) || o)];
-  const result = compileSourceFurniture(ordered, scene.footprint, scene.rooms, scene.walls);
-  const preserved = (scene.assets || []).filter((a) => !rejected.has(a.id));
-  const restored = result.assets.filter((a) => rejected.has(a.id)).filter((a) => !preserved.some((b2) => a.type !== "rug" && b2.type !== "rug" && !(a.embeddedInCounter && b2.type === "kitchen_counter") && !(b2.embeddedInCounter && a.type === "kitchen_counter") && furnitureOverlaps(a, b2, scene, -0.03)));
-  result.assets = [...preserved, ...restored];
-  const restoredIds = new Set(restored.map((a) => a.id));
-  result.rejected = [...result.rejected.filter((a) => rejected.has(a.id)), ...Array.from(rejected).filter((id) => !restoredIds.has(id) && !result.rejected.some((r) => r.id === id)).map((id) => ({ id, reason: "repair_not_validated" }))];
-  const repairedIds = result.assets.filter((a) => rejected.has(a.id)).map((a) => a.id);
-  return { ...scene, assets: result.assets, furnishingReview: { ...review, observations: ordered, acceptedCount: result.assets.length, rejected: result.rejected, requiresReview: result.rejected.length > 0, repair: { mode: "fixed_geometry", repairedIds } }, geometryValidation: { ...scene.geometryValidation, furnishing: { ...scene.geometryValidation.furnishing, assetCount: result.assets.length, byType: result.assets.reduce((counts, a) => (counts[a.type] = (counts[a.type] || 0) + 1, counts), {}), byRoom: scene.rooms.map((r) => ({ roomId: r.id, type: r.type, assetCount: result.assets.filter((a) => a.roomId === r.id).length, assetTypes: result.assets.filter((a) => a.roomId === r.id).map((a) => a.type) })) } } };
-}
-
-// src/lib/sourceFurnitureReview.mjs
-function applySourceFurnitureReview(scene, observations) {
-  const bounds3 = scene.geometryValidation?.sourceProjection?.sourceBounds;
-  if (!bounds3 || !(bounds3.maxX > bounds3.minX) || !(bounds3.maxY > bounds3.minY) || !Array.isArray(observations)) throw new Error("Furniture review has no valid source alignment.");
-  const point2 = (p) => Number.isFinite(p?.x) && Number.isFinite(p?.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 ? mapPrintedDimensionPoint({ x: (p.x - bounds3.minX) / (bounds3.maxX - bounds3.minX) * scene.width, y: (bounds3.maxY - p.y) / (bounds3.maxY - bounds3.minY) * scene.depth }, scene.geometryValidation?.dimensionAlignment) : { x: NaN, y: NaN };
-  const mapped = observations.map((o) => ({ ...o, backLeft: point2(o.backLeft), backRight: point2(o.backRight), frontCenter: point2(o.frontCenter) }));
-  const result = compileSourceFurniture(mapped, scene.footprint, scene.rooms, scene.walls);
-  const missing = [];
-  for (const room of scene.rooms) {
-    if (canonicalRoomType(room) === "laundry" && !result.assets.some((a) => a.roomId === room.id && a.type === "washing_machine")) missing.push({ roomId: room.id, type: "washing_machine", reason: "laundry_appliance_not_confirmed" });
-  }
-  const furnishing = { ...scene.geometryValidation.furnishing, version: "source_fidelity_v49", assetCount: result.assets.length, rejectedCount: result.rejected.length, completedEssentialCount: 0, doorClearanceAware: false, byType: result.assets.reduce((c, a) => (c[a.type] = (c[a.type] || 0) + 1, c), {}), byRoom: scene.rooms.map((r) => ({ roomId: r.id, type: canonicalRoomType(r), assetCount: result.assets.filter((a) => a.roomId === r.id).length, assetTypes: result.assets.filter((a) => a.roomId === r.id).map((a) => a.type) })) };
-  return { ...scene, assets: result.assets, furnishingMode: "source_observed", furnishingReview: { ...scene.furnishingReview, observedCount: mapped.length, acceptedCount: result.assets.length, observations: mapped, observationCoordinateMode: "scene_meters_y_up", rejected: result.rejected, added: [], missing, requiresReview: !!(result.rejected.length || missing.length || !result.assets.length), coverageReview: { status: "completed", mode: "furniture_only_fixed_architecture" } }, geometryValidation: { ...scene.geometryValidation, furnishing } };
-}
-
-// src/lib/serverPreviewAnalysis.js
+// src/lib/serverRasterPreview.js
 import { NextResponse } from "next/server.js";
-import sharp2 from "sharp";
-
-// src/lib/wallOverlapRepair.mjs
-var EPS2 = 1e-6;
-var point = (p) => Number.isFinite(Number(p?.x)) && Number.isFinite(Number(p?.y));
-var geometry = (wall) => {
-  if (!point(wall?.start) || !point(wall?.end)) return null;
-  const dx = Number(wall.end.x) - Number(wall.start.x);
-  const dy = Number(wall.end.y) - Number(wall.start.y);
-  const length = Math.hypot(dx, dy);
-  return length > EPS2 ? { x: Number(wall.start.x), y: Number(wall.start.y), ux: dx / length, uy: dy / length, length } : null;
-};
-var at2 = (g, t) => ({ x: g.x + g.ux * t, y: g.y + g.uy * t });
-var projection = (g, p) => (Number(p.x) - g.x) * g.ux + (Number(p.y) - g.y) * g.uy;
-var separation2 = (g, p) => Math.abs((Number(p.x) - g.x) * g.uy - (Number(p.y) - g.y) * g.ux);
-var rank = (wall, openings) => (openings.some((o) => String(o?.wallId) === String(wall?.id)) ? 8 : 0) + (wall?.type === "external" ? 4 : 0) + (wall?.provenance === "observed" ? 2 : 0) + (wall?.provenance === "room_boundary" || String(wall?.id || "").startsWith("room_edge_") ? 0 : 1);
-function repairOverlappingWalls(walls = [], openings = [], { distanceTolerance = 0.04, angleToleranceDegrees = 1 } = {}) {
-  if (!Array.isArray(walls) || walls.length < 2) return { walls, openings, changed: false };
-  const ordered = walls.map((wall, index) => ({ wall, index, g: geometry(wall) })).sort((a, b) => rank(b.wall, openings) - rank(a.wall, openings) || a.index - b.index);
-  const accepted = [];
-  const output = /* @__PURE__ */ new Map();
-  let changed = false;
-  const angleLimit = Math.sin(angleToleranceDegrees * Math.PI / 180);
-  for (const entry of ordered) {
-    const { wall, g } = entry;
-    if (!g) {
-      output.set(entry.index, [wall]);
-      continue;
-    }
-    let spans = [[0, g.length]];
-    for (const higher of accepted) {
-      const h = higher.g;
-      if (Math.abs(g.ux * h.uy - g.uy * h.ux) > angleLimit || separation2(g, higher.wall.start) > distanceTolerance || separation2(g, higher.wall.end) > distanceTolerance) continue;
-      const lo = Math.max(0, Math.min(projection(g, higher.wall.start), projection(g, higher.wall.end)));
-      const hi = Math.min(g.length, Math.max(projection(g, higher.wall.start), projection(g, higher.wall.end)));
-      if (hi <= lo + EPS2) continue;
-      spans = spans.flatMap(([a, b]) => {
-        if (hi <= a + EPS2 || lo >= b - EPS2) return [[a, b]];
-        const pieces2 = [];
-        if (lo > a + EPS2) pieces2.push([a, lo]);
-        if (hi < b - EPS2) pieces2.push([hi, b]);
-        return pieces2;
-      });
-      if (!spans.length) break;
-    }
-    const pieces = spans.map(([a, b], i) => a < EPS2 && b > g.length - EPS2 ? wall : { ...wall, id: `${wall.id || `wall_${entry.index}`}__residual_${i + 1}`, start: at2(g, a), end: at2(g, b) });
-    if (pieces.length !== 1 || pieces[0] !== wall) changed = true;
-    output.set(entry.index, pieces);
-    for (const piece of pieces) accepted.push({ wall: piece, g: geometry(piece) });
-  }
-  if (!changed) return { walls, openings, changed: false };
-  const repairedWalls = walls.flatMap((_, index) => output.get(index));
-  let unsafe = false;
-  const remappedOpenings = openings.map((opening) => {
-    const original = walls.find((w) => String(w?.id) === String(opening?.wallId));
-    const g = geometry(original);
-    if (!g || !Number.isFinite(Number(opening?.offset))) return opening;
-    const center = at2(g, Number(opening.offset) * g.length);
-    const candidates = repairedWalls.map((w) => ({ wall: w, g: geometry(w) })).filter(({ wall, g: candidate }) => candidate && separation2(candidate, center) <= distanceTolerance && Math.abs(g.ux * candidate.uy - g.uy * candidate.ux) <= angleLimit && projection(candidate, center) >= -EPS2 && projection(candidate, center) <= candidate.length + EPS2);
-    const width = Math.max(0, Number(opening.width) || 0);
-    const supporting = candidates.find(({ wall, g: candidate }) => wall.id === opening.wallId && projection(candidate, center) >= width / 2 - EPS2 && candidate.length - projection(candidate, center) >= width / 2 - EPS2) || candidates.find(({ g: candidate }) => projection(candidate, center) >= width / 2 - EPS2 && candidate.length - projection(candidate, center) >= width / 2 - EPS2);
-    if (!supporting) {
-      if (!repairedWalls.includes(original)) unsafe = true;
-      return opening;
-    }
-    const offset = projection(supporting.g, center) / supporting.g.length;
-    if (supporting.wall.id === opening.wallId && Math.abs(offset - Number(opening.offset)) <= EPS2) return opening;
-    const reversed = g.ux * supporting.g.ux + g.uy * supporting.g.uy < 0;
-    return {
-      ...opening,
-      wallId: supporting.wall.id,
-      offset,
-      ...reversed && opening.hinge ? { hinge: opening.hinge === "start" ? "end" : opening.hinge === "end" ? "start" : opening.hinge } : {},
-      ...reversed && opening.swing ? { swing: opening.swing === "clockwise" ? "counterclockwise" : opening.swing === "counterclockwise" ? "clockwise" : opening.swing } : {}
-    };
-  });
-  if (unsafe) return { walls, openings, changed: false };
-  return { walls: repairedWalls, openings: remappedOpenings, changed: true };
-}
-
-// src/lib/openPlanPartitions.mjs
-var key = (a, b) => [String(a), String(b)].sort().join("|");
-var inside2 = (p, polygon2 = []) => {
-  let hit = false;
-  for (let i = 0, j = polygon2.length - 1; i < polygon2.length; j = i++) {
-    const a = polygon2[i], b = polygon2[j];
-    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
-  }
-  return hit;
-};
-var distance = (p, a, b) => {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
-  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-};
-var semanticOpen = (a, b) => {
-  const types = [a.semanticType || a.type, b.semanticType || b.type];
-  return types.includes("living") && types.some((t) => t === "kitchen_dining" || t === "dining");
-};
-function filterOpenPlanPartitions(partitions = [], rooms = [], relationships = [], openings = []) {
-  const relations = new Map(relationships.map((r) => [key(r.roomAId, r.roomBId), r]));
-  const removedIds = [];
-  const replacements = /* @__PURE__ */ new Map();
-  const filtered = partitions.filter((wall) => {
-    if (wall.type === "external" || !String(wall.id || "").startsWith("room_edge_") || wall.provenance === "observed") return true;
-    if (!wall.start || !wall.end) return true;
-    if (openings.some((o) => o.wallId === wall.id || o.wallIdHint === wall.id || o.type !== "window" && o.center && distance(o.center, wall.start, wall.end) <= 0.18)) return true;
-    const dx = wall.end.x - wall.start.x, dy = wall.end.y - wall.start.y, length = Math.hypot(dx, dy);
-    if (length < 0.2) return true;
-    const offset = 0.12;
-    const samples = [0.15, 0.325, 0.5, 0.675, 0.85].map((t) => {
-      const p = { x: wall.start.x + t * dx, y: wall.start.y + t * dy };
-      return [
-        rooms.filter((r) => inside2({ x: p.x - dy / length * offset, y: p.y + dx / length * offset }, r.polygon)),
-        rooms.filter((r) => inside2({ x: p.x + dy / length * offset, y: p.y - dx / length * offset }, r.polygon))
-      ];
-    });
-    for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) {
-      const a = rooms[i], b = rooms[j], relation = relations.get(key(a.id, b.id));
-      if (relation && relation.relation !== "open") continue;
-      if (!(relation?.relation === "open" && relation.confidence >= 0.45) && !(!relation && semanticOpen(a, b))) continue;
-      const matches = samples.every(([left, right]) => {
-        if ([...left, ...right].some((r) => r !== a && r !== b)) return false;
-        return left.includes(a) && right.includes(b) || left.includes(b) && right.includes(a);
-      });
-      if (matches) {
-        removedIds.push(wall.id);
-        return false;
-      }
-    }
-    const partialOffset = Math.max(offset, Math.min(0.3, Number(wall.thickness || wall.width) || 0.3));
-    const cuts = [0, 1];
-    for (const room of rooms) for (let i = 0; i < (room.polygon || []).length; i++) {
-      const a = room.polygon[i], b = room.polygon[(i + 1) % room.polygon.length];
-      const ex = b.x - a.x, ey = b.y - a.y, den = dx * ey - dy * ex;
-      if (Math.abs(den) < 1e-10) continue;
-      for (const side of [-1, 1]) {
-        const origin = { x: wall.start.x - side * dy / length * partialOffset, y: wall.start.y + side * dx / length * partialOffset };
-        const ax = a.x - origin.x, ay = a.y - origin.y;
-        const t = (ax * ey - ay * ex) / den, u = (ax * dy - ay * dx) / den;
-        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts.push(t);
-      }
-    }
-    const sorted = [...new Set(cuts.map((t) => Number(t.toFixed(9))))].sort((a, b) => a - b), kept = [];
-    let changed = false;
-    for (let i = 1; i < sorted.length; i++) {
-      const start = sorted[i - 1], end = sorted[i], t = (start + end) / 2;
-      const p = { x: wall.start.x + t * dx, y: wall.start.y + t * dy };
-      const left = rooms.filter((r) => inside2({ x: p.x - dy / length * partialOffset, y: p.y + dx / length * partialOffset }, r.polygon));
-      const right = rooms.filter((r) => inside2({ x: p.x + dy / length * partialOffset, y: p.y - dx / length * partialOffset }, r.polygon));
-      const open = relationships.some((r) => r.relation === "open" && r.confidence >= 0.45 && [...left, ...right].every((room) => room.id === r.roomAId || room.id === r.roomBId) && (left.some((a) => a.id === r.roomAId) && right.some((b) => b.id === r.roomBId) || left.some((a) => a.id === r.roomBId) && right.some((b) => b.id === r.roomAId)));
-      if (open && (end - start) * length >= 0.15) {
-        changed = true;
-        continue;
-      }
-      const last = kept.at(-1);
-      if (last && Math.abs(last[1] - start) < 1e-8) last[1] = end;
-      else kept.push([start, end]);
-    }
-    if (changed) {
-      removedIds.push(wall.id);
-      replacements.set(wall.id, kept.filter(([a, b]) => (b - a) * length > 1e-8).map(([a, b], i) => ({ ...wall, id: `${wall.id}__open_trim_${i + 1}`, start: { x: wall.start.x + a * dx, y: wall.start.y + a * dy }, end: { x: wall.start.x + b * dx, y: wall.start.y + b * dy } })));
-    }
-    return true;
-  });
-  return { partitions: filtered.flatMap((w) => replacements.get(w.id) || [w]), removed: removedIds.length, removedIds };
-}
-
-// src/lib/serverPreviewAnalysis.js
-import { createHash as createHash2 } from "node:crypto";
+import sharp3 from "sharp";
+import { createHash } from "node:crypto";
 
 // src/services/drawingJobRuntime.mjs
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -782,8 +42,605 @@ async function createResponse(payload) {
   return openai.responses.create(payload);
 }
 
+// src/lib/rasterVisionRequest.mjs
+var RASTER_RETRYABLE_GEOMETRY_CODES = Object.freeze([
+  "INVALID_COORDINATE",
+  "COORDINATE_FRAME_MISMATCH",
+  "CONFLICTING_SCALE",
+  "CONFLICTING_DIMENSIONS",
+  "TRACE_IMAGE_MISMATCH",
+  "UNSUPPORTED_ROOM_BOUNDARY",
+  "WALL_CROSSES_ROOM",
+  "ROOM_OVERLAP",
+  "OVERLAPPING_ROOMS",
+  "ROOM_NOT_CONTAINED",
+  "SELF_INTERSECTING_POLYGON",
+  "INVALID_POLYGON",
+  "INVALID_WALL",
+  "INCOMPLETE_TRACE",
+  "DUPLICATE_OR_MISSING_ID",
+  "INVALID_OPENING",
+  "OPENING_OFF_WALL",
+  "OPENING_OUTSIDE_WALL",
+  "OPENING_WALL_MISSING",
+  "OVERLAPPING_OPENINGS"
+]);
+function shouldRetryRasterGeometry(error) {
+  return RASTER_RETRYABLE_GEOMETRY_CODES.includes(String(error?.code || ""));
+}
+async function requestRasterVision(create, payload, timeoutMs = 24e4) {
+  const controller = new AbortController();
+  let timer;
+  const timeoutError = () => Object.assign(new Error("Image analysis exceeded its time limit. No new 3D scene was saved."), { code: "RASTER_VISION_TIMEOUT", status: 504 });
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => create(payload, { signal: controller.signal, timeout: timeoutMs, maxRetries: 0 })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(timeoutError());
+          controller.abort();
+        }, timeoutMs);
+      })
+    ]);
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === "APIConnectionTimeoutError") throw timeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function consumeRasterVisionStream(create, payload, options, progress, notify = () => {
+}) {
+  const started = Date.now();
+  const stage = (name2) => {
+    progress.stage = name2;
+    progress.elapsedMs = Date.now() - started;
+    notify({ stage: name2, elapsedMs: progress.elapsedMs, responseId: progress.responseId || null });
+  };
+  progress.maxOutputTokens = payload.max_output_tokens ?? null;
+  progress.reasoningEffort = payload.reasoning?.effort ?? null;
+  progress.eventCount = 0;
+  progress.outputCharacters = 0;
+  stage("request_sent");
+  try {
+    const stream = await create({ ...payload, stream: true }, options);
+    progress.headersMs = Date.now() - started;
+    stage("stream_open");
+    for await (const event of stream) {
+      progress.eventCount++;
+      progress.lastEventMs = Date.now() - started;
+      if (progress.firstEventMs == null) progress.firstEventMs = progress.lastEventMs;
+      if (event.type === "response.created") {
+        progress.responseId = event.response?.id || null;
+        stage("response_created");
+      }
+      if (event.type === "response.output_text.delta") {
+        if (progress.firstTextMs == null) {
+          progress.firstTextMs = Date.now() - started;
+          stage("output_started");
+        }
+        progress.outputCharacters += typeof event.delta === "string" ? event.delta.length : 0;
+      }
+      if (event.type === "response.completed") {
+        const response = event.response;
+        if (response?.status !== "completed") throw Object.assign(new Error("Vision returned an invalid completion event."), { code: "RASTER_VISION_STREAM_ERROR", status: 502 });
+        const outputText = (response.output || []).filter((item) => item.type === "message").flatMap((item) => item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("");
+        progress.usage = response.usage || null;
+        stage("response_completed");
+        return { ...response, output_text: outputText };
+      }
+      if (event.type === "response.incomplete" || event.type === "response.failed" || event.type === "error") {
+        progress.providerStatus = event.response?.status || "error";
+        progress.incompleteReason = event.response?.incomplete_details?.reason || null;
+        progress.usage = event.response?.usage || null;
+        progress.responseId = event.response?.id || progress.responseId || null;
+        stage(event.type.replace(".", "_"));
+        const outputLimit = progress.incompleteReason === "max_output_tokens";
+        const failed = event.type !== "response.incomplete";
+        const code = outputLimit ? "RASTER_VISION_OUTPUT_LIMIT" : failed ? "RASTER_VISION_PROVIDER_FAILED" : "RASTER_VISION_INCOMPLETE";
+        const message = outputLimit ? "Vision reached its output token limit before completing the geometry. No new 3D scene was saved." : failed ? "The Vision provider failed before completing the geometry. No new 3D scene was saved." : "Vision did not complete its structured trace. No partial geometry was accepted.";
+        throw Object.assign(new Error(message), { code, status: 502 });
+      }
+    }
+    throw Object.assign(new Error("Vision stream ended before a completed response was received."), { code: "RASTER_VISION_STREAM_ENDED", status: 502 });
+  } catch (error) {
+    progress.elapsedMs = Date.now() - started;
+    progress.transportError = error?.name || "Error";
+    throw error;
+  }
+}
+
+// src/lib/rasterFloorplanGeometry.mjs
+var RASTER_GEOMETRY_VERSION = "raster-metric-trace-v1";
+var object = (properties) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
+var array = (items) => ({ type: "array", items });
+var number = { type: "number" };
+var text = { type: "string" };
+var nullableNumber = { type: ["number", "null"] };
+var choice = (...values) => ({ type: "string", enum: values });
+var point = object({ x: number, y: number });
+var rasterFloorplanSchema = object({
+  title: text,
+  confidence: number,
+  wallHeightMeters: nullableNumber,
+  measurements: array(object({
+    id: text,
+    text,
+    axis: choice("horizontal", "vertical", "aligned"),
+    start: point,
+    end: point,
+    meters: number
+  })),
+  footprint: array(point),
+  holes: array(object({ id: text, type: choice("shaft", "courtyard"), polygon: array(point) })),
+  rooms: array(object({ id: text, name: text, type: text, polygon: array(point) })),
+  walls: array(object({ id: text, type: choice("external", "internal"), start: point, end: point })),
+  openings: array(object({
+    id: text,
+    type: choice("door", "window"),
+    wallId: text,
+    start: point,
+    end: point,
+    heightMeters: nullableNumber,
+    sillHeightMeters: nullableNumber,
+    hingeSide: choice("start", "end", "unknown"),
+    swingDirection: choice("clockwise", "counterclockwise", "unknown")
+  }))
+});
+var rasterPixelTraceSchema = object({
+  coordinateSpace: choice("image_pixels"),
+  imageWidth: number,
+  imageHeight: number,
+  title: text,
+  confidence: number,
+  wallHeightMeters: nullableNumber,
+  footprint: rasterFloorplanSchema.properties.footprint,
+  holes: rasterFloorplanSchema.properties.holes,
+  walls: rasterFloorplanSchema.properties.walls,
+  rooms: rasterFloorplanSchema.properties.rooms,
+  openings: rasterFloorplanSchema.properties.openings,
+  measurements: rasterFloorplanSchema.properties.measurements
+});
+function rasterPixelTraceSchemaForImage(imageWidth, imageHeight) {
+  if (![imageWidth, imageHeight].every((n) => Number.isSafeInteger(n) && n > 0)) {
+    fail("IMAGE_SIZE_UNAVAILABLE", "Image dimensions must be positive integers.");
+  }
+  const schema = JSON.parse(JSON.stringify(rasterPixelTraceSchema));
+  const visit = (node) => {
+    if (node.type === "object" && node.properties?.x && node.properties?.y) {
+      node.properties.x = { type: "number", minimum: 0, maximum: imageWidth };
+      node.properties.y = { type: "number", minimum: 0, maximum: imageHeight };
+    }
+    if (node.properties) Object.values(node.properties).forEach(visit);
+    if (node.items) visit(node.items);
+  };
+  visit(schema);
+  schema.properties.imageWidth.enum = [imageWidth];
+  schema.properties.imageHeight.enum = [imageHeight];
+  return schema;
+}
+function normalizeRasterPixelTrace(raw, { imageWidth, imageHeight }) {
+  if (raw?.coordinateSpace !== "image_pixels" || raw.imageWidth !== imageWidth || raw.imageHeight !== imageHeight) {
+    fail("COORDINATE_FRAME_MISMATCH", "The AI trace does not use the supplied image pixel frame.", { expected: { imageWidth, imageHeight }, actual: { imageWidth: raw?.imageWidth, imageHeight: raw?.imageHeight, coordinateSpace: raw?.coordinateSpace } });
+  }
+  if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) fail("IMAGE_SIZE_UNAVAILABLE", "Image dimensions must be positive.");
+  const convert = (p, path) => {
+    const x = finite(p?.x, "pixel.x"), y = finite(p?.y, "pixel.y");
+    if (x < 0 || y < 0 || x > imageWidth || y > imageHeight) fail("INVALID_COORDINATE", "A traced pixel lies outside the supplied image.", { path, point: { x, y }, imageWidth, imageHeight });
+    return { x: x * 1e3 / imageWidth, y: y * 1e3 / imageHeight };
+  };
+  const poly = (p, path) => list(p, "polygon", 1e3).map((point3, i) => convert(point3, `${path}[${i}]`));
+  const span = (s, path) => ({ ...s, start: convert(s.start, `${path}.start`), end: convert(s.end, `${path}.end`) });
+  return {
+    title: raw.title,
+    confidence: raw.confidence,
+    wallHeightMeters: raw.wallHeightMeters,
+    footprint: poly(raw.footprint, "footprint"),
+    measurements: list(raw.measurements, "measurements", 80).map((s, i) => span(s, `measurements[${i}]`)),
+    walls: list(raw.walls, "walls", 400).map((s, i) => span(s, `walls[${i}]`)),
+    openings: list(raw.openings, "openings", 150).map((s, i) => span(s, `openings[${i}]`)),
+    rooms: list(raw.rooms, "rooms", 100).map((r, i) => ({ ...r, polygon: poly(r.polygon, `rooms[${i}].polygon`) })),
+    holes: list(raw.holes, "holes", 50).map((h, i) => ({ ...h, polygon: poly(h.polygon, `holes[${i}].polygon`) }))
+  };
+}
+var RasterGeometryError = class extends Error {
+  constructor(code, message, details = {}) {
+    super(message);
+    this.name = "RasterGeometryError";
+    this.code = code;
+    this.details = details;
+  }
+};
+var EPS = 1e-8;
+var distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+var cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+var lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+var fail = (code, message, details) => {
+  throw new RasterGeometryError(code, message, details);
+};
+function finite(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value)) fail("INVALID_COORDINATE", `${label} must be a finite number.`);
+  return value;
+}
+function imagePoint(p, label) {
+  const x = finite(p?.x, `${label}.x`), y = finite(p?.y, `${label}.y`);
+  if (x < 0 || x > 1e3 || y < 0 || y > 1e3) fail("INVALID_COORDINATE", `${label} is outside the image.`);
+  return { x, y };
+}
+function list(value, name2, limit) {
+  if (!Array.isArray(value) || value.length > limit) fail("INVALID_TRACE", `${name2} must be an array with at most ${limit} entries.`);
+  return value;
+}
+function uniqueIds(items, label) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    if (typeof item?.id !== "string" || !item.id.trim() || ids.has(item.id)) {
+      fail("DUPLICATE_OR_MISSING_ID", `${label} contains a missing or repeated ID.`, { id: item?.id });
+    }
+    ids.add(item.id);
+  }
+}
+function projection(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, length2 = dx * dx + dy * dy;
+  const t = length2 > EPS ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / length2 : 0;
+  const projected = lerp(a, b, t);
+  return { t, point: projected, distance: distance(p, projected) };
+}
+function edgeDistance(p, a, b) {
+  return distance(p, lerp(a, b, Math.max(0, Math.min(1, projection(p, a, b).t))));
+}
+function signedArea(poly) {
+  return poly.reduce((sum, p, i) => sum + p.x * poly[(i + 1) % poly.length].y - poly[(i + 1) % poly.length].x * p.y, 0) / 2;
+}
+var area = (poly) => Math.abs(signedArea(poly));
+var edges = (poly) => poly.map((a, i) => [a, poly[(i + 1) % poly.length]]);
+function intersection(a, b, c, d) {
+  const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+  const denominator = rx * sy - ry * sx;
+  if (Math.abs(denominator) < EPS) return null;
+  return { t: ((c.x - a.x) * sy - (c.y - a.y) * sx) / denominator, u: ((c.x - a.x) * ry - (c.y - a.y) * rx) / denominator };
+}
+function inside(p, poly, tolerance = EPS) {
+  if (edges(poly).some(([a, b]) => edgeDistance(p, a, b) <= tolerance)) return true;
+  let result = false;
+  for (const [a, b] of edges(poly)) {
+    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) result = !result;
+  }
+  return result;
+}
+function polygon(points, label, transform) {
+  let poly = list(points, label, 256).map((p, i) => transform(imagePoint(p, `${label}[${i}]`)));
+  if (poly.length > 1 && distance(poly[0], poly.at(-1)) < EPS) poly = poly.slice(0, -1);
+  if (poly.length < 3 || area(poly) < EPS) fail("INVALID_POLYGON", `${label} has no usable enclosed area.`);
+  const boundary2 = edges(poly);
+  for (let i = 0; i < boundary2.length; i++) {
+    const [a, b] = boundary2[i];
+    if (distance(a, b) < EPS) fail("INVALID_POLYGON", `${label} has a repeated consecutive point.`);
+    const next = poly[(i + 2) % poly.length];
+    if (Math.abs(cross(a, b, next)) < EPS && (b.x - a.x) * (next.x - b.x) + (b.y - a.y) * (next.y - b.y) < -EPS) {
+      fail("SELF_INTERSECTING_POLYGON", `${label} backtracks along its boundary.`);
+    }
+    for (let j = i + 1; j < boundary2.length; j++) {
+      if (j === i + 1 || i === 0 && j === boundary2.length - 1) continue;
+      const [c, d] = boundary2[j];
+      const hit = intersection(a, b, c, d);
+      const touching = hit ? hit.t >= -EPS && hit.t <= 1 + EPS && hit.u >= -EPS && hit.u <= 1 + EPS : Math.min(edgeDistance(a, c, d), edgeDistance(b, c, d), edgeDistance(c, a, b), edgeDistance(d, a, b)) <= EPS;
+      if (touching) fail("SELF_INTERSECTING_POLYGON", `${label} crosses or touches itself.`, { edgeIndices: [i, j] });
+    }
+  }
+  return poly;
+}
+function segmentPartitions(a, b, poly) {
+  const ts = [0, 1];
+  for (const [c, d] of edges(poly)) {
+    const hit = intersection(a, b, c, d);
+    if (hit && hit.t > 0 && hit.t < 1 && hit.u >= 0 && hit.u <= 1) ts.push(hit.t);
+  }
+  ts.sort((x, y) => x - y);
+  return ts;
+}
+function segmentInside(a, b, poly, tolerance = EPS) {
+  const ts = segmentPartitions(a, b, poly);
+  return inside(a, poly, tolerance) && inside(b, poly, tolerance) && ts.slice(1).every((t, i) => inside(lerp(a, b, (t + ts[i]) / 2), poly, tolerance));
+}
+function triangles(poly) {
+  const indices = poly.map((_, i) => i);
+  if (signedArea(poly) < 0) indices.reverse();
+  const result = [];
+  while (indices.length > 3) {
+    let removed = false;
+    for (let i = 0; i < indices.length; i++) {
+      const ia = indices[(i + indices.length - 1) % indices.length], ib = indices[i], ic = indices[(i + 1) % indices.length];
+      const a = poly[ia], b = poly[ib], c = poly[ic];
+      if (Math.abs(cross(a, b, c)) < EPS) {
+        indices.splice(i, 1);
+        removed = true;
+        break;
+      }
+      if (cross(a, b, c) < 0) continue;
+      if (indices.some((id) => id !== ia && id !== ib && id !== ic && cross(a, b, poly[id]) >= -EPS && cross(b, c, poly[id]) >= -EPS && cross(c, a, poly[id]) >= -EPS)) continue;
+      result.push([a, b, c]);
+      indices.splice(i, 1);
+      removed = true;
+      break;
+    }
+    if (!removed) fail("INVALID_POLYGON", "Could not triangulate a traced polygon.");
+  }
+  if (indices.length === 3) result.push(indices.map((id) => poly[id]));
+  return result;
+}
+function triangleOverlap(a, b) {
+  let output = a;
+  for (const [c, d] of edges(b)) {
+    const input = output;
+    output = [];
+    if (!input.length) break;
+    for (const [p, q] of edges(input)) {
+      const cp = cross(c, d, p), cq = cross(c, d, q);
+      if (cp >= -EPS) output.push(p);
+      if (cp > EPS && cq < -EPS || cp < -EPS && cq > EPS) output.push(lerp(p, q, cp / (cp - cq)));
+    }
+  }
+  return output.length >= 3 ? area(output) : 0;
+}
+function overlap(a, b) {
+  return triangles(a).reduce((total, ta) => total + triangles(b).reduce((sum, tb) => sum + triangleOverlap(ta, tb), 0), 0);
+}
+function scaleFromMeasurements(measurements, imageWidth, imageHeight) {
+  if (!measurements.length) fail("MISSING_SCALE_EVIDENCE", "No readable dimension was found. Supply a clearer plan with at least one printed dimension; metric sizes will not be guessed.");
+  const evidence = measurements.map((m) => {
+    if (typeof m.text !== "string" || !m.text.trim()) fail("INVALID_MEASUREMENT", "A dimension is missing its visible text.", { id: m.id });
+    const a = imagePoint(m.start, `measurement ${m.id}.start`), b = imagePoint(m.end, `measurement ${m.id}.end`);
+    const dx = Math.abs(b.x - a.x) * imageWidth / 1e3, dy = Math.abs(b.y - a.y) * imageHeight / 1e3;
+    const meters = finite(m.meters, `measurement ${m.id}.meters`);
+    if (meters <= 0 || Math.hypot(dx, dy) < 5) fail("INVALID_MEASUREMENT", "A dimension has no usable reference span.", { id: m.id });
+    if (m.axis === "horizontal" && dy > Math.max(3, dx * 0.03)) fail("INVALID_MEASUREMENT", "A horizontal dimension has inconsistent reference endpoints.", { id: m.id });
+    if (m.axis === "vertical" && dx > Math.max(3, dy * 0.03)) fail("INVALID_MEASUREMENT", "A vertical dimension has inconsistent reference endpoints.", { id: m.id });
+    if (!["horizontal", "vertical", "aligned"].includes(m.axis)) fail("INVALID_MEASUREMENT", "Unknown dimension axis.");
+    return { ...m, dx, dy, meters, pixels: m.axis === "horizontal" ? dx : m.axis === "vertical" ? dy : Math.hypot(dx, dy) };
+  });
+  const fit = (items) => items.reduce((s, m) => s + m.pixels * m.meters, 0) / items.reduce((s, m) => s + m.pixels ** 2, 0);
+  const horizontal = evidence.filter((m) => m.axis === "horizontal");
+  const vertical = evidence.filter((m) => m.axis === "vertical");
+  const uniform = fit(evidence);
+  const horizontalScale = horizontal.length ? fit(horizontal) : uniform;
+  const verticalScale = vertical.length ? fit(vertical) : uniform;
+  const scaleSkew = Math.max(horizontalScale / verticalScale, verticalScale / horizontalScale) - 1;
+  const residuals = evidence.map((m) => {
+    const measured = m.pixels * uniform;
+    const toleranceMeters = Math.max(2 * uniform, m.meters * 0.03);
+    const errorMeters = Math.abs(measured - m.meters);
+    return {
+      id: m.id,
+      text: m.text,
+      axis: m.axis,
+      pixels: m.pixels,
+      printedMeters: m.meters,
+      tracedMeters: measured,
+      errorMeters,
+      toleranceMeters,
+      accepted: errorMeters <= toleranceMeters + EPS
+    };
+  });
+  const diagnostics = { measurementScaleMode: "diagnostic_uniform_fit_not_accepted", measurements: residuals, conflictingIds: residuals.filter((r) => !r.accepted).map((r) => r.id), horizontalScale, verticalScale, scaleSkew };
+  if (horizontal.length && vertical.length && scaleSkew > 0.05) {
+    fail("CONFLICTING_SCALE", "Horizontal and vertical dimensions disagree with a uniform image scale.", diagnostics);
+  }
+  if (diagnostics.conflictingIds.length) {
+    fail("CONFLICTING_DIMENSIONS", "The traced dimension spans do not agree with every supplied printed measurement.", diagnostics);
+  }
+  return { sx: uniform, sy: uniform, residuals, evidenceScaleSkew: scaleSkew, mode: "uniform_pixel_scale_all_evidence" };
+}
+function mergeIntervals(intervals) {
+  const merged = [];
+  for (const interval of intervals.sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (!last || interval[0] > last[1] + EPS) merged.push([...interval]);
+    else last[1] = Math.max(last[1], interval[1]);
+  }
+  return merged;
+}
+function boundaryCoverage(a, b, supports, tolerance) {
+  const intervals = [];
+  for (const [c, d, supportTolerance = tolerance] of supports) {
+    const pc = projection(c, a, b), pd = projection(d, a, b);
+    if (pc.distance > supportTolerance || pd.distance > supportTolerance) continue;
+    let low = Math.max(0, Math.min(pc.t, pd.t)), high = Math.min(1, Math.max(pc.t, pd.t));
+    if (high <= low) continue;
+    const length = distance(a, b);
+    if (low * length <= supportTolerance) low = 0;
+    if ((1 - high) * length <= supportTolerance) high = 1;
+    if (high > low) intervals.push([low, high]);
+  }
+  return mergeIntervals(intervals).reduce((sum, [low, high]) => sum + high - low, 0);
+}
+function compileRasterFloorplan(raw, { imageWidth, imageHeight } = {}) {
+  finite(imageWidth, "imageWidth");
+  finite(imageHeight, "imageHeight");
+  if (imageWidth <= 0 || imageHeight <= 0) fail("IMAGE_SIZE_UNAVAILABLE", "The source image dimensions are unavailable.");
+  const confidence = finite(raw?.confidence, "confidence");
+  if (confidence < 0 || confidence > 1) fail("INVALID_CONFIDENCE", "The image trace confidence must be between 0 and 1.");
+  const measurements = list(raw.measurements, "measurements", 80);
+  const rawRooms = list(raw.rooms, "rooms", 100), rawWalls = list(raw.walls, "walls", 400);
+  const rawHoles = list(raw.holes, "holes", 50), rawOpenings = list(raw.openings, "openings", 150);
+  for (const [items, name2] of [[measurements, "measurements"], [rawRooms, "rooms"], [rawWalls, "walls"], [rawHoles, "holes"], [rawOpenings, "openings"]]) uniqueIds(items, name2);
+  if (!rawRooms.length || rawWalls.length < 3) fail("INCOMPLETE_TRACE", "No complete floor-plan trace was returned.");
+  const scale = scaleFromMeasurements(measurements, imageWidth, imageHeight);
+  const footprintImage = polygon(raw.footprint, "footprint", (p) => p);
+  const minX = Math.min(...footprintImage.map((p) => p.x)), maxX = Math.max(...footprintImage.map((p) => p.x));
+  const minY = Math.min(...footprintImage.map((p) => p.y)), maxY = Math.max(...footprintImage.map((p) => p.y));
+  const mx = imageWidth / 1e3 * scale.sx, my = imageHeight / 1e3 * scale.sy;
+  const transform = (p) => ({ x: (p.x - minX) * mx, y: (maxY - p.y) * my });
+  const width = (maxX - minX) * mx, depth = (maxY - minY) * my;
+  const footprint = footprintImage.map(transform);
+  const rooms = rawRooms.map((r) => ({ id: r.id, name: r.name, type: r.type, polygon: polygon(r.polygon, `room ${r.id}`, transform) }));
+  const holes = rawHoles.map((h) => {
+    if (!["shaft", "courtyard"].includes(h.type)) fail("INVALID_HOLE", "Only explicitly identified shafts/courtyards can remove floor.");
+    return { id: h.id, type: h.type, polygon: polygon(h.polygon, `hole ${h.id}`, transform) };
+  });
+  const assumptions = ["Wall thickness is schematic: internal 0.12 m, external 0.18 m."];
+  const height = raw.wallHeightMeters == null ? 3.2 : finite(raw.wallHeightMeters, "wallHeightMeters");
+  if (raw.wallHeightMeters == null) assumptions.push("Wall height is assumed to be 3.20 m; it is not measurable from the plan view alone.");
+  if (height <= 0) fail("INVALID_HEIGHT", "Wall height must be positive.");
+  const walls = [], wallMap = /* @__PURE__ */ new Map();
+  for (const w of rawWalls) {
+    if (!["external", "internal"].includes(w.type)) fail("INVALID_WALL", "Unknown wall type.", { id: w.id });
+    const wall = { id: w.id, type: w.type, start: transform(imagePoint(w.start, `wall ${w.id}.start`)), end: transform(imagePoint(w.end, `wall ${w.id}.end`)) };
+    if (distance(wall.start, wall.end) < 5e-3) fail("INVALID_WALL", "A wall has no usable length.", { id: w.id });
+    const duplicate = walls.find((v) => distance(v.start, wall.start) < EPS && distance(v.end, wall.end) < EPS || distance(v.end, wall.start) < EPS && distance(v.start, wall.end) < EPS);
+    if (duplicate && duplicate.type !== wall.type) fail("CONFLICTING_WALLS", "The same wall is classified as both internal and external.", { id: w.id });
+    wallMap.set(w.id, { wall: duplicate || wall, reversed: duplicate ? distance(duplicate.end, wall.start) < EPS : false });
+    if (!duplicate) walls.push(wall);
+  }
+  for (const wall of walls) {
+    if (!segmentInside(wall.start, wall.end, footprint, 0.015)) fail("WALL_OUTSIDE_FOOTPRINT", "A wall crosses outside the traced exterior boundary.", { wallId: wall.id });
+  }
+  for (let i = 0; i < walls.length; i++) for (let j = i + 1; j < walls.length; j++) {
+    const a = walls[i], b = walls[j];
+    const p = projection(b.start, a.start, a.end), q = projection(b.end, a.start, a.end);
+    if (p.distance < EPS && q.distance < EPS && Math.min(1, Math.max(p.t, q.t)) - Math.max(0, Math.min(p.t, q.t)) > EPS) {
+      fail("OVERLAPPING_WALLS", "Partly overlapping wall runs were returned. Trace each physical wall once.", { wallIds: [a.id, b.id] });
+    }
+  }
+  const pixelTolerance = Math.min(0.025, 2 * scale.sx);
+  const externalTolerance = 0.09 + pixelTolerance;
+  const externalEdges = walls.filter((w) => w.type === "external").map((w) => [w.start, w.end]);
+  for (const [a, b] of edges(footprint)) {
+    if (boundaryCoverage(a, b, externalEdges, externalTolerance) < 1 - EPS) fail("INCOMPLETE_EXTERIOR", "The exterior walls do not cover the traced footprint, including its recesses.");
+  }
+  const wallEdges = walls.map((w) => [w.start, w.end, (w.type === "external" ? 0.09 : 0.06) + pixelTolerance]);
+  for (const room of rooms) {
+    if (!edges(room.polygon).every(([a, b]) => segmentInside(a, b, footprint, 0.015))) fail("ROOM_OUTSIDE_FOOTPRINT", "A room crosses outside the traced footprint.", { roomId: room.id });
+    const supports = [
+      ...wallEdges,
+      ...edges(footprint).map(([a, b]) => [a, b, externalTolerance]),
+      ...rooms.filter((r) => r.id !== room.id).flatMap((r) => edges(r.polygon).map(([a, b]) => [a, b, pixelTolerance]))
+    ];
+    for (const [a, b] of edges(room.polygon)) {
+      const coverage = boundaryCoverage(a, b, supports, pixelTolerance);
+      if (coverage < 1 - EPS) fail("UNSUPPORTED_ROOM_BOUNDARY", "A room boundary is unsupported by the walls or an adjacent open-plan zone.", { roomId: room.id, roomName: room.name, start: a, end: b, coverage, requiredCoverage: 1, toleranceMeters: pixelTolerance });
+    }
+    for (const wall of walls) {
+      const ts = segmentPartitions(wall.start, wall.end, room.polygon);
+      const crossesInterior = ts.slice(1).some((t, i) => {
+        const middle = lerp(wall.start, wall.end, (t + ts[i]) / 2);
+        return inside(middle, room.polygon) && Math.min(...edges(room.polygon).map(([a, b]) => edgeDistance(middle, a, b))) > pixelTolerance;
+      });
+      if (crossesInterior) {
+        fail("WALL_CROSSES_ROOM", "A wall runs through the interior of a room polygon.", { wallId: wall.id, roomId: room.id });
+      }
+    }
+  }
+  for (let i = 0; i < rooms.length; i++) for (let j = i + 1; j < rooms.length; j++) {
+    const overlapArea = overlap(rooms[i].polygon, rooms[j].polygon);
+    if (overlapArea > Math.max(2e-3, Math.min(area(rooms[i].polygon), area(rooms[j].polygon)) * 2e-3)) {
+      fail("OVERLAPPING_ROOMS", "Room polygons overlap; shared walls cannot be validated.", { roomIds: [rooms[i].id, rooms[j].id], overlapArea });
+    }
+  }
+  for (const hole of holes) {
+    if (!edges(hole.polygon).every(([a, b]) => segmentInside(a, b, footprint))) fail("HOLE_OUTSIDE_FOOTPRINT", "A shaft/courtyard crosses outside the footprint.", { holeId: hole.id });
+    if (rooms.some((r) => overlap(r.polygon, hole.polygon) > 2e-3)) fail("HOLE_OVERLAPS_ROOM", "A shaft/courtyard overlaps a room.", { holeId: hole.id });
+  }
+  for (let i = 0; i < holes.length; i++) for (let j = i + 1; j < holes.length; j++) {
+    if (overlap(holes[i].polygon, holes[j].polygon) > 2e-3) fail("OVERLAPPING_HOLES", "Shaft/courtyard polygons overlap.");
+  }
+  const openings = [], intervalsByWall = /* @__PURE__ */ new Map();
+  for (const o of rawOpenings) {
+    const parent = wallMap.get(o.wallId);
+    if (!parent) fail("OPENING_WALL_MISSING", "A door/window references a missing wall. It was not reassigned to another wall.", { openingId: o.id, wallId: o.wallId });
+    const { wall, reversed } = parent;
+    const a = transform(imagePoint(o.start, `opening ${o.id}.start`)), b = transform(imagePoint(o.end, `opening ${o.id}.end`));
+    const pa = projection(a, wall.start, wall.end), pb = projection(b, wall.start, wall.end);
+    if (Math.max(pa.distance, pb.distance) > pixelTolerance) {
+      fail("OPENING_OFF_WALL", "A door/window jamb is off its stated wall; the trace cannot be accepted.", { openingId: o.id, wallId: wall.id, maxDistanceMeters: Math.max(pa.distance, pb.distance), toleranceMeters: pixelTolerance });
+    }
+    const low = Math.min(pa.t, pb.t), high = Math.max(pa.t, pb.t);
+    if (low < -EPS || high > 1 + EPS || high - low < EPS) {
+      fail("OPENING_OUTSIDE_WALL", "A door/window extends beyond its stated wall or has no width.", { openingId: o.id, wallId: wall.id });
+    }
+    const intervals = intervalsByWall.get(wall.id) || [];
+    if (intervals.some(([start, end]) => Math.min(end, high) - Math.max(start, low) > EPS)) {
+      fail("OVERLAPPING_OPENINGS", "Door/window intervals overlap on the same wall.", { openingId: o.id, wallId: wall.id });
+    }
+    intervals.push([low, high]);
+    intervalsByWall.set(wall.id, intervals);
+    if (!["door", "window"].includes(o.type) || !["start", "end", "unknown"].includes(o.hingeSide) || !["clockwise", "counterclockwise", "unknown"].includes(o.swingDirection)) {
+      fail("INVALID_OPENING", "A door/window has invalid type or swing metadata.", { openingId: o.id });
+    }
+    const openingHeight = o.heightMeters == null ? o.type === "window" ? 1.2 : 2.1 : finite(o.heightMeters, `opening ${o.id}.height`);
+    const sill = o.type === "door" ? 0 : o.sillHeightMeters == null ? 0.9 : finite(o.sillHeightMeters, `opening ${o.id}.sill`);
+    if (openingHeight <= 0 || sill < 0 || openingHeight + sill > height + EPS) fail("INVALID_OPENING_HEIGHT", "The opening height/sill exceeds the wall height.", { openingId: o.id });
+    if (o.heightMeters == null || o.type === "window" && o.sillHeightMeters == null) assumptions.push(`Opening ${o.id}: unannotated vertical dimensions use schematic defaults.`);
+    let hinge = o.hingeSide;
+    if (reversed) hinge = hinge === "start" ? "end" : hinge === "end" ? "start" : "unknown";
+    openings.push({ id: o.id, type: o.type, wallId: wall.id, offset: (low + high) / 2, width: (high - low) * distance(wall.start, wall.end), height: openingHeight, sillHeight: sill, hinge, swing: o.swingDirection });
+  }
+  const validation = {
+    version: RASTER_GEOMETRY_VERSION,
+    structuralChecks: "passed",
+    imageAgreement: "requires_visual_review",
+    scaleMode: scale.mode,
+    scaleSkew: Number(scale.evidenceScaleSkew.toFixed(4)),
+    measurements: scale.residuals,
+    assumptions,
+    duplicateWallsRemoved: rawWalls.length - walls.length,
+    roomCount: rooms.length,
+    wallCount: walls.length,
+    openingCount: openings.length,
+    omittedOpeningCount: 0,
+    omittedOpenings: []
+  };
+  return {
+    sceneType: "apartment_floorplan",
+    title: raw.title || "Image floor plan",
+    rasterGeometryVersion: RASTER_GEOMETRY_VERSION,
+    width,
+    depth,
+    height,
+    wallThickness: 0.12,
+    externalWallThickness: 0.18,
+    cutawayHeight: height,
+    heightSource: raw.wallHeightMeters == null ? "design_default_not_measured" : "source_dimension",
+    footprint,
+    holes,
+    rooms,
+    walls,
+    openings,
+    assets: [],
+    palette: { wall: "#B8B1A7", floor: "#92785D", ceiling: "#D7D1C7", accent: "#6D503B", glass: "#557F94", door: "#654736" },
+    geometryValidation: validation
+  };
+}
+
 // src/lib/rasterImageEvidence.mjs
 import sharp from "sharp";
+
+// src/lib/rasterInkContrast.mjs
+function rasterInkContrast(tone, width, height) {
+  const stride = width + 1, integral = new Float64Array(stride * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let row = 0;
+    for (let x = 0; x < width; x++) {
+      row += tone[y * width + x];
+      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + row;
+    }
+  }
+  const mask = new Uint8Array(tone.length), strokeMask = new Uint8Array(tone.length);
+  const radius = Math.max(6, Math.min(24, Math.round(Math.min(width, height) * 0.025)));
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const i = y * width + x, v = tone[i], x0 = Math.max(0, x - radius), x1 = Math.min(width, x + radius + 1), y0 = Math.max(0, y - radius), y1 = Math.min(height, y + radius + 1);
+    const mean = (integral[y1 * stride + x1] - integral[y0 * stride + x1] - integral[y1 * stride + x0] + integral[y0 * stride + x0]) / ((x1 - x0) * (y1 - y0));
+    strokeMask[i] = v < 252 && mean - v >= 6 ? 1 : 0;
+    mask[i] = v < 170 || strokeMask[i] ? 1 : 0;
+  }
+  return { mask, strokeMask };
+}
+
+// src/lib/rasterImageEvidence.mjs
+var RASTER_IMAGE_EVIDENCE_VERSION = "raster-pixel-support-v2-contrast";
+function evidenceError(code, message, details) {
+  return Object.assign(new Error(message), { name: "RasterImageEvidenceError", code, details });
+}
 function exteriorBackground(mask, width, height) {
   const stride = width + 1, integral = new Uint32Array(stride * (height + 1));
   for (let y = 0; y < height; y++) {
@@ -884,7 +741,7 @@ function strokeGuides(mask, width, height, horizontal) {
       }
     }
     active.clear();
-    for (const [key2, g] of next) active.set(key2, g);
+    for (const [key, g] of next) active.set(key, g);
   }
   return groups.filter((g) => g.last - g.first >= 2 && g.last - g.first + 1 <= maxThickness && g.end - g.start >= minLength).map((g) => {
     const center = (g.first + g.last) / 2;
@@ -898,11 +755,12 @@ function strokeGuides(mask, width, height, horizontal) {
 async function prepareRasterImageEvidence(buffer) {
   const { data, info } = await sharp(buffer).flatten({ background: "#ffffff" }).greyscale().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  const mask = Uint8Array.from(data, (v) => v < 170 ? 1 : 0);
+  const { mask, strokeMask } = rasterInkContrast(data, width, height);
+  const symbolMask = Uint8Array.from(data, (v, i) => v < 132 || strokeMask[i] ? 1 : 0);
   const background = exteriorBackground(mask, width, height);
   for (let i = 0; i < mask.length; i++) if (background[i]) mask[i] = 0;
   const guides = [...strokeGuides(mask, width, height, true), ...strokeGuides(mask, width, height, false)].sort((a, b) => Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y) - Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y)).slice(0, 100).map((g, i) => ({ id: `pixel-stroke-${i + 1}`, ...g }));
-  return { width, height, mask, guides };
+  return { width, height, mask, guides, tone: data, symbolMask };
 }
 function rasterEvidencePrompt(evidence) {
   if (!evidence.guides.length) return "No long dark wall-stroke guides could be isolated. Trace only clearly visible structural lines; unreadable geometry must remain rejected.";
@@ -910,6 +768,733 @@ function rasterEvidencePrompt(evidence) {
 ${JSON.stringify(evidence.guides)}
 Use the original image to classify wall strokes versus text/furniture. Match visible wall centerlines to these coordinates where relevant. Connect strokes only through visible wall junctions or real door/window gaps. The guide list may be incomplete and is never permission to infer a rectangle, extend a wall into white space, or fill a recess.`;
 }
+var point2 = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y);
+function project(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, denominator = dx * dx + dy * dy;
+  const t = denominator ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / denominator : 0;
+  return { t, distance: Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy) };
+}
+function inspectRasterImageEvidence(pixelTrace, evidence) {
+  const { width, height, mask } = evidence;
+  if (pixelTrace.imageWidth !== width || pixelTrace.imageHeight !== height) {
+    throw evidenceError("COORDINATE_FRAME_MISMATCH", "The trace and pixel evidence use different image dimensions.", { imageWidth: width, imageHeight: height });
+  }
+  const tolerancePixels = Math.max(2, Math.min(5, Math.round(Math.min(width, height) * 4e-3)));
+  const outlineRadius = Math.max(6, Math.min(14, Math.round(Math.min(width, height) * 0.018)));
+  const at = (x, y) => {
+    const ix = Math.round(x), iy = Math.round(y);
+    return ix >= 0 && iy >= 0 && ix < width && iy < height ? mask[iy * width + ix] || 0 : 0;
+  };
+  const nearInk = (x, y, radius = 1) => {
+    for (let dx = -radius; dx <= radius; dx++) for (let dy = -radius; dy <= radius; dy++) if (at(x + dx, y + dy)) return true;
+    return false;
+  };
+  const openings = Array.isArray(pixelTrace.openings) ? pixelTrace.openings : [];
+  const walls = (Array.isArray(pixelTrace.walls) ? pixelTrace.walls : []).map((w) => {
+    if (!point2(w.start) || !point2(w.end)) return { id: w.id, passed: false, reason: "invalid_endpoints" };
+    const dx = w.end.x - w.start.x, dy = w.end.y - w.start.y, length = Math.hypot(dx, dy);
+    if (!length) return { id: w.id, passed: false, reason: "empty_wall" };
+    const nx = -dy / length, ny = dx / length;
+    const inkAt = (t) => {
+      const x = w.start.x + dx * t, y = w.start.y + dy * t;
+      let dark = 0;
+      for (let n = -tolerancePixels; n <= tolerancePixels; n++) dark += at(x + nx * n, y + ny * n);
+      if (dark >= 1) return true;
+      let negative = 0, positive = 0;
+      for (let n = 1; n <= outlineRadius; n++) {
+        if (!negative && at(x - nx * n, y - ny * n)) negative = n;
+        if (!positive && at(x + nx * n, y + ny * n)) positive = n;
+      }
+      return negative > 0 && positive > 0 && Math.abs(negative - positive) <= tolerancePixels;
+    };
+    const unsupportedOpeningIds = [];
+    const openingIssues = [];
+    const windowIntervals = [];
+    const intervals = openings.filter((o) => o.wallId === w.id && point2(o.start) && point2(o.end)).flatMap((o) => {
+      const a = project(o.start, w.start, w.end), b = project(o.end, w.start, w.end);
+      if (a.distance > tolerancePixels || b.distance > tolerancePixels) {
+        unsupportedOpeningIds.push(o.id);
+        openingIssues.push({ id: o.id, reason: "jamb_off_wall", start: o.start, end: o.end, maximumDistancePixels: Math.max(a.distance, b.distance) });
+        return [];
+      }
+      const low = Math.max(0, Math.min(a.t, b.t)), high = Math.min(1, Math.max(a.t, b.t));
+      const jambHasInk = (t, direction) => {
+        for (let step = 0; step <= tolerancePixels * 2; step++) {
+          const sample = t + direction * step / length;
+          if (sample >= 0 && sample <= 1 && inkAt(sample)) return true;
+        }
+        return false;
+      };
+      if (low >= high || !jambHasInk(low, -1) || !jambHasInk(high, 1)) {
+        unsupportedOpeningIds.push(o.id);
+        openingIssues.push({ id: o.id, reason: "jamb_ink_unverified" });
+        return [];
+      }
+      const openingWidth = (high - low) * length;
+      let along = 0;
+      for (let n = 0; n < 20; n++) if (inkAt(low + (high - low) * (0.2 + 0.6 * n / 19))) along++;
+      let symbolSupported = along / 20 >= 0.7;
+      if (!symbolSupported && o.type === "door") {
+        for (const [hinge, sign] of [[low, 1], [high, -1]]) {
+          const hx = w.start.x + dx * hinge, hy = w.start.y + dy * hinge;
+          const angleStep = Math.min(1, Math.atan2(1, openingWidth) * 180 / Math.PI);
+          for (const leafFraction of [1, 0.5]) for (const side of [-1, 1]) for (let degrees = 1; degrees < 180; degrees += angleStep) {
+            const angle = side * degrees * Math.PI / 180;
+            const ux = sign * dx / length, uy = sign * dy / length;
+            const rx = ux * Math.cos(angle) - uy * Math.sin(angle), ry = ux * Math.sin(angle) + uy * Math.cos(angle);
+            let supported2 = 0;
+            for (let n = 0; n < 20; n++) {
+              const reach = openingWidth * leafFraction * (0.18 + 0.65 * n / 19);
+              const x = hx + rx * reach, y = hy + ry * reach;
+              let thickness = 0;
+              for (let offset = -tolerancePixels; offset <= tolerancePixels; offset++) thickness += at(x - ry * offset, y + rx * offset);
+              if (nearInk(x, y, 1) && thickness <= Math.max(2, tolerancePixels)) supported2++;
+            }
+            if (supported2 / 20 >= 0.8) symbolSupported = true;
+          }
+        }
+      }
+      if (!symbolSupported) {
+        unsupportedOpeningIds.push(o.id);
+        openingIssues.push({ id: o.id, reason: "symbol_ink_unverified" });
+        return [];
+      }
+      if (o.type === "window") windowIntervals.push([low, high]);
+      return [[low, high]];
+    });
+    const samples = Math.max(2, Math.ceil(length));
+    let tested = 0, supported = 0, longestMissing = 0, missing = 0;
+    let missingStart = -1;
+    const missingSpans = [];
+    const samplePoint = (i) => ({ x: Number((w.start.x + dx * i / samples).toFixed(2)), y: Number((w.start.y + dy * i / samples).toFixed(2)) });
+    const closeMissingSpan = (endIndex) => {
+      if (missingStart < 0) return;
+      const pixels = (endIndex - missingStart + 1) * length / samples;
+      if (pixels > tolerancePixels * 2) missingSpans.push({ start: samplePoint(missingStart), end: samplePoint(endIndex), lengthPixels: Number(pixels.toFixed(1)) });
+      missingStart = -1;
+    };
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      if (intervals.some(([a, b]) => t >= a && t <= b)) {
+        closeMissingSpan(i - 1);
+        missing = 0;
+        continue;
+      }
+      tested++;
+      if (inkAt(t)) {
+        closeMissingSpan(i - 1);
+        supported++;
+        missing = 0;
+      } else {
+        if (missingStart < 0) missingStart = i;
+        missing++;
+        longestMissing = Math.max(longestMissing, missing);
+      }
+    }
+    closeMissingSpan(samples);
+    const windowOnly = windowIntervals.some(([a, b]) => a <= 0 && b >= 1);
+    const coverage = tested ? supported / tested : windowOnly ? 1 : 0;
+    const longestMissingPixels = longestMissing * length / samples;
+    const passed = !unsupportedOpeningIds.length && (tested >= 4 || windowOnly) && coverage >= 0.9 && longestMissingPixels <= tolerancePixels * 2;
+    return { id: w.id, type: w.type, start: w.start, end: w.end, coverage: Number(coverage.toFixed(3)), longestMissingPixels: Number(longestMissingPixels.toFixed(1)), missingSpans, testedSamples: tested, windowOnly, unsupportedOpeningIds, openingIssues, passed };
+  });
+  return {
+    version: RASTER_IMAGE_EVIDENCE_VERSION,
+    status: walls.length && walls.every((w) => w.passed) ? "passed" : "rejected",
+    tolerancePixels,
+    walls,
+    unsupportedWallIds: walls.filter((w) => !w.passed).map((w) => w.id),
+    guideCount: evidence.guides.length,
+    meaning: "Visible ink supports these traced wall positions; this does not certify labels, dimensions or completeness."
+  };
+}
+function requireRasterImageEvidence(result) {
+  if (result.status !== "passed") {
+    throw evidenceError("TRACE_IMAGE_MISMATCH", "Traced walls do not follow the source image. No new 3D scene was saved.", { imageEvidence: result, unsupportedWallIds: result.unsupportedWallIds });
+  }
+  return result;
+}
+
+// src/lib/verifiedPreview.mjs
+var VERIFIED_PREVIEW_VERSION = "verified-raster-preview-v144-dimension-review-20261109";
+
+// src/lib/rasterCoordinateReference.mjs
+import sharp2 from "sharp";
+async function rasterCoordinateReference(buffer, width, height) {
+  const step = Math.max(100, Math.ceil(Math.max(width, height) / 12 / 100) * 100);
+  const marks = [];
+  for (let x = 0; x < width; x += step) {
+    marks.push(`<path d="M${x} 0V${height}"/><text x="${x + 3}" y="16">x=${x}</text>`);
+  }
+  for (let y = step; y < height; y += step) {
+    marks.push(`<path d="M0 ${y}H${width}"/><text x="3" y="${y - 4}">y=${y}</text>`);
+  }
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><g stroke="#1675bb" stroke-opacity=".38" stroke-width="1" stroke-dasharray="3 6" fill="#07588e" font-family="sans-serif" font-size="14">${marks.join("")}</g></svg>`);
+  const data = await sharp2(buffer).composite([{ input: overlay }]).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
+  return { type: "input_image", image_url: `data:image/jpeg;base64,${data.toString("base64")}`, detail: "high" };
+}
+
+// src/lib/serverRasterPreview.js
+var RASTER_PREVIEW_VERSION = VERIFIED_PREVIEW_VERSION;
+var RASTER_TRACE_BUILD = RASTER_PREVIEW_VERSION;
+var RASTER_TRACE_MAX_ATTEMPTS = 2;
+var OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS = 24e4;
+async function prepareVisionImage(imageUrl, { maxDimension = 1600, quality = 88 } = {}) {
+  const response = await fetch(imageUrl, { cache: "no-store", signal: AbortSignal.timeout(45e3) });
+  if (!response.ok) {
+    throw new Error(`Could not download floor-plan image (${response.status}).`);
+  }
+  const sourceBuffer = Buffer.from(await response.arrayBuffer());
+  const { data: optimizedBuffer, info } = await sharp3(sourceBuffer).rotate().resize({
+    width: maxDimension,
+    height: maxDimension,
+    fit: "inside",
+    withoutEnlargement: true
+  }).flatten({ background: "#ffffff" }).sharpen({ sigma: 0.6 }).jpeg({ quality, chromaSubsampling: "4:4:4" }).toBuffer({ resolveWithObject: true });
+  return {
+    imageUrl: `data:image/jpeg;base64,${optimizedBuffer.toString("base64")}`,
+    width: info.width,
+    height: info.height,
+    buffer: optimizedBuffer
+  };
+}
+function extractJson(text2) {
+  const raw = String(text2 || "").trim();
+  const unfenced = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const first = unfenced.indexOf("{");
+  const last = unfenced.lastIndexOf("}");
+  if (first < 0 || last <= first) throw new Error("No JSON design object returned.");
+  return JSON.parse(unfenced.slice(first, last + 1));
+}
+async function runRasterPreview(body) {
+  const mode = "analyze";
+  const imageUrl = String(body?.imageUrl || "").trim();
+  if (!imageUrl) {
+    return NextResponse.json({ error: "imageUrl is required." }, { status: 400 });
+  }
+  const geometryModel = process.env.OPENAI_FLOORPLAN_GEOMETRY_MODEL || process.env.OPENAI_DRAWING_MODEL || "gpt-5.1";
+  const baselinePrompt = `Trace the supplied architectural floor plan faithfully. Return one structured trace, not a redesigned layout. Establish the exterior contour and physical wall runs from the image FIRST. Read metric spans after fixing that pixel topology; never start from room dimension labels and turn them into a room grid.
+
+IMAGE COORDINATES:
+Use actual PIXEL coordinates of the ENTIRE supplied image: origin at its top-left, x right, y down. Exact width and height are supplied after these instructions. Return coordinateSpace="image_pixels" and echo those exact dimensions. Never use a 0..1000 normalized grid, a building-local frame, or a guessed room grid. The server converts pixels into its internal frame exactly once.
+
+DIMENSION EVIDENCE:
+- measurements contains only legible printed dimensions, converted to metres. Copy the visible dimension text into text.
+- start/end identify the architectural reference points actually measured by that dimension: extension-line origins, or the two internal faces for a printed clear room dimension. Do not measure a clear room dimension between wall centerlines.
+- Prefer long overall/chained dimensions with identifiable reference ticks. When an actual dimension rule is printed, its endpoints are the two ticks, not the ends of the printed number. Treat standalone room labels such as "4 x 3.5 m" as room metadata unless the drawing explicitly identifies both measured faces. horizontal/vertical refers to the reference span in the image; use aligned for an oblique span.
+- Never estimate metres from a bed, a door, a room name, or a familiar layout. If no dimension is readable, return measurements as [].
+- Return wallHeightMeters as null unless an annotation explicitly gives the wall height. Likewise use null for unannotated door/window heights and window sill heights.
+
+ONE CONSISTENT TRACE:
+1. A crossed rectangle can be a shaft/void, not a storage room. Preserve explicit lift/shaft labels and their floor holes. A gray hatch alone is not proof of a void. If its use is uncertain, keep it unresolved instead of manufacturing a storage room. Read KITCHEN and non-English kitchen labels even when counters are drawn as plain L/U linework; they are not sofas.
+1A. Follow the exterior footprint, including EVERY visible notch/recess; do not use its bounding rectangle or a convex hull. The footprint follows the outer wall face. Include only explicitly labeled/recognizable shafts or courtyards in holes.
+2. List every visible real room/zone exactly once, with its visible name. Never create a room for a wardrobe, a wall-thickness sliver, a door swing, or dimension text. Room polygons follow the clear internal boundaries. Named open-plan zones may share conceptual boundaries, but no wall may be invented there.
+3. Trace each physical wall ONCE, on its CENTERLINE. Adjacent rooms must share the same physical wall. Preserve oblique/rotated walls; do not force them horizontal/vertical. At a junction, use matching coordinates. Split at corners and real T/X junctions.
+4. A wall run must CONTINUE THROUGH its door/window gaps. Do NOT split the wall at door jambs. Each opening references the ID of the single wall run containing both jambs. No wall may cross a room's interior polygon or bridge an exterior recess.
+5. For each door/window, start/end are its two visible jamb locations on that wall's centerline. The server measures its width from these points. Do not return the door arc tip, leaf tip, or furniture edge as a jamb. If ownership or jambs cannot be read, omit the uncertain opening and lower confidence.
+6. For a door, hingeSide is start/end relative to the owning WALL's direction. swingDirection is the clockwise/counterclockwise rotation visible on the image from closed leaf toward open leaf. Use unknown when the hinge or arc is unclear. Sliding/unreadable doors must not receive an invented swing.
+7. Never move, resize or recenter an individual room to fit its printed dimension. Preserve shared topology; contradictory evidence must lower confidence.
+8. Return empty collections for absent features. Do not add furniture, fixtures, guessed openings, or missing structural features. This stage validates plan geometry only.
+9. Trace the supplied plan even if it resembles a familiar template. No predetermined room count, dimensions, coordinates or topology.
+10. Before returning, walk the complete exterior contour visually, including changes of direction at entrances and recesses. A rectangular footprint is permitted only if the actual outline is rectangular.
+11. Check every wall against the room interiors, and every pair of room polygons for overlap. Shared open-plan boundaries do not imply physical walls. Measurements inside room labels are NOT permission to invent different room polygons.
+12. For each dimension, identify the two visible reference ticks/faces before returning its endpoints. Do not reuse a nearby span for a different printed value. Exclude dimensions whose reference points cannot be located confidently. Do not adjust the visible geometry to force inconsistent annotations to fit.
+13. Inventory every visible door arc and window symbol before tracing, then reconcile that inventory with the openings you return. Do not silently drop recognizable openings to make geometry validation pass.
+14. Check each opening's two jamb points against its parent wall: BOTH must be collinear with that wall and fall between its endpoints. A leaf drawn perpendicular to the wall is not the jamb span. Inspect every exterior wall for window symbols before returning the openings array; do not silently omit visible windows while tracing doors.
+
+Return only JSON conforming to the supplied schema.`;
+  const requestStartedAt = Date.now();
+  const rasterDiagnostics = {
+    format: "ventra-raster-diagnostic-v1",
+    build: RASTER_TRACE_BUILD,
+    model: geometryModel,
+    inputCoordinateSpace: "image_pixels",
+    reasoningEffort: "low",
+    trace: null,
+    transport: { stage: "preparing_image" },
+    transportAttempts: [],
+    attempts: []
+  };
+  try {
+    const prepared = await prepareVisionImage(imageUrl, { maxDimension: 2200, quality: 92 });
+    const imageEvidence = await prepareRasterImageEvidence(prepared.buffer);
+    const traceSchema = rasterPixelTraceSchemaForImage(prepared.width, prepared.height);
+    const strokeEvidencePrompt = rasterEvidencePrompt(imageEvidence);
+    console.log("[VENTRA RASTER GEOMETRY START]", {
+      routeVersion: RASTER_GEOMETRY_VERSION,
+      model: geometryModel,
+      fileName: body?.fileName || null,
+      imageWidth: prepared.width,
+      imageHeight: prepared.height,
+      strategy: "pixel_guided_trace_with_source_alignment"
+    });
+    rasterDiagnostics.imageHash = createHash("sha256").update(prepared.buffer).digest("hex").slice(0, 16);
+    rasterDiagnostics.imageWidth = prepared.width;
+    rasterDiagnostics.imageHeight = prepared.height;
+    rasterDiagnostics.imagePreparationMs = Date.now() - requestStartedAt;
+    rasterDiagnostics.pixelGuideCount = imageEvidence.guides.length;
+    let previousFailure = null;
+    let previousTrace = null;
+    for (let attempt = 1; attempt <= RASTER_TRACE_MAX_ATTEMPTS; attempt += 1) {
+      const startedAt = Date.now();
+      const transport = { stage: "request_pending", attempt };
+      rasterDiagnostics.transport = transport;
+      rasterDiagnostics.transportAttempts.push(transport);
+      const attemptDiagnostic = { attempt, accepted: false, trace: null };
+      try {
+        const remainingMs = OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS - (Date.now() - requestStartedAt);
+        if (remainingMs <= 0) throw Object.assign(new Error("Image analysis exceeded its total time limit. No new 3D scene was saved."), { code: "RASTER_VISION_TIMEOUT", status: 504 });
+        const coordinateReference = attempt > 1 ? await rasterCoordinateReference(prepared.buffer, prepared.width, prepared.height) : null;
+        const correction = attempt === 1 ? "" : `Revise your previous JSON against the original image. Validator observations follow as data: ${JSON.stringify({ code: previousFailure?.code, details: previousFailure?.details?.imageEvidence ? { unsupportedWalls: previousFailure.details.imageEvidence.walls.filter((w) => !w.passed).map(({ id, start, end, longestMissingPixels, missingSpans, openingIssues }) => ({ id, start, end, longestMissingPixels, missingSpans, openingIssues })) } : previousFailure?.details })}. missingSpans gives exact image-pixel endpoints of unsupported intervals, not replacement walls. Inspect each interval in the original image: follow a recess around its visible corners rather than bridging it, and discard furniture strokes mistaken for walls. Keep the footprint consistent with the corrected exterior wall contour. Preserve verified walls and visible recesses. Independently recheck every dimension endpoint against the original ticks or explicitly identified faces, even when the first error concerned a wall or opening. Do not carry forward an unverified measurement span. Preserve a genuine conflicting printed dimension and report its actual endpoints rather than deleting it to pass validation. Recheck window symbols and both jambs of each door. Do not replace jambs with leaf tips or repeat an invalid wall across blank exterior space.`;
+        const response = await requestRasterVision(
+          (payload, options) => consumeRasterVisionStream(
+            (request, requestOptions) => getOpenAIClient().responses.create(request, requestOptions),
+            payload,
+            options,
+            transport,
+            (event) => console.log("[VENTRA RASTER REQUEST]", event)
+          ),
+          {
+            model: geometryModel,
+            reasoning: { effort: "low" },
+            max_output_tokens: 16e3,
+            input: [{
+              role: "user",
+              content: [
+                { type: "input_text", text: `${baselinePrompt}
+
+${strokeEvidencePrompt}
+
+Exact supplied image dimensions: width=${prepared.width} pixels, height=${prepared.height} pixels. All coordinates must use that pixel frame.` },
+                { type: "input_image", image_url: prepared.imageUrl, detail: "high" },
+                ...coordinateReference ? [
+                  { type: "input_text", text: "The next image is the SAME source with a blue PIXEL ruler overlay. It is a coordinate reference, not another plan. Blue dashed lines and x=/y= labels are generated guides, never walls or metric dimensions. Use this ruler to locate all points in the FIRST image. Every point must satisfy 0 <= x <= " + prepared.width + " and 0 <= y <= " + prepared.height + ". Dimension values never define pixel coordinates: locate the printed extension lines visually. In particular, do not add a printed centimetre value to an endpoint to invent the other pixel endpoint." },
+                  coordinateReference
+                ] : []
+              ]
+            }, ...previousTrace ? [{ role: "assistant", content: JSON.stringify(previousTrace) }, { role: "user", content: correction }] : []],
+            text: { format: { type: "json_schema", name: "ventra_raster_metric_trace", strict: true, schema: traceSchema } }
+          },
+          remainingMs
+        );
+        if (response.status === "incomplete" || !response.output_text) {
+          throw new RasterGeometryError("INCOMPLETE_VISION_RESPONSE", "The image analysis did not return a complete trace. No new 3D scene was accepted.");
+        }
+        rasterDiagnostics.rawOutputText = response.output_text;
+        const pixelTrace = extractJson(response.output_text);
+        rasterDiagnostics.rawPixelTrace = pixelTrace;
+        rasterDiagnostics.trace = null;
+        rasterDiagnostics.imageEvidence = null;
+        attemptDiagnostic.rawPixelTrace = pixelTrace;
+        const rawGeometry = normalizeRasterPixelTrace(pixelTrace, { imageWidth: prepared.width, imageHeight: prepared.height });
+        rasterDiagnostics.trace = rawGeometry;
+        rasterDiagnostics.traceAttempt = attempt;
+        attemptDiagnostic.trace = rawGeometry;
+        const imageAlignment = inspectRasterImageEvidence(pixelTrace, imageEvidence);
+        rasterDiagnostics.imageEvidence = imageAlignment;
+        attemptDiagnostic.imageEvidence = imageAlignment;
+        requireRasterImageEvidence(imageAlignment);
+        const scene = compileRasterFloorplan(rawGeometry, { imageWidth: prepared.width, imageHeight: prepared.height });
+        scene.geometryValidation.pixelSupport = imageAlignment.status;
+        scene.geometryValidation.acceptanceBuild = RASTER_TRACE_BUILD;
+        rasterDiagnostics.attempts.push({ ...attemptDiagnostic, accepted: true, elapsedMs: Date.now() - startedAt });
+        rasterDiagnostics.elapsedMs = Date.now() - requestStartedAt;
+        console.log("[VENTRA RASTER GEOMETRY ACCEPTED]", {
+          routeVersion: RASTER_GEOMETRY_VERSION,
+          attempt,
+          elapsedMs: Date.now() - startedAt,
+          roomCount: scene.rooms.length,
+          wallCount: scene.walls.length,
+          openingCount: scene.openings.length,
+          footprintPointCount: scene.footprint.length,
+          width: scene.width,
+          depth: scene.depth,
+          structuralChecks: scene.geometryValidation.structuralChecks,
+          imageAgreement: scene.geometryValidation.imageAgreement
+        });
+        return NextResponse.json({
+          scene,
+          diagnostics: { ...rasterDiagnostics, accepted: true, validation: scene.geometryValidation },
+          source: attempt > 1 ? "openai-bounded-correction-raster-metric-trace" : "openai-single-pass-raster-metric-trace",
+          mode,
+          confidence: rawGeometry.confidence,
+          // Passing geometric invariants is not proof of correct image recognition.
+          needsManualReview: true,
+          warning: "Wall pixel support and structural checks passed. Room labels, opening interpretation and completeness still require comparison with the source image. Unannotated heights remain schematic assumptions.",
+          validation: scene.geometryValidation,
+          routeVersion: RASTER_PREVIEW_VERSION
+        });
+      } catch (error) {
+        const failure = { code: error?.code || null, message: error?.message || "Raster trace failed.", details: error instanceof RasterGeometryError || error?.name === "RasterImageEvidenceError" ? error.details : void 0 };
+        rasterDiagnostics.attempts.push({ ...attemptDiagnostic, ...failure, failure, elapsedMs: Date.now() - startedAt });
+        if (attempt < RASTER_TRACE_MAX_ATTEMPTS && shouldRetryRasterGeometry(error) && Date.now() - requestStartedAt < OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS) {
+          previousFailure = error;
+          previousTrace = attemptDiagnostic.rawPixelTrace || null;
+          console.warn("[VENTRA RASTER GEOMETRY RETRY]", { attempt, nextAttempt: attempt + 1, code: error.code, message: error.message });
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new RasterGeometryError("INCOMPLETE_TRACE", "The image analysis did not produce an accepted trace. No new 3D scene was saved.");
+  } catch (error) {
+    rasterDiagnostics.elapsedMs = Date.now() - requestStartedAt;
+    const geometryFailure = error instanceof RasterGeometryError || error?.name === "RasterImageEvidenceError";
+    const details = geometryFailure ? error.details : void 0;
+    console.error("[VENTRA RASTER GEOMETRY REJECTED]", JSON.stringify({ build: RASTER_TRACE_BUILD, code: error?.code, message: error?.message, attempts: rasterDiagnostics.attempts.map(({ attempt, code, elapsedMs }) => ({ attempt, code, elapsedMs })), transport: rasterDiagnostics.transport }, null, 2));
+    return NextResponse.json({
+      error: error?.message || "Could not reconstruct this floor plan.",
+      diagnostics: { ...rasterDiagnostics, accepted: false, failure: { code: error?.code, message: error?.message, details } },
+      code: String(error?.code || "").startsWith("RASTER_VISION_") ? error.code : error?.status === 429 ? "OPENAI_BILLING_OR_RATE_LIMIT" : geometryFailure ? error.code : "FLOORPLAN_NEEDS_REVIEW",
+      details,
+      needsManualReview: true,
+      routeVersion: RASTER_PREVIEW_VERSION
+    }, { status: error?.code === "RASTER_VISION_TIMEOUT" ? 504 : String(error?.code || "").startsWith("RASTER_VISION_") ? 502 : error?.status === 429 ? 429 : 422 });
+  }
+}
+
+// src/lib/operatorAllowance.mjs
+function isOperator(owner, env) {
+  return !!env.VENTRA_FREE_USER_ID && owner === env.VENTRA_FREE_USER_ID;
+}
+function operatorAllowance(owner, baseLimit, env) {
+  return isOperator(owner, env) ? 2147483647 : baseLimit;
+}
+
+// src/lib/serverCommercial.js
+import { createHash as createHash2 } from "node:crypto";
+import { createClient as createClient2 } from "@supabase/supabase-js";
+
+// src/lib/serverBilling.js
+import Stripe from "stripe";
+import { createClient } from "@supabase/supabase-js";
+function billingError(message, status) {
+  return Object.assign(new Error(message), { status });
+}
+function provider() {
+  if (!process.env.STRIPE_SECRET_KEY) throw billingError("Billing has not been configured by the site operator.", 503);
+  return new Stripe(process.env.STRIPE_SECRET_KEY);
+}
+async function account(request) {
+  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+  if (!token) throw billingError("Please sign in to manage billing.", 401);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw billingError("Account authentication is not configured.", 503);
+  const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await db.auth.getUser(token);
+  if (error || !data.user) throw billingError("Please sign in again.", 401);
+  return data.user;
+}
+async function customerFor(stripe, user, create = false) {
+  if (!/^[a-f0-9-]{36}$/i.test(user.id)) throw billingError("Invalid account identifier.", 400);
+  const result = await stripe.customers.search({ query: `metadata['supabase_user_id']:'${user.id}'`, limit: 10 });
+  if (result.has_more || result.data.length > 1) throw billingError("Multiple billing profiles found. Contact support.", 409);
+  let customer = result.data[0];
+  if (!customer && user.email) {
+    const legacy = await stripe.customers.list({ email: user.email, limit: 100 });
+    if (legacy.has_more) throw billingError("Billing profile needs support review.", 409);
+    for (const candidate of legacy.data) {
+      const subscriptions = await stripe.subscriptions.list({ customer: candidate.id, status: "all", limit: 100 });
+      if (subscriptions.data.some((row) => row.metadata?.supabase_user_id === user.id)) {
+        if (customer) throw billingError("Multiple billing profiles found. Contact support.", 409);
+        customer = await stripe.customers.update(candidate.id, { metadata: { supabase_user_id: user.id } });
+      }
+    }
+  }
+  if (!customer && create) customer = await stripe.customers.create({ email: user.email, metadata: { supabase_user_id: user.id } }, { idempotencyKey: `ventra-customer-${user.id}` });
+  return customer;
+}
+async function subscriptionFor(stripe, customer) {
+  if (!customer) return null;
+  const rows = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 100 });
+  return rows.data.sort((a, b) => Number(["active", "trialing", "past_due", "unpaid", "incomplete"].includes(b.status)) - Number(["active", "trialing", "past_due", "unpaid", "incomplete"].includes(a.status)) || b.created - a.created)[0] || null;
+}
+
+// src/lib/commercialAccess.mjs
+var COMMERCIAL_LIMITS = { active: 30, trialing: 5 };
+function subscriptionAccess(subscription, priceId) {
+  if (!priceId) throw Object.assign(new Error("The operator must configure the subscription price."), { status: 503 });
+  const eligible = subscription && Object.hasOwn(COMMERCIAL_LIMITS, subscription.status) && subscription.items?.data?.some((item) => item.price?.id === priceId);
+  if (!eligible) throw Object.assign(new Error("An active Ventra subscription or trial is required. Open Billing."), { status: 402, code: "SUBSCRIPTION_REQUIRED" });
+  return { status: subscription.status, limit: COMMERCIAL_LIMITS[subscription.status] };
+}
+function validProjectId(id) {
+  return typeof id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
+}
+
+// src/lib/serverCommercial.js
+var fail2 = (message, status = 503, code = "COMMERCIAL_UNAVAILABLE") => Object.assign(new Error(message), { status, code });
+function commercialAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw fail2("Commercial services are not configured. Contact support.");
+  return createClient2(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+async function commercialContext(request, projectId, verifiedUser = null) {
+  const user = verifiedUser || await account(request);
+  if (!validProjectId(projectId)) throw fail2("A valid project ID is required.", 400, "PROJECT_REQUIRED");
+  const db = commercialAdmin();
+  const { data: project2, error } = await db.from("projects").select("user_id").eq("id", projectId).maybeSingle();
+  if (error) throw fail2("Could not verify project access.");
+  if (!project2) throw fail2("Project unavailable.", 403, "PROJECT_ACCESS_DENIED");
+  if (project2.user_id !== user.id) {
+    const member = await db.from("ventra_project_members").select("role").eq("project_id", projectId).eq("user_id", user.id).maybeSingle();
+    if (member.error || !["manager", "supervisor"].includes(member.data?.role)) throw fail2("You cannot run analysis for this project.", 403, "PROJECT_ACCESS_DENIED");
+  }
+  if (isOperator(project2.user_id, process.env)) return { user, db, owner: project2.user_id, status: "operator", limit: operatorAllowance(project2.user_id, 0, process.env) };
+  const stripe = provider(), customer = await customerFor(stripe, { id: project2.user_id, email: project2.user_id === user.id ? user.email : void 0 });
+  const subscription = await subscriptionFor(stripe, customer);
+  const access = subscriptionAccess(subscription, process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID);
+  return { user, db, owner: project2.user_id, ...access, limit: operatorAllowance(project2.user_id, access.limit, process.env) };
+}
+function commercialError(error) {
+  return Response.json({ success: false, error: error.status ? error.message : "Commercial service unavailable. Try later.", code: error.code || "COMMERCIAL_UNAVAILABLE" }, { status: error.status || 503 });
+}
+var running = /* @__PURE__ */ new Map();
+var done = /* @__PURE__ */ new Map();
+async function commercialRun(request, action, handler2) {
+  try {
+    const user = await account(request);
+    const raw = await request.clone().text();
+    if (raw.length > 12 * 1024 * 1024) throw fail2("Analysis request exceeds 12 MB.", 413, "REQUEST_TOO_LARGE");
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      throw fail2("Invalid JSON request.", 400, "BAD_REQUEST");
+    }
+    const context = await commercialContext(request, body.projectId, user);
+    const digest = createHash2("sha256").update(raw).digest("hex");
+    const suppliedId = String(request.headers.get("x-ventra-request-id") || body.requestId || digest).slice(0, 180);
+    const key = `${user.id}:${action}:${suppliedId}:${digest}`;
+    for (const [id, row] of done) if (row.until < Date.now()) done.delete(id);
+    if (done.has(key)) return done.get(key).response.clone();
+    if (running.has(key)) return (await running.get(key)).clone();
+    const task = (async () => {
+      let reserved = false;
+      async function release() {
+        if (!reserved) return;
+        reserved = false;
+        try {
+          const { error } = await context.db.rpc("ventra_release_analysis", { p_owner: context.owner, p_actor: user.id, p_project: body.projectId, p_action: action, p_request: suppliedId, p_hash: digest });
+          if (error) throw error;
+        } catch {
+          console.error("[VENTRA USAGE RELEASE] Failed to release unsuccessful analysis; operator reconciliation required.", { projectId: body.projectId, action, requestId: suppliedId });
+        }
+      }
+      if (action !== "boq") {
+        if (!process.env.OPENAI_API_KEY) throw fail2("AI analysis is not configured. Contact support.");
+        if (!isOperator(context.owner, process.env)) {
+          const { data, error } = await context.db.rpc("ventra_consume_analysis", { p_owner: context.owner, p_actor: user.id, p_project: body.projectId, p_action: action, p_request: suppliedId, p_hash: digest, p_limit: context.limit });
+          if (error) throw fail2("Usage tracking is unavailable. Contact support.");
+          if (!data?.accepted) throw fail2(data?.duplicate ? "This analysis was already submitted. Check the project result before retrying." : "Monthly analysis allowance reached. Open Billing.", data?.duplicate ? 409 : 429, data?.duplicate ? "ANALYSIS_ALREADY_SUBMITTED" : "ANALYSIS_LIMIT_REACHED");
+        }
+      }
+      reserved = action !== "boq" && !isOperator(context.owner, process.env);
+      try {
+        body.requestId = key;
+        const headers2 = new Headers(request.headers);
+        headers2.set("x-ventra-request-id", key);
+        headers2.delete("content-length");
+        const scoped = new Request(request.url, { method: "POST", headers: headers2, body: JSON.stringify(body), signal: request.signal });
+        let response;
+        response = await handler2(scoped);
+        if (!response.ok) await release();
+        if (response.ok) {
+          if (done.size >= 50) done.delete(done.keys().next().value);
+          done.set(key, { response: response.clone(), until: Date.now() + 3e5 });
+        }
+        return response;
+      } catch (error) {
+        await release();
+        throw error;
+      }
+    })();
+    running.set(key, task);
+    try {
+      return await task;
+    } finally {
+      if (running.get(key) === task) running.delete(key);
+    }
+  } catch (error) {
+    return commercialError(error);
+  }
+}
+
+// src/lib/interiorPresentation.mjs
+var xy = (a, s) => ({ x: Number.isFinite(a.xMeters) ? a.xMeters : Number(a.x ?? 0.5) * s.width, y: Number.isFinite(a.yMeters) ? a.yMeters : Number(a.y ?? 0.5) * s.depth });
+var shape = (a, s, pad = 0) => {
+  const p = xy(a, s), t = (Number(a.rotation) || 0) * Math.PI / 180;
+  return { ...p, u: { x: Math.cos(t), y: Math.sin(t) }, v: { x: -Math.sin(t), y: Math.cos(t) }, hx: (Number(a.width) || 0.8) / 2 + pad, hy: (Number(a.depth) || 0.8) / 2 + pad };
+};
+var dot = (a, b) => a.x * b.x + a.y * b.y;
+function furnitureOverlaps(a, b, s, gap = 0) {
+  const x = shape(a, s, gap / 2), y = shape(b, s, gap / 2), d = { x: y.x - x.x, y: y.y - x.y };
+  return [x.u, x.v, y.u, y.v].every((n) => Math.abs(dot(d, n)) < x.hx * Math.abs(dot(x.u, n)) + x.hy * Math.abs(dot(x.v, n)) + y.hx * Math.abs(dot(y.u, n)) + y.hy * Math.abs(dot(y.v, n)) - 1e-6);
+}
+
+// src/lib/sourceFurniture.mjs
+var inside2 = (p, poly) => {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.y > p.y !== b.y > p.y && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) hit = !hit;
+  }
+  return hit;
+};
+var heights = { sofa: 0.82, bed: 0.82, armchair: 0.85, chair: 0.88, dining_table: 0.76, coffee_table: 0.42, rug: 0.018, kitchen_counter: 0.88, sink: 0.86, stove: 0.9, refrigerator: 1.82, wardrobe: 2.05, tv_unit: 0.58, toilet: 0.78, shower: 2.05, washing_machine: 0.88, desk: 0.76, nightstand: 0.5, cabinet: 1.4, plant: 0.9 };
+function tuckedChairPair(a, b) {
+  const chair = a.type === "chair" ? a : b.type === "chair" ? b : null;
+  const table3 = a.type === "dining_table" ? a : b.type === "dining_table" ? b : null;
+  if (!chair || !table3 || chair.roomId !== table3.roomId) return false;
+  const r = chair.rotation * Math.PI / 180, fx = -Math.sin(r), fy = Math.cos(r);
+  const tx = table3.xMeters - chair.xMeters, ty = table3.yMeters - chair.yMeters;
+  if (tx * fx + ty * fy <= 0) return false;
+  const cut = Math.min(0.18, chair.depth * 0.45);
+  const rear = { ...chair, depth: chair.depth - cut, xMeters: chair.xMeters - fx * cut / 2, yMeters: chair.yMeters - fy * cut / 2 };
+  return !furnitureOverlaps(rear, table3, { width: 0, depth: 0 }, 0);
+}
+function compileSourceFurniture(observations, footprint, rooms, walls = []) {
+  const assets = [], rejected = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const [index, o] of (observations || []).entries()) {
+    const reject = (reason) => rejected.push({ id: o.id || String(index), reason });
+    const room = rooms.find((r) => r.id === o.roomId);
+    if (!(o.type in heights) || !room) {
+      reject("unknown_type_or_room");
+      continue;
+    }
+    if (o.id && seen.has(o.id)) {
+      reject("duplicate_observation_id");
+      continue;
+    }
+    if (o.id) seen.add(o.id);
+    let a = o.backLeft, b = o.backRight;
+    const f = o.frontCenter;
+    if (![a, b, f].every((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) || !Number.isFinite(o.confidence) || o.confidence < 0.65) {
+      reject("uncertain_observation");
+      continue;
+    }
+    let dx = b.x - a.x, dy = b.y - a.y;
+    const width = Math.hypot(dx, dy);
+    if (width < 0.12 || width > 6) {
+      reject("invalid_width");
+      continue;
+    }
+    let nx = -dy / width, ny = dx / width;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    let depth = (f.x - mx) * nx + (f.y - my) * ny;
+    if (depth < 0) {
+      [a, b] = [b, a];
+      dx = -dx;
+      dy = -dy;
+      nx = -nx;
+      ny = -ny;
+      depth = -depth;
+    }
+    if (depth < 0.1 || depth > 4 || Math.abs((f.x - mx) * dx / width + (f.y - my) * dy / width) > 0.15) {
+      reject("invalid_front_axis");
+      continue;
+    }
+    let rearInset = 0;
+    if (["kitchen_counter", "cabinet", "wardrobe", "tv_unit"].includes(o.type)) for (const w of walls) {
+      const wx = w.end.x - w.start.x, wy = w.end.y - w.start.y, wl = Math.hypot(wx, wy);
+      if (!wl || Math.abs((wx * dy - wy * dx) / (wl * width)) > 0.01) continue;
+      const distance3 = (p) => Math.abs((p.x - w.start.x) * wy - (p.y - w.start.y) * wx) / wl;
+      const along = (p) => ((p.x - w.start.x) * wx + (p.y - w.start.y) * wy) / wl;
+      if (distance3(a) > 0.015 || distance3(b) > 0.015 || Math.min(along(a), along(b)) < -0.01 || Math.max(along(a), along(b)) > wl + 0.01) continue;
+      const thickness = Number(w.thickness) || 0.12;
+      if (thickness <= 0 || thickness > 0.3) continue;
+      rearInset = Math.max(rearInset, thickness / 2 + 5e-3);
+    }
+    if (rearInset) {
+      if (depth - rearInset < 0.1) {
+        reject("insufficient_depth_at_wall");
+        continue;
+      }
+      a = { x: a.x + nx * rearInset, y: a.y + ny * rearInset };
+      b = { x: b.x + nx * rearInset, y: b.y + ny * rearInset };
+      depth -= rearInset;
+    }
+    const corners = [a, b, { x: b.x + nx * depth, y: b.y + ny * depth }, { x: a.x + nx * depth, y: a.y + ny * depth }];
+    const center = { x: mx + nx * (rearInset + depth / 2), y: my + ny * (rearInset + depth / 2) };
+    if (!corners.map((p) => ({ x: p.x * 0.98 + center.x * 0.02, y: p.y * 0.98 + center.y * 0.02 })).every((p) => inside2(p, footprint))) {
+      reject("outside_footprint");
+      continue;
+    }
+    if (room.polygon?.length >= 3 && !corners.map((p) => ({ x: p.x * 0.98 + center.x * 0.02, y: p.y * 0.98 + center.y * 0.02 })).every((p) => inside2(p, room.polygon))) {
+      reject("outside_assigned_room");
+      continue;
+    }
+    const forwardPositive = ["sofa", "bed", "armchair", "chair"].includes(o.type);
+    const asset = { id: o.id, groupId: o.groupId, roomId: o.roomId, type: o.type, xMeters: center.x, yMeters: center.y, width, depth, height: heights[o.type], rotation: Math.atan2(dy, dx) * 180 / Math.PI + (forwardPositive ? 0 : 180), placementSource: "source_image_observation_v1", sourceConfidence: o.confidence, embeddedInCounter: !!o.embeddedInCounter };
+    if (rearInset) asset.sourceAdjustment = { reason: "rear_face_wall_contact", rearInsetMeters: rearInset, frontPreserved: true };
+    const embeddedPair = (a2, b2) => a2.embeddedInCounter && b2.type === "kitchen_counter" || b2.embeddedInCounter && a2.type === "kitchen_counter";
+    if (o.type !== "rug" && assets.some((a2) => a2.type !== "rug" && !embeddedPair(a2, asset) && !tuckedChairPair(a2, asset) && furnitureOverlaps(a2, asset, { width: 0, depth: 0 }, -0.03))) {
+      reject("overlapping_furniture");
+      continue;
+    }
+    if (o.type !== "rug" && walls.some((w) => {
+      const dx2 = w.end.x - w.start.x, dy2 = w.end.y - w.start.y;
+      const wall = { xMeters: (w.start.x + w.end.x) / 2, yMeters: (w.start.y + w.end.y) / 2, width: Math.hypot(dx2, dy2), depth: Number(w.thickness) || 0.12, rotation: Math.atan2(dy2, dx2) * 180 / Math.PI };
+      return furnitureOverlaps(asset, wall, { width: 0, depth: 0 }, -0.04);
+    })) {
+      reject("intersects_wall");
+      continue;
+    }
+    assets.push(asset);
+  }
+  return { assets, rejected };
+}
+
+// src/lib/fixedFurnitureRepair.mjs
+function repairFixedFurniture(scene, boxes) {
+  const review = scene?.furnishingReview, p = scene?.geometryValidation?.sourceProjection, b = p?.sourceBounds;
+  if (review?.observationCoordinateMode !== "scene_meters_y_up" || !b || !(b.maxX > b.minX) || !(b.maxY > b.minY)) throw new Error("This scene has no source alignment for furniture repair.");
+  const original = review.observations || [], rejected = new Set((review.rejected || []).map((x) => x.id));
+  const map = (q) => ({ x: (q.x - b.minX) / (b.maxX - b.minX) * scene.width, y: (b.maxY - q.y) / (b.maxY - b.minY) * scene.depth });
+  const replacements = /* @__PURE__ */ new Map();
+  for (const box of boxes || []) {
+    const old = original.find((o) => o.id === box.id);
+    if (!old || !rejected.has(box.id) || replacements.has(box.id)) continue;
+    const { left: l, right: r, top: t, bottom: d, front } = box;
+    if (![l, r, t, d, box.confidence].every(Number.isFinite) || l < 0 || t < 0 || r > 1 || d > 1 || l >= r || t >= d || box.confidence < 0.65 || !["left", "right", "top", "bottom"].includes(front)) continue;
+    let a, c, f;
+    if (front === "right") {
+      a = { x: l, y: t };
+      c = { x: l, y: d };
+      f = { x: r, y: (t + d) / 2 };
+    }
+    if (front === "left") {
+      a = { x: r, y: t };
+      c = { x: r, y: d };
+      f = { x: l, y: (t + d) / 2 };
+    }
+    if (front === "bottom") {
+      a = { x: l, y: t };
+      c = { x: r, y: t };
+      f = { x: (l + r) / 2, y: d };
+    }
+    if (front === "top") {
+      a = { x: l, y: d };
+      c = { x: r, y: d };
+      f = { x: (l + r) / 2, y: t };
+    }
+    replacements.set(box.id, { ...old, backLeft: map(a), backRight: map(c), frontCenter: map(f), confidence: box.confidence });
+  }
+  const ordered = [...original.filter((o) => !rejected.has(o.id)), ...original.filter((o) => rejected.has(o.id)).map((o) => replacements.get(o.id) || o)];
+  const result = compileSourceFurniture(ordered, scene.footprint, scene.rooms, scene.walls);
+  const preserved = (scene.assets || []).filter((a) => !rejected.has(a.id));
+  const restored = result.assets.filter((a) => rejected.has(a.id)).filter((a) => !preserved.some((b2) => a.type !== "rug" && b2.type !== "rug" && !(a.embeddedInCounter && b2.type === "kitchen_counter") && !(b2.embeddedInCounter && a.type === "kitchen_counter") && furnitureOverlaps(a, b2, scene, -0.03)));
+  result.assets = [...preserved, ...restored];
+  const restoredIds = new Set(restored.map((a) => a.id));
+  result.rejected = [...result.rejected.filter((a) => rejected.has(a.id)), ...Array.from(rejected).filter((id) => !restoredIds.has(id) && !result.rejected.some((r) => r.id === id)).map((id) => ({ id, reason: "repair_not_validated" }))];
+  const repairedIds = result.assets.filter((a) => rejected.has(a.id)).map((a) => a.id);
+  return { ...scene, assets: result.assets, furnishingReview: { ...review, observations: ordered, acceptedCount: result.assets.length, rejected: result.rejected, requiresReview: result.rejected.length > 0, repair: { mode: "fixed_geometry", repairedIds } }, geometryValidation: { ...scene.geometryValidation, furnishing: { ...scene.geometryValidation.furnishing, assetCount: result.assets.length, byType: result.assets.reduce((counts, a) => (counts[a.type] = (counts[a.type] || 0) + 1, counts), {}), byRoom: scene.rooms.map((r) => ({ roomId: r.id, type: r.type, assetCount: result.assets.filter((a) => a.roomId === r.id).length, assetTypes: result.assets.filter((a) => a.roomId === r.id).map((a) => a.type) })) } } };
+}
+
+// src/lib/serverPreviewAnalysis.js
+import { NextResponse as NextResponse2 } from "next/server.js";
+import sharp4 from "sharp";
 
 // src/lib/previewSceneWire.mjs
 var aliases = {
@@ -951,7 +1536,7 @@ var aliases = {
   hingeSide: "hs",
   swingDirection: "sd"
 };
-var fail2 = (code, message) => Object.assign(new Error(message), { code });
+var fail3 = (code, message) => Object.assign(new Error(message), { code });
 function createPreviewWireCodec(originalSchema) {
   const legend = [];
   function compile(node, path) {
@@ -963,17 +1548,17 @@ function createPreviewWireCodec(originalSchema) {
           decode: (value) => ({ x: value[0], y: value[1] })
         };
       }
-      const entries = keys.map((key2) => ({
-        key: key2,
-        alias: aliases[key2] || key2,
-        child: compile(node.properties[key2], `${path}.${key2}`)
+      const entries = keys.map((key) => ({
+        key,
+        alias: aliases[key] || key,
+        child: compile(node.properties[key], `${path}.${key}`)
       }));
       if (new Set(entries.map((e) => e.alias)).size !== entries.length) throw new Error(`Duplicate preview wire keys at ${path}.`);
       legend.push(`${path}: ${entries.map((e) => `${e.alias}=${e.key}`).join(", ")}`);
       return {
         schema: {
           ...node,
-          required: node.required.map((key2) => aliases[key2] || key2),
+          required: node.required.map((key) => aliases[key] || key),
           properties: Object.fromEntries(entries.map((e) => [e.alias, e.child.schema]))
         },
         decode: (value) => Object.fromEntries(entries.map((e) => [e.key, e.child.decode(value[e.alias])]))
@@ -998,42 +1583,20 @@ ${legend.join("\n")}`,
 }
 function validate(value, schema, path) {
   const invalid = () => {
-    throw fail2("PREVIEW_SCHEMA_INVALID", `Preview returned invalid scene data at ${path}. No new scene was saved.`);
+    throw fail3("PREVIEW_SCHEMA_INVALID", `Preview returned invalid scene data at ${path}. No new scene was saved.`);
   };
   if (schema.type === "object") {
     if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
-    if (schema.required.some((key2) => !Object.hasOwn(value, key2)) || Object.keys(value).some((key2) => !Object.hasOwn(schema.properties, key2))) invalid();
-    for (const [key2, child] of Object.entries(schema.properties)) validate(value[key2], child, `${path}.${key2}`);
+    if (schema.required.some((key) => !Object.hasOwn(value, key)) || Object.keys(value).some((key) => !Object.hasOwn(schema.properties, key))) invalid();
+    for (const [key, child] of Object.entries(schema.properties)) validate(value[key], child, `${path}.${key}`);
   } else if (schema.type === "array") {
     if (!Array.isArray(value) || value.length < (schema.minItems ?? 0) || value.length > (schema.maxItems ?? Infinity)) invalid();
     value.forEach((item, i) => validate(item, schema.items, `${path}[${i}]`));
   } else if (typeof value !== schema.type || schema.type === "number" && !Number.isFinite(value)) invalid();
   if (schema.enum && !schema.enum.includes(value)) invalid();
 }
-function readCompletedPreview(response, codec) {
-  if (response?.status !== "completed") {
-    const reason = response?.incomplete_details?.reason;
-    throw fail2(
-      reason === "max_output_tokens" ? "PREVIEW_OUTPUT_LIMIT" : "PREVIEW_INCOMPLETE_OUTPUT",
-      reason === "max_output_tokens" ? "3D analysis reached its response limit before completing. No new scene was saved and no automatic retry was made." : "3D analysis did not complete. No new scene was saved and no automatic retry was made."
-    );
-  }
-  if (response.output?.some((item) => item.content?.some((part) => part.type === "refusal"))) {
-    throw fail2("PREVIEW_REFUSED", "The preview model declined this image. No new scene was saved.");
-  }
-  const text = String(response.output_text || "").trim();
-  if (!text) throw fail2("PREVIEW_EMPTY_OUTPUT", "The preview model returned no scene data. No new scene was saved.");
-  let raw;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    throw fail2("PREVIEW_JSON_PARSE_FAILED", "The preview model returned invalid JSON. No new scene was saved.");
-  }
-  return codec.decode(raw);
-}
 
 // src/lib/serverPreviewAnalysis.js
-var VERSION = "preview-compact-response-v133-20261015";
 var MODEL = process.env.OPENAI_3D_PREVIEW_MODEL || "gpt-5.6-sol";
 var requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "low";
 var REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "low";
@@ -1145,1214 +1708,8 @@ var sceneSchema = {
     }
   }
 };
-function clamp(value, min, max, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
-}
-function openingVerticalDimensions(opening, type) {
-  const supplied = (value) => value !== null && value !== void 0 && value !== "" && Number.isFinite(Number(value));
-  const rawHeight = Number(opening?.heightMeters);
-  const hasHeight = supplied(opening?.heightMeters) && rawHeight > 0;
-  const height = hasHeight ? Math.min(2.8, rawHeight) : type === "window" ? 1.25 : 2.1;
-  const rawSill = Number(opening?.sillHeightMeters);
-  const hasSill = type === "window" && supplied(opening?.sillHeightMeters) && rawSill >= 0 && (hasHeight || rawSill > 0);
-  const sillHeight = type === "window" ? hasSill ? Math.min(rawSill, Math.max(0, 2.8 - height)) : Math.min(0.9, 2.8 - height) : 0;
-  return {
-    height,
-    sillHeight,
-    heightSource: hasHeight ? "source_dimension" : "visual_default_not_measured",
-    sillHeightSource: type === "door" ? "door_floor_level" : hasSill ? "source_dimension" : "visual_default_not_measured"
-  };
-}
-function dist(a, b) {
-  return Math.hypot(Number(a?.x || 0) - Number(b?.x || 0), Number(a?.y || 0) - Number(b?.y || 0));
-}
-function polygonArea(points = []) {
-  if (!Array.isArray(points) || points.length < 3) return 0;
-  let sum = 0;
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    sum += Number(a.x) * Number(b.y) - Number(b.x) * Number(a.y);
-  }
-  return Math.abs(sum / 2);
-}
-function cleanPolygon(points = []) {
-  const out = [];
-  for (const point2 of points) {
-    if (!Number.isFinite(Number(point2?.x)) || !Number.isFinite(Number(point2?.y))) continue;
-    const p = { x: Number(point2.x), y: Number(point2.y) };
-    if (!out.length || dist(out[out.length - 1], p) > 0.025) out.push(p);
-  }
-  if (out.length > 2 && dist(out[0], out[out.length - 1]) < 0.025) out.pop();
-  return out;
-}
-function pointInPolygon(point2, polygon2 = []) {
-  let inside4 = false;
-  for (let i = 0, j = polygon2.length - 1; i < polygon2.length; j = i++) {
-    const a = polygon2[i];
-    const b = polygon2[j];
-    const hit = a.y > point2.y !== b.y > point2.y && point2.x < (b.x - a.x) * (point2.y - a.y) / (b.y - a.y || 1e-9) + a.x;
-    if (hit) inside4 = !inside4;
-  }
-  return inside4;
-}
-function projectToSegment(point2, a, b) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  const raw = len2 ? ((point2.x - a.x) * dx + (point2.y - a.y) * dy) / len2 : 0;
-  const t = Math.max(0, Math.min(1, raw));
-  const q = { x: a.x + dx * t, y: a.y + dy * t };
-  return { t, point: q, distance: dist(point2, q), length: Math.sqrt(len2) };
-}
-function normalizedPointBounds(points = []) {
-  const valid2 = (Array.isArray(points) ? points : []).filter(
-    (p) => Number.isFinite(Number(p?.x)) && Number.isFinite(Number(p?.y))
-  );
-  if (!valid2.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
-  return {
-    minX: Math.min(...valid2.map((p) => Number(p.x))),
-    minY: Math.min(...valid2.map((p) => Number(p.y))),
-    maxX: Math.max(...valid2.map((p) => Number(p.x))),
-    maxY: Math.max(...valid2.map((p) => Number(p.y)))
-  };
-}
-function roomNormalizedBounds(room) {
-  return normalizedPointBounds(Array.isArray(room?.polygon) ? room.polygon : []);
-}
-function mean(values = []) {
-  const nums = values.filter((v) => Number.isFinite(v));
-  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-}
-function axisScaleQuality(input, axis, meterPerPixel, imageWidth, imageHeight) {
-  if (!(meterPerPixel > 0)) return { meanRelativeError: null, count: 0 };
-  const errors = [];
-  for (const room of Array.isArray(input?.rooms) ? input.rooms : []) {
-    if (room?.labelVisible === false) continue;
-    const b = roomNormalizedBounds(room);
-    const normalizedSpan = axis === "x" ? b.maxX - b.minX : b.maxY - b.minY;
-    const pixels = normalizedSpan * (axis === "x" ? imageWidth : imageHeight);
-    const printed = Number(axis === "x" ? room?.printedWidthMeters : room?.printedDepthMeters);
-    if (!(pixels > 4 && printed > 0.25)) continue;
-    const predicted = pixels * meterPerPixel;
-    errors.push(Math.abs(predicted - printed) / Math.max(printed, 0.25));
-  }
-  return { meanRelativeError: mean(errors), count: errors.length };
-}
-function projectImageNormalizedSceneToMeters(input, imageMeta = {}) {
-  if (input?.coordinateMode !== "image_normalized") {
-    return { raw: input, diagnostics: { applied: false, reason: "legacy_metric_input" } };
-  }
-  const imageWidth = clamp(imageMeta?.width, 64, 2e4, 1e3);
-  const imageHeight = clamp(imageMeta?.height, 64, 2e4, 1e3);
-  const statedWidth = clamp(input?.widthMeters, 2, 80, 10);
-  const statedDepth = clamp(input?.depthMeters, 2, 80, 8);
-  const footprint = Array.isArray(input?.footprint) ? input.footprint : [];
-  const bounds3 = normalizedPointBounds(footprint);
-  const spanX = bounds3.maxX - bounds3.minX;
-  const spanY = bounds3.maxY - bounds3.minY;
-  if (!(spanX > 0.05 && spanY > 0.05)) {
-    throw Object.assign(
-      new Error("The preview returned an unusable normalized building outline."),
-      { code: "PREVIEW_BAD_NORMALIZED_BOUNDS" }
-    );
-  }
-  const pixelSpanX = spanX * imageWidth;
-  const pixelSpanY = spanY * imageHeight;
-  const scaleFromX = statedWidth / Math.max(pixelSpanX, 1e-6);
-  const scaleFromY = statedDepth / Math.max(pixelSpanY, 1e-6);
-  const xQuality = axisScaleQuality(input, "x", scaleFromX, imageWidth, imageHeight);
-  const yQuality = axisScaleQuality(input, "y", scaleFromY, imageWidth, imageHeight);
-  const hasWidth = Number.isFinite(Number(input?.widthMeters)) && Number(input.widthMeters) > 0.5;
-  const hasDepth = Number.isFinite(Number(input?.depthMeters)) && Number(input.depthMeters) > 0.5;
-  let meterPerPixelX = scaleFromX;
-  let meterPerPixelY = scaleFromY;
-  let calibrationMode = "two_axis_global_affine";
-  if (hasWidth && !hasDepth) {
-    meterPerPixelY = meterPerPixelX;
-    calibrationMode = "uniform_from_x_only";
-  } else if (!hasWidth && hasDepth) {
-    meterPerPixelX = meterPerPixelY;
-    calibrationMode = "uniform_from_y_only";
-  }
-  const width = pixelSpanX * meterPerPixelX;
-  const depth = pixelSpanY * meterPerPixelY;
-  const mapPoint = (point2) => {
-    const nx = clamp(point2?.x, 0, 1, bounds3.minX);
-    const ny = clamp(point2?.y, 0, 1, bounds3.minY);
-    return {
-      x: (nx - bounds3.minX) * imageWidth * meterPerPixelX,
-      y: (ny - bounds3.minY) * imageHeight * meterPerPixelY
-    };
-  };
-  const raw = {
-    ...input,
-    widthMeters: width,
-    depthMeters: depth,
-    coordinateMode: "meters_from_image_normalized_global_affine_v15",
-    footprint: footprint.map(mapPoint),
-    rooms: (Array.isArray(input?.rooms) ? input.rooms : []).map((room) => ({
-      ...room,
-      polygon: (Array.isArray(room?.polygon) ? room.polygon : []).map(mapPoint)
-    })),
-    partitions: (Array.isArray(input?.partitions) ? input.partitions : []).map((wall) => ({
-      ...wall,
-      start: mapPoint(wall?.start),
-      end: mapPoint(wall?.end)
-    })),
-    furniture: (input.furniture || []).map((item) => ({ ...item, backLeft: mapPoint(item.backLeft), backRight: mapPoint(item.backRight), frontCenter: mapPoint(item.frontCenter) })),
-    openings: (Array.isArray(input?.openings) ? input.openings : []).map((opening) => ({
-      ...opening,
-      center: mapPoint(opening?.center)
-    }))
-  };
-  const anisotropyRatio = meterPerPixelX > 0 && meterPerPixelY > 0 ? Math.max(meterPerPixelX, meterPerPixelY) / Math.min(meterPerPixelX, meterPerPixelY) : 1;
-  return {
-    raw,
-    diagnostics: {
-      applied: true,
-      reason: "single_global_two_axis_affine_transform_v15",
-      calibrationMode,
-      imageWidth,
-      imageHeight,
-      sourceBounds: {
-        minX: Number(bounds3.minX.toFixed(4)),
-        minY: Number(bounds3.minY.toFixed(4)),
-        maxX: Number(bounds3.maxX.toFixed(4)),
-        maxY: Number(bounds3.maxY.toFixed(4))
-      },
-      pixelSpanX: Number(pixelSpanX.toFixed(2)),
-      pixelSpanY: Number(pixelSpanY.toFixed(2)),
-      statedWidthMeters: Number(statedWidth.toFixed(3)),
-      statedDepthMeters: Number(statedDepth.toFixed(3)),
-      projectedWidthMeters: Number(width.toFixed(3)),
-      projectedDepthMeters: Number(depth.toFixed(3)),
-      meterPerPixelX: Number(meterPerPixelX.toFixed(6)),
-      meterPerPixelY: Number(meterPerPixelY.toFixed(6)),
-      anisotropyRatio: Number(anisotropyRatio.toFixed(4)),
-      xValidationMeanRelativeError: Number.isFinite(xQuality.meanRelativeError) ? Number(xQuality.meanRelativeError.toFixed(4)) : null,
-      yValidationMeanRelativeError: Number.isFinite(yQuality.meanRelativeError) ? Number(yQuality.meanRelativeError.toFixed(4)) : null,
-      xValidationCount: xQuality.count,
-      yValidationCount: yQuality.count
-    }
-  };
-}
-function sourcePoint(point2, width, depth) {
-  const x = clamp(point2?.x, 0, width, 0);
-  const yDown = clamp(point2?.y, 0, depth, 0);
-  return { x, y: depth - yDown };
-}
-function snapAxisWall(wall) {
-  const a = { ...wall.start };
-  const b = { ...wall.end };
-  const dx = Math.abs(b.x - a.x);
-  const dy = Math.abs(b.y - a.y);
-  if (dx > dy * 5) {
-    const y = (a.y + b.y) / 2;
-    a.y = y;
-    b.y = y;
-  } else if (dy > dx * 5) {
-    const x = (a.x + b.x) / 2;
-    a.x = x;
-    b.x = x;
-  }
-  return { ...wall, start: a, end: b };
-}
-function wallKey(wall) {
-  const a = `${wall.start.x.toFixed(3)},${wall.start.y.toFixed(3)}`;
-  const b = `${wall.end.x.toFixed(3)},${wall.end.y.toFixed(3)}`;
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-function roomBounds(room) {
-  const xs = room.polygon.map((p) => p.x);
-  const ys = room.polygon.map((p) => p.y);
-  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
-}
-function pointToSegmentDistance(point2, a, b) {
-  return projectToSegment(point2, a, b).distance;
-}
-function rectFromRoom(room) {
-  if (!room?.polygon || room.polygon.length !== 4) return null;
-  const xs = [...new Set(room.polygon.map((p) => Number(p.x.toFixed(3))))].sort((a, b) => a - b);
-  const ys = [...new Set(room.polygon.map((p) => Number(p.y.toFixed(3))))].sort((a, b) => a - b);
-  if (xs.length !== 2 || ys.length !== 2) return null;
-  const [minX, maxX] = xs;
-  const [minY, maxY] = ys;
-  if (maxX - minX < 0.2 || maxY - minY < 0.2) return null;
-  return { minX, maxX, minY, maxY };
-}
-function overlapArea(a, b) {
-  const x = Math.max(0, Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX));
-  const y = Math.max(0, Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY));
-  return x * y;
-}
-function roomCenter(room) {
-  const b = roomBounds(room);
-  return { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
-}
-function pairKey(a, b) {
-  const x = String(a || "");
-  const y = String(b || "");
-  return x < y ? `${x}|${y}` : `${y}|${x}`;
-}
-function normalizeRelationships(rawRelationships, roomIds) {
-  const valid2 = new Set(roomIds.map(String));
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const rel of Array.isArray(rawRelationships) ? rawRelationships : []) {
-    const a = String(rel?.roomAId || "");
-    const b = String(rel?.roomBId || "");
-    if (!a || !b || a === b || !valid2.has(a) || !valid2.has(b)) continue;
-    const relation = ["wall", "open", "door", "separate"].includes(rel?.relation) ? rel.relation : "separate";
-    const key2 = `${pairKey(a, b)}:${relation}`;
-    if (seen.has(key2)) continue;
-    seen.add(key2);
-    out.push({
-      roomAId: a,
-      roomBId: b,
-      relation,
-      direction: ["left", "right", "above", "below", "overlap"].includes(rel?.direction) ? rel.direction : "overlap",
-      confidence: clamp(rel?.confidence, 0, 1, 0.5)
-    });
-  }
-  return out;
-}
-function inferRoomPairGeometry(roomA, roomB) {
-  const a = rectFromRoom(roomA);
-  const b = rectFromRoom(roomB);
-  if (!a || !b) return null;
-  const ca = roomCenter(roomA), cb = roomCenter(roomB);
-  const overlapX = Math.max(0, Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX));
-  const overlapY = Math.max(0, Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY));
-  if (Math.abs(cb.x - ca.x) >= Math.abs(cb.y - ca.y)) {
-    if (ca.x <= cb.x) return { axis: "x", first: roomA, second: roomB, gap: b.minX - a.maxX, overlap: overlapY };
-    return { axis: "x", first: roomB, second: roomA, gap: a.minX - b.maxX, overlap: overlapY };
-  }
-  if (ca.y <= cb.y) return { axis: "y", first: roomA, second: roomB, gap: b.minY - a.maxY, overlap: overlapX };
-  return { axis: "y", first: roomB, second: roomA, gap: a.minY - b.maxY, overlap: overlapX };
-}
-function roomAtOffsetPoint(point2, rooms) {
-  return rooms.find((room) => pointInPolygon(point2, room.polygon))?.id || null;
-}
-function sharedBoundaryForRelationship(roomA, roomB) {
-  const a = rectFromRoom(roomA), b = rectFromRoom(roomB);
-  if (!a || !b) return null;
-  const g = inferRoomPairGeometry(roomA, roomB);
-  if (!g) return null;
-  if (g.axis === "x") {
-    const y0 = Math.max(a.minY, b.minY), y1 = Math.min(a.maxY, b.maxY);
-    if (y1 - y0 < 0.35 || Math.abs(g.gap) > 0.18) return null;
-    const x = ((g.first === roomA ? a.maxX : b.maxX) + (g.second === roomB ? b.minX : a.minX)) / 2;
-    return { start: { x, y: y0 }, end: { x, y: y1 } };
-  }
-  const x0 = Math.max(a.minX, b.minX), x1 = Math.min(a.maxX, b.maxX);
-  if (x1 - x0 < 0.35 || Math.abs(g.gap) > 0.18) return null;
-  const y = ((g.first === roomA ? a.maxY : b.maxY) + (g.second === roomB ? b.minY : a.minY)) / 2;
-  return { start: { x: x0, y }, end: { x: x1, y } };
-}
-function ensureRelationshipWalls(partitions, rooms, relationships) {
-  const roomById = new Map(rooms.map((r) => [String(r.id), r]));
-  const out = [...partitions];
-  let added = 0;
-  for (const rel of relationships) {
-    if (!(rel.relation === "wall" || rel.relation === "door") || rel.confidence < 0.6) continue;
-    const a = roomById.get(String(rel.roomAId)), b = roomById.get(String(rel.roomBId));
-    if (!a || !b) continue;
-    const candidate = sharedBoundaryForRelationship(a, b);
-    if (!candidate) continue;
-    const duplicate = out.some((wall) => {
-      const m = { x: (candidate.start.x + candidate.end.x) / 2, y: (candidate.start.y + candidate.end.y) / 2 };
-      return pointToSegmentDistance(m, wall.start, wall.end) < 0.14;
-    });
-    if (!duplicate) {
-      out.push({ id: `rel_${a.id}_${b.id}`.slice(0, 64), type: "internal", ...candidate });
-      added += 1;
-    }
-  }
-  return { partitions: out, added };
-}
-function getRelationshipForPair(relationships, aId, bId) {
-  const key2 = pairKey(aId, bId);
-  return (Array.isArray(relationships) ? relationships : []).find(
-    (rel) => pairKey(rel.roomAId, rel.roomBId) === key2
-  ) || null;
-}
-function roomsAcrossWallDetailed(wall, rooms) {
-  const length = dist(wall.start, wall.end);
-  if (length < 0.2) return { a: null, b: null, ids: [] };
-  const mx = (wall.start.x + wall.end.x) / 2;
-  const my = (wall.start.y + wall.end.y) / 2;
-  const dx = (wall.end.x - wall.start.x) / length;
-  const dy = (wall.end.y - wall.start.y) / length;
-  const nx = -dy, ny = dx;
-  for (const offset of [0.1, 0.16, 0.22, 0.28, 0.34]) {
-    const a = roomAtOffsetPoint({ x: mx + nx * offset, y: my + ny * offset }, rooms);
-    const b = roomAtOffsetPoint({ x: mx - nx * offset, y: my - ny * offset }, rooms);
-    const ids = [...new Set([a, b].filter(Boolean))];
-    if (a || b) return { a, b, ids };
-  }
-  return { a: null, b: null, ids: [] };
-}
-function openingPlacementScore(type, wall, projection2, rooms, relationships) {
-  if (!wall || !projection2 || projection2.length < 0.35) return Number.POSITIVE_INFINITY;
-  let score = Number(projection2.distance || 0);
-  const side = roomsAcrossWallDetailed(wall, rooms);
-  const ids = side.ids;
-  const rel = ids.length === 2 ? getRelationshipForPair(relationships, ids[0], ids[1]) : null;
-  const isExternal = String(wall?.type || "") === "external";
-  if (type === "window") {
-    score += isExternal ? -0.3 : 1.35;
-    if (ids.length === 0) score += 0.25;
-    return score;
-  }
-  if (isExternal) {
-    score += ids.length === 1 ? -0.1 : 1.1;
-    return score;
-  }
-  if (ids.length === 2) {
-    if (rel?.relation === "door") score -= 0.4;
-    else if (rel?.relation === "wall") score -= 0.02;
-    else if (rel?.relation === "open") score += 1.2;
-    else score += 0.22;
-  } else if (ids.length === 1) {
-    score += 0.12;
-  } else {
-    score += 1.3;
-  }
-  return score;
-}
-function chooseBestWallForOpening(center, type, walls, rooms, relationships, wallIdHint = null, wallAxis = "unknown", openingWidth = 0.9) {
-  let candidateWalls = Array.isArray(walls) ? walls : [];
-  if (wallIdHint) {
-    const hinted = candidateWalls.find((wall) => String(wall.id) === String(wallIdHint));
-    if (hinted) candidateWalls = [hinted, ...candidateWalls.filter((wall) => wall !== hinted)];
-  }
-  let best = null;
-  for (const wall of candidateWalls) {
-    const dx = Math.abs(wall.end.x - wall.start.x);
-    const dy = Math.abs(wall.end.y - wall.start.y);
-    if (wallAxis === "horizontal" && dy > dx * 0.2) continue;
-    if (wallAxis === "vertical" && dx > dy * 0.2) continue;
-    if (wallAxis === "diagonal" && (dx < dy * 0.2 || dy < dx * 0.2)) continue;
-    const projection2 = projectToSegment(center, wall.start, wall.end);
-    const measuredWidth = Number(openingWidth);
-    const halfWidth = measuredWidth > 0 ? measuredWidth / 2 : 0.45;
-    const endClearance = Math.min(projection2.t, 1 - projection2.t) * projection2.length;
-    if (projection2.distance > 0.18 || endClearance < halfWidth - 5e-3) continue;
-    const endpointPenalty = Math.max(0, halfWidth - endClearance) * 2;
-    const hintBonus = String(wall.id) === String(wallIdHint) && projection2.distance < 0.35 ? -0.2 : 0;
-    const ux = (wall.end.x - wall.start.x) / projection2.length;
-    const uy = (wall.end.y - wall.start.y) / projection2.length;
-    const localWall = {
-      ...wall,
-      start: { x: projection2.point.x - ux * 0.2, y: projection2.point.y - uy * 0.2 },
-      end: { x: projection2.point.x + ux * 0.2, y: projection2.point.y + uy * 0.2 }
-    };
-    const score = endpointPenalty + hintBonus + openingPlacementScore(type, localWall, projection2, rooms, relationships);
-    if (!Number.isFinite(score)) continue;
-    if (!best || score < best.score) best = { wall, projection: projection2, score };
-  }
-  return best;
-}
-function closeAlignedWallGaps(walls, tolerance = 0.18) {
-  const out = (Array.isArray(walls) ? walls : []).map((wall) => ({
-    ...wall,
-    start: { ...wall.start },
-    end: { ...wall.end }
-  }));
-  for (let i = 0; i < out.length; i += 1) {
-    for (let j = i + 1; j < out.length; j += 1) {
-      const a = out[i], b = out[j];
-      const av = Math.abs(a.start.x - a.end.x) < 0.05;
-      const bv = Math.abs(b.start.x - b.end.x) < 0.05;
-      const ah = Math.abs(a.start.y - a.end.y) < 0.05;
-      const bh = Math.abs(b.start.y - b.end.y) < 0.05;
-      if (av && bv && Math.abs(a.start.x - b.start.x) < 0.12) {
-        if (dist(a.end, b.start) < tolerance) a.end = { x: a.start.x, y: b.start.y };
-        if (dist(a.start, b.end) < tolerance) a.start = { x: a.start.x, y: b.end.y };
-      }
-      if (ah && bh && Math.abs(a.start.y - b.start.y) < 0.12) {
-        if (dist(a.end, b.start) < tolerance) a.end = { x: b.start.x, y: a.start.y };
-        if (dist(a.start, b.end) < tolerance) a.start = { x: b.end.x, y: a.start.y };
-      }
-    }
-  }
-  return out;
-}
-function cleanupWallStubs(walls, minKeep = 0.22) {
-  return (Array.isArray(walls) ? walls : []).filter((wall) => dist(wall.start, wall.end) >= minKeep);
-}
-function dedupeOpenings(openings) {
-  const out = [], seen = /* @__PURE__ */ new Set();
-  for (const opening of Array.isArray(openings) ? openings : []) {
-    const key2 = [opening.type, opening.wallId, Number(opening.offset || 0).toFixed(2), Number(opening.width || 0).toFixed(2)].join("|");
-    if (seen.has(key2)) continue;
-    seen.add(key2);
-    out.push(opening);
-  }
-  return out;
-}
-function ensureRequiredDoors(openings) {
-  return { openings: dedupeOpenings(openings), added: 0 };
-}
-function wallMidpoint(wall) {
-  return {
-    x: (Number(wall.start?.x || 0) + Number(wall.end?.x || 0)) / 2,
-    y: (Number(wall.start?.y || 0) + Number(wall.end?.y || 0)) / 2
-  };
-}
-function wallAngle(wall) {
-  return Math.atan2(
-    Number(wall.end?.y || 0) - Number(wall.start?.y || 0),
-    Number(wall.end?.x || 0) - Number(wall.start?.x || 0)
-  );
-}
-function angleDeltaModuloPi(a, b) {
-  let d = Math.abs(a - b) % Math.PI;
-  if (d > Math.PI / 2) d = Math.PI - d;
-  return d;
-}
-function segmentNearExistingWall(candidate, walls, distanceTolerance = 0.14, angleTolerance = 0.18) {
-  const mid = wallMidpoint(candidate);
-  const angle = wallAngle(candidate);
-  return (Array.isArray(walls) ? walls : []).some((wall) => {
-    const d = pointToSegmentDistance(mid, wall.start, wall.end);
-    if (d > distanceTolerance) return false;
-    return angleDeltaModuloPi(angle, wallAngle(wall)) <= angleTolerance;
-  });
-}
-function edgeLiesOnExterior(edge, externalWalls) {
-  const length = dist(edge.start, edge.end);
-  if (length < 0.25) return true;
-  const mid = wallMidpoint(edge);
-  const angle = wallAngle(edge);
-  return (Array.isArray(externalWalls) ? externalWalls : []).some((wall) => {
-    if (pointToSegmentDistance(mid, wall.start, wall.end) > 0.18) return false;
-    if (angleDeltaModuloPi(angle, wallAngle(wall)) > 0.18) return false;
-    return true;
-  });
-}
-function synthesizeRoomBoundaryPartitions(partitions, rooms, externalWalls) {
-  const out = [...Array.isArray(partitions) ? partitions : []];
-  let added = 0;
-  for (const room of Array.isArray(rooms) ? rooms : []) {
-    if (!isEnclosedAccessRoom(room)) continue;
-    const poly = Array.isArray(room?.polygon) ? room.polygon : [];
-    if (poly.length < 3) continue;
-    for (let i = 0; i < poly.length; i += 1) {
-      const edge = {
-        id: `room_edge_${room.id}_${i + 1}`.slice(0, 64),
-        provenance: "room_boundary",
-        type: "internal",
-        start: { ...poly[i] },
-        end: { ...poly[(i + 1) % poly.length] }
-      };
-      if (dist(edge.start, edge.end) < 0.42) continue;
-      if (edgeLiesOnExterior(edge, externalWalls)) continue;
-      if (segmentNearExistingWall(edge, out, 0.13, 0.16)) continue;
-      out.push(edge);
-      added += 1;
-    }
-  }
-  return { partitions: out, added };
-}
-function isEnclosedAccessRoom(room) {
-  const type = canonicalRoomType(room);
-  return ["bedroom", "bathroom", "storage", "office", "kitchen"].includes(type);
-}
-function normalizeEnclosedRoomDoors(openings) {
-  return { openings: dedupeOpenings(openings), removedExtraDoors: 0, synthesizedDoors: 0 };
-}
-function clusterAxisValues(values, tolerance = 0.2) {
-  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
-  const clusters = [];
-  for (const value of sorted) {
-    const last = clusters[clusters.length - 1];
-    if (!last || Math.abs(value - last.mean) > tolerance) {
-      clusters.push({ values: [value], mean: value });
-    } else {
-      last.values.push(value);
-      last.mean = last.values.reduce((sum, n) => sum + n, 0) / last.values.length;
-    }
-  }
-  return clusters.map((c, index) => ({ id: index, initial: c.mean, value: c.mean }));
-}
-function nearestNodeIndex(nodes, value) {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < nodes.length; i += 1) {
-    const d = Math.abs(nodes[i].initial - value);
-    if (d < bestD) {
-      best = i;
-      bestD = d;
-    }
-  }
-  return best;
-}
-function solveDimensionAxis(rooms, axis, extent) {
-  const rects = rooms.map((room) => ({ room, rect: rectFromRoom(room) })).filter((entry) => entry.rect);
-  const values = [0, extent];
-  for (const { rect } of rects) {
-    if (axis === "x") values.push(rect.minX, rect.maxX);
-    else values.push(rect.minY, rect.maxY);
-  }
-  const nodes = clusterAxisValues(values, Math.max(0.12, Math.min(0.28, extent * 0.018)));
-  if (nodes.length < 2) return { nodes, constraints: [], applied: false };
-  const minNode = nearestNodeIndex(nodes, 0);
-  const maxNode = nearestNodeIndex(nodes, extent);
-  nodes[minNode].fixed = true;
-  nodes[minNode].value = 0;
-  nodes[maxNode].fixed = true;
-  nodes[maxNode].value = extent;
-  const constraints = [];
-  for (const { room, rect } of rects) {
-    const target = axis === "x" ? Number(room.printedWidthMeters || 0) : Number(room.printedDepthMeters || 0);
-    if (!(target > 0.35 && target <= extent)) continue;
-    const lo = axis === "x" ? rect.minX : rect.minY;
-    const hi = axis === "x" ? rect.maxX : rect.maxY;
-    const i = nearestNodeIndex(nodes, lo);
-    const j = nearestNodeIndex(nodes, hi);
-    if (i === j) continue;
-    const current = Math.abs(nodes[j].initial - nodes[i].initial);
-    const ratio = target / Math.max(1e-3, current);
-    if (ratio < 0.55 || ratio > 1.8) continue;
-    const confidence = ratio >= 0.72 && ratio <= 1.38 ? 1 : 0.35;
-    constraints.push({ roomId: room.id, i: Math.min(i, j), j: Math.max(i, j), target, confidence, current });
-  }
-  if (!constraints.length) return { nodes, constraints, applied: false };
-  for (let iter = 0; iter < 180; iter += 1) {
-    for (const node of nodes) {
-      if (node.fixed) continue;
-      node.value += (node.initial - node.value) * 0.035;
-    }
-    for (const c of constraints) {
-      const a = nodes[c.i];
-      const b = nodes[c.j];
-      const error = c.target - (b.value - a.value);
-      const gain = 0.46 * c.confidence;
-      if (!a.fixed && !b.fixed) {
-        a.value -= error * gain * 0.5;
-        b.value += error * gain * 0.5;
-      } else if (!a.fixed) {
-        a.value -= error * gain;
-      } else if (!b.fixed) {
-        b.value += error * gain;
-      }
-    }
-    for (let i = 1; i < nodes.length; i += 1) {
-      const minGap = 0.06;
-      if (nodes[i].value < nodes[i - 1].value + minGap) {
-        if (!nodes[i].fixed) nodes[i].value = nodes[i - 1].value + minGap;
-        else if (!nodes[i - 1].fixed) nodes[i - 1].value = nodes[i].value - minGap;
-      }
-    }
-    nodes[minNode].value = 0;
-    nodes[maxNode].value = extent;
-  }
-  const residuals = constraints.map((c) => {
-    const actual = nodes[c.j].value - nodes[c.i].value;
-    return { ...c, actual, relativeError: Math.abs(actual - c.target) / Math.max(1e-3, c.target) };
-  });
-  const strong = residuals.filter((r) => r.confidence >= 0.9);
-  const meanError = (strong.length ? strong : residuals).reduce((s, r) => s + r.relativeError, 0) / Math.max(1, (strong.length ? strong : residuals).length);
-  return { nodes, constraints: residuals, meanError, applied: meanError <= 0.14 };
-}
-function dimensionLockRooms(inputRooms, width, depth) {
-  const original = inputRooms.map((room) => ({ ...room, polygon: room.polygon.map((p) => ({ ...p })) }));
-  const sx = solveDimensionAxis(original, "x", width);
-  const sy = solveDimensionAxis(original, "y", depth);
-  if (!sx.applied && !sy.applied) return { rooms: inputRooms, applied: false, reason: "no_stable_axis_solution", x: sx, y: sy };
-  const mapped = original.map((room) => {
-    const rect = rectFromRoom(room);
-    if (!rect) return room;
-    const ix0 = nearestNodeIndex(sx.nodes, rect.minX);
-    const ix1 = nearestNodeIndex(sx.nodes, rect.maxX);
-    const iy0 = nearestNodeIndex(sy.nodes, rect.minY);
-    const iy1 = nearestNodeIndex(sy.nodes, rect.maxY);
-    const minX = sx.applied ? Math.min(sx.nodes[ix0].value, sx.nodes[ix1].value) : rect.minX;
-    const maxX = sx.applied ? Math.max(sx.nodes[ix0].value, sx.nodes[ix1].value) : rect.maxX;
-    const minY = sy.applied ? Math.min(sy.nodes[iy0].value, sy.nodes[iy1].value) : rect.minY;
-    const maxY = sy.applied ? Math.max(sy.nodes[iy0].value, sy.nodes[iy1].value) : rect.maxY;
-    if (maxX - minX < 0.25 || maxY - minY < 0.25) return room;
-    return { ...room, polygon: [
-      { x: minX, y: minY },
-      { x: maxX, y: minY },
-      { x: maxX, y: maxY },
-      { x: minX, y: maxY }
-    ] };
-  });
-  for (let i = 0; i < mapped.length; i += 1) {
-    const a0 = rectFromRoom(original[i]);
-    const a1 = rectFromRoom(mapped[i]);
-    if (!a0 || !a1) continue;
-    const center0 = { x: (a0.minX + a0.maxX) / 2, y: (a0.minY + a0.maxY) / 2 };
-    const center1 = { x: (a1.minX + a1.maxX) / 2, y: (a1.minY + a1.maxY) / 2 };
-    if (dist(center0, center1) > Math.max(1.25, Math.min(width, depth) * 0.13)) {
-      return { rooms: inputRooms, applied: false, reason: "excessive_room_displacement", x: sx, y: sy };
-    }
-    for (let j = i + 1; j < mapped.length; j += 1) {
-      const b0 = rectFromRoom(original[j]);
-      const b1 = rectFromRoom(mapped[j]);
-      if (!b0 || !b1) continue;
-      const before = overlapArea(a0, b0);
-      const after = overlapArea(a1, b1);
-      if (after > Math.max(0.18, before + 0.12)) {
-        return { rooms: inputRooms, applied: false, reason: "room_overlap_guard", x: sx, y: sy };
-      }
-    }
-  }
-  return { rooms: mapped, applied: true, reason: sx.applied && sy.applied ? "printed_dimension_grid_lock_xy" : sx.applied ? "printed_dimension_grid_lock_x_only" : "printed_dimension_grid_lock_y_only", x: sx, y: sy };
-}
-function roomBoundaryGrid(rooms) {
-  const xs = [];
-  const ys = [];
-  for (const room of rooms) {
-    const r = rectFromRoom(room);
-    if (!r) continue;
-    xs.push(r.minX, r.maxX);
-    ys.push(r.minY, r.maxY);
-  }
-  return { xs, ys };
-}
-function snapPartitionToRoomGrid(wall, rooms) {
-  const grid = roomBoundaryGrid(rooms);
-  const out = snapAxisWall(wall);
-  const dx = Math.abs(out.end.x - out.start.x);
-  const dy = Math.abs(out.end.y - out.start.y);
-  const snap = (value, values, tolerance = 0.32) => {
-    let best = value, bestD = tolerance;
-    for (const v of values) {
-      const d = Math.abs(v - value);
-      if (d < bestD) {
-        best = v;
-        bestD = d;
-      }
-    }
-    return best;
-  };
-  if (dy > dx * 3) {
-    const x = snap((out.start.x + out.end.x) / 2, grid.xs);
-    out.start.x = x;
-    out.end.x = x;
-    out.start.y = snap(out.start.y, grid.ys);
-    out.end.y = snap(out.end.y, grid.ys);
-  } else if (dx > dy * 3) {
-    const y = snap((out.start.y + out.end.y) / 2, grid.ys);
-    out.start.y = y;
-    out.end.y = y;
-    out.start.x = snap(out.start.x, grid.xs);
-    out.end.x = snap(out.end.x, grid.xs);
-  }
-  return out;
-}
-function simplifyOrthogonalPolygon(points = [], epsilon = 0.035) {
-  if (!Array.isArray(points) || points.length < 4) return points;
-  let out = [...points];
-  let changed = true;
-  while (changed && out.length >= 4) {
-    changed = false;
-    const next = [];
-    for (let i = 0; i < out.length; i += 1) {
-      const prev = out[(i - 1 + out.length) % out.length];
-      const cur = out[i];
-      const after = out[(i + 1) % out.length];
-      const vertical = Math.abs(prev.x - cur.x) <= epsilon && Math.abs(cur.x - after.x) <= epsilon;
-      const horizontal = Math.abs(prev.y - cur.y) <= epsilon && Math.abs(cur.y - after.y) <= epsilon;
-      if (vertical || horizontal || dist(prev, cur) < epsilon) {
-        changed = true;
-        continue;
-      }
-      next.push(cur);
-    }
-    if (next.length >= 4) out = next;
-    else break;
-  }
-  return out;
-}
-function partitionCrossesRoomInterior(wall, rooms) {
-  const length = dist(wall.start, wall.end);
-  if (length < 0.25) return true;
-  const mx = (wall.start.x + wall.end.x) / 2;
-  const my = (wall.start.y + wall.end.y) / 2;
-  const dx = (wall.end.x - wall.start.x) / length;
-  const dy = (wall.end.y - wall.start.y) / length;
-  const nx = -dy, ny = dx;
-  const offset = Math.min(0.18, Math.max(0.08, length * 0.08));
-  const left = { x: mx + nx * offset, y: my + ny * offset };
-  const right = { x: mx - nx * offset, y: my - ny * offset };
-  const roomAt = (p) => rooms.find((room) => pointInPolygon(p, room.polygon))?.id || null;
-  const a = roomAt(left), b = roomAt(right);
-  if (a && b && a === b) return true;
-  const midRoom = roomAt({ x: mx, y: my });
-  if (midRoom && a === midRoom && b === midRoom) return true;
-  return false;
-}
-function floorFinishForRoom(room) {
-  const type = canonicalRoomType(room);
-  if (type === "bathroom") return "wet_tile";
-  if (type === "storage" || type === "balcony" || type === "laundry") return "utility_tile";
-  if (type === "bedroom") return "light_oak";
-  if (["living", "kitchen", "kitchen_dining", "dining", "office"].includes(type)) return "light_stone";
-  return "neutral_floor";
-}
-function polygonSamplePoints(polygon2 = []) {
-  const pts = [...polygon2];
-  for (let i = 0; i < polygon2.length; i += 1) {
-    const a = polygon2[i], b = polygon2[(i + 1) % polygon2.length];
-    pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-  }
-  const xs = polygon2.map((p) => p.x), ys = polygon2.map((p) => p.y);
-  if (xs.length) pts.push({ x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 });
-  return pts;
-}
-function roomInsideFootprint(room, footprint) {
-  return polygonSamplePoints(room?.polygon || []).every((p) => pointInPolygon(p, footprint) || footprint.some((a, i) => pointToSegmentDistance(p, a, footprint[(i + 1) % footprint.length]) < 0.035));
-}
-function containRoomInFootprint(room, footprint) {
-  if (!room?.polygon?.length || roomInsideFootprint(room, footprint)) return { room, adjusted: false };
-  const b = roomBounds(room);
-  const center = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
-  if (!pointInPolygon(center, footprint)) return { room, adjusted: false };
-  for (let scale = 0.98; scale >= 0.55; scale -= 0.02) {
-    const polygon2 = room.polygon.map((p) => ({
-      x: center.x + (p.x - center.x) * scale,
-      y: center.y + (p.y - center.y) * scale
-    }));
-    const candidate = { ...room, polygon: polygon2 };
-    if (roomInsideFootprint(candidate, footprint)) return { room: candidate, adjusted: true };
-  }
-  return { room, adjusted: false };
-}
-function clusterGuideCoordinates(values = [], tolerance = 5) {
-  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
-  const clusters = [];
-  for (const value of sorted) {
-    const last = clusters[clusters.length - 1];
-    if (!last || Math.abs(value - last.mean) > tolerance) {
-      clusters.push({ values: [value], mean: value });
-    } else {
-      last.values.push(value);
-      last.mean = last.values.reduce((s, n) => s + n, 0) / last.values.length;
-    }
-  }
-  return clusters.map((c) => c.mean);
-}
-function snapRawSceneToPixelGuides(raw, evidence) {
-  if (!raw || raw.coordinateMode !== "image_normalized" || !evidence?.guides?.length) {
-    return { raw, diagnostics: { applied: false, reason: "no_usable_pixel_guides" } };
-  }
-  const width = Number(evidence.width) || 1;
-  const height = Number(evidence.height) || 1;
-  const minDim = Math.max(1, Math.min(width, height));
-  const minGuideLength = minDim * 0.055;
-  const verticalGuides = [];
-  const horizontalGuides = [];
-  for (const g of evidence.guides) {
-    const dx = Number(g?.end?.x) - Number(g?.start?.x);
-    const dy = Number(g?.end?.y) - Number(g?.start?.y);
-    const len = Math.hypot(dx, dy);
-    if (!(len >= minGuideLength)) continue;
-    if (Math.abs(dx) <= Math.abs(dy) * 0.12) {
-      verticalGuides.push({
-        coord: (Number(g.start.x) + Number(g.end.x)) / 2,
-        min: Math.min(Number(g.start.y), Number(g.end.y)),
-        max: Math.max(Number(g.start.y), Number(g.end.y)),
-        length: len
-      });
-    } else if (Math.abs(dy) <= Math.abs(dx) * 0.12) {
-      horizontalGuides.push({
-        coord: (Number(g.start.y) + Number(g.end.y)) / 2,
-        min: Math.min(Number(g.start.x), Number(g.end.x)),
-        max: Math.max(Number(g.start.x), Number(g.end.x)),
-        length: len
-      });
-    }
-  }
-  const xClusters = clusterGuideCoordinates(verticalGuides.map((g) => g.coord), 5);
-  const yClusters = clusterGuideCoordinates(horizontalGuides.map((g) => g.coord), 5);
-  const remapGuides = (guides, clusters) => guides.map((g) => ({
-    ...g,
-    coord: clusters.reduce(
-      (best, c) => Math.abs(c - g.coord) < Math.abs(best - g.coord) ? c : best,
-      clusters[0] ?? g.coord
-    )
-  }));
-  const vGuides = remapGuides(verticalGuides, xClusters);
-  const hGuides = remapGuides(horizontalGuides, yClusters);
-  const tolerancePx = Math.max(5, Math.min(13, Math.round(minDim * 0.015)));
-  const spanMarginPx = Math.max(10, Math.min(24, Math.round(minDim * 0.025)));
-  let pointsSeen = 0;
-  let pointsSnapped = 0;
-  let xSnaps = 0;
-  let ySnaps = 0;
-  let totalSnapDistance = 0;
-  const snapPoint = (point2) => {
-    if (!point2 || !Number.isFinite(Number(point2.x)) || !Number.isFinite(Number(point2.y))) return point2;
-    pointsSeen += 1;
-    const px = Number(point2.x) * width;
-    const py = Number(point2.y) * height;
-    let nx = px;
-    let ny = py;
-    let changed = false;
-    let localDistance = 0;
-    let bestV = null;
-    for (const g of vGuides) {
-      if (py < g.min - spanMarginPx || py > g.max + spanMarginPx) continue;
-      const d = Math.abs(px - g.coord);
-      if (d <= tolerancePx && (!bestV || d < bestV.d)) bestV = { d, coord: g.coord };
-    }
-    if (bestV) {
-      nx = bestV.coord;
-      changed = true;
-      xSnaps += 1;
-      localDistance += bestV.d;
-    }
-    let bestH = null;
-    for (const g of hGuides) {
-      if (px < g.min - spanMarginPx || px > g.max + spanMarginPx) continue;
-      const d = Math.abs(py - g.coord);
-      if (d <= tolerancePx && (!bestH || d < bestH.d)) bestH = { d, coord: g.coord };
-    }
-    if (bestH) {
-      ny = bestH.coord;
-      changed = true;
-      ySnaps += 1;
-      localDistance += bestH.d;
-    }
-    if (changed) {
-      pointsSnapped += 1;
-      totalSnapDistance += localDistance;
-    }
-    return {
-      x: clamp(nx / width, 0, 1, Number(point2.x)),
-      y: clamp(ny / height, 0, 1, Number(point2.y))
-    };
-  };
-  const snapped = {
-    ...raw,
-    footprint: (Array.isArray(raw.footprint) ? raw.footprint : []).map(snapPoint),
-    rooms: (Array.isArray(raw.rooms) ? raw.rooms : []).map((room) => ({
-      ...room,
-      polygon: (Array.isArray(room?.polygon) ? room.polygon : []).map((p) => ({ ...p }))
-    })),
-    partitions: (Array.isArray(raw.partitions) ? raw.partitions : []).map((wall) => ({
-      ...wall,
-      start: snapPoint(wall?.start),
-      end: snapPoint(wall?.end)
-    })),
-    openings: (Array.isArray(raw.openings) ? raw.openings : []).map((opening) => ({
-      ...opening,
-      center: { ...opening?.center || {} }
-    }))
-  };
-  return {
-    raw: snapped,
-    diagnostics: {
-      applied: pointsSnapped > 0,
-      reason: "structural_pixel_guide_snap_final",
-      tolerancePixels: tolerancePx,
-      spanMarginPixels: spanMarginPx,
-      verticalGuideCount: vGuides.length,
-      horizontalGuideCount: hGuides.length,
-      pointsSeen,
-      pointsSnapped,
-      xSnaps,
-      ySnaps,
-      meanSnapDistancePixels: pointsSnapped ? Number((totalSnapDistance / Math.max(1, xSnaps + ySnaps)).toFixed(2)) : 0
-    }
-  };
-}
-function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
-  const guideSnap = snapRawSceneToPixelGuides(inputRaw, imageEvidence);
-  const sourceProjection = projectImageNormalizedSceneToMeters(guideSnap.raw, imageMeta);
-  const raw = sourceProjection.raw;
-  const width = clamp(raw?.widthMeters, 2, 80, 10);
-  const depth = clamp(raw?.depthMeters, 2, 80, 8);
-  let footprint = cleanPolygon((raw?.footprint || []).map((p) => sourcePoint(p, width, depth)));
-  if (footprint.length < 4 || polygonArea(footprint) < width * depth * 0.18) {
-    throw Object.assign(new Error("The preview did not return a usable building outline."), { code: "PREVIEW_BAD_FOOTPRINT" });
-  }
-  const rawRooms = Array.isArray(raw?.rooms) ? raw.rooms : [];
-  const roomCandidates = rawRooms.map((room, index) => {
-    const polygon2 = cleanPolygon((room?.polygon || []).map((p) => sourcePoint(p, width, depth)));
-    const visible = room?.labelVisible !== false;
-    const printedWidth = clamp(room?.printedWidthMeters, 0, 40, 0);
-    const printedDepth = clamp(room?.printedDepthMeters, 0, 40, 0);
-    return {
-      id: String(room?.id || `room_${index + 1}`).slice(0, 64),
-      name: String(room?.name || `Room ${index + 1}`).slice(0, 100),
-      type: String(room?.type || "room").slice(0, 64),
-      labelVisible: visible,
-      printedWidthMeters: printedWidth,
-      printedDepthMeters: printedDepth,
-      polygon: polygon2
-    };
-  }).filter((room) => room.polygon.length >= 3 && polygonArea(room.polygon) > 0.2);
-  const roomIds = /* @__PURE__ */ new Set();
-  const observedRooms = roomCandidates.map((room) => {
-    if (roomIds.has(room.id)) throw Object.assign(new Error("Duplicate room identifier in trace."), { code: "PREVIEW_DUPLICATE_ROOM_ID" });
-    roomIds.add(room.id);
-    return room;
-  });
-  const dimensionAlignment = createPrintedDimensionAlignment(observedRooms, width, depth, footprint);
-  const alignedPoint = (p) => mapPrintedDimensionPoint(p, dimensionAlignment);
-  const sourceScenePoint = (p) => alignedPoint(sourcePoint(p, width, depth));
-  footprint = footprint.map(alignedPoint);
-  const roomsBeforeLock = observedRooms.map((room) => ({ ...room, polygon: room.polygon.map(alignedPoint) }));
-  const dimensionDiagnostic = dimensionLockRooms(roomsBeforeLock, width, depth);
-  const dimensionLock = { ...dimensionDiagnostic, rooms: roomsBeforeLock, applied: dimensionAlignment.applied, reason: dimensionAlignment.applied ? "shared_printed_dimension_alignment_v54" : "source_dimensions_preserved" };
-  const relationships = normalizeRelationships(raw?.relationships, roomsBeforeLock.map((r) => r.id));
-  const topology = {
-    rooms: roomsBeforeLock,
-    diagnostics: {
-      version: "source_image_global_affine_layout_v15",
-      applied: false,
-      snappedPairs: 0,
-      openPairs: relationships.filter((r) => r.relation === "open").length,
-      wallPairs: relationships.filter((r) => r.relation === "wall" || r.relation === "door").length,
-      relationshipResidualMean: 0,
-      maxShiftMeters: 0,
-      sourceAnchorMeanShift: 0,
-      guardedRelationships: 0,
-      maxAllowedShiftMeters: 0
-    }
-  };
-  const overlapCleanup = { rooms: topology.rooms, adjustments: 0 };
-  let roomContainmentAdjustments = 0;
-  const rooms = overlapCleanup.rooms.map((room) => {
-    const semanticType = canonicalRoomType(room);
-    const normalized2 = {
-      ...room,
-      semanticType,
-      // The unchanged V7 viewer maps room.type to its floor material. Integrated
-      // kitchen+dining zones are dry open-plan space, so expose them as dining
-      // for rendering while preserving semanticType/name for furnishing logic.
-      type: ["kitchen_dining", "dining"].includes(semanticType) ? "living" : semanticType,
-      floorFinish: floorFinishForRoom({ ...room, type: semanticType })
-    };
-    const contained = containRoomInFootprint(normalized2, footprint);
-    if (contained.adjusted) roomContainmentAdjustments += 1;
-    return contained.room;
-  });
-  if (!rooms.length) {
-    throw Object.assign(new Error("The preview did not return usable room zones."), { code: "PREVIEW_NO_ROOMS" });
-  }
-  const rawFootprint = footprint;
-  footprint = simplifyOrthogonalPolygon(rawFootprint, 0.045);
-  const footprintRepair = {
-    repaired: false,
-    reason: "model_outer_contour_preserved_v7",
-    rawPointCount: rawFootprint.length,
-    finalPointCount: footprint.length
-  };
-  const externalWalls = footprint.map((p, index) => ({
-    id: `ext_${index + 1}`,
-    type: "external",
-    start: { ...p },
-    end: { ...footprint[(index + 1) % footprint.length] }
-  }));
-  const rawPartitions = (Array.isArray(raw?.partitions) ? raw.partitions : []).map((wall, index) => snapPartitionToRoomGrid({
-    id: String(wall?.id || `int_${index + 1}`).slice(0, 64),
-    provenance: "observed",
-    type: "internal",
-    start: sourceScenePoint(wall?.start),
-    end: sourceScenePoint(wall?.end)
-  }, rooms)).filter((wall) => dist(wall.start, wall.end) > 0.15 && !partitionCrossesRoomInterior(wall, rooms));
-  const synthesizedRoomWalls = synthesizeRoomBoundaryPartitions(rawPartitions, rooms, externalWalls);
-  const openPlanFiltered = filterOpenPlanPartitions(synthesizedRoomWalls.partitions, rooms, relationships, (raw.openings || []).map((opening) => ({ ...opening, center: sourceScenePoint(opening.center) })));
-  const relationshipWalls = ensureRelationshipWalls(openPlanFiltered.partitions, rooms, relationships);
-  let partitions = relationshipWalls.partitions;
-  const seen = /* @__PURE__ */ new Set();
-  let walls = [...externalWalls, ...partitions].filter((wall) => {
-    const key2 = wallKey(wall);
-    if (seen.has(key2)) return false;
-    seen.add(key2);
-    return true;
-  });
-  walls = cleanupWallStubs(closeAlignedWallGaps(walls));
-  const sourceOpeningObservations = (raw.openings || []).map((opening) => ({ ...opening, center: sourceScenePoint(opening.center) }));
-  const openingSupport = prepareObservedOpeningWalls(walls, rooms, sourceOpeningObservations, relationships);
-  walls = openingSupport.walls;
-  const detectedOpenings = [];
-  for (const opening of Array.isArray(raw?.openings) ? raw.openings : []) {
-    const center = sourceScenePoint(opening?.center);
-    const type = opening?.type === "window" ? "window" : "door";
-    const best = chooseBestWallForOpening(center, type, walls, rooms, relationships, opening?.wallIdHint, opening?.wallAxis, opening?.widthMeters);
-    if (!best || !best.projection || best.projection.length < 0.35) continue;
-    if (best.projection.distance > Math.max(0.9, Math.min(width, depth) * 0.09)) continue;
-    if (type === "door" && best.score > 1.05) continue;
-    if (type === "window" && String(best.wall.type) !== "external" && best.score > 0.85) continue;
-    const observedWidth = Number(opening?.widthMeters);
-    detectedOpenings.push({
-      id: String(opening?.id || `opening_${detectedOpenings.length + 1}`).slice(0, 64),
-      type,
-      wallId: best.wall.id,
-      offset: best.projection.t,
-      width: observedWidth > 0 ? observedWidth : type === "window" ? 1.4 : 0.9,
-      ...openingVerticalDimensions(opening, type),
-      ...observedDoorOrientation(opening, best.wall),
-      provenance: "source_observed",
-      _sourceDistance: Number(best.projection.distance || 0),
-      _score: Number(best.score || 0)
-    });
-  }
-  const requiredDoorPass = ensureRequiredDoors(dedupeOpenings(detectedOpenings), walls, rooms, relationships);
-  const accessDoorPass = normalizeEnclosedRoomDoors(
-    requiredDoorPass.openings,
-    walls,
-    rooms,
-    relationships,
-    footprint
-  );
-  const overlapRepair = repairOverlappingWalls(walls, accessDoorPass.openings);
-  walls = overlapRepair.walls;
-  const outdoor = outdoorBoundaries(walls, rooms, overlapRepair.openings);
-  walls = outdoor.walls;
-  const finalOpenings = outdoor.openings;
-  const furnitureObservations = (raw.furniture || []).map((item) => ({
-    ...item,
-    backLeft: sourceScenePoint(item.backLeft),
-    backRight: sourceScenePoint(item.backRight),
-    frontCenter: sourceScenePoint(item.frontCenter)
-  }));
-  const sourceFurniture = compileSourceFurniture(furnitureObservations, footprint, rooms, walls);
-  const furnitureValidation = { assets: sourceFurniture.assets, rejected: [], added: [], collisionAware: true, doorClearanceAware: false };
-  let assets = furnitureValidation.assets;
-  return {
-    sceneType: "floorplan_interactive_preview",
-    title: String(raw?.title || "Interactive 3D Preview").slice(0, 120),
-    previewMode: "interactive_architectural_cutaway_v20",
-    presentationStyle: "ventra_architectural_cutaway_v21",
-    width,
-    depth,
-    height: 3.2,
-    cutawayHeight: 3.2,
-    heightSource: "design_default_not_measured",
-    wallThickness: 0.12,
-    externalWallThickness: 0.2,
-    footprint,
-    holes: [],
-    rooms,
-    relationships,
-    walls,
-    openings: finalOpenings,
-    assets,
-    furnishingMode: "source_observed",
-    furnishingReview: {
-      observedCount: (raw.furniture || []).length,
-      acceptedCount: assets.length,
-      rejected: [...sourceFurniture.rejected, ...furnitureValidation.rejected],
-      added: furnitureValidation.added,
-      observations: furnitureObservations,
-      observationCoordinateMode: "scene_meters_y_up",
-      requiresReview: sourceFurniture.rejected.length > 0 || furnitureValidation.rejected.length > 0 || assets.length === 0
-    },
-    palette: {
-      wall: "#ECEAE5",
-      externalWall: "#45484D",
-      floor: "#E3DED6",
-      ceiling: "#F7F4EE",
-      accent: "#7C624E",
-      glass: "#9FC2D0",
-      door: "#7B573E",
-      furniture: "#AF8460",
-      upholstery: "#DDD5CA",
-      textileAccent: "#88956F",
-      metal: "#6B7074",
-      bathroomTile: "#F5F6F4",
-      bedroomWood: "#C89C6C",
-      mainStone: "#E5E1DA"
-    },
-    backgroundColor: "#D5D7DA",
-    showRoomLabels: false,
-    geometryValidation: {
-      version: VERSION,
-      mode: "visual_interactive_preview",
-      confidence: clamp(raw?.confidence, 0, 1, 0.5),
-      footprintRepair: { repaired: footprintRepair.repaired, reason: footprintRepair.reason },
-      sourceProjection: sourceProjection.diagnostics,
-      guideSnap: guideSnap.diagnostics,
-      dimensionAlignment,
-      dimensionLock: {
-        applied: dimensionLock.applied,
-        reason: dimensionLock.reason,
-        xApplied: Boolean(dimensionLock.x?.applied),
-        yApplied: Boolean(dimensionLock.y?.applied),
-        xMeanError: Number.isFinite(dimensionLock.x?.meanError) ? Number(dimensionLock.x.meanError.toFixed(4)) : null,
-        yMeanError: Number.isFinite(dimensionLock.y?.meanError) ? Number(dimensionLock.y.meanError.toFixed(4)) : null,
-        xConstraintCount: dimensionLock.x?.constraints?.length || 0,
-        yConstraintCount: dimensionLock.y?.constraints?.length || 0
-      },
-      topology: {
-        version: "source_image_global_affine_layout_v15",
-        relationshipCount: relationships.length,
-        applied: topology.diagnostics.applied,
-        snappedPairs: topology.diagnostics.snappedPairs,
-        openPairs: topology.diagnostics.openPairs,
-        wallPairs: topology.diagnostics.wallPairs,
-        removedOpenPlanPartitions: openPlanFiltered.removed,
-        addedRelationshipWalls: relationshipWalls.added,
-        addedRequiredDoors: requiredDoorPass.added,
-        serviceOverlapAdjustments: overlapCleanup.adjustments,
-        relationshipResidualMean: Number.isFinite(topology.diagnostics.relationshipResidualMean) ? Number(topology.diagnostics.relationshipResidualMean.toFixed(4)) : null,
-        maxShiftMeters: Number(topology.diagnostics.maxShiftMeters.toFixed(4)),
-        sourceAnchorMeanShift: Number((topology.diagnostics.sourceAnchorMeanShift || 0).toFixed(4)),
-        guardedRelationships: topology.diagnostics.guardedRelationships || 0,
-        maxAllowedShiftMeters: topology.diagnostics.maxAllowedShiftMeters || 0.8
-      },
-      openings: {
-        observations: sourceOpeningObservations,
-        observationCoordinateMode: "scene_meters_y_up",
-        sharedBoundarySupports: openingSupport.added,
-        sourceObservedCount: (raw.openings || []).length,
-        preservedCount: finalOpenings.length,
-        rejectedObservationIds: (raw.openings || []).filter((o) => !finalOpenings.some((f) => f.id === String(o.id))).map((o) => o.id),
-        syntheticCount: 0,
-        sourceVerified: false
-      },
-      roomContainmentAdjustments,
-      furnishing: {
-        version: "source_image_observation_validated_v2",
-        assetCount: assets.length,
-        collisionAware: furnitureValidation.collisionAware,
-        doorClearanceAware: furnitureValidation.doorClearanceAware,
-        roomTypeAware: true,
-        rejectedCount: furnitureValidation.rejected.length,
-        completedEssentialCount: furnitureValidation.added.length,
-        byType: assets.reduce((acc, a) => {
-          const key2 = String(a?.type || "unknown");
-          acc[key2] = (acc[key2] || 0) + 1;
-          return acc;
-        }, {}),
-        essentialFallbackCount: assets.filter((a) => a.essentialFallback).length,
-        byRoom: rooms.map((room) => ({
-          roomId: room.id,
-          type: canonicalRoomType(room),
-          assetCount: assets.filter((a) => String(a.roomId) === String(room.id)).length,
-          assetTypes: assets.filter((a) => String(a.roomId) === String(room.id)).map((a) => a.type)
-        }))
-      },
-      materialZoning: {
-        version: "room_polygon_material_zoning_v20",
-        roomFinishCount: rooms.filter((room) => room.floorFinish).length
-      },
-      presentation: {
-        version: "ventra_architectural_cutaway_v21",
-        deterministicFurniture: true,
-        darkExternalWalls: true,
-        roomSpecificMaterials: true,
-        imageGuideSnap: Boolean(guideSnap?.diagnostics?.applied),
-        guideSnapScope: "footprint_and_partitions_only",
-        targetStyle: "warm_modern_architectural_cutaway",
-        openingPlacementMode: "source_axis_and_relationship_attachment_v22"
-      },
-      note: "Visual interactive preview. Engineering quantities remain on the APS/takeoff pipeline."
-    }
-  };
-}
-function parseJson(text) {
-  const value = String(text || "").trim();
+function parseJson(text2) {
+  const value = String(text2 || "").trim();
   if (!value) return null;
   try {
     return JSON.parse(value);
@@ -2375,7 +1732,7 @@ async function prepareImage(imageUrl, signal) {
   const response = await fetch(imageUrl, { cache: "no-store", signal });
   if (!response.ok) throw Object.assign(new Error(`Could not download the floor-plan image (${response.status}).`), { code: "PREVIEW_IMAGE_DOWNLOAD_FAILED" });
   const buffer = Buffer.from(await response.arrayBuffer());
-  const image = sharp2(buffer, { failOn: "none" });
+  const image = sharp4(buffer, { failOn: "none" });
   const meta = await image.metadata();
   const maxSide = 1800;
   let pipeline = image.rotate().flatten({ background: "#ffffff" });
@@ -2392,276 +1749,13 @@ async function prepareImage(imageUrl, signal) {
 }
 var IMAGE_SCENE_CACHE_TTL_MS = 24 * 60 * 60 * 1e3;
 var imageSceneCache = globalThis.__ventraImageSceneCacheV20 || (globalThis.__ventraImageSceneCacheV20 = /* @__PURE__ */ new Map());
-function cleanupImageSceneCache() {
-  const now = Date.now();
-  for (const [key2, entry] of imageSceneCache.entries()) {
-    if (!entry || entry.expiresAt <= now) imageSceneCache.delete(key2);
-  }
-  while (imageSceneCache.size > 24) {
-    const oldest = imageSceneCache.keys().next().value;
-    imageSceneCache.delete(oldest);
-  }
-}
-async function runPreview(body) {
-  const startedAt = Date.now();
-  const diagnostics = {
-    format: "ventra-interactive-preview-diagnostic-v2",
-    build: VERSION,
-    model: MODEL,
-    stage: "starting",
-    accepted: false,
-    reasoningEffort: REASONING_EFFORT,
-    maxOutputTokens: MAX_OUTPUT_TOKENS,
-    wireFormat: "lossless-short-keys-point-pairs-v1"
-  };
-  try {
-    diagnostics.stage = "preparing_image";
-    const prepared = await prepareImage(body?.imageUrl);
-    diagnostics.imageWidth = prepared.width;
-    diagnostics.imageHeight = prepared.height;
-    cleanupImageSceneCache();
-    const imageHash = createHash2("sha256").update(prepared.buffer).digest("hex");
-    diagnostics.imageHash = imageHash.slice(0, 16);
-    const stableCacheKey = `${VERSION}:${imageHash}`;
-    const stableCached = imageSceneCache.get(stableCacheKey);
-    if (stableCached?.scene) {
-      const cachedScene = JSON.parse(JSON.stringify(stableCached.scene));
-      diagnostics.stage = "completed";
-      diagnostics.accepted = true;
-      diagnostics.cacheHit = true;
-      diagnostics.elapsedMs = Date.now() - startedAt;
-      diagnostics.roomCount = cachedScene.rooms?.length || 0;
-      diagnostics.wallCount = cachedScene.walls?.length || 0;
-      diagnostics.openingCount = cachedScene.openings?.length || 0;
-      diagnostics.assetCount = cachedScene.assets?.length || 0;
-      diagnostics.footprintPointCount = cachedScene.footprint?.length || 0;
-      diagnostics.guideSnap = cachedScene.geometryValidation?.guideSnap || null;
-      diagnostics.furnishing = cachedScene.geometryValidation?.furnishing || null;
-      diagnostics.materialZoning = cachedScene.geometryValidation?.materialZoning || null;
-      diagnostics.presentation = cachedScene.geometryValidation?.presentation || null;
-      return NextResponse.json({
-        scene: cachedScene,
-        diagnostics,
-        source: "ventra-stable-image-cache-v20",
-        routeVersion: VERSION,
-        warning: "Visual 3D preview only. APS/engineering geometry remains authoritative for quantities and BOQ."
-      });
-    }
-    const imageEvidence = await prepareRasterImageEvidence(prepared.buffer);
-    diagnostics.pixelGuideCount = imageEvidence.guides.length;
-    const strokeGuideText = rasterEvidencePrompt(imageEvidence);
-    const prompt = `You are reconstructing ONE architectural floor plan into a compact interactive 3D scene graph. Accuracy to the visible plan is more important than decoration.
-
-THIS IS NOT A DESIGN TASK. Do not redesign, improve, simplify, mirror, rotate, add rooms, invent corridors, or reinterpret the plan. Reconstruct what is visibly drawn.
-
-READ THE WHOLE PLAN BEFORE TRACING:
-First understand the building layout, entrance, connected spaces, room labels, furniture symbols and outdoor areas together. Then trace architecture and furniture as separate evidence layers. Do not let the stroke guides replace your visual understanding.
-For handwritten sketches, room labels may be generic ("Room") and the photograph may be rotated. Read text in its readable orientation to understand meaning, but return ALL coordinates in the original image orientation. A bed symbol can identify a bedroom even when the label is generic. A sofa/TV pair identifies a living use. Counters with a sink or cooker identify kitchen use. Persian/Arabic labels for balcony or terrace identify an outdoor zone; preserve its actual drawn location.
-Distinguish physical partitions from furniture edges, leader arrows, handwriting, dimension lines, door leaves and window strokes. An L-shaped sofa or kitchen counter is furniture, never a room boundary. A terrace separator follows the drawn boundary, never a conventional layout you expect.
-If a living area and kitchen are visibly one connected open space, represent them as one non-overlapping room of type kitchen_dining or living, or as adjacent use zones with an open relationship. Never add a wall between them. Each observed furniture item belongs to its containing zone regardless of whether that zone's label names the object.
-Use room.type for the understood use (bedroom, living, kitchen, kitchen_dining, bathroom, balcony, circulation, storage, laundry); preserve the actual source label in room.name. Do not erase generic or non-English labels.
-Where evidence is unclear, lower confidence and omit uncertain objects instead of substituting an invented partition or furnishing. Do not turn uncertain evidence into certainty to produce a complete-looking result.
-
-
-EVIDENCE PRIORITY, strongest first:
-A. Printed overall dimensions and printed room dimensions.
-B. Visible heavy wall lines / recesses / projections / entrance notches.
-C. Printed room labels.
-D. Door/window symbols.
-E. Pixel proportions only when no printed dimension exists.
-
-ROOM RULES:
-1. Return every visible enclosed space and distinct open-plan use zone, including unlabeled spaces supported by walls or furniture. Use unique IDs even when room names repeat.
-2. Do not invent a room without visual evidence. Unlabeled circulation can be recorded when its boundaries are visible.
-3. Set labelVisible=true only when the name itself is visibly printed. Otherwise use false and a descriptive inferred name. Both are preserved.
-4. Copy visible printed room dimensions into printedWidthMeters/printedDepthMeters. Use 0 only if no dimension is printed for that room.
-5. A room polygon must occupy the same location as its visible label and enclosing walls.
-5A. Preserve shared room boundaries: if two labeled rooms visibly meet at one wall line, use the SAME coordinate for that shared boundary. Do not center each room independently.
-5B. Copy printed room dimensions accurately, but DO NOT resize or relocate a room to force those numbers. The room polygon must follow the visible source-image walls. Printed dimensions are used by the server as validation evidence after one global transform.
-
-RELATIONSHIP RULES:
-5C. Return relationships for every pair of labeled rooms that visibly touch or directly open into each other.
-5D. relation="open" means there is NO physical wall between the two zones (for example a truly open living + dining/kitchen zone).
-5E. relation="wall" means the rooms share a continuous physical wall. relation="door" means the shared physical boundary contains a visible doorway. relation="separate" means they do not directly touch.
-5F. direction is the visible relative location of roomB from roomA in the source image. Do not invent adjacency merely because two labels are close.
-
-FOOTPRINT RULES:
-6. footprint is the REAL OUTER FACE of the building, not the page rectangle, not a bounding box. Include all recesses/notches/projections, especially entrance cut-ins and side setbacks.
-7. Do not make footprint rectangular if the visible building outline is not rectangular. A 4-point footprint is allowed ONLY when all four outer sides are visibly continuous straight boundaries with no setback, notch, projection or entrance cut-in.
-8. Inspect the TOP, RIGHT, BOTTOM and LEFT outer boundary independently before emitting footprint vertices. Every change of direction in the visible exterior wall requires a footprint vertex.
-9. widthMeters/depthMeters are the overall architectural extents from printed dimensions when available.
-9A. The exterior footprint MUST include unlabeled circulation, entrance and open-plan floor area. Never derive or shrink the outer shell from the union of labeled rooms.
-
-PARTITION RULES:
-10. partitions contains ONLY physical interior wall centerlines that are visibly present.
-11. Do not place a partition merely because two room labels differ. Open-plan living/dining/kitchen zones can share one open space.
-12. Partition endpoints must terminate on another physical wall or the footprint, except where a visible doorway gap interrupts it.
-12A. Unlabeled circulation is NOT an excuse to omit walls. If a corridor, passage or service strip is visibly bounded by walls, return those walls in partitions and include its visible circulation zone.
-12B. Preserve TV/service-core nib walls, corridor separator walls and short return walls when they are physically drawn. A missing separator wall is a geometry error.
-12C. Do not create a doorway gap unless a visible door leaf / swing arc / opening symbol supports it. Continuous wall line means continuous wall.
-
-OPENING RULES:
-13. Return ALL visible doors AND ALL visible windows. Count them separately before answering. A window must not disappear merely because it sits inside a thick exterior wall.
-14. Return visible doors and windows only. Put each opening center on or very near its supporting wall.
-15. Doors must correspond to visible swing/opening symbols. Windows must correspond to visible window symbols.
-15A. Before returning a door, verify that it sits on the wall actually interrupted by the swing symbol. Never assign a door to a nearby parallel wall merely because it is spatially close.
-15C. wallAxis describes the supporting wall as drawn in the source image, NOT the swung door leaf: horizontal, vertical, diagonal, or unknown only if genuinely unclear. Set wallIdHint to the matching partition id when identifiable.
-15D. hingeSide must identify the hinge in SOURCE IMAGE coordinates: left, right, top, bottom or unknown. swingDirection must be clockwise or counterclockwise as drawn in the image (Y down), or unknown. Do not guess a hinge or swing.
-15E. Only return heightMeters and sillHeightMeters from explicit vertical dimension annotations; never infer them from the plan symbol size. Use -1 for an unknown vertical dimension. A dimensioned floor-level window may have sillHeightMeters=0.
-15B. If a visible swing symbol interrupts a wall, include that door even when one side is an unlabeled corridor or passage.
-
-COORDINATES:
-16. coordinateMode MUST be "image_normalized". Every footprint / room / partition / opening coordinate is normalized to the SOURCE IMAGE: x=0 left image edge, x=1 right image edge, y=0 top image edge, y=1 bottom image edge. Preserve the SOURCE IMAGE geometry and proportions exactly; do not compensate for printed dimensions by stretching one axis.
-16A. Do NOT convert individual rooms to metres. Preserve their visible image positions and shared boundaries. The server applies ONE global image-to-metre transform to the entire plan.
-16B. widthMeters/depthMeters still contain the printed overall architectural dimensions in metres when visible.
-17. Keep every coordinate between 0 and 1. The footprint should tightly trace the actual exterior walls, not the page margins.
-
-FINAL SELF-CHECK BEFORE ANSWERING:
-- Account for every visible space; verify no zone is lost merely because it has no printed label.
-- Trace the outer boundary clockwise and verify every visible recess/projection is present. If the footprint has only 4 points, explicitly re-check whether every outer side is truly straight before answering.
-- Compare bedroom/bath/store positions to their labels.
-- Verify the main entrance is on the same side and same notch as the source.
-- Verify no invented corridor/hall room exists.
-- Verify relationships includes every directly touching labeled-room pair and correctly distinguishes OPEN from WALL/DOOR adjacency.
-- Verify no wall crosses through a room that is visibly open-plan.
-- Count visible window symbols and door swing symbols and ensure openings contains both categories.
-
-Trace ALL visible furniture into furniture, including toilets, basins, shower trays and washing_machine symbols in laundry rooms. Do not add a shower to a WC when no shower symbol or explicit shower label exists. Trace ALL visible furniture into furniture; do not invent objects or substitute a generic room furnishing profile. Include dining tables with each visible chair, coffee tables, rugs, kitchen counter runs and embedded fixtures, beds and wardrobes. Include unlabeled spaces (balcony, circulation, dining, study) as separate zones when supported by visible boundaries/use. Room IDs must be unique; names need not be unique. Do not combine zones into overlapping room polygons.
-Each furniture item is an oriented rectangle: backLeft/backRight are the ends of its BACK edge and frontCenter is the midpoint of its FRONT edge. Use normalized FULL-IMAGE coordinates, like the walls. Either ordering of the back-edge endpoints is accepted; frontCenter determines the facing direction. Bed back is its headboard; sofa back is its backrest; TV front faces viewers. Other objects face their access side. Trace L-shaped sofas and L/U kitchen counters as multiple non-overlapping rectangular components sharing groupId. Use one sofa component for each leg. Keep every component at its observed location. Never fill the empty corner of an L shape with a bounding rectangle. Empty groupId for single objects. embeddedInCounter=true only for a sink/stove drawn in a counter. Confidence below 0.65 is rejected for review. Heights/materials are visual defaults, not measured evidence.
-
-DETERMINISTIC PIXEL-STROKE EVIDENCE FROM THE SAME IMAGE:
-${strokeGuideText}
-Treat these guides as supporting evidence only. They are especially useful for locating long physical wall runs and recess corners, but they can include furniture/text and can omit walls interrupted by openings. Do not blindly copy them.
-
-Return only the strict schema.`;
-    diagnostics.stage = "model_request";
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    let response;
-    try {
-      response = await getOpenAIClient().responses.create({
-        model: MODEL,
-        reasoning: { effort: REASONING_EFFORT },
-        max_output_tokens: MAX_OUTPUT_TOKENS,
-        input: [{
-          role: "user",
-          content: [
-            { type: "input_text", text: `${prompt}
-
-${sceneWire.instructions}
-
-Source image size: ${prepared.width}x${prepared.height}px (reference only).` },
-            { type: "input_image", image_url: prepared.imageUrl, detail: "high" }
-          ]
-        }],
-        text: {
-          verbosity: "low",
-          format: { type: "json_schema", name: "ventra_compact_plan_scene_v133", strict: true, schema: sceneWire.schema }
-        }
-      }, { signal: controller.signal, maxRetries: 0 });
-    } catch (error) {
-      if (controller.signal.aborted) throw Object.assign(new Error("Interactive preview timed out."), { code: "PREVIEW_TIMEOUT" });
-      throw error;
-    } finally {
-      clearTimeout(timer);
-    }
-    diagnostics.responseId = response?.id || null;
-    diagnostics.status = response?.status || null;
-    diagnostics.usage = response?.usage || null;
-    diagnostics.incompleteDetails = response?.incomplete_details || null;
-    diagnostics.stage = "validating_response";
-    const raw = readCompletedPreview(response, sceneWire);
-    diagnostics.stage = "normalizing_scene";
-    let scene = normalizeScene(raw, { width: prepared.width, height: prepared.height }, imageEvidence);
-    diagnostics.stage = "source_furniture_review";
-    const remainingMs = Math.min(6e4, TIMEOUT_MS - (Date.now() - startedAt));
-    if (remainingMs > 5e3) {
-      const furnitureController = new AbortController();
-      const furnitureTimer = setTimeout(() => furnitureController.abort(), remainingMs);
-      try {
-        const reviewResponse = await getOpenAIClient().responses.create({
-          model: MODEL,
-          reasoning: { effort: REASONING_EFFORT },
-          max_output_tokens: MAX_OUTPUT_TOKENS,
-          input: [{ role: "user", content: [
-            { type: "input_text", text: `Review ONLY furniture and fixtures in this original floor plan. Read Persian, Arabic and English labels. Return ALL visible objects, not a generic furnished design. The attached fixed scene supplies room IDs and metre/Y-up polygons; use these IDs. Return coordinates normalized to the FULL ORIGINAL IMAGE, Y down. backLeft/backRight are BACK-edge endpoints; frontCenter is the midpoint of the FRONT edge. For beds the back is the pillow/headboard edge: trace the whole bed and preserve its position and facing. Split every L/U sofa or counter into non-overlapping rectangles sharing groupId, one rectangle per leg. Do not drop the shorter leg or fill its empty corner. Trace each visible toilet, basin, shower and washing-machine symbol, including narrow laundry rooms labeled \u0631\u062E\u062A\u200C\u0634\u0648\u06CC\u200C\u062E\u0627\u0646\u0647, \u0644\u0628\u0627\u0633\u200C\u0634\u0648\u06CC\u06CC, laundry or \u063A\u0631\u0641\u0629 \u063A\u0633\u064A\u0644. A square with a circle inside may be a washing machine or basin: use its room and other symbols to distinguish them. Do not infer a shower from WC alone. Do not add refrigerators, wardrobes or fixtures absent from the drawing. Confidence below .65 must remain uncertain. Do not modify walls, rooms, doors or windows. Fixed scene: ${JSON.stringify({ width: scene.width, depth: scene.depth, sourceBounds: scene.geometryValidation.sourceProjection.sourceBounds, rooms: scene.rooms })}` },
-            { type: "input_text", text: furnitureWire.instructions },
-            { type: "input_image", image_url: prepared.imageUrl, detail: "high" }
-          ] }],
-          text: { format: { type: "json_schema", name: "compact_furniture_coverage_v133", strict: true, schema: furnitureWire.schema } }
-        }, { signal: furnitureController.signal, maxRetries: 0 });
-        diagnostics.furnitureReview = { responseId: reviewResponse.id, usage: reviewResponse.usage, status: reviewResponse.status, incompleteDetails: reviewResponse.incomplete_details || null };
-        const reviewed = readCompletedPreview(reviewResponse, furnitureWire);
-        if (!Array.isArray(reviewed?.furniture)) throw new Error("Furniture review returned invalid observations.");
-        const reviewedScene = applySourceFurnitureReview(scene, reviewed.furniture);
-        if (!reviewedScene.assets.length && scene.assets.length) throw new Error("Furniture review found no validated objects.");
-        for (const prior of scene.assets) {
-          const before = scene.assets.filter((a) => a.roomId === prior.roomId && a.type === prior.type).length;
-          const after = reviewedScene.assets.filter((a) => a.roomId === prior.roomId && a.type === prior.type).length;
-          if (after < before) throw new Error(`Furniture review lost source objects in room ${prior.roomId}; the first trace was preserved.`);
-        }
-        scene = reviewedScene;
-        diagnostics.furnitureReview = { responseId: reviewResponse.id, usage: reviewResponse.usage, status: "completed" };
-      } catch (error) {
-        scene = { ...scene, furnishingReview: { ...scene.furnishingReview, requiresReview: true, coverageReview: { status: "failed", reason: error?.message || "Furniture review failed" } } };
-        diagnostics.furnitureReview = { ...diagnostics.furnitureReview, status: "failed", code: error?.code || null, message: error?.message };
-      } finally {
-        clearTimeout(furnitureTimer);
-      }
-    } else {
-      scene = { ...scene, furnishingReview: { ...scene.furnishingReview, requiresReview: true, coverageReview: { status: "skipped", reason: "analysis_time_budget" } } };
-    }
-    diagnostics.stage = "completed";
-    diagnostics.accepted = true;
-    diagnostics.elapsedMs = Date.now() - startedAt;
-    diagnostics.roomCount = scene.rooms.length;
-    diagnostics.wallCount = scene.walls.length;
-    diagnostics.openingCount = scene.openings.length;
-    diagnostics.assetCount = scene.assets.length;
-    diagnostics.footprintPointCount = scene.footprint.length;
-    diagnostics.footprintRepair = scene.geometryValidation?.footprintRepair || null;
-    diagnostics.sourceProjection = scene.geometryValidation?.sourceProjection || null;
-    diagnostics.guideSnap = scene.geometryValidation?.guideSnap || null;
-    diagnostics.dimensionLock = scene.geometryValidation?.dimensionLock || null;
-    diagnostics.topology = scene.geometryValidation?.topology || null;
-    diagnostics.roomContainmentAdjustments = scene.geometryValidation?.roomContainmentAdjustments || 0;
-    diagnostics.furnishing = scene.geometryValidation?.furnishing || null;
-    diagnostics.materialZoning = scene.geometryValidation?.materialZoning || null;
-    diagnostics.presentation = scene.geometryValidation?.presentation || null;
-    imageSceneCache.set(stableCacheKey, {
-      scene: JSON.parse(JSON.stringify(scene)),
-      expiresAt: Date.now() + IMAGE_SCENE_CACHE_TTL_MS
-    });
-    return NextResponse.json({
-      scene,
-      diagnostics,
-      source: "openai-interactive-preview-consolidated-v20",
-      routeVersion: VERSION,
-      warning: "Visual 3D preview only. APS/engineering geometry remains authoritative for quantities and BOQ."
-    });
-  } catch (error) {
-    diagnostics.failedStage = diagnostics.stage;
-    diagnostics.stage = "failed";
-    diagnostics.elapsedMs = Date.now() - startedAt;
-    diagnostics.error = error?.message || String(error);
-    diagnostics.failure = { code: error?.code || "INTERACTIVE_PREVIEW_FAILED", message: diagnostics.error };
-    console.warn("[VENTRA INTERACTIVE PREVIEW V2 REJECTED]", diagnostics);
-    const status = error?.status === 429 ? 429 : error?.code === "PREVIEW_TIMEOUT" ? 504 : 422;
-    return NextResponse.json({
-      error: diagnostics.error,
-      code: diagnostics.failure.code,
-      diagnostics,
-      routeVersion: VERSION
-    }, { status });
-  }
-}
 var PREVIEW_JOB_TTL_MS = 2 * 60 * 1e3;
 var previewInFlight = globalThis.__ventraPreviewInFlightV4 || (globalThis.__ventraPreviewInFlightV4 = /* @__PURE__ */ new Map());
 var previewCompleted = globalThis.__ventraPreviewCompletedV4 || (globalThis.__ventraPreviewCompletedV4 = /* @__PURE__ */ new Map());
 function cleanupPreviewCache() {
   const now = Date.now();
-  for (const [key2, entry] of previewCompleted.entries()) {
-    if (!entry || entry.expiresAt <= now) previewCompleted.delete(key2);
+  for (const [key, entry] of previewCompleted.entries()) {
+    if (!entry || entry.expiresAt <= now) previewCompleted.delete(key);
   }
 }
 async function runFurnitureRepair(body) {
@@ -2674,7 +1768,7 @@ async function runFurnitureRepair(body) {
     if (prepared.width !== projection2.imageWidth || prepared.height !== projection2.imageHeight) throw new Error("Choose the original plan image with the same dimensions.");
     const ids = new Set((review.rejected || []).map((x) => x.id));
     const targets = review.observations.filter((o) => ids.has(o.id));
-    if (!targets.length) return NextResponse.json({ scene, repairedCount: 0 });
+    if (!targets.length) return NextResponse2.json({ scene, repairedCount: 0 });
     const schema = { "type": "object", "additionalProperties": false, "required": ["items"], "properties": { "items": { "type": "array", "maxItems": 80, "items": { "type": "object", "additionalProperties": false, "required": ["left", "right", "top", "bottom", "confidence", "id", "front"], "properties": { "left": { "type": "number" }, "right": { "type": "number" }, "top": { "type": "number" }, "bottom": { "type": "number" }, "confidence": { "type": "number" }, "id": { "type": "string" }, "front": { "type": "string", "enum": ["left", "right", "top", "bottom"] } } } } } };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -2688,9 +1782,9 @@ async function runFurnitureRepair(body) {
     const raw = parseJson(response.output_text || "");
     if (!Array.isArray(raw?.items)) throw new Error("Furniture response was invalid.");
     const next = repairFixedFurniture(scene, raw.items);
-    return NextResponse.json({ scene: next, repairedCount: next.furnishingReview.repair.repairedIds.length });
+    return NextResponse2.json({ scene: next, repairedCount: next.furnishingReview.repair.repairedIds.length });
   } catch (error) {
-    return NextResponse.json({ error: error?.message || "Furniture repair failed; current scene preserved." }, { status: 422 });
+    return NextResponse2.json({ error: error?.message || "Furniture repair failed; current scene preserved." }, { status: 422 });
   }
 }
 async function handleCommercialRequest(request) {
@@ -2698,7 +1792,7 @@ async function handleCommercialRequest(request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Preview request body was empty or invalid JSON.", code: "PREVIEW_BAD_REQUEST" }, { status: 400 });
+    return NextResponse2.json({ error: "Preview request body was empty or invalid JSON.", code: "PREVIEW_BAD_REQUEST" }, { status: 400 });
   }
   if (body?.mode === "repair_furniture") return runFurnitureRepair(body);
   cleanupPreviewCache();
@@ -2715,7 +1809,7 @@ async function handleCommercialRequest(request) {
     const response = await existing;
     return response.clone();
   }
-  const task = runPreview(body);
+  const task = runRasterPreview(body);
   previewInFlight.set(cacheKey, task);
   try {
     const response = await task;
@@ -2740,16 +1834,17 @@ async function executePreviewJob(input, run) {
   if (!job) return;
   let result, httpStatus = 500;
   try {
-    const { __backgroundAction = "preview", ...body } = job.request_body;
+    const { __backgroundAction = "preview", __expectedRasterBuild, ...body } = job.request_body;
     if (!["preview", "boq"].includes(__backgroundAction)) throw billingError("Invalid analysis action.", 400);
     const request = new Request(`https://ventra.internal/api/ai/${__backgroundAction === "boq" ? "generate-boq" : "design-3d-preview"}`, { method: "POST", headers: { authorization: input.authorization, "content-type": "application/json" }, body: JSON.stringify(body) });
     const user = await account(request);
     if (user.id !== job.actor_id) throw billingError("Analysis job access denied.", 403);
+    if (__expectedRasterBuild && __expectedRasterBuild !== VERIFIED_PREVIEW_VERSION) throw Object.assign(billingError("The background analysis build differs from the requesting build. No AI request was made.", 503), { code: "PREVIEW_WORKER_BUILD_MISMATCH" });
     const response = await run(request, __backgroundAction);
     httpStatus = response.status;
     result = await response.json();
   } catch (error2) {
-    result = { error: error2.status ? error2.message : "Background analysis failed. Retry or contact support.", code: "PREVIEW_BACKGROUND_FAILED" };
+    result = { error: error2.status ? error2.message : "Background analysis failed. Retry or contact support.", code: error2.code || "PREVIEW_BACKGROUND_FAILED" };
     httpStatus = error2.status || 500;
   }
   const saved = await db.from(table).update({ status: httpStatus < 400 ? "completed" : "failed", http_status: httpStatus, result, request_body: null, nonce_hash: null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", input.id).eq("status", "running");
@@ -2773,7 +1868,7 @@ function recoverPdfRoomInventory(page) {
     rooms.set(tag, { ...item, tag, finish });
   }
   if (!rooms.size) return { page, warnings };
-  const list = [...rooms.values()], enclosed = list.filter((r) => !["void", "outdoor"].includes(r.finish)), outdoor = list.filter((r) => r.finish === "outdoor");
+  const list2 = [...rooms.values()], enclosed = list2.filter((r) => !["void", "outdoor"].includes(r.finish)), outdoor = list2.filter((r) => r.finish === "outdoor");
   const inner = enclosed.reduce((s, r) => s + r.quantity, 0), outside = outdoor.reduce((s, r) => s + r.quantity, 0), walkable = inner + outside;
   if (Math.abs(page.floor_area - walkable) > 0.01 && Math.abs(page.floor_area - inner) > 0.01) {
     warnings.push(`Room area inventory on page ${page.pageNumber} does not reconcile to its floor summary; finish recovery withheld.`);
@@ -2781,19 +1876,19 @@ function recoverPdfRoomInventory(page) {
   }
   const values = { floor_area: walkable }, scope2 = page.page_evidence.scope_id;
   const materialKeys = { wood: "wood_floor_area", tile: "ceramic_floor_area", epoxy: "epoxy_floor_area", outdoor: "terrace_floor_area" };
-  for (const [finish, key2] of Object.entries(materialKeys)) {
-    const matching = list.filter((r) => r.finish === finish);
+  for (const [finish, key] of Object.entries(materialKeys)) {
+    const matching = list2.filter((r) => r.finish === finish);
     if (!matching.length) continue;
-    if ((page.page_evidence.quantities || []).some((q) => q.key === key2)) continue;
-    values[key2] = matching.reduce((s, r) => s + r.quantity, 0);
+    if ((page.page_evidence.quantities || []).some((q) => q.key === key)) continue;
+    values[key] = matching.reduce((s, r) => s + r.quantity, 0);
   }
   const quantities = (page.page_evidence.quantities || []).filter((q) => q.key !== "floor_area");
-  for (const [key2, value] of Object.entries(values)) quantities.push({
-    key: key2,
+  for (const [key, value] of Object.entries(values)) quantities.push({
+    key,
     value,
     unit: "m2",
     scope_id: scope2,
-    evidence: `Tagged room inventory on page ${page.pageNumber} reconciles to floor summary; ${key2}: ` + list.filter((r) => key2 === "floor_area" ? r.finish !== "void" : r.finish === Object.keys(materialKeys).find((k) => materialKeys[k] === key2)).map((r) => `${r.tag}=${r.quantity} m2 (${r.description})`).join(" + ") + `. AI room labels/materials require review.`
+    evidence: `Tagged room inventory on page ${page.pageNumber} reconciles to floor summary; ${key}: ` + list2.filter((r) => key === "floor_area" ? r.finish !== "void" : r.finish === Object.keys(materialKeys).find((k) => materialKeys[k] === key)).map((r) => `${r.tag}=${r.quantity} m2 (${r.description})`).join(" + ") + `. AI room labels/materials require review.`
   });
   return { page: { ...page, floor_area: walkable, page_evidence: { ...page.page_evidence, quantities } }, warnings };
 }
@@ -2801,8 +1896,8 @@ function recoverPdfRoomInventory(page) {
 // src/lib/pdfNativeRoomInventory.mjs
 var tagOf = (value) => String(value || "").trim().match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
 var finishOf = (value) => {
-  const text = String(value || "").toUpperCase(), values = new Set([...text.matchAll(/(?:^|\||\/|M(?:2|²)\s+)\s*(WOOD|TILE|EPOXY|OUTDOOR|VOID)\b/g)].map((m) => m[1].toLowerCase()));
-  if (/\bVOID\s*$/.test(text)) values.add("void");
+  const text2 = String(value || "").toUpperCase(), values = new Set([...text2.matchAll(/(?:^|\||\/|M(?:2|²)\s+)\s*(WOOD|TILE|EPOXY|OUTDOOR|VOID)\b/g)].map((m) => m[1].toLowerCase()));
+  if (/\bVOID\s*$/.test(text2)) values.add("void");
   return values.size === 1 ? [...values][0] : null;
 };
 var printedArea = (value) => String(value || "").match(/(?:^|\s|\|)(\d+(?:\.\d+)?)\s*m(?:2|²)(?=\s|$|\|)/i);
@@ -2813,9 +1908,9 @@ function recoverNativeRoomInventory(page, validatedSpaces) {
   for (const span of native.spans) {
     const tag = tagOf(span.text);
     if (!tag || !/^\S+\s+\S/.test(span.text)) continue;
-    const list = captions.get(tag) || [];
-    list.push(span);
-    captions.set(tag, list);
+    const list2 = captions.get(tag) || [];
+    list2.push(span);
+    captions.set(tag, list2);
   }
   const items = [...original];
   for (const [tag, rows] of captions) {
@@ -2840,10 +1935,10 @@ function recoverNativeRoomInventory(page, validatedSpaces) {
 }
 
 // src/lib/pdfNativeWallGeometry.mjs
-var EPS3 = 1e-5;
-var near = (a, b) => Math.abs(a - b) < EPS3;
+var EPS2 = 1e-5;
+var near = (a, b) => Math.abs(a - b) < EPS2;
 var round = (n) => Math.round(n * 1e6) / 1e6;
-var dist2 = (p, a, b) => {
+var dist = (p, a, b) => {
   const dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
 };
@@ -2865,10 +1960,10 @@ function facesOf(walls) {
   };
   for (const w of walls) {
     const points = [w.a, w.b];
-    for (const other of walls) for (const p of [other.a, other.b]) if (dist2(p, w.a, w.b) < EPS3) points.push(p);
+    for (const other of walls) for (const p of [other.a, other.b]) if (dist(p, w.a, w.b) < EPS2) points.push(p);
     for (const other of walls) if (w.axis !== other.axis) {
       const h = w.axis === "h" ? w : other, v = w.axis === "v" ? w : other, p = { x: v.a.x, y: h.a.y };
-      if (dist2(p, h.a, h.b) < EPS3 && dist2(p, v.a, v.b) < EPS3) points.push(p);
+      if (dist(p, h.a, h.b) < EPS2 && dist(p, v.a, v.b) < EPS2) points.push(p);
     }
     const sorted = [...new Map(points.map((p) => [`${round(p.x)},${round(p.y)}`, p])).values()].sort((a, b) => w.axis === "h" ? a.x - b.x : a.y - b.y);
     for (let i = 1; i < sorted.length; i++) {
@@ -2886,7 +1981,7 @@ function facesOf(walls) {
     let [a, b] = edge;
     const start = a + "|" + b;
     if (visited.has(start)) continue;
-    const polygon2 = [];
+    const polygon3 = [];
     let closed = false;
     for (let guard = 0; guard <= edges2.length; guard++) {
       const id = a + "|" + b;
@@ -2895,22 +1990,22 @@ function facesOf(walls) {
         break;
       }
       visited.add(id);
-      polygon2.push(nodes.get(a));
+      polygon3.push(nodes.get(a));
       const n = nodes.get(b), index = n.to.indexOf(a), next = n.to[(index + n.to.length - 1) % n.to.length];
       a = b;
       b = next;
     }
-    if (closed && polygon2.length >= 3 && signed(polygon2) > EPS3) faces.push({ polygon: polygon2.map(({ x, y }) => ({ x, y })), area: signed(polygon2) });
+    if (closed && polygon3.length >= 3 && signed(polygon3) > EPS2) faces.push({ polygon: polygon3.map(({ x, y }) => ({ x, y })), area: signed(polygon3) });
   }
   return faces;
 }
 function measureNativeWallFloor(page, schedule) {
   const audit = { page: page.pageNumber, status: "pending", method: "calibrated_centreline_graph", warnings: [] };
   try {
-    const text = page.native_plan_text, graphics = page.native_graphics;
-    if (text?.status !== "readable" || graphics?.status !== "readable" || schedule?.status !== "read") throw Error("Readable plan text, vectors and complete opening table are required");
+    const text2 = page.native_plan_text, graphics = page.native_graphics;
+    if (text2?.status !== "readable" || graphics?.status !== "readable" || schedule?.status !== "read") throw Error("Readable plan text, vectors and complete opening table are required");
     if (graphics.strokes.length > 5e3 || schedule.rows.length > 300) throw Error("Native wall graph size limit; independent extraction required");
-    const all = text.spans.map((s) => s.text).join(" "), envelopes = [...all.matchAll(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
+    const all = text2.spans.map((s) => s.text).join(" "), envelopes = [...all.matchAll(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
     const declared = [...all.matchAll(/all dimensions (?:in|are)\s*(millimet(?:re|er)s|centimet(?:re|er)s|met(?:re|er)s|mm|cm|m)\b/gi)].map((m) => /^milli|^mm$/i.test(m[1]) ? 1e-3 : /^centi|^cm$/i.test(m[1]) ? 0.01 : 1);
     if (envelopes.length !== 1 || !declared.length || new Set(declared).size !== 1 || !/datum\s*:\s*wall cent(?:re|er)lines/i.test(all)) throw Error("Explicit metric envelope and wall-centreline datum are required");
     const dimensionFactor = declared[0], ew = Number(envelopes[0][1]) * dimensionFactor, eh = Number(envelopes[0][2]) * dimensionFactor, ext = all.match(/External:\s*(\d+(?:\.\d+)?)\s*mm/i), int = all.match(/Internal:\s*(\d+(?:\.\d+)?)\s*mm/i);
@@ -2934,15 +2029,15 @@ function measureNativeWallFloor(page, schedule) {
     }
     if (pairs.length !== 1) throw Error("Wall stroke classes or envelope calibration are ambiguous");
     const { outer, inner, x0, y0, scale } = pairs[0], toMetres = (p) => ({ x: round((p.x - x0) / scale), y: round((p.y - y0) / scale) });
-    const numeric = text.spans.filter((s) => /^\d+(?:\.\d+)?$/.test(s.text));
-    const widthAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, ew) && Math.abs(s.angle || 0) < EPS3 && s.y < y0 && y0 - s.y < 6 * s.height && Math.abs(s.x - (x0 + ew * scale / 2)) < 2 * s.height);
-    const heightAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, eh) && Math.abs(Math.abs(s.angle || 0) - Math.PI / 2) < EPS3 && s.x < x0 && x0 - s.x < 6 * s.height && Math.abs(s.y - (y0 + eh * scale / 2)) < 2 * s.height);
+    const numeric = text2.spans.filter((s) => /^\d+(?:\.\d+)?$/.test(s.text));
+    const widthAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, ew) && Math.abs(s.angle || 0) < EPS2 && s.y < y0 && y0 - s.y < 6 * s.height && Math.abs(s.x - (x0 + ew * scale / 2)) < 2 * s.height);
+    const heightAnchors = numeric.filter((s) => near(Number(s.text) * dimensionFactor, eh) && Math.abs(Math.abs(s.angle || 0) - Math.PI / 2) < EPS2 && s.x < x0 && x0 - s.x < 6 * s.height && Math.abs(s.y - (y0 + eh * scale / 2)) < 2 * s.height);
     if (widthAnchors.length !== 1 || heightAnchors.length !== 1) throw Error("Independent overall dimension anchors do not confirm the envelope scale");
-    const spans = text.spans.filter((s) => Math.abs(s.angle || 0) < EPS3).map((s) => ({ ...s, ...toMetres(s), height: s.height / scale }));
+    const spans = text2.spans.filter((s) => Math.abs(s.angle || 0) < EPS2).map((s) => ({ ...s, ...toMetres(s), height: s.height / scale }));
     const groups = /* @__PURE__ */ new Map();
     for (const [style, classification] of [[outer, "external"], [inner, "internal"]]) for (const path of style.paths) for (const segment of path.segments) {
       let a = toMetres(segment.a), b = toMetres(segment.b);
-      if (Math.hypot(b.x - a.x, b.y - a.y) < EPS3) continue;
+      if (Math.hypot(b.x - a.x, b.y - a.y) < EPS2) continue;
       const axis = near(a.y, b.y) ? "h" : near(a.x, b.x) ? "v" : null;
       if (!axis) throw Error("Only orthogonal centreline walls are supported");
       if (axis === "h" ? a.x > b.x : a.y > b.y) [a, b] = [b, a];
@@ -2955,7 +2050,7 @@ function measureNativeWallFloor(page, schedule) {
       const sorted = g.pieces.sort((a, b) => a.a - b.a), merged = [];
       for (const p of sorted) {
         const last = merged.at(-1);
-        if (last && p.a <= last.b + EPS3) last.b = Math.max(last.b, p.b);
+        if (last && p.a <= last.b + EPS2) last.b = Math.max(last.b, p.b);
         else merged.push({ ...p });
       }
       g.pieces = merged;
@@ -2982,41 +2077,41 @@ function measureNativeWallFloor(page, schedule) {
       }
       const divided = [];
       for (const p of pieces) {
-        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS3 && o.gap.b <= p.b + EPS3).sort((a, b) => a.gap.a - b.gap.a), cuts = [];
+        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS2 && o.gap.b <= p.b + EPS2).sort((a, b) => a.gap.a - b.gap.a), cuts = [];
         for (let i = 1; i < attached.length; i++) if (attached[i - 1].opening.wall_id && attached[i].opening.wall_id && attached[i - 1].opening.wall_id !== attached[i].opening.wall_id) {
-          const junctions = [...new Set([...groups.values()].filter((other) => other.axis !== g.axis && other.fixed > attached[i - 1].gap.b + EPS3 && other.fixed < attached[i].gap.a - EPS3 && other.pieces.some((piece) => g.fixed >= piece.a - EPS3 && g.fixed <= piece.b + EPS3)).map((other) => other.fixed))];
+          const junctions = [...new Set([...groups.values()].filter((other) => other.axis !== g.axis && other.fixed > attached[i - 1].gap.b + EPS2 && other.fixed < attached[i].gap.a - EPS2 && other.pieces.some((piece) => g.fixed >= piece.a - EPS2 && g.fixed <= piece.b + EPS2)).map((other) => other.fixed))];
           if (junctions.length !== 1) throw Error("Different source host IDs require one unambiguous intervening wall junction");
           cuts.push(junctions[0]);
         }
-        const bounds3 = [p.a, ...cuts, p.b];
-        for (let i = 1; i < bounds3.length; i++) divided.push({ a: bounds3[i - 1], b: bounds3[i] });
+        const bounds2 = [p.a, ...cuts, p.b];
+        for (let i = 1; i < bounds2.length; i++) divided.push({ a: bounds2[i - 1], b: bounds2[i] });
       }
       for (const p of divided) {
         const a = g.axis === "h" ? { x: p.a, y: g.fixed } : { x: g.fixed, y: p.a }, b = g.axis === "h" ? { x: p.b, y: g.fixed } : { x: g.fixed, y: p.b };
-        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS3 && o.gap.b <= p.b + EPS3), hosts = [...new Set(attached.map((o) => o.opening.wall_id).filter(Boolean))];
+        const attached = bindings.filter((o) => o.gap.g === g && o.gap.a >= p.a - EPS2 && o.gap.b <= p.b + EPS2), hosts = [...new Set(attached.map((o) => o.opening.wall_id).filter(Boolean))];
         if (hosts.length > 1) throw Error(`Physical wall ${g.axis}:${g.fixed}:${p.a}:${p.b} maps to conflicting source host IDs: ${hosts.join(", ")}`);
         walls.push({ id: hosts[0] || `native:${g.axis}:${g.fixed}:${p.a}:${p.b}`, a, b, axis: g.axis, classification: g.classification, length: round(p.b - p.a), openings: attached.map((o) => o.opening.id) });
       }
     }
     const discarded = [];
     if (walls.length > 300) throw Error("Native wall graph exceeds bounded connectivity check");
-    for (const w of [...walls]) if (w.classification === "internal" && [w.a, w.b].every((p) => !walls.some((other) => other !== w && dist2(p, other.a, other.b) < EPS3))) {
-      const tv = spans.find((s) => /^TV$/i.test(s.text.trim()) && dist2(s, w.a, w.b) < 3 * s.height);
+    for (const w of [...walls]) if (w.classification === "internal" && [w.a, w.b].every((p) => !walls.some((other) => other !== w && dist(p, other.a, other.b) < EPS2))) {
+      const tv = spans.find((s) => /^TV$/i.test(s.text.trim()) && dist(s, w.a, w.b) < 3 * s.height);
       if (!tv) throw Error("Unclassified isolated wall-weight stroke");
       discarded.push({ a: w.a, b: w.b, source_label: tv.text, reason: "Isolated annotated TV object; requires source review" });
       walls.splice(walls.indexOf(w), 1);
     }
-    for (const w of walls) for (const p of [w.a, w.b]) if (!walls.some((other) => other !== w && dist2(p, other.a, other.b) < EPS3)) throw Error("Unclosed wall endpoint; untagged gap or free-standing wall requires review");
+    for (const w of walls) for (const p of [w.a, w.b]) if (!walls.some((other) => other !== w && dist(p, other.a, other.b) < EPS2)) throw Error("Unclosed wall endpoint; untagged gap or free-standing wall requires review");
     const external = walls.filter((w) => w.classification === "external");
-    for (const w of external) for (const p of [w.a, w.b]) if (external.filter((other) => other !== w && dist2(p, other.a, other.b) < EPS3).length !== 1) throw Error("External centreline envelope is not a single closed boundary");
+    for (const w of external) for (const p of [w.a, w.b]) if (external.filter((other) => other !== w && dist(p, other.a, other.b) < EPS2).length !== 1) throw Error("External centreline envelope is not a single closed boundary");
     const faces = facesOf(walls);
     if (!faces.length || faces.length > 200) throw Error("Closed wall faces unavailable");
-    const roomSpans = text.spans.map((s) => ({ ...s, ...toMetres(s) }));
+    const roomSpans = text2.spans.map((s) => ({ ...s, ...toMetres(s) }));
     for (const face of faces) {
       face.tags = roomSpans.filter((s) => /^[A-Z]{1,4}[-_]?\d{1,4}(?=\s)/i.test(s.text.trim()) && contains(face.polygon, s)).map((s) => s.text.trim().match(/^[A-Z]{1,4}[-_]?\d{1,4}/i)[0]);
       face.opening_ids = bindings.filter((o) => {
         const g = o.gap, p = g.g.axis === "h" ? { x: (g.a + g.b) / 2, y: g.g.fixed } : { x: g.g.fixed, y: (g.a + g.b) / 2 };
-        return face.polygon.some((a, i) => dist2(p, a, face.polygon[(i + 1) % face.polygon.length]) < EPS3);
+        return face.polygon.some((a, i) => dist(p, a, face.polygon[(i + 1) % face.polygon.length]) < EPS2);
       }).map((o) => o.opening.id);
     }
     for (const d of discarded) {
@@ -3050,16 +2145,16 @@ function measureNativeWallFloor(page, schedule) {
 var E = 2e-4;
 var near2 = (a, b) => Math.abs(a - b) < E;
 var distance2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-var cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-var on = (p, a, b) => Math.abs(cross(a, b, p)) < E && p.x >= Math.min(a.x, b.x) - E && p.x <= Math.max(a.x, b.x) + E && p.y >= Math.min(a.y, b.y) - E && p.y <= Math.max(a.y, b.y) + E;
+var cross2 = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+var on = (p, a, b) => Math.abs(cross2(a, b, p)) < E && p.x >= Math.min(a.x, b.x) - E && p.x <= Math.max(a.x, b.x) + E && p.y >= Math.min(a.y, b.y) - E && p.y <= Math.max(a.y, b.y) + E;
 var signed2 = (p) => p.reduce((s, a, i) => {
   const b = p[(i + 1) % p.length];
   return s + a.x * b.y - b.x * a.y;
 }, 0) / 2;
-var bounds2 = (p) => ({ x0: Math.min(...p.map((p2) => p2.x)), x1: Math.max(...p.map((p2) => p2.x)), y0: Math.min(...p.map((p2) => p2.y)), y1: Math.max(...p.map((p2) => p2.y)) });
-function inside3(p, polygon2) {
+var bounds = (p) => ({ x0: Math.min(...p.map((p2) => p2.x)), x1: Math.max(...p.map((p2) => p2.x)), y0: Math.min(...p.map((p2) => p2.y)), y1: Math.max(...p.map((p2) => p2.y)) });
+function inside3(p, polygon3) {
   let yes = false;
-  for (let i = 0, j = polygon2.length - 1; i < polygon2.length; j = i++) if (polygon2[i].y > p.y !== polygon2[j].y > p.y && p.x < (polygon2[j].x - polygon2[i].x) * (p.y - polygon2[i].y) / (polygon2[j].y - polygon2[i].y) + polygon2[i].x) yes = !yes;
+  for (let i = 0, j = polygon3.length - 1; i < polygon3.length; j = i++) if (polygon3[i].y > p.y !== polygon3[j].y > p.y && p.x < (polygon3[j].x - polygon3[i].x) * (p.y - polygon3[i].y) / (polygon3[j].y - polygon3[i].y) + polygon3[i].x) yes = !yes;
   return yes;
 }
 var textOf = (p) => p.native_text_evidence?.status === "readable" ? p.native_text_evidence.spans.map((s) => s.text).join(" ") : "";
@@ -3067,18 +2162,18 @@ var unique = (values, label) => {
   if (values.length !== 1) throw Error("Ambiguous or missing " + label);
   return values[0];
 };
-function pairList(text) {
+function pairList(text2) {
   const pairs = [];
-  for (const m of text.matchAll(/\b([A-Z])\/([A-Z])(\d+)-to-\1\/\2(\d+)\b/g)) for (const prefix of [m[1], m[2]]) pairs.push([prefix + m[3], prefix + m[4]]);
-  for (const m of text.matchAll(/\b([A-Z]+\d+)-to-([A-Z]+\d+)\b/g)) pairs.push([m[1], m[2]]);
+  for (const m of text2.matchAll(/\b([A-Z])\/([A-Z])(\d+)-to-\1\/\2(\d+)\b/g)) for (const prefix of [m[1], m[2]]) pairs.push([prefix + m[3], prefix + m[4]]);
+  for (const m of text2.matchAll(/\b([A-Z]+\d+)-to-([A-Z]+\d+)\b/g)) pairs.push([m[1], m[2]]);
   return pairs;
 }
 function measureNativeClearPlan(page, sourcePages = []) {
   const audit = { page: page.pageNumber, status: "pending", method: "native_clear_axis_graph", requires_review: true };
   try {
-    const text = page.native_plan_text, graphics = page.native_graphics;
-    if (text?.status !== "readable" || graphics?.status !== "readable" || graphics.strokes.length > 5e3 || text.spans.length > 3e3) throw Error("Bounded readable plan text and vectors required");
-    const all = text.spans.map((s) => s.text).join(" "), source2 = sourcePages.map((p) => ({ page: p.pageNumber, text: textOf(p) }));
+    const text2 = page.native_plan_text, graphics = page.native_graphics;
+    if (text2?.status !== "readable" || graphics?.status !== "readable" || graphics.strokes.length > 5e3 || text2.spans.length > 3e3) throw Error("Bounded readable plan text and vectors required");
+    const all = text2.spans.map((s) => s.text).join(" "), source2 = sourcePages.map((p) => ({ page: p.pageNumber, text: textOf(p) }));
     if (!/Units:\s*metres unless noted/i.test(all)) throw Error("Explicit metre coordinate units required");
     const polyText = unique([...all.matchAll(/CL polygon:\s*((?:\([^()]+\)\s*)+)\./gi)], "source CL polygon")[1];
     const envelope = [...polyText.matchAll(/\(\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\s*\)/g)].map((m) => ({ x: Number(m[1]), y: Number(m[2]) }));
@@ -3101,7 +2196,7 @@ function measureNativeClearPlan(page, sourcePages = []) {
     }
     const external = unique([...styles.values()].filter((s) => near2(s.width / scale, Number(ext[3]) / 1e3)), "physical external-wall vector weight");
     const internal = unique([...styles.values()].filter((s) => near2(s.width / scale, Number(int[3]) / 1e3) && JSON.stringify(s.color) === JSON.stringify(external.color)), "physical internal-wall vector weight");
-    const eb = bounds2(envelope), gb = bounds2(external.segments.flatMap((s) => [s.a, s.b]));
+    const eb = bounds(envelope), gb = bounds(external.segments.flatMap((s) => [s.a, s.b]));
     const origin = { x: gb.x0 - eb.x0 * scale, y: gb.y0 - eb.y0 * scale };
     if (!near2((gb.x1 - gb.x0) / scale, eb.x1 - eb.x0) || !near2((gb.y1 - gb.y0) / scale, eb.y1 - eb.y0)) throw Error("Printed scale does not match the dimensioned source polygon");
     const axes = { x: [...new Set(envelope.map((p) => p.x))], y: [...new Set(envelope.map((p) => p.y))] };
@@ -3143,13 +2238,13 @@ function measureNativeClearPlan(page, sourcePages = []) {
     for (const w of walls) for (const p of [w.a, w.b]) if (!walls.some((v) => v !== w && on(p, v.a, v.b))) throw Error("Unclosed room-wall endpoint");
     const faces = facesOf(walls);
     if (!faces.length || faces.length > 100 || !near2(faces.reduce((s, f) => s + f.area, 0), Math.abs(signed2(envelope)))) throw Error("Room CL cells do not cover the declared footprint");
-    const tags = text.spans.filter((s) => /^[A-Z]{1,4}\d{1,4}$/.test(s.text.trim()) && inside3(metres(s), envelope));
+    const tags = text2.spans.filter((s) => /^[A-Z]{1,4}\d{1,4}$/.test(s.text.trim()) && inside3(metres(s), envelope));
     const rooms = [], seen = /* @__PURE__ */ new Set();
     for (const face of faces) {
       const label = unique(tags.filter((s) => inside3(metres(s), face.polygon)), "one printed room tag per closed cell"), tag = label.text.trim();
       if (seen.has(tag)) throw Error("Repeated source room tag");
       seen.add(tag);
-      const b = bounds2(face.polygon);
+      const b = bounds(face.polygon);
       if (!near2((b.x1 - b.x0) * (b.y1 - b.y0), face.area)) throw Error("Nonrectangular clear cells require independent offset geometry");
       const offsetsBySide = {};
       for (const [name2, a, c] of [["left", { x: b.x0, y: b.y0 }, { x: b.x0, y: b.y1 }], ["right", { x: b.x1, y: b.y0 }, { x: b.x1, y: b.y1 }], ["bottom", { x: b.x0, y: b.y0 }, { x: b.x1, y: b.y0 }], ["top", { x: b.x0, y: b.y1 }, { x: b.x1, y: b.y1 }]]) {
@@ -3160,7 +2255,7 @@ function measureNativeClearPlan(page, sourcePages = []) {
       const clear = { x0: b.x0 + offsetsBySide.left, x1: b.x1 - offsetsBySide.right, y0: b.y0 + offsetsBySide.bottom, y1: b.y1 - offsetsBySide.top };
       const width = clear.x1 - clear.x0, depth = clear.y1 - clear.y0;
       if (!(width > 0 && depth > 0)) throw Error("Nonpositive clear room dimensions");
-      const captions = text.spans.filter((s) => s !== label && inside3(metres(s), face.polygon)), printed = captions.flatMap((s) => [...s.text.matchAll(/^Clear\s+(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*m$/gi)].map((m) => [Number(m[1]), Number(m[2])]));
+      const captions = text2.spans.filter((s) => s !== label && inside3(metres(s), face.polygon)), printed = captions.flatMap((s) => [...s.text.matchAll(/^Clear\s+(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*m$/gi)].map((m) => [Number(m[1]), Number(m[2])]));
       if (printed.length > 1 || printed.length === 1 && (!near2(width, printed[0][0]) || !near2(depth, printed[0][1]))) throw Error("Printed room clear dimensions conflict with calibrated wall faces: " + tag);
       rooms.push({ tag, bounds: b, clear, width, depth, grossArea: width * depth, area: width * depth, deductions: [], void: captions.some((s) => /^VOID\s*-?\s*no floor\s*\/\s*no ceiling/i.test(s.text)), polygon: face.polygon, caption: captions.map((s) => s.text).join(" ") });
     }
@@ -3193,20 +2288,20 @@ function measureNativeClearPlan(page, sourcePages = []) {
 }
 
 // src/lib/pdfAreaGeometry.mjs
-var EPS4 = 1e-8;
-var cross2 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+var EPS3 = 1e-8;
+var cross3 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 var signed3 = (p) => p.reduce((s, a, i) => {
   const b = p[(i + 1) % p.length];
   return s + a.x * b.y - b.x * a.y;
 }, 0) / 2;
 var area2 = (p) => Math.abs(signed3(p));
 function on2(a, b, p) {
-  return Math.abs(cross2(a, b, p)) < EPS4 && p.x >= Math.min(a.x, b.x) - EPS4 && p.x <= Math.max(a.x, b.x) + EPS4 && p.y >= Math.min(a.y, b.y) - EPS4 && p.y <= Math.max(a.y, b.y) + EPS4;
+  return Math.abs(cross3(a, b, p)) < EPS3 && p.x >= Math.min(a.x, b.x) - EPS3 && p.x <= Math.max(a.x, b.x) + EPS3 && p.y >= Math.min(a.y, b.y) - EPS3 && p.y <= Math.max(a.y, b.y) + EPS3;
 }
 function intersects(a, b, c, d) {
-  return cross2(a, b, c) * cross2(a, b, d) < -EPS4 && cross2(c, d, a) * cross2(c, d, b) < -EPS4 || on2(a, b, c) || on2(a, b, d) || on2(c, d, a) || on2(c, d, b);
+  return cross3(a, b, c) * cross3(a, b, d) < -EPS3 && cross3(c, d, a) * cross3(c, d, b) < -EPS3 || on2(a, b, c) || on2(a, b, d) || on2(c, d, a) || on2(c, d, b);
 }
-function polygon(raw) {
+function polygon2(raw) {
   if (!Array.isArray(raw) || raw.length < 3 || raw.length > 64) throw Error("Polygon requires 3\u201364 dimensioned vertices.");
   let p = raw.map((v) => ({ x: v.x, y: v.y }));
   if (p.some((v) => !Number.isFinite(v.x) || !Number.isFinite(v.y) || Math.abs(v.x) > 1e6 || Math.abs(v.y) > 1e6)) throw Error("Invalid polygon coordinates.");
@@ -3215,34 +2310,34 @@ function polygon(raw) {
     if (j === i + 1 || i === 0 && j === p.length - 1) continue;
     if (intersects(p[i], p[(i + 1) % p.length], p[j], p[(j + 1) % p.length])) throw Error("Polygon crosses or touches itself.");
   }
-  if (area2(p) < EPS4) throw Error("Polygon has no usable area.");
+  if (area2(p) < EPS3) throw Error("Polygon has no usable area.");
   if (signed3(p) < 0) p.reverse();
   return p;
 }
 function triangulate(p) {
-  const points = [...p], triangles = [];
+  const points = [...p], triangles2 = [];
   let guard = p.length * p.length;
   while (points.length > 3 && guard--) {
     let cut = false;
     for (let i = 0; i < points.length; i++) {
       const a = points[(i + points.length - 1) % points.length], b = points[i], c = points[(i + 1) % points.length];
-      if (Math.abs(cross2(a, b, c)) < EPS4) {
+      if (Math.abs(cross3(a, b, c)) < EPS3) {
         points.splice(i, 1);
         cut = true;
         break;
       }
-      if (cross2(a, b, c) < EPS4) continue;
-      if (points.some((v) => v !== a && v !== b && v !== c && cross2(a, b, v) >= -EPS4 && cross2(b, c, v) >= -EPS4 && cross2(c, a, v) >= -EPS4)) continue;
-      triangles.push([a, b, c]);
+      if (cross3(a, b, c) < EPS3) continue;
+      if (points.some((v) => v !== a && v !== b && v !== c && cross3(a, b, v) >= -EPS3 && cross3(b, c, v) >= -EPS3 && cross3(c, a, v) >= -EPS3)) continue;
+      triangles2.push([a, b, c]);
       points.splice(i, 1);
       cut = true;
       break;
     }
     if (!cut) throw Error("Polygon triangulation failed.");
   }
-  if (points.length === 3) triangles.push(points);
+  if (points.length === 3) triangles2.push(points);
   else if (points.length > 3) throw Error("Polygon triangulation exceeded limit.");
-  return triangles;
+  return triangles2;
 }
 function clip(subject, triangle) {
   let out = subject;
@@ -3250,7 +2345,7 @@ function clip(subject, triangle) {
     const a = triangle[i], b = triangle[(i + 1) % 3], input = out;
     out = [];
     for (let j = 0; j < input.length; j++) {
-      const p = input[j], q = input[(j + 1) % input.length], dp = cross2(a, b, p), dq = cross2(a, b, q), pin = dp >= -EPS4, qin = dq >= -EPS4;
+      const p = input[j], q = input[(j + 1) % input.length], dp = cross3(a, b, p), dq = cross3(a, b, q), pin = dp >= -EPS3, qin = dq >= -EPS3;
       if (pin) out.push(p);
       if (pin !== qin) {
         const t = dp / (dp - dq);
@@ -3261,9 +2356,9 @@ function clip(subject, triangle) {
   return out.length >= 3 ? area2(out) : 0;
 }
 var bbox = (p) => ({ minX: Math.min(...p.map((v) => v.x)), maxX: Math.max(...p.map((v) => v.x)), minY: Math.min(...p.map((v) => v.y)), maxY: Math.max(...p.map((v) => v.y)) });
-function intersection(a, b) {
+function intersection2(a, b) {
   const x = bbox(a.p), y = bbox(b.p);
-  if (x.maxX <= y.minX + EPS4 || y.maxX <= x.minX + EPS4 || x.maxY <= y.minY + EPS4 || y.maxY <= x.minY + EPS4) return 0;
+  if (x.maxX <= y.minX + EPS3 || y.maxX <= x.minX + EPS3 || x.maxY <= y.minY + EPS3 || y.maxY <= x.minY + EPS3) return 0;
   return a.t.reduce((s, u) => s + b.t.reduce((n, v) => n + clip(u, v), 0), 0);
 }
 var metricKeys = ["floor_area", "ceiling_area", "wood_floor_area", "ceramic_floor_area", "epoxy_floor_area", "terrace_floor_area"];
@@ -3271,8 +2366,8 @@ var material = { wood: "wood_floor_area", tile: "ceramic_floor_area", epoxy: "ep
 var inferred = /\binferred\b|\bassumed\b|\bremainder\b|\bderived\b|استنباط|تخمین/i;
 var roomTag = (name2) => String(name2 || "").match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toUpperCase();
 var labeledFinish = (r) => /\bVOID\b/i.test(r.name) || /^VOID\b/i.test(r.description) ? "void" : /^OUTDOOR\b/i.test(r.description) ? "outdoor" : /^WOOD\b|^parquet\b/i.test(r.description) ? "wood" : /^TILE\b|^ceramic\b/i.test(r.description) ? "tile" : /^EPOXY\b/i.test(r.description) ? "epoxy" : null;
-function partialInventory(page, geometry2, spaces, envelopeArea, tolerance) {
-  if (geometry2.basis !== "wall_centerline_zones") throw Error("Partial clear-area geometry cannot resolve missing wall footprints");
+function partialInventory(page, geometry, spaces, envelopeArea, tolerance) {
+  if (geometry.basis !== "wall_centerline_zones") throw Error("Partial clear-area geometry cannot resolve missing wall footprints");
   const inventory = /* @__PURE__ */ new Map(), polygons = /* @__PURE__ */ new Map(), corrections = [], labels = [], unresolved = [];
   for (const r of spaces) {
     const tag = roomTag(r.tag);
@@ -3300,21 +2395,21 @@ function partialInventory(page, geometry2, spaces, envelopeArea, tolerance) {
   }
   for (const tag of polygons.keys()) if (!inventory.has(tag)) throw Error(`Dimensioned space ${tag} is absent from the tagged inventory`);
   if (unresolved.length) throw Error(`Inferred rooms still lack dimensioned polygons: ${unresolved.join(", ")}`);
-  const list = [...inventory.values()], total = list.reduce((s, r) => s + r.quantity, 0);
-  if (!list.length || Math.abs(total - envelopeArea) > tolerance) throw Error("Mixed polygon/printed-area inventory does not reconcile to the dimensioned envelope");
-  const dimensions = { floor_area: list.filter((r) => r.finish !== "void").reduce((s, r) => s + r.quantity, 0), ceiling_area: list.filter((r) => !["void", "outdoor"].includes(r.finish)).reduce((s, r) => s + r.quantity, 0) };
-  for (const [finish, key2] of Object.entries(material)) dimensions[key2] = list.filter((r) => r.finish === finish).reduce((s, r) => s + r.quantity, 0);
+  const list2 = [...inventory.values()], total = list2.reduce((s, r) => s + r.quantity, 0);
+  if (!list2.length || Math.abs(total - envelopeArea) > tolerance) throw Error("Mixed polygon/printed-area inventory does not reconcile to the dimensioned envelope");
+  const dimensions = { floor_area: list2.filter((r) => r.finish !== "void").reduce((s, r) => s + r.quantity, 0), ceiling_area: list2.filter((r) => !["void", "outdoor"].includes(r.finish)).reduce((s, r) => s + r.quantity, 0) };
+  for (const [finish, key] of Object.entries(material)) dimensions[key] = list2.filter((r) => r.finish === finish).reduce((s, r) => s + r.quantity, 0);
   const quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
-  const basis = `Partial dimensioned geometry plus printed room labels on page ${page.pageNumber}; dimensioned tags: ${[...polygons.keys()].join(", ")}; label-only tags: ${labels.join(", ")}; ${geometry2.envelope_evidence}. Inventory closure checked; unmeasured room boundaries and AI materials require review.`;
-  for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: page.page_evidence.scope_id, evidence: basis });
+  const basis = `Partial dimensioned geometry plus printed room labels on page ${page.pageNumber}; dimensioned tags: ${[...polygons.keys()].join(", ")}; label-only tags: ${labels.join(", ")}; ${geometry.envelope_evidence}. Inventory closure checked; unmeasured room boundaries and AI materials require review.`;
+  for (const [key, value] of Object.entries(dimensions)) quantities.push({ key, value, unit: "m2", scope_id: page.page_evidence.scope_id, evidence: basis });
   const updated = { ...page, ...dimensions, __areaGeometryValidated: true, page_evidence: { ...page.page_evidence, quantities }, detected_items: nativeInventory.items.map((r) => inventory.has(roomTag(r.name)) && ["m2", "m\xB2"].includes(String(r.unit).toLowerCase()) ? Object.fromEntries(Object.entries(inventory.get(roomTag(r.name))).filter(([k]) => k !== "finish")) : r) };
-  return { page: updated, audit: { page: page.pageNumber, status: "partial_geometry_with_printed_labels", basis: geometry2.basis, envelope_area: envelopeArea, covered_area: spaces.reduce((s, r) => s + r.quantity, 0), dimensioned_tags: [...polygons.keys()], label_only_tags: labels, corrections, native_inventory_recovery: nativeInventory.recovered, withheld_metrics: [] }, warnings: [`PDF page ${page.pageNumber}: partial area geometry; printed room labels retained provisionally, full room boundaries are not verified.`] };
+  return { page: updated, audit: { page: page.pageNumber, status: "partial_geometry_with_printed_labels", basis: geometry.basis, envelope_area: envelopeArea, covered_area: spaces.reduce((s, r) => s + r.quantity, 0), dimensioned_tags: [...polygons.keys()], label_only_tags: labels, corrections, native_inventory_recovery: nativeInventory.recovered, withheld_metrics: [] }, warnings: [`PDF page ${page.pageNumber}: partial area geometry; printed room labels retained provisionally, full room boundaries are not verified.`] };
 }
 function withheld(page, keys, reason) {
   const original = page.__withheldAreaClaims || { claims: (page.page_evidence?.quantities || []).filter((q) => keys.includes(q.key)), fields: Object.fromEntries(keys.filter((k) => Number.isFinite(page[k])).map((k) => [k, page[k]])) };
   const quantities = (page.page_evidence?.quantities || []).filter((q) => !keys.includes(q.key));
   const next = { ...page, __withheldAreaClaims: original, page_evidence: { ...page.page_evidence, quantities } };
-  for (const key2 of keys) next[key2] = 0;
+  for (const key of keys) next[key] = 0;
   return { page: next, audit: { page: page.pageNumber, status: "withheld", reason, withheld_metrics: keys, original_area_evidence: original }, warnings: [`PDF page ${page.pageNumber}: ${reason}; ${keys.join(", ")} withheld.`] };
 }
 function auditPdfAreaGeometry(page, sourcePages = []) {
@@ -3322,8 +2417,8 @@ function auditPdfAreaGeometry(page, sourcePages = []) {
   const native = measureNativeClearPlan(page, sourcePages);
   if (native.status === "checked") {
     const quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
-    for (const [key2, value] of Object.entries(native.dimensions)) quantities.push({
-      key: key2,
+    for (const [key, value] of Object.entries(native.dimensions)) quantities.push({
+      key,
       value,
       unit: "m2",
       scope_id: page.page_evidence.scope_id,
@@ -3336,8 +2431,8 @@ function auditPdfAreaGeometry(page, sourcePages = []) {
     const detected = native.rooms.map((r) => ({ name: r.tag, unit: "m2", quantity: r.area, description: `${r.void ? "VOID" : "UNKNOWN"} | original PDF clear dimensions ${r.width} x ${r.depth} m; explicit stair deductions ${r.deductions.reduce((s, d) => s + d.area, 0)} m2. Native geometry; finish code requires separate source reconciliation.` }));
     return { page: { ...page, ...dimensions, __areaGeometryValidated: true, native_clear_geometry: native.audit, page_evidence: { ...page.page_evidence, quantities }, detected_items: [...(page.detected_items || []).filter((i) => !["m2", "m\xB2"].includes(String(i.unit).toLowerCase())), ...detected] }, audit: { ...native.audit, withheld_metrics: withheldMetrics }, warnings: withheldMetrics.length ? [`PDF page ${page.pageNumber}: native clear geometry checked; floor material classifications remain unresolved.`] : [] };
   }
-  const geometry2 = page.area_geometry;
-  if (!geometry2) {
+  const geometry = page.area_geometry;
+  if (!geometry) {
     const ambiguous = (page.detected_items || []).filter((r) => ["m2", "m\xB2"].includes(String(r.unit).toLowerCase()) && inferred.test(r.description || ""));
     if (!ambiguous.length) return { page, audit: { page: page.pageNumber, status: "label_areas_only", reason: "Independent dimensioned polygons unavailable." }, warnings: [] };
     const keys = /* @__PURE__ */ new Set(["floor_area", "ceiling_area"]);
@@ -3347,40 +2442,40 @@ function auditPdfAreaGeometry(page, sourcePages = []) {
       else if (/^TILE\b/i.test(desc)) keys.add("ceramic_floor_area");
       else if (/^EPOXY\b/i.test(desc)) keys.add("epoxy_floor_area");
       else if (/^OUTDOOR\b/i.test(desc)) keys.add("terrace_floor_area");
-      else for (const key2 of Object.values(material)) keys.add(key2);
+      else for (const key of Object.values(material)) keys.add(key);
     }
     return withheld(page, [...keys], "Inferred room areas lack independent dimensioned geometry");
   }
   try {
-    if (!["wall_centerline_zones", "clear_internal"].includes(geometry2.basis) || !geometry2.envelope_evidence?.trim()) throw Error("Independent area measurement basis or envelope evidence missing");
-    const envelope = polygon(geometry2.envelope), outer = { p: envelope, t: triangulate(envelope) }, envelopeArea = area2(envelope), tolerance = Math.max(0.01, envelopeArea * 1e-3);
-    if (!Array.isArray(geometry2.spaces) || !geometry2.spaces.length || geometry2.spaces.length > 200) throw Error("A complete tagged space inventory is required");
+    if (!["wall_centerline_zones", "clear_internal"].includes(geometry.basis) || !geometry.envelope_evidence?.trim()) throw Error("Independent area measurement basis or envelope evidence missing");
+    const envelope = polygon2(geometry.envelope), outer = { p: envelope, t: triangulate(envelope) }, envelopeArea = area2(envelope), tolerance = Math.max(0.01, envelopeArea * 1e-3);
+    if (!Array.isArray(geometry.spaces) || !geometry.spaces.length || geometry.spaces.length > 200) throw Error("A complete tagged space inventory is required");
     const seen = /* @__PURE__ */ new Set(), spaces = [];
-    for (const r of geometry2.spaces) {
+    for (const r of geometry.spaces) {
       if (!r.tag?.trim() || seen.has(r.tag.trim().toUpperCase()) || !r.evidence?.trim() || !["enclosed", "outdoor", "void", "wall"].includes(r.kind) || !["wood", "tile", "epoxy", "outdoor", "unknown"].includes(r.finish)) throw Error("Missing or duplicate room identity/material/geometry evidence");
       seen.add(r.tag.trim().toUpperCase());
-      if (geometry2.coverage === "partial" && Array.isArray(r.polygon) && r.polygon.length === 0) {
+      if (geometry.coverage === "partial" && Array.isArray(r.polygon) && r.polygon.length === 0) {
         const tag = roomTag(r.tag), items = (page.detected_items || []).filter((i) => roomTag(i.name) === tag && ["m2", "m\xB2"].includes(String(i.unit).toLowerCase()));
-        if (geometry2.basis !== "wall_centerline_zones" || !tag || items.length !== 1 || !Number.isFinite(r.reported_area) || r.reported_area <= 0 || Math.abs(items[0].quantity - r.reported_area) > 0.01 || !/\bprinted\b|\breported\b|\blabel\b/i.test(r.evidence) || inferred.test(items[0].description || "") || !/\bprinted\b|\breported\b|برچسب|چاپ/i.test(items[0].description || "")) throw Error(`Unmeasured space ${r.tag} lacks a consistent printed label`);
+        if (geometry.basis !== "wall_centerline_zones" || !tag || items.length !== 1 || !Number.isFinite(r.reported_area) || r.reported_area <= 0 || Math.abs(items[0].quantity - r.reported_area) > 0.01 || !/\bprinted\b|\breported\b|\blabel\b/i.test(r.evidence) || inferred.test(items[0].description || "") || !/\bprinted\b|\breported\b|برچسب|چاپ/i.test(items[0].description || "")) throw Error(`Unmeasured space ${r.tag} lacks a consistent printed label`);
         const finish = labeledFinish(items[0]);
         if (!finish || (finish === "void" ? r.kind !== "void" : finish === "outdoor" ? r.kind !== "outdoor" : r.kind !== "enclosed") || finish !== "void" && r.finish !== finish) throw Error(`Conflicting printed-label identity/material for ${r.tag}`);
         continue;
       }
-      const p = polygon(r.polygon), shape2 = { p, t: triangulate(p) }, quantity = area2(p);
-      if (Math.abs(intersection(shape2, outer) - quantity) > tolerance) throw Error(`Space ${r.tag} lies outside the dimensioned envelope`);
-      for (const old of spaces) if (intersection(shape2, old.shape) > tolerance) throw Error(`Spaces ${old.tag} and ${r.tag} overlap`);
+      const p = polygon2(r.polygon), shape2 = { p, t: triangulate(p) }, quantity = area2(p);
+      if (Math.abs(intersection2(shape2, outer) - quantity) > tolerance) throw Error(`Space ${r.tag} lies outside the dimensioned envelope`);
+      for (const old of spaces) if (intersection2(shape2, old.shape) > tolerance) throw Error(`Spaces ${old.tag} and ${r.tag} overlap`);
       if (r.kind === "outdoor" && r.finish !== "outdoor" || r.kind === "enclosed" && r.finish === "outdoor") throw Error(`Space ${r.tag} has conflicting indoor/outdoor classification`);
       spaces.push({ ...r, quantity, shape: shape2 });
     }
     const total = spaces.reduce((s, r) => s + r.quantity, 0);
-    if (geometry2.coverage === "partial") return partialInventory(page, geometry2, spaces, envelopeArea, tolerance);
-    if (geometry2.coverage != null && geometry2.coverage !== "complete") throw Error("Unknown area geometry coverage mode");
+    if (geometry.coverage === "partial") return partialInventory(page, geometry, spaces, envelopeArea, tolerance);
+    if (geometry.coverage != null && geometry.coverage !== "complete") throw Error("Unknown area geometry coverage mode");
     if (Math.abs(total - envelopeArea) > tolerance) throw Error("Space polygons do not cover the complete dimensioned envelope");
     const usable = (r) => ["enclosed", "outdoor"].includes(r.kind);
     const dimensions = { floor_area: spaces.filter(usable).reduce((s, r) => s + r.quantity, 0), ceiling_area: spaces.filter((r) => r.kind === "enclosed").reduce((s, r) => s + r.quantity, 0) };
-    for (const [finish, key2] of Object.entries(material)) dimensions[key2] = spaces.filter((r) => usable(r) && r.finish === finish).reduce((s, r) => s + r.quantity, 0);
+    for (const [finish, key] of Object.entries(material)) dimensions[key] = spaces.filter((r) => usable(r) && r.finish === finish).reduce((s, r) => s + r.quantity, 0);
     const scope2 = page.page_evidence.scope_id, quantities = (page.page_evidence.quantities || []).filter((q) => !metricKeys.includes(q.key));
-    for (const [key2, value] of Object.entries(dimensions)) quantities.push({ key: key2, value, unit: "m2", scope_id: scope2, evidence: `Area computed from dimensioned, non-overlapping space polygons (${geometry2.basis}) on page ${page.pageNumber}; ${geometry2.envelope_evidence}; AI dimension transcription and materials require review.` });
+    for (const [key, value] of Object.entries(dimensions)) quantities.push({ key, value, unit: "m2", scope_id: scope2, evidence: `Area computed from dimensioned, non-overlapping space polygons (${geometry.basis}) on page ${page.pageNumber}; ${geometry.envelope_evidence}; AI dimension transcription and materials require review.` });
     const corrections = [];
     for (const r of spaces) if (Number.isFinite(r.reported_area) && Math.abs(r.reported_area - r.quantity) > 0.01) corrections.push({ tag: r.tag, reported: r.reported_area, computed: r.quantity, evidence: r.evidence });
     const unknown = spaces.filter((r) => usable(r) && r.finish === "unknown").map((r) => r.tag);
@@ -3398,7 +2493,7 @@ function auditPdfAreaGeometry(page, sourcePages = []) {
         __areaGeometryValidated: true,
         detected_items: [...(page.detected_items || []).filter((i) => !["m2", "m\xB2"].includes(String(i.unit).toLowerCase())), ...measuredRooms]
       },
-      audit: { page: page.pageNumber, status: "dimension_geometry_checked", basis: geometry2.basis, envelope_area: envelopeArea, covered_area: total, corrections, unknown_finish_spaces: unknown, withheld_metrics: unknown.length ? Object.values(material) : [] },
+      audit: { page: page.pageNumber, status: "dimension_geometry_checked", basis: geometry.basis, envelope_area: envelopeArea, covered_area: total, corrections, unknown_finish_spaces: unknown, withheld_metrics: unknown.length ? Object.values(material) : [] },
       warnings: unknown.length ? [`PDF page ${page.pageNumber}: unknown floor finishes; complete material totals withheld.`] : []
     };
   } catch (error) {
@@ -3412,14 +2507,14 @@ var headers = { id: /^(?:id|tag|mark|reference)$/, host: /^(?:host wall|wall|hos
 var kindOf = (s) => /^(?:garage door|overhead door|roller shutter)$/.test(clean(s)) ? "garage_door" : /^(?:door|internal door|external door|entrance door|service door|main door)$/.test(clean(s)) ? "door" : /^(?:window|glazed window)$/.test(clean(s)) ? "window" : null;
 var dimension = (s) => /^\d+(?:\.\d+)?$/.test(s) ? Number(s) : null;
 function tableUnit(spans, head, inherited) {
-  const text = spans.filter((s) => s.y > head.y).map((s) => s.text).join(" ");
-  const source2 = [...text.matchAll(/(?:all\s+)?dimensions\s+(?:are\s+|in\s+)(millimet(?:er|re)s?|met(?:er|re)s?|mm|m)\b/gi)].map((m) => /^mm|^milli/i.test(m[1]) ? 1e-3 : 1);
+  const text2 = spans.filter((s) => s.y > head.y).map((s) => s.text).join(" ");
+  const source2 = [...text2.matchAll(/(?:all\s+)?dimensions\s+(?:are\s+|in\s+)(millimet(?:er|re)s?|met(?:er|re)s?|mm|m)\b/gi)].map((m) => /^mm|^milli/i.test(m[1]) ? 1e-3 : 1);
   const fromHeaders = ["width", "height"].map((k) => head.cols.find((c) => c.key === k)?.text.match(/\((mm|m)\)/i)?.[1]).filter(Boolean).map((u) => u.toLowerCase() === "mm" ? 1e-3 : 1);
   const signature = head.cols.map((c) => `${c.key}:${Math.round(c.x - head.cols[0].x)}`).join("|");
   const factors = [...source2, ...fromHeaders];
   if (!factors.length && inherited?.signature === signature && inherited.allow_continuation) return { ...inherited };
   if (!factors.length || new Set(factors).size !== 1) throw Error("Missing or conflicting schedule dimension units");
-  return { factor: factors[0], signature, allow_continuation: /all\s+dimensions\s+(?:are|in)\s+/i.test(text) };
+  return { factor: factors[0], signature, allow_continuation: /all\s+dimensions\s+(?:are|in)\s+/i.test(text2) };
 }
 function readNativeOpeningSchedule(page, normalizeScope, inherited) {
   const native = page.native_text_evidence;
@@ -3432,8 +2527,8 @@ function readNativeOpeningSchedule(page, normalizeScope, inherited) {
       const band5 = spans.filter((x) => Math.abs(x.y - s.y) < Math.min(2, s.height * 0.2));
       const cols = [];
       for (const x of band5) {
-        const key2 = Object.keys(headers).find((k) => headers[k].test(clean(x.text)));
-        if (key2) cols.push({ ...x, key: key2 });
+        const key = Object.keys(headers).find((k) => headers[k].test(clean(x.text)));
+        if (key) cols.push({ ...x, key });
       }
       if (["id", "kind", "width", "height"].every((k) => cols.filter((c) => c.key === k).length === 1)) heads.push({ y: s.y, cols: cols.sort((a, b) => a.x - b.x) });
     }
@@ -3493,9 +2588,9 @@ function nativeOpeningEvidence(pages, normalizeScope) {
     return { claims, blocked, warnings, schedules };
   }
   for (const s of schedules) {
-    for (const [kind, key2] of [["door", "door_count"], ["window", "window_count"]]) {
+    for (const [kind, key] of [["door", "door_count"], ["window", "window_count"]]) {
       const rows = s.rows.filter((r) => kind === "door" ? r.kind === "door" || r.kind === "garage_door" : r.kind === "window");
-      for (const [metric, value, unit5] of [[key2, rows.length, "nr"], [`${kind}_area`, rows.reduce((v, r) => v + r.width * r.height, 0), "m2"]]) claims.push({
+      for (const [metric, value, unit5] of [[key, rows.length, "nr"], [`${kind}_area`, rows.reduce((v, r) => v + r.width * r.height, 0), "m2"]]) claims.push({
         key: metric,
         value,
         unit: unit5,
@@ -3516,9 +2611,9 @@ var floorScope = (s) => String(s || "").trim().toLowerCase().replace(/[ _-]+/g, 
 var canon = (s) => ["ground floor", "ground", "gf", "floor 0"].includes(floorScope(s)) ? "floor:0" : ["first floor", "first", "ff", "floor 1"].includes(floorScope(s)) ? "floor:1" : floorScope(s);
 var name = (s) => String(s || "").trim().toLowerCase();
 var roomTag2 = (s) => String(s || "").match(/^([A-Z]{1,4}[-_]?\d{1,4})(?=\s|$)/i)?.[1]?.toLowerCase();
-var unique2 = (rows, key2) => {
-  const ids = rows.map((r) => name(r[key2]));
-  if (ids.some((s) => !s) || new Set(ids).size !== ids.length) throw Error(`Missing or duplicated ${key2}`);
+var unique2 = (rows, key) => {
+  const ids = rows.map((r) => name(r[key]));
+  if (ids.some((s) => !s) || new Set(ids).size !== ids.length) throw Error(`Missing or duplicated ${key}`);
 };
 function calculatePdfSourceMeasurements(basis, pages, metricUnits, availablePages) {
   const calculations = [], blocked = /* @__PURE__ */ new Set(), issues = [];
@@ -3530,8 +2625,8 @@ function calculatePdfSourceMeasurements(basis, pages, metricUnits, availablePage
     if (typeof r?.value !== "boolean" || !r.evidence?.trim() || !r.pages?.length || r.pages.some((p) => !availablePages.has(p))) throw Error("Missing source finish rule");
     return r;
   };
-  const term2 = (id, operation, factors) => ({ id, operation, factors });
-  const add = (key2, terms, evidence) => calculations.push({ key: key2, scope_id: "project", terms, evidence });
+  const term2 = (id, operation2, factors) => ({ id, operation: operation2, factors });
+  const add = (key, terms, evidence) => calculations.push({ key, scope_id: "project", terms, evidence });
   const tryGroup = (keys, work) => {
     try {
       work();
@@ -3590,7 +2685,7 @@ function calculatePdfSourceMeasurements(basis, pages, metricUnits, availablePage
         }
       }
       for (const kind of ["door", "window"]) {
-        const key2 = `${kind}_count`, candidates = (native.claims.length ? native.claims : pages.flatMap((p) => (p.page_evidence?.quantities || []).filter((q) => p.page_evidence.kind === "opening_schedule" || q.document_calculated))).filter((q) => q.key === key2 && canon(q.scope_id) === prefix && q.unit === "nr");
+        const key = `${kind}_count`, candidates = (native.claims.length ? native.claims : pages.flatMap((p) => (p.page_evidence?.quantities || []).filter((q) => p.page_evidence.kind === "opening_schedule" || q.document_calculated))).filter((q) => q.key === key && canon(q.scope_id) === prefix && q.unit === "nr");
         if (candidates.some((q) => q.value !== f.openings.filter((o) => o.kind === kind).length)) throw Error("Opening ledger does not reconcile to source schedule count");
       }
     }
@@ -3712,8 +2807,8 @@ function nativePdfSupplementaryScope(pages) {
     return xs[0];
   };
   const f = (value, unit5, pages2, evidence) => ({ value, unit: unit5, operation: "multiply", pages: [...new Set(pages2)], evidence, clip: null });
-  const calc2 = (key2, terms, evidence) => ({ key: key2, scope_id: "project", terms, evidence });
-  const term2 = (id, operation, factors) => ({ id, operation, factors });
+  const calc2 = (key, terms, evidence) => ({ key, scope_id: "project", terms, evidence });
+  const term2 = (id, operation2, factors) => ({ id, operation: operation2, factors });
   const collect = (re) => texts.flatMap((p) => [...p.text.matchAll(re)].map((m) => ({ m, page: p.page })));
   const waterproof = collect(/WATERPROOFING:\s*roof excludes open terrace; terrace is a separate line\./gi);
   if (waterproof.length) {
@@ -3721,8 +2816,8 @@ function nativePdfSupplementaryScope(pages) {
       const rule = one(waterproof, "roof/terrace waterproofing scope rule");
       const floors = pages.filter((p) => p.page_evidence?.kind === "floor_plan");
       const envelopes = floors.map((p) => {
-        const text = p.native_plan_text?.status === "readable" ? p.native_plan_text.spans.map((s) => s.text).join(" ") : "";
-        const entries = [...text.matchAll(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
+        const text2 = p.native_plan_text?.status === "readable" ? p.native_plan_text.spans.map((s) => s.text).join(" ") : "";
+        const entries = [...text2.matchAll(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s+envelope\b/gi)];
         const distinct = [...new Map(entries.map((m) => [m.slice(1).map(Number).sort((a, b) => a - b).join("|"), m])).values()];
         const match = one(distinct, "printed floor envelope");
         return { dims: match.slice(1).map(Number).sort((a, b) => a - b), page: p.pageNumber, evidence: match[0] };
@@ -3755,7 +2850,7 @@ function nativePdfSupplementaryScope(pages) {
     try {
       const r = one(fixtures, "declared sanitary fixture inventory"), tags = r.m[1].split(/\s*,\s*|\s+and\s+/).filter(Boolean);
       if (!tags.length || tags.length > 100 || (/* @__PURE__ */ new Set([...tags, r.m[2], r.m[3]])).size !== tags.length + 2) throw Error("Repeated sanitary room identity");
-      for (const [key2, n] of [["toilet_count", tags.length], ["basin_count", tags.length], ["shower_count", tags.length], ["kitchen_sink_count", 1], ["laundry_sink_count", 1]]) calculations.push(calc2(key2, [term2("native-fixtures:" + key2, "add", [f(n, "count", [r.page], r.m[0])])], r.m[0] + " Distinct fixture types; one scheduled item per named room."));
+      for (const [key, n] of [["toilet_count", tags.length], ["basin_count", tags.length], ["shower_count", tags.length], ["kitchen_sink_count", 1], ["laundry_sink_count", 1]]) calculations.push(calc2(key, [term2("native-fixtures:" + key, "add", [f(n, "count", [r.page], r.m[0])])], r.m[0] + " Distinct fixture types; one scheduled item per named room."));
     } catch (e) {
       issues.push(e.message);
     }
@@ -3772,14 +2867,14 @@ function readNativeSurfaceConventions(pages) {
       const band5 = (y) => spans.filter((s) => Math.abs(s.y - y) < 1.5).sort((a, b) => a.x - b.x);
       const cols = band5(head.y);
       if (cols.length !== 3 || cols[1].text !== "Material" || cols[2].text !== "Measurement rule") continue;
-      for (const key2 of spans.filter((s) => s.y < head.y - 3 && Math.abs(s.x - head.x) < 15 && /^[A-Z]+\d*$/.test(s.text))) {
-        const cells = band5(key2.y), description = cells.filter((s) => Math.abs(s.x - cols[1].x) < 10).map((s) => s.text).join(" "), rule = cells.filter((s) => Math.abs(s.x - cols[2].x) < 10).map((s) => s.text).join(" ");
+      for (const key of spans.filter((s) => s.y < head.y - 3 && Math.abs(s.x - head.x) < 15 && /^[A-Z]+\d*$/.test(s.text))) {
+        const cells = band5(key.y), description = cells.filter((s) => Math.abs(s.x - cols[1].x) < 10).map((s) => s.text).join(" "), rule = cells.filter((s) => Math.abs(s.x - cols[2].x) < 10).map((s) => s.text).join(" ");
         let family2 = null;
         if (/^Full-height fixed internal glass$/i.test(description) && /^Net CL length x local height less .+ glass door openings; BOQ m2$/i.test(rule)) family2 = "fixed-glazing";
         if (/^Exterior weather paint$/i.test(description) && /^Net [A-Z]+\d+ wall area; no parapets or reveals$/i.test(rule)) family2 = "external-paint";
         if (!family2) continue;
         if (found.some((c) => c.family === family2)) throw Error("Duplicate or conflicting surface measurement declaration");
-        found.push({ sourceCode: key2.text, family: family2, sourceDescription: description, rule, page: page.pageNumber });
+        found.push({ sourceCode: key.text, family: family2, sourceDescription: description, rule, page: page.pageNumber });
       }
     }
   }
@@ -3818,8 +2913,8 @@ var on3 = (p, w) => Math.abs((w.b.x - w.a.x) * (p.y - w.a.y) - (w.b.y - w.a.y) *
 var boundary = (p, r) => (near3(p.x, r.bounds.x0) || near3(p.x, r.bounds.x1)) && p.y >= r.bounds.y0 - E2 && p.y <= r.bounds.y1 + E2 || (near3(p.y, r.bounds.y0) || near3(p.y, r.bounds.y1)) && p.x >= r.bounds.x0 - E2 && p.x <= r.bounds.x1 + E2;
 var band = (spans, y) => spans.filter((s) => Math.abs(s.y - y) < 1.5).sort((a, b) => a.x - b.x);
 var factor = (value, unit5, pages, evidence) => ({ value, unit: unit5, operation: "multiply", pages: [...new Set(pages)], evidence, clip: null });
-var term = (id, operation, factors) => ({ id, operation, factors });
-var calc = (key2, scope_id, terms, evidence) => ({ key: key2, scope_id, terms, evidence });
+var term = (id, operation2, factors) => ({ id, operation: operation2, factors });
+var calc = (key, scope_id, terms, evidence) => ({ key, scope_id, terms, evidence });
 function cellsAt(spans, y, cols) {
   const cells = cols.map(() => []);
   for (const s of band(spans, y)) {
@@ -3832,7 +2927,7 @@ function cellsAt(spans, y, cols) {
 function readNativeInstanceTables(pages) {
   const result = [];
   for (const page of pages) {
-    const text = textOf2(page), kind = /DOOR SCHEDULE\s*\/\s*UNIQUE INSTANCES/i.test(text) ? "door" : /WINDOW SCHEDULE\s*\/\s*UNIQUE INSTANCES/i.test(text) ? "window" : null;
+    const text2 = textOf2(page), kind = /DOOR SCHEDULE\s*\/\s*UNIQUE INSTANCES/i.test(text2) ? "door" : /WINDOW SCHEDULE\s*\/\s*UNIQUE INSTANCES/i.test(text2) ? "window" : null;
     if (!kind) continue;
     const spans = page.native_text_evidence.spans;
     const header = unique3(spans.filter((s) => s.text === "Instance"), "instance-table header"), cols = band(spans, header.y);
@@ -3935,10 +3030,10 @@ function nativeCoordinatedPdfCalculations(pages) {
           calculations.push(calc(areaKey, scope2, rows.map((o) => term(o.id + ":area", "add", [f(o.width, "m", o.id + " scheduled width", [o.page]), f(o.height, "m", o.id + " scheduled height", [o.page])])), "Sum each unique scheduled source opening width times height once"));
         }
       }
-      for (const [classification, key2] of [["external", "external_block_area"], ["internal", "internal_block_area"]]) {
+      for (const [classification, key] of [["external", "external_block_area"], ["internal", "internal_block_area"]]) {
         const terms = plan.walls.filter((w) => w.classification === classification).map((w, i) => term(`${scope2}:${classification}:${i}`, "add", [f(w.length, "m", "Calibrated full CL vector length"), f(height.value, "m", "Printed local floor wall height")]));
         terms.push(...local.filter((o) => o.host.classification === classification).map((o) => openingTerm(o, o.id + ":masonry")));
-        calculations.push(calc(key2, scope2, terms, "Source CL wall lengths; no T-junction overlap deductions; all scheduled openings deducted once on their physical host"));
+        calculations.push(calc(key, scope2, terms, "Source CL wall lengths; no T-junction overlap deductions; all scheduled openings deducted once on their physical host"));
       }
       const plaster = [], tile = [], up = [], wetFloors = [], gypsum = [], ceilingPaint = [], roomDetails = [];
       for (const r of plan.rooms) {
@@ -3966,12 +3061,12 @@ function nativeCoordinatedPdfCalculations(pages) {
         if (wetRule.tags.includes(r.tag)) {
           if (plan.walls.some((w) => w.classification === "glass" && w.rooms.includes(r.tag))) throw Error("Wet glass finish rule unresolved");
           wetFloors.push(...areaTerms("wet-floor"));
-          for (const [key2, h] of [["tile", wetRule.height], ["upstand", upstand.height]]) {
-            const list = key2 === "tile" ? tile : up;
-            list.push(term(r.tag + ":" + key2 + ":width-sides", "add", [f(2, "count", "Two room faces"), f(r.width, "m", "Clear room width"), f(h, "m", "Explicit wet finish height", [key2 === "tile" ? wetRule.page : upstand.page])]), term(r.tag + ":" + key2 + ":depth-sides", "add", [f(2, "count", "Two room faces"), f(r.depth, "m", "Clear room depth"), f(h, "m", "Explicit wet finish height", [key2 === "tile" ? wetRule.page : upstand.page])]));
-            for (const o of local.filter((o2) => o2.spaces.includes(r.tag) && (key2 === "tile" || o2.kind === "door"))) {
-              if (key2 === "tile") list.push(openingTerm(o, r.tag + ":" + o.id + ":tile", 1, h));
-              else list.push(term(r.tag + ":" + o.id + ":upstand", "subtract", [f(o.width, "m", "Door width excluded from upstand", [o.page]), f(h, "m", "Explicit upstand height", [upstand.page])]));
+          for (const [key, h] of [["tile", wetRule.height], ["upstand", upstand.height]]) {
+            const list2 = key === "tile" ? tile : up;
+            list2.push(term(r.tag + ":" + key + ":width-sides", "add", [f(2, "count", "Two room faces"), f(r.width, "m", "Clear room width"), f(h, "m", "Explicit wet finish height", [key === "tile" ? wetRule.page : upstand.page])]), term(r.tag + ":" + key + ":depth-sides", "add", [f(2, "count", "Two room faces"), f(r.depth, "m", "Clear room depth"), f(h, "m", "Explicit wet finish height", [key === "tile" ? wetRule.page : upstand.page])]));
+            for (const o of local.filter((o2) => o2.spaces.includes(r.tag) && (key === "tile" || o2.kind === "door"))) {
+              if (key === "tile") list2.push(openingTerm(o, r.tag + ":" + o.id + ":tile", 1, h));
+              else list2.push(term(r.tag + ":" + o.id + ":upstand", "subtract", [f(o.width, "m", "Door width excluded from upstand", [o.page]), f(h, "m", "Explicit upstand height", [upstand.page])]));
             }
           }
         }
@@ -3994,7 +3089,7 @@ function nativeCoordinatedPdfCalculations(pages) {
           plaster_terms: own
         });
       }
-      for (const [key2, terms] of [["plaster_area", plaster], ["paint_area", [...plaster, ...tile.map((t) => ({ ...t, id: "paint-exclude:" + t.id, operation: t.operation === "add" ? "subtract" : "add" }))]], ["wet_wall_tile_area", tile], ["wet_wall_waterproofing_area", up], ["wet_floor_area", wetFloors], ["wet_floor_waterproofing_area", wetFloors], ["gypsum_ceiling_area", gypsum], ["ceiling_paint_area", ceilingPaint]]) if (terms.length) calculations.push(calc(key2, scope2, terms, "Original PDF coordinated native room geometry, unique opening ledger and explicit finish/height conventions; no model-calculated totals used"));
+      for (const [key, terms] of [["plaster_area", plaster], ["paint_area", [...plaster, ...tile.map((t) => ({ ...t, id: "paint-exclude:" + t.id, operation: t.operation === "add" ? "subtract" : "add" }))]], ["wet_wall_tile_area", tile], ["wet_wall_waterproofing_area", up], ["wet_floor_area", wetFloors], ["wet_floor_waterproofing_area", wetFloors], ["gypsum_ceiling_area", gypsum], ["ceiling_paint_area", ceilingPaint]]) if (terms.length) calculations.push(calc(key, scope2, terms, "Original PDF coordinated native room geometry, unique opening ledger and explicit finish/height conventions; no model-calculated totals used"));
       let surface_operations = [], surface_operations_valid = true;
       try {
         surface_operations = measureNativeSurfaceOperations(plan, local, height.value, surfaceConventions).map((o) => ({ ...o, pages: [.../* @__PURE__ */ new Set([...o.pages, ...proof])] }));
@@ -4097,22 +3192,22 @@ function nativeDeclaredScheduleOperations(pages, details) {
         if (!anchors.length || anchors.length > 500) throw Error("Empty or excessive declared schedule");
         for (const anchor of anchors) {
           const cells = band2(spans, anchor.y);
-          const at3 = (i) => {
+          const at = (i) => {
             const matches = cells.filter((s) => Math.abs(s.x - cols[i].x) < 10);
             if (matches.length !== 1) throw Error("Missing/ambiguous schedule cell");
             return matches[0].text;
           };
-          const description = at3(1), classification = declaredOperationKind(description);
+          const description = at(1), classification = declaredOperationKind(description);
           if (!classification) throw Error("Unknown source operation: " + description);
-          const raw = countTable ? at3(4) : at3(2), u = countTable ? "nr" : unit(at3(3));
+          const raw = countTable ? at(4) : at(2), u = countTable ? "nr" : unit(at(3));
           if (!/^\d+(?:\.\d+)?$/.test(raw)) throw Error("Non-numeric declared quantity");
           const quantity = Number(raw);
           if (!(quantity >= 0 && quantity < 1e9) || !["m", "m2", "m3", "nr"].includes(u) || u === "nr" && !Number.isInteger(quantity)) throw Error("Unsupported quantity/unit");
-          if (countTable && (!/^\d+$/.test(at3(2)) || !/^\d+$/.test(at3(3)) || Number(at3(2)) + Number(at3(3)) !== quantity)) throw Error("Floor counts do not reconcile to project count");
+          if (countTable && (!/^\d+$/.test(at(2)) || !/^\d+$/.test(at(3)) || Number(at(2)) + Number(at(3)) !== quantity)) throw Error("Floor counts do not reconcile to project count");
           if (!quantity) continue;
           const expected = classification.family === "pipe" || classification.family === "pipe-insulation" || classification.family === "electrical-route" ? "m" : classification.family === "duct-sheet" ? "m2" : "nr";
           if (u !== expected) throw Error("Unit conflicts with source operation");
-          add({ metricKey: `native-${classification.family}:${anchor.text}`, sourceCode: anchor.text, sourceDescription: description, ...classification, quantity, unit: u, pages: [page.pageNumber], basis: `Original declared project schedule: ${anchor.text} | ${description} | ${quantity} ${u}; ${countTable ? "Ground " + at3(2) + " + First " + at3(3) + " = project total." : "Total already includes stated horizontal runs and risers; no extra multiplier."}` });
+          add({ metricKey: `native-${classification.family}:${anchor.text}`, sourceCode: anchor.text, sourceDescription: description, ...classification, quantity, unit: u, pages: [page.pageNumber], basis: `Original declared project schedule: ${anchor.text} | ${description} | ${quantity} ${u}; ${countTable ? "Ground " + at(2) + " + First " + at(3) + " = project total." : "Total already includes stated horizontal runs and risers; no extra multiplier."}` });
         }
       } catch (e) {
         operations2.splice(start);
@@ -4169,24 +3264,24 @@ function nativePdfServiceOperations(pages, details) {
   const surfacesComplete = details.every((d) => d.surface_operations_valid !== false);
   if (!surfacesComplete) issues.push("Native surface scope withheld across all floors: at least one floor has invalid surface measurements; no partial aggregate published.");
   for (const floor2 of surfacesComplete ? details : []) for (const op of floor2.surface_operations || []) {
-    const key2 = op.family + ":" + op.sourceCode, g = surfaceGroups.get(key2) || { ...op, quantity: 0, pages: [], basis: [] };
+    const key = op.family + ":" + op.sourceCode, g = surfaceGroups.get(key) || { ...op, quantity: 0, pages: [], basis: [] };
     if (g.sourceDescription !== op.sourceDescription) throw Error("Conflicting source surface description");
     g.quantity += op.quantity;
     g.pages.push(...op.pages);
     g.basis.push(op.basis);
-    surfaceGroups.set(key2, g);
+    surfaceGroups.set(key, g);
   }
   for (const g of surfaceGroups.values()) {
     add(g.pages[0], g.sourceCode, g.family, g.sourceDescription, g.quantity, g.unit, g.basis.join(" | "));
     operations2.at(-1).pages = [...new Set(g.pages)];
   }
   for (const page of pages) {
-    const text = textOf4(page);
-    if (!text) continue;
+    const text2 = textOf4(page);
+    if (!text2) continue;
     const spans = page.native_text_evidence.spans;
     const start = operations2.length;
     try {
-      if (/SECTIONS \/ STAIR \/ FINISH DETAILS/.test(text)) {
+      if (/SECTIONS \/ STAIR \/ FINISH DETAILS/.test(text2)) {
         const row = (pattern) => {
           const anchor = unique4(spans.filter((s) => pattern.test(s.text)), "explicit stair detail label");
           return { label: anchor.text, text: band3(spans, anchor.y).filter((s) => s !== anchor).map((s) => s.text).join(" ") };
@@ -4209,7 +3304,7 @@ function nativePdfServiceOperations(pages, details) {
       if (screed.length) {
         const rule = unique4(screed, "net screed convention").text, m = rule.match(/^([A-Z]+\d+) screed: (\d+(?:\.\d+)?) mm/);
         add(page.pageNumber, m[1], "screed", "Floor screed " + m[2] + " mm", details.flatMap((d) => d.rooms).reduce((s, r) => s + r.floor_area, 0) * Number(m[2]) / 1e3, "m3", rule + "; sum of checked net floor areas \xD7 source thickness in metres.");
-        if (!/Skirting: clear room perimeter minus each door width\. Do NOT deduct windows\./.test(text) || !/No skirting along full GL01 glass faces\./.test(text)) throw Error("Skirting measurement convention incomplete");
+        if (!/Skirting: clear room perimeter minus each door width\. Do NOT deduct windows\./.test(text2) || !/No skirting along full GL01 glass faces\./.test(text2)) throw Error("Skirting measurement convention incomplete");
         const groups = /* @__PURE__ */ new Map();
         for (const room of details.flatMap((d) => d.rooms).filter((r) => r.skirting_length > 0)) {
           if (!room.skirting_description) throw Error("Skirting finish unspecified");
@@ -4221,7 +3316,7 @@ function nativePdfServiceOperations(pages, details) {
         }
         for (const [code, g] of groups) add(page.pageNumber, code, "skirting", g.description, g.quantity, "m", "Checked clear room perimeters, minus solid door widths and shared glass faces; wet rooms/upper void excluded; " + g.rooms.join(", "));
       }
-      if (/DOOR SCHEDULE \/ UNIQUE INSTANCES/.test(text) && !declared.openingKinds.has("door")) {
+      if (/DOOR SCHEDULE \/ UNIQUE INSTANCES/.test(text2) && !declared.openingKinds.has("door")) {
         const groups = /* @__PURE__ */ new Map();
         for (const door of details.flatMap((d) => d.source_openings).filter((o) => o.kind === "door")) {
           const g = groups.get(door.type) || { quantity: 0, width: door.width, height: door.height };
@@ -4237,7 +3332,7 @@ function nativePdfServiceOperations(pages, details) {
           operations2.at(-1).replacesMetrics = ["door_count", "internal_door_count", "service_door_count", "entrance_door_count"];
         }
       }
-      if (/WINDOW SCHEDULE \/ UNIQUE INSTANCES/.test(text) && !declared.openingKinds.has("window")) {
+      if (/WINDOW SCHEDULE \/ UNIQUE INSTANCES/.test(text2) && !declared.openingKinds.has("window")) {
         const specification = unique4(spans.filter((s) => /^Powder-coated aluminium double-glazed windows, measured by net scheduled opening area\.$/.test(s.text)), "window material and area convention").text;
         const groups = /* @__PURE__ */ new Map(), seen = /* @__PURE__ */ new Set();
         for (const w of details.flatMap((d) => d.source_openings).filter((o) => o.kind === "window")) {
@@ -4254,8 +3349,8 @@ function nativePdfServiceOperations(pages, details) {
           operations2.at(-1).replacesMetrics = ["window_area", "window_count"];
         }
       }
-      if (/PLUMBING \/ DIMENSIONED PIPE ROUTES/.test(text)) {
-        if (!/All unshown plumbing is excluded/.test(text) || !/Add specified vertical lengths only/.test(pages.map(textOf4).join(" "))) throw Error("Pipe route scope incomplete");
+      if (/PLUMBING \/ DIMENSIONED PIPE ROUTES/.test(text2)) {
+        if (!/All unshown plumbing is excluded/.test(text2) || !/Add specified vertical lengths only/.test(pages.map(textOf4).join(" "))) throw Error("Pipe route scope incomplete");
         const header = unique4(spans.filter((s) => s.text === "System"), "pipe system header"), cols = band3(spans, header.y);
         if (cols.map((s) => s.text).join("|") !== "System|Material|Vertical / equipment rule") throw Error("Unsupported pipe table layout");
         const zones = panels(page, details, header.y), codes = spans.filter((s) => s.y < header.y && Math.abs(s.x - header.x) < 10 && /^[A-Z]+\d+$/.test(s.text));
@@ -4294,7 +3389,7 @@ function nativePdfServiceOperations(pages, details) {
         }
         for (const [description, f] of fixtures) if (!["wc set", "wash basin"].includes(description)) add(page.pageNumber, description.replace(/\s+/g, "-"), "fixture", description, f.value, "nr", f.basis.join("; "));
       }
-      if (/HVAC \/ DIMENSIONED DUCT ROUTES/.test(text)) {
+      if (/HVAC \/ DIMENSIONED DUCT ROUTES/.test(text2)) {
         const header = unique4(spans.filter((s) => s.text === "Code"), "HVAC code header"), cols = band3(spans, header.y);
         if (cols.map((s) => s.text).join("|") !== "Code|Item|Specification / quantity rule") throw Error("Unsupported HVAC schedule");
         const zones = panels(page, details, header.y), rows = spans.filter((s) => s.y < header.y && Math.abs(s.x - header.x) < 10 && /^[A-Z]+\d+$/.test(s.text)), areas = [];
@@ -4305,10 +3400,10 @@ function nativePdfServiceOperations(pages, details) {
             if (Math.abs(Number(size[1]) / 1e3 - Number(size[3])) > 1e-9 || Math.abs(Number(size[2]) / 1e3 - Number(size[4])) > 1e-9) throw Error("Duct size and area formula conflict");
             const labels = zones.flatMap((z) => z.spans.filter((s) => new RegExp(`^${row.text} / \\d+(?:\\.\\d+)?$`).test(s.text)));
             if (!labels.length) throw Error("Measured duct route labels missing");
-            const risers = [...text.matchAll(new RegExp(`([A-Z]+-[A-Z]+\\d+) has an additional (\\d+(?:\\.\\d+)?) m VERTICAL ${row.text} riser`, "g"))];
+            const risers = [...text2.matchAll(new RegExp(`([A-Z]+-[A-Z]+\\d+) has an additional (\\d+(?:\\.\\d+)?) m VERTICAL ${row.text} riser`, "g"))];
             for (const m of risers) if (spans.filter((s) => s.text === m[1]).length !== 1) throw Error("Duct riser instance tag unresolved");
             const length = labels.reduce((s, l) => s + Number(l.text.split(" / ")[1]), 0) + risers.reduce((s, m) => s + Number(m[2]), 0);
-            if (!/All other duct verticals = zero/.test(text)) throw Error("Duct vertical coverage unresolved");
+            if (!/All other duct verticals = zero/.test(text2)) throw Error("Duct vertical coverage unresolved");
             const area3 = 2 * (Number(size[3]) + Number(size[4])) * length;
             areas.push(area3);
             add(page.pageNumber, row.text, "duct-sheet", `${item}; ${size[1]} x ${size[2]} mm GI`, area3, "m2", `${labels.map((s) => s.text).join(" + ")}; ${risers.map((m) => m[0]).join("; ")}; ${rule} Net CL length ${length} m (check only, not an extra priced line).`);
@@ -4337,7 +3432,7 @@ function nativePdfServiceOperations(pages, details) {
           }
         }
       }
-      if (/ELECTRICAL \/ EQUIPMENT COUNTS \/ MEASURED ROUTES/.test(text)) {
+      if (/ELECTRICAL \/ EQUIPMENT COUNTS \/ MEASURED ROUTES/.test(text2)) {
         const header = unique4([...new Set(spans.filter((s) => s.text === "Room").map((s) => s.y))], "electrical matrix header y"), cols = band3(spans, header);
         if (cols.length !== 8 || cols[0].text !== "Room" || cols[4].text !== "Room") throw Error("Unsupported electrical matrix columns");
         const matrixSpans = spans.filter((s) => s.x >= cols[0].x - 10), roomTags = new Set(details.flatMap((d) => d.rooms.map((r) => r.tag))), rows = matrixSpans.filter((s) => s.y < header && roomTags.has(s.text) && [cols[0], cols[4]].some((c) => Math.abs(s.x - c.x) < 10)), seen = /* @__PURE__ */ new Set(), totals = /* @__PURE__ */ new Map();
@@ -4357,16 +3452,16 @@ function nativePdfServiceOperations(pages, details) {
         }
         if (seen.size !== roomTags.size) throw Error("Electrical matrix floor coverage incomplete");
         for (const [code, count] of totals) {
-          const label = unique4([...text.matchAll(new RegExp(`\\b${code}:\\s*([^;.]+)[;.]`, "g"))], "electrical matrix legend")[1];
+          const label = unique4([...text2.matchAll(new RegExp(`\\b${code}:\\s*([^;.]+)[;.]`, "g"))], "electrical matrix legend")[1];
           if (/twin socket points/i.test(label)) continue;
           add(page.pageNumber, code, "electrical", label, count, "nr", "Complete unique room equipment matrix; counts, not watts", /LED light fittings/i.test(label) ? "light_count" : null);
         }
-        const switches = unique4([...text.matchAll(/\b([A-Z]+\d+) light switches: (\d+) per occupied room except each corridor has (\d+)\. None at ([A-Z]+\d+)\./g)], "switch quantity rule");
-        const emergency = unique4([...text.matchAll(/\b([A-Z]+\d+) emergency lights: (\d+) per corridor \+ (\d+) per core\./g)], "emergency-light rule");
-        const exits = unique4([...text.matchAll(/\b([A-Z]+\d+) exit signs: (\d+) per level\./g)], "exit-sign rule");
+        const switches = unique4([...text2.matchAll(/\b([A-Z]+\d+) light switches: (\d+) per occupied room except each corridor has (\d+)\. None at ([A-Z]+\d+)\./g)], "switch quantity rule");
+        const emergency = unique4([...text2.matchAll(/\b([A-Z]+\d+) emergency lights: (\d+) per corridor \+ (\d+) per core\./g)], "emergency-light rule");
+        const exits = unique4([...text2.matchAll(/\b([A-Z]+\d+) exit signs: (\d+) per level\./g)], "exit-sign rule");
         if (corridors !== details.length || cores !== details.length || !details.some((d) => d.rooms.some((r) => r.tag === switches[4] && r.floor_code === "VOID"))) throw Error("Electrical room-derived scope unresolved");
         for (const [m, description, qty] of [[switches, "light switches", Number(switches[2]) * (roomCount - corridors) + Number(switches[3]) * corridors], [emergency, "emergency lights", Number(emergency[2]) * corridors + Number(emergency[3]) * cores], [exits, "exit signs", Number(exits[2]) * details.length]]) add(page.pageNumber, m[1], "electrical", description, qty, "nr", m[0]);
-        const riser = unique4([...text.matchAll(/Every FIRST route adds one (\d+(?:\.\d+)?) m riser; ground adds none\./g)], "electrical route riser");
+        const riser = unique4([...text2.matchAll(/Every FIRST route adds one (\d+(?:\.\d+)?) m riser; ground adds none\./g)], "electrical route riser");
         const zones = panels(page, details, header), codes = [...new Set(zones.flatMap((z) => z.spans.flatMap((s) => s.text.match(/^([A-Z]+\d+) \/ \d+(?:\.\d+)?$/)?.[1] || [])))];
         for (const code of codes) {
           const definition = unique4(spans.filter((s) => s.text.startsWith(code + ": ")), "electrical route definition").text, labels = zones.flatMap((z) => z.spans.filter((s) => s.text.startsWith(code + " / ")));
@@ -4411,8 +3506,8 @@ function nativePdfDocumentCalculations(pages, review, validate2) {
   if (convention.length === 1) {
     const terms = [];
     let valid2 = true;
-    for (const [key2, label] of [["first_slab_volume", "First"], ["roof_slab_volume", "Roof"]]) {
-      const candidates = (review.calculations || []).filter((c2) => c2.key === key2), thicknesses = texts.filter((p) => /All dimensions (?:in|are) metres/i.test(p.text)).flatMap((p) => [...p.text.matchAll(new RegExp(`\\b${label} slab:\\s*(\\d*\\.\\d+|\\d+)\\s*;\\s*omit\\s+(\\d+(?:\\.\\d+)?)\\s*x\\s*(\\d+(?:\\.\\d+)?)\\s+(?:stair void|terrace)\\b`, "gi"))].map((m) => ({ value: Number(m[1]), omit: [Number(m[2]), Number(m[3])].sort((a, b) => a - b), page: p.page, evidence: m[0] })));
+    for (const [key, label] of [["first_slab_volume", "First"], ["roof_slab_volume", "Roof"]]) {
+      const candidates = (review.calculations || []).filter((c2) => c2.key === key), thicknesses = texts.filter((p) => /All dimensions (?:in|are) metres/i.test(p.text)).flatMap((p) => [...p.text.matchAll(new RegExp(`\\b${label} slab:\\s*(\\d*\\.\\d+|\\d+)\\s*;\\s*omit\\s+(\\d+(?:\\.\\d+)?)\\s*x\\s*(\\d+(?:\\.\\d+)?)\\s+(?:stair void|terrace)\\b`, "gi"))].map((m) => ({ value: Number(m[1]), omit: [Number(m[2]), Number(m[3])].sort((a, b) => a - b), page: p.page, evidence: m[0] })));
       if (candidates.length !== 1 || thicknesses.length !== 1 || !(thicknesses[0].value > 0)) {
         valid2 = false;
         break;
@@ -4446,7 +3541,7 @@ function nativePdfDocumentCalculations(pages, review, validate2) {
           valid2 = false;
           break;
         }
-        terms.push({ ...term2, id: `native-soffit:${key2}:${term2.id}`, factors: remaining.map((f) => ({ ...f, pages: [.../* @__PURE__ */ new Set([...f.pages, t.page, convention[0].page])], evidence: `${f.evidence}; original source ${t.evidence}; envelope ${uniqueEnvelopes[0].join(" x ")} m` })) });
+        terms.push({ ...term2, id: `native-soffit:${key}:${term2.id}`, factors: remaining.map((f) => ({ ...f, pages: [.../* @__PURE__ */ new Set([...f.pages, t.page, convention[0].page])], evidence: `${f.evidence}; original source ${t.evidence}; envelope ${uniqueEnvelopes[0].join(" x ")} m` })) });
       }
     }
     if (valid2 && terms.length) calculations.push({ key: "slab_formwork_area", scope_id: "project", terms, evidence: `Source suspended first/roof slab volume operands divided by their explicit source thickness; source page ${convention[0].page}: slab soffit includes beam undersides. Full original volume calculations and remaining area units validated; beam strips are not added again. Source operand transcription still requires review.` });
@@ -4458,7 +3553,7 @@ function nativePdfDocumentCalculations(pages, review, validate2) {
     coordinated_details: coordinated.details,
     source_operations: services2.operations,
     coordinated_identities: [...coordinated.calculations, ...supplementary.calculations].map((c) => [c.key, c.scope_id]),
-    coordinated_complete_keys: [...supplementary.calculations.map((c) => c.key), ...[...new Set(coordinated.calculations.map((c) => c.key))].filter((key2) => coordinated.details.every((d) => coordinated.calculations.some((c) => c.key === key2 && c.scope_id === d.scope)))]
+    coordinated_complete_keys: [...supplementary.calculations.map((c) => c.key), ...[...new Set(coordinated.calculations.map((c) => c.key))].filter((key) => coordinated.details.every((d) => coordinated.calculations.some((c) => c.key === key && c.scope_id === d.scope)))]
   };
 }
 
@@ -4470,15 +3565,15 @@ var words = (s) => String(s || "").toLowerCase().replace(/^[a-z]{1,4}[-_]?\d{1,4
 function buildNativePdfSourceBasis(pages, normalizeScope) {
   const floors = pages.filter((p) => p.page_evidence?.kind === "floor_plan"), native = nativeOpeningEvidence(pages, normalizeScope), sections = /* @__PURE__ */ new Map();
   for (const p of pages.filter((p2) => p2.page_evidence?.kind === "specification" && p2.native_text_evidence?.status === "readable")) {
-    const text = [...p.native_text_evidence.spans].sort((a, b) => b.y - a.y || a.x - b.x).map((s) => s.text).join(" "), headers2 = [...text.matchAll(/\b([A-Z][A-Z ]{2,30}):\s*/g)];
+    const text2 = [...p.native_text_evidence.spans].sort((a, b) => b.y - a.y || a.x - b.x).map((s) => s.text).join(" "), headers2 = [...text2.matchAll(/\b([A-Z][A-Z ]{2,30}):\s*/g)];
     for (let i = 0; i < headers2.length; i++) {
-      const key2 = headers2[i][1].trim(), value = text.slice(headers2[i].index + headers2[i][0].length, headers2[i + 1]?.index ?? text.length).trim();
-      if (!sections.has(key2)) sections.set(key2, []);
-      sections.get(key2).push({ text: value, page: p.pageNumber });
+      const key = headers2[i][1].trim(), value = text2.slice(headers2[i].index + headers2[i][0].length, headers2[i + 1]?.index ?? text2.length).trim();
+      if (!sections.has(key)) sections.set(key, []);
+      sections.get(key).push({ text: value, page: p.pageNumber });
     }
   }
-  const get = (key2) => {
-    const rows = sections.get(key2) || [];
+  const get = (key) => {
+    const rows = sections.get(key) || [];
     return rows.length && new Set(rows.map((r) => r.text)).size === 1 ? { text: rows[0].text, pages: rows.map((r) => r.page) } : null;
   };
   const dimension2 = (section, regex) => {
@@ -4524,10 +3619,10 @@ function buildNativePdfSourceBasis(pages, normalizeScope) {
     }
   }
   if (ceilingRuleKnown) rules.gypsum_exclusions_confirmed = source(true, ceilings.pages, ceilings.text);
-  const wetNames = wet?.text.split(/\.\s+/)[0].match(/\b[A-Z]{1,4}[-_]?\d{1,4}\b/g) || [], geometry2 = [], basis = { floors: [], rules, exclusions: [], notes: "Native calibrated graph and explicitly recognized source rules; provisional, source review required." };
+  const wetNames = wet?.text.split(/\.\s+/)[0].match(/\b[A-Z]{1,4}[-_]?\d{1,4}\b/g) || [], geometry = [], basis = { floors: [], rules, exclusions: [], notes: "Native calibrated graph and explicitly recognized source rules; provisional, source review required." };
   for (const p of floors) {
     const scope2 = normalizeScope(p.page_evidence.scope_id), schedule = native.claims.length ? native.schedules.find((s) => s.scope_id === scope2) : null, measured = measureNativeWallFloor(p, schedule);
-    geometry2.push(measured.audit);
+    geometry.push(measured.audit);
     const f = {
       scope_id: scope2,
       walls_complete: measured.status === "provisional",
@@ -4576,7 +3671,7 @@ function buildNativePdfSourceBasis(pages, normalizeScope) {
   }
   const wetResolved = basis.floors.flatMap((f) => f.wet_rooms.map((r) => r.id.toLowerCase()));
   if (wetNames.some((tag) => wetResolved.filter((t) => t === tag.toLowerCase()).length !== 1)) basis.floors.forEach((f) => f.wet_rooms_complete = false);
-  return { basis, source_pages: [.../* @__PURE__ */ new Set([...floors.flatMap((p) => [p.pageNumber, ...p.document_area_source_pages || []]), ...native.schedules.flatMap((s) => s.dimension_basis?.pages || []), ...[...sections.values()].flatMap((a) => a.map((r) => r.page))])], geometry: geometry2 };
+  return { basis, source_pages: [.../* @__PURE__ */ new Set([...floors.flatMap((p) => [p.pageNumber, ...p.document_area_source_pages || []]), ...native.schedules.flatMap((s) => s.dimension_basis?.pages || []), ...[...sections.values()].flatMap((a) => a.map((r) => r.page))])], geometry };
 }
 
 // src/lib/pdfMeasurementCalculations.mjs
@@ -4653,10 +3748,10 @@ function reconcilePdfSoffitCoverage(calculation, notes, metricUnits, availablePa
   }
 }
 function calculatePdfMeasurement(calculation, metricUnits, availablePages) {
-  const { key: key2, scope_id: scope2, evidence, terms } = calculation || {};
-  const expected = units[metricUnits[key2]];
+  const { key, scope_id: scope2, evidence, terms } = calculation || {};
+  const expected = units[metricUnits[key]];
   if (!expected || !nonempty(scope2) || !nonempty(evidence)) throw Error("Missing metric, scope or measurement evidence");
-  if (PDF_AREA_KEYS.includes(key2)) throw Error("Floor and finish areas require audited space geometry");
+  if (PDF_AREA_KEYS.includes(key)) throw Error("Floor and finish areas require audited space geometry");
   if (!Array.isArray(terms) || !terms.length || terms.length > 500) throw Error("Missing or excessive calculation terms");
   let value = 0;
   const pages = /* @__PURE__ */ new Set(), termIds = /* @__PURE__ */ new Set(), basis = [];
@@ -4690,14 +3785,14 @@ function calculatePdfMeasurement(calculation, metricUnits, availablePages) {
   }
   if (!Number.isFinite(value) || value < -1e-8 || value > 1e12) throw Error("Invalid net measurement");
   value = Math.max(0, value);
-  if (metricUnits[key2] === "nr" && !Number.isInteger(value)) throw Error("Fractional counted result");
+  if (metricUnits[key] === "nr" && !Number.isInteger(value)) throw Error("Fractional counted result");
   return {
-    key: key2,
+    key,
     scope_id: scope2,
     value,
-    unit: metricUnits[key2],
+    unit: metricUnits[key],
     pages: [...pages].sort((a, b) => a - b),
-    evidence: `${evidence}. Independently calculated: ${basis.join("; ")} = ${value} ${metricUnits[key2]}. Source transcription requires review.`
+    evidence: `${evidence}. Independently calculated: ${basis.join("; ")} = ${value} ${metricUnits[key]}. Source transcription requires review.`
   };
 }
 function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) => String(s).trim().toLowerCase()) {
@@ -4764,7 +3859,7 @@ function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) =>
   const nativeKeys = /* @__PURE__ */ new Set([...nativeResult?.calculations.map((c) => c.key) || [], ...nativeDocument.calculations.map((c) => c.key)]);
   const derivedKeys = /* @__PURE__ */ new Set([...sourceResult?.calculations.map((c) => c.key) || [], ...nativeKeys]);
   const allCalculations = [...(review.calculations || []).filter((c) => !derivedKeys.has(c.key)), ...(sourceResult?.calculations || []).filter((c) => !nativeKeys.has(c.key)), ...nativeResult?.calculations || [], ...nativeDocument.calculations];
-  for (const key2 of sourceResult?.blocked || []) if (!nativeKeys.has(key2)) blocked.add(key2);
+  for (const key of sourceResult?.blocked || []) if (!nativeKeys.has(key)) blocked.add(key);
   warnings.push(...(sourceResult?.issues || []).map((s) => `PDF source measurement withheld: ${s}`));
   warnings.push(...(nativeResult?.issues || []).map((s) => `PDF native source measurement pending: ${s}`));
   warnings.push(...nativeDocument.issues.map((s) => `PDF native document measurement pending: ${s}`));
@@ -4776,7 +3871,7 @@ function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) =>
       const reconciled = reconcilePdfSoffitCoverage(c, review.notes, metricUnits, available);
       assertPdfSoffitCoverage(reconciled.calculation, review.notes);
       const claim2 = calculatePdfMeasurement(reconciled.calculation, metricUnits, available);
-      if (nativeDocument.coordinated_identities?.some(([key2, scope2]) => key2 === claim2.key && normalizeScope(scope2) === normalizeScope(claim2.scope_id))) claim2.native_coordinated = true;
+      if (nativeDocument.coordinated_identities?.some(([key, scope2]) => key === claim2.key && normalizeScope(scope2) === normalizeScope(claim2.scope_id))) claim2.native_coordinated = true;
       if (reconciled.adjustment) {
         claim2.pages = [.../* @__PURE__ */ new Set([...claim2.pages, ...reconciled.adjustment.source_pages])].sort((a, b) => a - b);
         adjustments.push(reconciled.adjustment);
@@ -4788,13 +3883,13 @@ function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) =>
       warnings.push(`PDF document calculation ${c.key} withheld: ${error.message}`);
     }
   }
-  for (const key2 of blocked) {
+  for (const key of blocked) {
     for (const p of pages) {
-      if (Object.hasOwn(p, key2)) p[key2] = 0;
+      if (Object.hasOwn(p, key)) p[key] = 0;
       p.page_evidence?.quantities.splice(
         0,
         p.page_evidence.quantities.length,
-        ...p.page_evidence.quantities.filter((q) => q.key !== key2)
+        ...p.page_evidence.quantities.filter((q) => q.key !== key)
       );
     }
   }
@@ -4823,7 +3918,7 @@ function applyPdfDocumentReview(inputPages, metricUnits, normalizeScope = (s) =>
 function pdfCatalogScope(description) {
   const d = String(description || "").toLowerCase().replace(/[-‐‑–—]/g, " ").replace(/\s+/g, " ").trim();
   if (/\b(?:disposal|haul|backfill|pool|tank|raft|pile|stairs?|staircase)\b/.test(d)) return null;
-  const match = (key2, unit5, extra = {}) => ({ key: key2, unit: unit5, ...extra });
+  const match = (key, unit5, extra = {}) => ({ key, unit: unit5, ...extra });
   if (/\bformwork\b/.test(d)) {
     if (/\bslabs?\b/.test(d) && (!/\bbeams?\b/.test(d) || /\bsoffit\b/.test(d))) return match("slab_formwork_area", "m2");
     if (/\bbeams?\b/.test(d) && !/\b(?:slabs?|soffits?|undersides?|bottoms?)\b/.test(d)) return match("beam_formwork_area", "m2");
@@ -4870,7 +3965,7 @@ function pdfCatalogThicknessMatches(metric, rows) {
 }
 function pdfCatalogHeightMatches(metric, rows, description) {
   if (!["wet_wall_tile_area", "wet_wall_waterproofing_area"].includes(metric.key)) return true;
-  const text = String(description || "").toLowerCase(), dimension2 = text.match(/\b(\d+(?:\.\d+)?)\s*(mm|m)\b/);
+  const text2 = String(description || "").toLowerCase(), dimension2 = text2.match(/\b(\d+(?:\.\d+)?)\s*(mm|m)\b/);
   if (!dimension2) return true;
   const height = Number(dimension2[1]) * (dimension2[2] === "mm" ? 1e-3 : 1), kind = metric.key === "wet_wall_tile_area" ? "tile" : "waterproofing";
   const operands = rows.flatMap((r) => [...String(r.evidence || "").matchAll(/\*\s*(\d+(?:\.\d+)?)\s+m\s*\[WET ROOMS:\s*([^\]]*height[^\]]*)\]/gi)].filter((m) => m[2].toLowerCase().includes(kind)).map((m) => Number(m[1])));
@@ -4881,12 +3976,12 @@ function pdfCatalogHeightMatches(metric, rows, description) {
 var concrete = [["pcc_volume", /\b(?:pcc|blinding)\b/], ["foundation_volume", /\b(?:foundations?|footings?)\b/], ["pedestal_volume", /\bpedestals?\b/], ["column_volume", /\bcolumns?\b/], ["beam_volume", /\bbeams?\b/], ["ground_slab_volume", /\b(?:ground|gf)(?: floor)? slabs?\b/], ["first_slab_volume", /\b(?:first|ff)(?: floor)? slabs?\b/], ["roof_slab_volume", /\broof slabs?\b/]];
 var normal = (s) => String(s || "").toLowerCase().replace(/[‐‑–—-]/g, " ").replace(/\s+/g, " ").trim();
 var unique5 = (xs) => [...new Set(xs)];
-function clauses(text) {
-  return String(text).split(/;|\n|\.(?=\s+[A-Z])/).map((s) => s.trim()).filter(Boolean);
+function clauses(text2) {
+  return String(text2).split(/;|\n|\.(?=\s+[A-Z])/).map((s) => s.trim()).filter(Boolean);
 }
-function factsIn(text, page, scope2 = "project") {
+function factsIn(text2, page, scope2 = "project") {
   const facts = [];
-  for (const quote of clauses(text)) {
+  for (const quote of clauses(text2)) {
     if (quote.length > 2e3) continue;
     const d = normal(quote), local = d.match(/\b(gf|ff|ground floor|first floor|floor\s*-?\d+)\b/);
     const scopeId = local ? ["gf", "ground floor"].includes(local[1]) ? "floor:0" : ["ff", "first floor"].includes(local[1]) ? "floor:1" : local[1].replace(/floor\s*/, "floor:") : scope2;
@@ -4895,26 +3990,26 @@ function factsIn(text, page, scope2 = "project") {
     };
     if (/\b(?:not|unless|option|optional|alternative|except|excluding)\b/.test(d)) continue;
     for (const m of d.matchAll(/\b(external|internal) wall\s+[a-z]+\d+\s*=\s*(\d+(?:\.\d+)?)\s*mm\s+(cmu|concrete|aac|clay|brick)\b/g)) {
-      const key2 = m[1] + "_block_area";
-      add(key2, "thickness_mm", [Number(m[2])]);
-      add(key2, "block_material", [m[3] === "cmu" ? "concrete" : m[3] === "brick" ? "clay" : m[3]]);
+      const key = m[1] + "_block_area";
+      add(key, "thickness_mm", [Number(m[2])]);
+      add(key, "block_material", [m[3] === "cmu" ? "concrete" : m[3] === "brick" ? "clay" : m[3]]);
     }
-    for (const [word, key2] of [["external", "external_block_area"], ["exterior", "external_block_area"], ["internal", "internal_block_area"], ["interior", "internal_block_area"]]) {
+    for (const [word, key] of [["external", "external_block_area"], ["exterior", "external_block_area"], ["internal", "internal_block_area"], ["interior", "internal_block_area"]]) {
       if (/\b(?:height|ffl)\b|\b(?:above|below)\b/.test(d)) continue;
       const material2 = "(?:autoclaved aerated concrete|hollow concrete|solid concrete|aac|concrete|clay|brick)";
       const pattern = new RegExp(`\\b${word}\\s*(?:${material2}\\s+)?(?:walls?|partitions?|blockwork|masonry)?\\s*[:=]?\\s*(?:${material2}\\s+)?(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\b`, "g");
-      add(key2, "thickness_mm", [...d.matchAll(pattern)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
+      add(key, "thickness_mm", [...d.matchAll(pattern)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
       const reversed = new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(mm|cm|m)\\s+(?:thick\\s+)?${word}\\s+(?:${material2}\\s+)?(?:walls?|partitions?|blockwork|masonry)\\b`, "g");
-      add(key2, "thickness_mm", [...d.matchAll(reversed)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
+      add(key, "thickness_mm", [...d.matchAll(reversed)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2]]));
     }
     const grades = [...d.matchAll(/\bc\s*(\d{1,3})(?:\s*\/\s*(\d{1,3}))?\b/g)].map((m) => `C${m[1]}${m[2] ? "/" + m[2] : ""}`);
-    for (const [key2, re] of concrete) if (re.test(d)) add(key2, "concrete_grade", grades);
-    if (/\ball\s+(?:structural\s+)?concrete\b/.test(d) && !/\bexcept\b/.test(d)) for (const [key2] of concrete.filter(([k]) => k !== "pcc_volume")) add(key2, "concrete_grade", grades);
-    for (const [key2, re] of [["water_pipe_length", /\b(?:water supply|domestic water|water pipes?)\b/], ["waste_pipe_length", /\b(?:waste|drainage|soil)\s*(?:water\s*)?pipes?\b/]]) if (re.test(d)) {
+    for (const [key, re] of concrete) if (re.test(d)) add(key, "concrete_grade", grades);
+    if (/\ball\s+(?:structural\s+)?concrete\b/.test(d) && !/\bexcept\b/.test(d)) for (const [key] of concrete.filter(([k]) => k !== "pcc_volume")) add(key, "concrete_grade", grades);
+    for (const [key, re] of [["water_pipe_length", /\b(?:water supply|domestic water|water pipes?)\b/], ["waste_pipe_length", /\b(?:waste|drainage|soil)\s*(?:water\s*)?pipes?\b/]]) if (re.test(d)) {
       const dn = [...d.matchAll(/(?:\b(?:dn|dia(?:meter)?|od)\s*[:=]?\s*|[ø⌀]\s*)(\d+(?:\.\d+)?)\s*(mm|cm|m)?\b/g)].map((m) => Number(m[1]) * { mm: 1, cm: 10, m: 1e3 }[m[2] || "mm"]);
       const series = [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:\/|and|,)\s*(\d+(?:\.\d+)?)\s*mm\b/g)].flatMap((m) => [Number(m[1]), Number(m[2])]);
-      add(key2, "diameter_mm", series.length ? series : dn.length ? dn : [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*mm\b/g)].map((m) => Number(m[1])));
-      add(key2, "pipe_material", [...d.matchAll(/\b(ppr|cpvc|u?pvc|hdpe|copper|pex|steel|galvanized)\b/g)].map((m) => m[1].toUpperCase()));
+      add(key, "diameter_mm", series.length ? series : dn.length ? dn : [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*mm\b/g)].map((m) => Number(m[1])));
+      add(key, "pipe_material", [...d.matchAll(/\b(ppr|cpvc|u?pvc|hdpe|copper|pex|steel|galvanized)\b/g)].map((m) => m[1].toUpperCase()));
     }
     if (/\b(?:ac|air conditioning|refrigerant)\b/.test(d) && /\b(?:pipes?|pipework|piping|line sets?)\b/.test(d)) {
       add("ac_pipe_length", "pipe_material", [...d.matchAll(/\b(copper|steel|aluminium|aluminum|ppr|u?pvc|hdpe)\b/g)].map((m) => m[1].toUpperCase()));
@@ -4927,21 +4022,21 @@ function factsIn(text, page, scope2 = "project") {
       if (/\b(?:dn|diameter|dia|od)\b|\d\s*mm|[øØ]/.test(detail)) add("ac_pipe_length", "unparsed_pipe_detail", ["present"]);
     }
     if (/\b(?:ac|air conditioning|air conditioner|split)\b/.test(d)) add("ac_count", "capacity_tr", [...d.matchAll(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/g)].map((m) => Number(m[1])));
-    for (const [key2, re] of [["internal_block_area", /\b(?:internal|interior|partition)\b/], ["external_block_area", /\b(?:external|exterior)\b/]]) if (re.test(d) && /\b(?:blockwork|blocks?|masonry|walls?)\b/.test(d)) {
+    for (const [key, re] of [["internal_block_area", /\b(?:internal|interior|partition)\b/], ["external_block_area", /\b(?:external|exterior)\b/]]) if (re.test(d) && /\b(?:blockwork|blocks?|masonry|walls?)\b/.test(d)) {
       const material2 = /\b(?:aac|autoclaved)\b/.test(d) ? "aac" : /\b(?:clay|brick)\b/.test(d) ? "clay" : /\bconcrete\b/.test(d) ? "concrete" : null;
-      if (material2) add(key2, "block_material", [material2]);
+      if (material2) add(key, "block_material", [material2]);
     }
     if (/\b(?:wood(?:en)?|timber|parquet)\b/.test(d) && /\bfloor/.test(d)) {
       const system = /\bengineered\b/.test(d) ? "engineered_wood" : /\bsolid\b/.test(d) ? "solid_wood" : /\blaminate\b/.test(d) ? "laminate" : null;
       if (system) add("wood_floor_area", "floor_system", [system]);
     }
-    for (const [key2, re] of [["terrace_floor_area", /\bterrace\b/], ["wet_wall_tile_area", /\bwet\s+(?:area\s+)?wall\b/], ["backsplash_area", /\bbacksplash\b/]]) if (re.test(d) && /\b(?:tile|tiling|ceramic|porcelain|marble|granite)\b/.test(d)) {
+    for (const [key, re] of [["terrace_floor_area", /\bterrace\b/], ["wet_wall_tile_area", /\bwet\s+(?:area\s+)?wall\b/], ["backsplash_area", /\bbacksplash\b/]]) if (re.test(d) && /\b(?:tile|tiling|ceramic|porcelain|marble|granite)\b/.test(d)) {
       const material2 = ["porcelain", "marble", "granite", "ceramic"].find((s) => new RegExp("\\b" + s + "\\b").test(d));
-      if (material2) add(key2, "tile_material", [material2]);
+      if (material2) add(key, "tile_material", [material2]);
     }
-    for (const [key2, re] of [["roof_waterproofing_area", /\broof\b/], ["terrace_waterproofing_area", /\bterrace\b/], ["wet_floor_waterproofing_area", /\bwet\s+(?:area\s+)?floor\b/], ["wet_wall_waterproofing_area", /\bwet\s+(?:area\s+)?wall\b/]]) if (re.test(d) && /\b(?:waterproof|membrane)/.test(d)) {
+    for (const [key, re] of [["roof_waterproofing_area", /\broof\b/], ["terrace_waterproofing_area", /\bterrace\b/], ["wet_floor_waterproofing_area", /\bwet\s+(?:area\s+)?floor\b/], ["wet_wall_waterproofing_area", /\bwet\s+(?:area\s+)?wall\b/]]) if (re.test(d) && /\b(?:waterproof|membrane)/.test(d)) {
       const system = /\b(?:polyurethane|pu)\b/.test(d) ? "polyurethane" : /\bcementitious\b/.test(d) ? "cementitious" : /\b(?:torch|bitumen|bituminous)\b/.test(d) ? "torch_bitumen" : null;
-      if (system) add(key2, "waterproofing_system", [system]);
+      if (system) add(key, "waterproofing_system", [system]);
     }
     if (/\bkitchen\b/.test(d) && /\bcabinet/.test(d)) {
       const material2 = /\balumini?um\b/.test(d) ? "aluminium" : /\bmdf\b/.test(d) ? "mdf" : /\bplywood\b/.test(d) ? "plywood" : null;
@@ -4959,12 +4054,12 @@ function readPdfSourceSpecifications(takeoff) {
   let native = false;
   for (const p of pages) {
     if (["boq", "estimate", "quotation", "cost_schedule"].includes(p.page_evidence?.kind)) continue;
-    const text = p.native_text_evidence?.status === "readable" ? p.native_text_evidence : p.native_plan_text?.status === "readable" ? p.native_plan_text : null;
-    if (!text) continue;
+    const text2 = p.native_text_evidence?.status === "readable" ? p.native_text_evidence : p.native_plan_text?.status === "readable" ? p.native_plan_text : null;
+    if (!text2) continue;
     native = true;
-    if (!Number.isInteger(p.pageNumber) || p.pageNumber < 1 || !Array.isArray(text.spans) || text.spans.length > 1e4) continue;
+    if (!Number.isInteger(p.pageNumber) || p.pageNumber < 1 || !Array.isArray(text2.spans) || text2.spans.length > 1e4) continue;
     const bands = [];
-    const spans = text.spans.filter((s) => typeof s.text === "string" && Number.isFinite(s.y) && Number.isFinite(s.x)).sort((a, b) => b.y - a.y || a.x - b.x);
+    const spans = text2.spans.filter((s) => typeof s.text === "string" && Number.isFinite(s.y) && Number.isFinite(s.x)).sort((a, b) => b.y - a.y || a.x - b.x);
     for (const s of spans) {
       let band5 = bands.at(-1);
       if (!band5 || Math.abs(band5.y - s.y) >= 1.5) {
@@ -4988,29 +4083,29 @@ function readPdfSourceSpecifications(takeoff) {
   }
   return [...new Map(facts.map((f) => [JSON.stringify([f.metric, f.property, f.value, f.page, f.scope_id, f.quote]), f])).values()];
 }
-function valueFor(facts, key2, property, takeoff) {
-  const rows = facts.filter((f) => f.metric === key2 && f.property === property), found = unique5(rows.map((f) => f.value));
+function valueFor(facts, key, property, takeoff) {
+  const rows = facts.filter((f) => f.metric === key && f.property === property), found = unique5(rows.map((f) => f.value));
   if (found.length !== 1) return null;
   if (rows.some((f) => f.scope_id === "project")) return found[0];
-  const intrinsic = { ground_slab_volume: "floor:0", first_slab_volume: "floor:1", roof_slab_volume: "roof" }[key2];
+  const intrinsic = { ground_slab_volume: "floor:0", first_slab_volume: "floor:1", roof_slab_volume: "roof" }[key];
   const scopes = intrinsic ? [intrinsic] : unique5((takeoff?.pdf_analysis?.selected_floor_pages || []).map((p) => p.scope));
   return scopes.length && scopes.every((s) => rows.some((f) => f.scope_id === s)) ? found[0] : null;
 }
-function compatible(facts, key2, constraints, takeoff) {
-  return Object.entries(constraints).every(([p, v]) => valueFor(facts, key2, p, takeoff) === v);
+function compatible(facts, key, constraints, takeoff) {
+  return Object.entries(constraints).every(([p, v]) => valueFor(facts, key, p, takeoff) === v);
 }
-function resolvedPdfSpecifications(takeoff, key2, facts = readPdfSourceSpecifications(takeoff)) {
-  return unique5(facts.filter((f) => f.metric === key2).map((f) => f.property)).flatMap((property) => {
-    const value = valueFor(facts, key2, property, takeoff);
-    return value === null ? [] : [{ property, value, pages: unique5(facts.filter((f) => f.metric === key2 && f.property === property).map((f) => f.page)) }];
+function resolvedPdfSpecifications(takeoff, key, facts = readPdfSourceSpecifications(takeoff)) {
+  return unique5(facts.filter((f) => f.metric === key).map((f) => f.property)).flatMap((property) => {
+    const value = valueFor(facts, key, property, takeoff);
+    return value === null ? [] : [{ property, value, pages: unique5(facts.filter((f) => f.metric === key && f.property === property).map((f) => f.page)) }];
   });
 }
 function pdfSpecificationConflicts(facts) {
   const groups = /* @__PURE__ */ new Map();
   for (const f of facts) {
-    const key2 = f.metric + "|" + f.property;
-    if (!groups.has(key2)) groups.set(key2, []);
-    groups.get(key2).push(f);
+    const key = f.metric + "|" + f.property;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
   }
   return [...groups.values()].filter((rows) => unique5(rows.map((f) => f.value)).length > 1).map((rows) => ({ metric: rows[0].metric, property: rows[0].property, values: unique5(rows.map((f) => f.value)), pages: unique5(rows.map((f) => f.page)), reason: "Mixed or conflicting specifications cannot price one aggregate quantity." }));
 }
@@ -5037,10 +4132,10 @@ function sourceSpecificationMetric(description, unit5, takeoff, facts = readPdfS
   }
   if (/\bpipes?\b/.test(d) && /\b(?:water|waste|drainage|soil)\b/.test(d)) {
     const waste = /\b(?:waste|drainage|soil)\b/.test(d), water = /\bwater\b/.test(d) && !waste;
-    const key2 = waste ? "waste_pipe_length" : water ? "water_pipe_length" : null, diameter = d.match(/\b(?:dn\s*)?(\d+(?:\.\d+)?)\s*(mm|cm)?\b/), material2 = d.match(/\b(ppr|u?pvc|hdpe|copper)\b/);
-    if (!key2 || !diameter && !material2) return null;
+    const key = waste ? "waste_pipe_length" : water ? "water_pipe_length" : null, diameter = d.match(/\b(?:dn\s*)?(\d+(?:\.\d+)?)\s*(mm|cm)?\b/), material2 = d.match(/\b(ppr|u?pvc|hdpe|copper)\b/);
+    if (!key || !diameter && !material2) return null;
     const constraints = { ...diameter ? { diameter_mm: Number(diameter[1]) * (diameter[2] === "cm" ? 10 : 1) } : {}, ...material2 ? { pipe_material: material2[1].toUpperCase() } : {} };
-    return compatible(facts, key2, constraints, takeoff) ? finish([key2], "m", constraints) : null;
+    return compatible(facts, key, constraints, takeoff) ? finish([key], "m", constraints) : null;
   }
   if (/\b(?:ac|air conditioning|air conditioner)\b/.test(d) && /\b(?:units?|split)\b/.test(d)) {
     const capacity = d.match(/\b(\d+(?:\.\d+)?)\s*(?:tr|tons?|tonnes?)\b/);
@@ -5056,11 +4151,11 @@ function hasSourceSpecificationScope(description) {
 }
 
 // src/lib/pdfNativePageExtraction.mjs
-var number = (text) => /^\d+(?:\.\d+)?$/.test(String(text).trim()) ? Number(text) : NaN;
-var clean4 = (text) => String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
-var floor = (text) => /^(?:ground|first|second|third|basement|roof)(?: floor)?$|^floor \d+$/i.test(text.trim());
+var number2 = (text2) => /^\d+(?:\.\d+)?$/.test(String(text2).trim()) ? Number(text2) : NaN;
+var clean4 = (text2) => String(text2 || "").trim().toLowerCase().replace(/\s+/g, " ");
+var floor = (text2) => /^(?:ground|first|second|third|basement|roof)(?: floor)?$|^floor \d+$/i.test(text2.trim());
 var zero = { rooms: 0, doors: 0, windows: 0, wall_length: 0, wall_area: 0, floor_area: 0, ceiling_area: 0, door_area: 0, window_area: 0 };
-var claim = (key2, value, unit5, scope2, page, evidence) => ({ key: key2, value, unit: unit5, scope_id: scope2, pages: [page], evidence, native_calculated: true, document_calculated: true });
+var claim = (key, value, unit5, scope2, page, evidence) => ({ key, value, unit: unit5, scope_id: scope2, pages: [page], evidence, native_calculated: true, document_calculated: true });
 function table2(spans, columns) {
   const matches = [];
   for (const anchor of spans) {
@@ -5099,8 +4194,8 @@ var services = /* @__PURE__ */ new Map([
   ["wash basins", ["basin_count", "nr"]]
 ]);
 function fixtureClaims(native, page) {
-  const text = native.spans.map((s) => s.text).join(" ");
-  if (!/\ball unshown plumbing is excluded\b/i.test(text)) throw Error("Fixture schedule completeness unresolved");
+  const text2 = native.spans.map((s) => s.text).join(" ");
+  if (!/\ball unshown plumbing is excluded\b/i.test(text2)) throw Error("Fixture schedule completeness unresolved");
   const rows = native.spans.filter((s) => /^Each (?:of )?[A-Z][A-Z0-9_-]*(?:\s*(?:,|and)\s*[A-Z][A-Z0-9_-]*)*:\s*\d/i.test(s.text.trim()));
   if (!rows.length || rows.length > 200) throw Error("Explicit fixture room rows unavailable");
   if (native.spans.some((s) => !rows.includes(s) && /\d+\s+(?:WC sets?|wash basins?|sinks?|floor drains?|electric water heaters?)\b/i.test(s.text))) throw Error("Unparsed fixture quantity outside the explicit room schedule");
@@ -5114,23 +4209,23 @@ function fixtureClaims(native, page) {
     for (const entry of entries) {
       const cells = entry.match(/^(\d+)\s+(.+)$/);
       if (!cells || !fixtureKeys.has(clean4(cells[2]))) throw Error("Unsupported fixture row");
-      const key2 = fixtureKeys.get(clean4(cells[2])), count = Number(cells[1]);
+      const key = fixtureKeys.get(clean4(cells[2])), count = Number(cells[1]);
       if (!Number.isSafeInteger(count) || count > 1e4) throw Error("Fixture count outside supported range");
-      const identity = key2 || clean4(cells[2]).replace(/s$/, "");
+      const identity = key || clean4(cells[2]).replace(/s$/, "");
       for (const room of rooms) {
         const id = room + "|" + identity;
         if (seen.has(id)) throw Error("Repeated physical fixture row");
         seen.add(id);
       }
-      if (key2) {
-        const items = inventory.get(key2) || [];
+      if (key) {
+        const items = inventory.get(key) || [];
         items.push({ count, rooms, evidence: row.text });
-        inventory.set(key2, items);
+        inventory.set(key, items);
       }
     }
   }
-  return [...inventory].map(([key2, items]) => claim(
-    key2,
+  return [...inventory].map(([key, items]) => claim(
+    key,
     items.reduce((s, r) => s + r.count * r.rooms.length, 0),
     "nr",
     "project",
@@ -5147,25 +4242,25 @@ function serviceClaims(native, page, normalizePdfScope2) {
     const mapping = services.get(clean4(row[0]));
     if (!mapping || seen.has(mapping[0])) throw Error("Unknown or repeated service row");
     seen.add(mapping[0]);
-    const [key2, unit5] = mapping;
+    const [key, unit5] = mapping;
     if (clean4(row[3]) !== unit5) throw Error("Unsupported service unit");
     for (let i = 0; i < 2; i++) {
-      const value = number(row[i + 1]);
+      const value = number2(row[i + 1]);
       if (!Number.isFinite(value) || value < 0 || value > 1e6 || unit5 === "nr" && !Number.isInteger(value)) throw Error("Invalid service quantity");
-      claims.push(claim(key2, value, unit5, scopes[i], page, `Native source table: ${row[0]}; ${t.head.cols[i + 1].text}: ${row[i + 1]} ${unit5}. Material, diameter and capacity are separate source requirements.`));
+      claims.push(claim(key, value, unit5, scopes[i], page, `Native source table: ${row[0]}; ${t.head.cols[i + 1].text}: ${row[i + 1]} ${unit5}. Material, diameter and capacity are separate source requirements.`));
     }
   }
   return claims;
 }
 function barClaims(native, page) {
-  const text = native.spans.map((s) => s.text).join(" ");
-  const formula = [...text.matchAll(/diameter\s*\(mm\)\s*\^\s*2\s*\/\s*(\d+(?:\.\d+)?)\s*kg\/m/gi)];
-  if (formula.length !== 1 || !(Number(formula[0][1]) > 0) || !/sum all rows/i.test(text) || !/(?:only scheduled\s+reinforcement|complete project reinforcement|all project reinforcement)/i.test(text)) throw Error("Complete reinforcement scope/formula required");
+  const text2 = native.spans.map((s) => s.text).join(" ");
+  const formula = [...text2.matchAll(/diameter\s*\(mm\)\s*\^\s*2\s*\/\s*(\d+(?:\.\d+)?)\s*kg\/m/gi)];
+  if (formula.length !== 1 || !(Number(formula[0][1]) > 0) || !/sum all rows/i.test(text2) || !/(?:only scheduled\s+reinforcement|complete project reinforcement|all project reinforcement)/i.test(text2)) throw Error("Complete reinforcement scope/formula required");
   const t = table2(native.spans, [/^element$/, /^dia(?:meter)? mm$/, /^count$/, /^cut length m$/]);
   if (!t.rows.length || t.rows.length > 500) throw Error("Empty/excessive reinforcement table");
   const seen = /* @__PURE__ */ new Set(), terms = [];
   for (const row of t.rows) {
-    const id = clean4(row[0]), [diameter, count, length] = row.slice(1).map(number);
+    const id = clean4(row[0]), [diameter, count, length] = row.slice(1).map(number2);
     if (!id || seen.has(id) || ![diameter, count, length].every((n) => Number.isFinite(n) && n > 0) || !Number.isInteger(count) || diameter > 100 || count > 1e6 || length > 1e6) throw Error("Invalid or repeated reinforcement row");
     seen.add(id);
     terms.push({ id, diameter, count, length, kg: count * length * diameter * diameter / Number(formula[0][1]) });
@@ -5185,7 +4280,7 @@ function extractNativePdfPages(readings, normalizePdfScope2) {
       inherited = null;
       continue;
     }
-    const spans = native.spans, text = spans.map((s) => s.text).join(" ");
+    const spans = native.spans, text2 = spans.map((s) => s.text).join(" ");
     let kind = null, scope2 = "project", quantities = [];
     try {
       const openingHeader = ["id", "type", "width", "height"].every((h) => spans.some((s) => clean4(s.text) === h));
@@ -5199,20 +4294,20 @@ function extractNativePdfPages(readings, normalizePdfScope2) {
         inherited = { page: pageNumber, basis: result.dimension_basis };
       } else {
         inherited = null;
-        if (/\bplumbing\b/i.test(text) && /\ball unshown plumbing is excluded\b/i.test(text)) {
+        if (/\bplumbing\b/i.test(text2) && /\ball unshown plumbing is excluded\b/i.test(text2)) {
           kind = "quantity_schedule";
           quantities = fixtureClaims(native, pageNumber);
-        } else if (/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text)) {
+        } else if (/\bdeclared services schedule\b|\bservices quantity schedule\b/i.test(text2)) {
           kind = "quantity_schedule";
           quantities = serviceClaims(native, pageNumber, normalizePdfScope2);
-        } else if (/\b(?:declared bar schedule|reinforcement schedule)\b/i.test(text)) {
+        } else if (/\b(?:declared bar schedule|reinforcement schedule)\b/i.test(text2)) {
           kind = "quantity_schedule";
           quantities = barClaims(native, pageNumber);
-        } else if (/\b(?:measurement and finishes|construction specifications|finish specifications)\b/i.test(text) && ["WALLS:", "FLOORS:", "CEILINGS:"].filter((s) => text.includes(s)).length >= 2) {
+        } else if (/\b(?:measurement and finishes|construction specifications|finish specifications)\b/i.test(text2) && ["WALLS:", "FLOORS:", "CEILINGS:"].filter((s) => text2.includes(s)).length >= 2) {
           kind = "specification";
         } else throw Error("No fully supported local page contract");
       }
-      const revisions = [...new Set([...text.matchAll(/\bREV(?:ISION)?\s*[:.]?\s*(R?\d+|[A-Z])\b/gi)].map((m) => m[1].toUpperCase()))];
+      const revisions = [...new Set([...text2.matchAll(/\bREV(?:ISION)?\s*[:.]?\s*(R?\d+|[A-Z])\b/gi)].map((m) => m[1].toUpperCase()))];
       if (revisions.length > 1) throw Error("Conflicting native source revisions");
       pages.push({
         ...zero,
@@ -5254,13 +4349,13 @@ function nativePdfFinishLedger(takeoff) {
       if (!(room.floor_area > 0) || !room.floor_description || !room.ceiling_description) return null;
       total += room.floor_area;
       const add = (family2, code, description) => {
-        const key2 = `native-${family2}:${code}`, old = groups.get(key2);
+        const key = `native-${family2}:${code}`, old = groups.get(key);
         if (old && old.sourceDescription !== description) throw Error("Conflicting native finish descriptions");
-        const group = old || { metricKey: key2, family: family2, sourceCode: code, sourceDescription: description, quantity: 0, unit: "m2", pages: [], rooms: [] };
+        const group = old || { metricKey: key, family: family2, sourceCode: code, sourceDescription: description, quantity: 0, unit: "m2", pages: [], rooms: [] };
         group.quantity += room.floor_area;
         group.pages = [.../* @__PURE__ */ new Set([...group.pages, ...room.finish_source_pages])];
         group.rooms.push(room.tag);
-        groups.set(key2, group);
+        groups.set(key, group);
       };
       add("floor", room.floor_code, room.floor_description);
       if (/gypsum/i.test(room.ceiling_description)) add("ceiling-board", room.ceiling_code, room.ceiling_description);
@@ -5270,8 +4365,8 @@ function nativePdfFinishLedger(takeoff) {
   if (Math.abs(total - (takeoff.scheduled_quantities?.floor_area ?? takeoff.floor_area)) > 1e-7) return null;
   return [...groups.values()];
 }
-function nativeFinishReplacesMetric(takeoff, key2) {
-  return (["gypsum_ceiling_area", "ceiling_paint_area", "wood_floor_area", "ceramic_floor_area", "epoxy_floor_area", "terrace_floor_area"].includes(key2) || takeoff?.pdf_analysis?.document_measurement_review?.native_source_operations?.some((o) => o.replacesMetric === key2 || o.replacesMetrics?.includes(key2))) && !!nativePdfFinishLedger(takeoff);
+function nativeFinishReplacesMetric(takeoff, key) {
+  return (["gypsum_ceiling_area", "ceiling_paint_area", "wood_floor_area", "ceramic_floor_area", "epoxy_floor_area", "terrace_floor_area"].includes(key) || takeoff?.pdf_analysis?.document_measurement_review?.native_source_operations?.some((o) => o.replacesMetric === key || o.replacesMetrics?.includes(key))) && !!nativePdfFinishLedger(takeoff);
 }
 function nativePdfSourceOperationLedger(takeoff) {
   if (!nativePdfFinishLedger(takeoff)) return [];
@@ -5290,7 +4385,7 @@ function normalizePdfScope(s) {
 var valid = (n) => Number.isFinite(n) && n >= 0;
 function pdfExcludedMetricKeys(exclusions) {
   const declared = /* @__PURE__ */ new Set();
-  for (const text of exclusions || []) for (const token of String(text).match(/[A-Za-z_][A-Za-z_0-9]*/g) || [])
+  for (const text2 of exclusions || []) for (const token of String(text2).match(/[A-Za-z_][A-Za-z_0-9]*/g) || [])
     if (Object.hasOwn(PDF_METRIC_UNITS, token)) declared.add(token);
   return [...declared];
 }
@@ -5352,7 +4447,7 @@ function mergePdfEvidence(pages, failed = [], total = pages.length) {
   }
   const claims = /* @__PURE__ */ new Map(), rejected = [];
   const observations = pages.filter((p) => p.page_evidence?.kind !== "floor_plan" || floors.includes(p)).map((p) => {
-    const direct = p.page_evidence?.kind === "floor_plan" ? Object.entries({ rooms: "rooms", doors: "door_count", windows: "window_count", floor_area: "floor_area", ceiling_area: "ceiling_area", wall_length: "wall_length", wall_area: "wall_area", window_area: "window_area", door_area: "door_area" }).filter(([k]) => valid(p[k]) && p[k] > 0).map(([k, key2]) => ({ key: key2, value: p[k], unit: PDF_METRIC_UNITS[key2], scope_id: p.page_evidence.scope_id, evidence: `Architectural plan page ${p.pageNumber}: ${k} summary; AI extraction requires review.` })) : [];
+    const direct = p.page_evidence?.kind === "floor_plan" ? Object.entries({ rooms: "rooms", doors: "door_count", windows: "window_count", floor_area: "floor_area", ceiling_area: "ceiling_area", wall_length: "wall_length", wall_area: "wall_area", window_area: "window_area", door_area: "door_area" }).filter(([k]) => valid(p[k]) && p[k] > 0).map(([k, key]) => ({ key, value: p[k], unit: PDF_METRIC_UNITS[key], scope_id: p.page_evidence.scope_id, evidence: `Architectural plan page ${p.pageNumber}: ${k} summary; AI extraction requires review.` })) : [];
     return { ...p, claims: [...direct, ...p.page_evidence?.quantities || []] };
   });
   if (native.claims.length) observations.push({ pageNumber: native.schedules[0].page, page_evidence: { kind: "opening_schedule" }, claims: native.claims });
@@ -5376,41 +4471,41 @@ function mergePdfEvidence(pages, failed = [], total = pages.length) {
   }
   const resolved = {}, evidence = {}, overlappingScopeClaims = [], nativeIncompleteKeys = /* @__PURE__ */ new Set();
   const floorScopes = new Set(floors.map((p) => normalizePdfScope(p.page_evidence.scope_id)));
-  for (const key2 of Object.keys(PDF_METRIC_UNITS)) {
-    const values = [...claims.values()].filter((q) => q.key === key2), whole = values.find((q) => q.scope_id === "project");
+  for (const key of Object.keys(PDF_METRIC_UNITS)) {
+    const values = [...claims.values()].filter((q) => q.key === key), whole = values.find((q) => q.scope_id === "project");
     const isFloorScope = (q) => floorScopes.has(q.scope_id) || /^floor:-?\d+$/.test(q.scope_id);
     const floorTotals = values.filter(isFloorScope);
-    if (nativeFloorTableKeys.has(key2) && [...floorScopes].some((scope2) => !floorTotals.some((q) => q.scope_id === scope2))) {
-      warnings.push("Native table does not cover every selected floor for " + key2 + "; project total withheld");
-      resolved[key2] = 0;
-      nativeIncompleteKeys.add(key2);
+    if (nativeFloorTableKeys.has(key) && [...floorScopes].some((scope2) => !floorTotals.some((q) => q.scope_id === scope2))) {
+      warnings.push("Native table does not cover every selected floor for " + key + "; project total withheld");
+      resolved[key] = 0;
+      nativeIncompleteKeys.add(key);
       continue;
     }
-    const structural = /^(?:beam|column|foundation|pedestal|.*slab)_volume$|_formwork_area$/.test(key2);
+    const structural = /^(?:beam|column|foundation|pedestal|.*slab)_volume$|_formwork_area$/.test(key);
     const use = whole ? [whole] : floorTotals.length ? values.filter((q) => isFloorScope(q) || structural && q.scope_id === "roof") : values;
-    for (const q of values) if (!use.includes(q)) overlappingScopeClaims.push({ key: key2, scope: q.scope_id, pages: q.pages, value: q.value, reason: whole ? "project_total_precedes_subsets" : "qualified_subset_not_added_to_floor_totals" });
+    for (const q of values) if (!use.includes(q)) overlappingScopeClaims.push({ key, scope: q.scope_id, pages: q.pages, value: q.value, reason: whole ? "project_total_precedes_subsets" : "qualified_subset_not_added_to_floor_totals" });
     if (!use.length) continue;
     if (use.some((q) => q.conflict)) {
-      warnings.push("Conflicting scheduled quantity: " + key2);
-      resolved[key2] = 0;
+      warnings.push("Conflicting scheduled quantity: " + key);
+      resolved[key] = 0;
       continue;
     }
-    resolved[key2] = use.reduce((n, q) => n + q.value, 0);
-    evidence[key2] = use.map(({ priority, ...q }) => q);
+    resolved[key] = use.reduce((n, q) => n + q.value, 0);
+    evidence[key] = use.map(({ priority, ...q }) => q);
   }
   const names = { door_count: "doors", window_count: "windows" };
-  for (const [key2, n] of Object.entries(resolved)) fields[names[key2] || key2] = n;
+  for (const [key, n] of Object.entries(resolved)) fields[names[key] || key] = n;
   const blocked = /* @__PURE__ */ new Set([...areaValidation.flatMap((a) => a.withheld_metrics || []), ...documentReview.blocked, ...nativeIncompleteKeys]);
-  for (const key2 of nativeKeys) if (!nativeIncompleteKeys.has(key2)) blocked.delete(key2);
+  for (const key of nativeKeys) if (!nativeIncompleteKeys.has(key)) blocked.delete(key);
   const omitted = pdfExcludedMetricKeys(documentReview.audit?.exclusions);
-  for (const key2 of omitted) if (PDF_SOURCE_MEASUREMENT_KEYS.includes(key2) && !evidence[key2]?.some((q) => q.document_calculated)) {
-    blocked.add(key2);
-    warnings.push("PDF explicitly unresolved source measurement: " + key2);
+  for (const key of omitted) if (PDF_SOURCE_MEASUREMENT_KEYS.includes(key) && !evidence[key]?.some((q) => q.document_calculated)) {
+    blocked.add(key);
+    warnings.push("PDF explicitly unresolved source measurement: " + key);
   }
-  for (const key2 of blocked) {
-    fields[names[key2] || key2] = 0;
-    resolved[key2] = 0;
-    delete evidence[key2];
+  for (const key of blocked) {
+    fields[names[key] || key] = 0;
+    resolved[key] = 0;
+    delete evidence[key];
   }
   fields.window_area = resolved.window_area ?? fields.window_area;
   fields.door_area = resolved.door_area ?? fields.door_area;
@@ -5454,18 +4549,18 @@ function pdfRuleMetric(description, unit5, takeoff = null, specificationFacts = 
     [/\b(?:kitchen\s+base\s+cabinets?|base\s+kitchen\s+cabinets?)\b/, "kitchen_cabinet_length", "m"]
   ];
   if (/\b(?:wall|walls)\b/.test(d) && /\b(?:floor|floors|ceiling|ceilings)\b/.test(d)) return null;
-  for (const [pattern, key2, expected] of specific) if (pattern.test(d)) return u === expected ? { key: key2, factor: 1 } : null;
-  const operation = pdfCatalogScope(d);
-  if (operation) {
-    const { unit: expected, ...metric } = operation;
+  for (const [pattern, key, expected] of specific) if (pattern.test(d)) return u === expected ? { key, factor: 1 } : null;
+  const operation2 = pdfCatalogScope(d);
+  if (operation2) {
+    const { unit: expected, ...metric } = operation2;
     if (expected === "kg" && ["ton", "tonne", "t"].includes(u)) return { ...metric, factor: 1e-3 };
     if (u === expected || expected === "nr" && ["nos", "no", "number", "nr"].includes(u)) return { ...metric, factor: 1 };
     return null;
   }
   const rules = [[/blinding/, "pcc_volume", "m3"], [/\bexcavation\b/, "excavation_volume", "m3"], [/formwork.*found/, "foundation_formwork_area", "m2"], [/formwork.*column/, "column_formwork_area", "m2"], [/formwork.*beam/, "beam_formwork_area", "m2"], [/formwork.*slab/, "slab_formwork_area", "m2"], [/reinforcement|reinforcing steel/, "rebar_kg", "kg"], [/wood.*floor|parquet/, "wood_floor_area", "m2"], [/ceramic.*floor/, "ceramic_floor_area", "m2"], [/epoxy.*floor|garage.*epoxy/, "epoxy_floor_area", "m2"], [/plaster/, "plaster_area", "m2"], [/internal wall.*paint|wall emulsion/, "paint_area", "m2"], [/gypsum.*ceiling/, "gypsum_ceiling_area", "m2"], [/glazed window|aluminium.*window/, "window_area", "m2"], [/water closet|toilet pan/, "toilet_count", "nr"], [/wash\s*basin/, "basin_count", "nr"], [/shower/, "shower_count", "nr"], [/socket/, "socket_count", "nr"], [/lighting?\s+point|light\s+point/, "light_count", "nr"], [/distribution board/, "distribution_board_count", "nr"], [/smoke detector/, "smoke_detector_count", "nr"]];
-  for (const [pattern, key2, expected] of rules) if (pattern.test(d)) {
-    if (expected === "kg" && ["ton", "tonne", "t"].includes(u)) return { key: key2, factor: 1e-3 };
-    if (u === expected || expected === "nr" && ["nos", "no", "number", "point", "nr"].includes(u)) return { key: key2, factor: 1 };
+  for (const [pattern, key, expected] of rules) if (pattern.test(d)) {
+    if (expected === "kg" && ["ton", "tonne", "t"].includes(u)) return { key, factor: 1e-3 };
+    if (u === expected || expected === "nr" && ["nos", "no", "number", "point", "nr"].includes(u)) return { key, factor: 1 };
     return null;
   }
   return null;
@@ -5476,9 +4571,9 @@ function pdfScheduledRule(takeoff, description, unit5, specificationFacts = void
   if (nativeFinishReplacesMetric(takeoff, metric.key)) return null;
   const keys = metric.keys || [metric.key], rows = [];
   let value = 0;
-  for (const key2 of keys) {
-    const claims = takeoff.pdf_analysis?.quantity_evidence?.[key2], quantity = takeoff.scheduled_quantities?.[key2];
-    if (!claims?.length || !valid(quantity) || claims.some((r) => r.key !== key2 || r.unit !== PDF_METRIC_UNITS[key2] || !valid(r.value) || r.unit === "nr" && !Number.isInteger(r.value) || !String(r.evidence || "").trim() || !Array.isArray(r.pages) || !r.pages.length)) return null;
+  for (const key of keys) {
+    const claims = takeoff.pdf_analysis?.quantity_evidence?.[key], quantity = takeoff.scheduled_quantities?.[key];
+    if (!claims?.length || !valid(quantity) || claims.some((r) => r.key !== key || r.unit !== PDF_METRIC_UNITS[key] || !valid(r.value) || r.unit === "nr" && !Number.isInteger(r.value) || !String(r.evidence || "").trim() || !Array.isArray(r.pages) || !r.pages.length)) return null;
     if (Math.abs(claims.reduce((n, r) => n + r.value, 0) - quantity) > 1e-3) return null;
     rows.push(...claims);
     value += quantity;
@@ -5500,8 +4595,77 @@ function resolvePdfCatalogRate(item, priceLevel = "standard") {
   };
   const level = String(priceLevel || "standard").toLowerCase();
   const order = level === "economy" ? ["economy", "standard", "premium", "component"] : level === "premium" ? ["premium", "standard", "economy", "component"] : ["standard", "economy", "premium", "component"];
-  for (const key2 of order) if (rates[key2] > 0) return { rate: rates[key2], source: key2 === level ? `direct_${key2}_rate` : `fallback_${key2}_rate`, peerCount: 0, missingRate: false };
+  for (const key of order) if (rates[key] > 0) return { rate: rates[key], source: key === level ? `direct_${key}_rate` : `fallback_${key}_rate`, peerCount: 0, missingRate: false };
   return { rate: 0, source: "rate_missing_on_catalog_item", peerCount: 0, missingRate: true };
+}
+
+// src/lib/commercialDocument.mjs
+function decimal(value, message) {
+  if (typeof value !== "number" && typeof value !== "string" || String(value).trim() === "" || !Number.isFinite(Number(value)) || Number(value) < 0) {
+    throw new Error(message);
+  }
+  const [mantissa, exponent = "0"] = Number(value).toString().toLowerCase().split("e");
+  const [whole, fraction = ""] = mantissa.split(".");
+  let digits = BigInt((whole + fraction).replace(/^\+/, ""));
+  let scale = fraction.length - Number(exponent);
+  if (scale < 0) {
+    digits *= 10n ** BigInt(-scale);
+    scale = 0;
+  }
+  return { digits, scale };
+}
+function roundedDivision(value, divisor) {
+  return (value + divisor / 2n) / divisor;
+}
+var MAX_CENTS = BigInt(Number.MAX_SAFE_INTEGER);
+function moneyFromCents(cents) {
+  if (cents > MAX_CENTS) throw new Error("Quotation amount is too large.");
+  return Number(cents) / 100;
+}
+function lineCents(item) {
+  const message = "Quantity and rate must be finite non-negative numbers.";
+  const quantity = decimal(item?.quantity, message), rate = decimal(item?.rate, message);
+  const cents = roundedDivision(quantity.digits * rate.digits * 100n, 10n ** BigInt(quantity.scale + rate.scale));
+  moneyFromCents(cents);
+  return cents;
+}
+function quotationLineAmount(item) {
+  return moneyFromCents(lineCents(item));
+}
+function currencyPercentage(amount, percentage) {
+  const cents = lineCents({ quantity: amount, rate: 1 });
+  const pct = decimal(percentage, "Percentage must be finite and non-negative.");
+  return moneyFromCents(roundedDivision(cents * pct.digits, 100n * 10n ** BigInt(pct.scale)));
+}
+function currencySum(values) {
+  return moneyFromCents(values.reduce((sum, value) => sum + lineCents({ quantity: value, rate: 1 }), 0n));
+}
+
+// src/lib/boqBudget.mjs
+var boqLineAmount = (item) => {
+  const valid2 = (value) => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
+  return quotationLineAmount({ quantity: valid2(item?.quantity), rate: valid2(item?.rate) });
+};
+function calculateBoqBudget(sums = {}, settings = {}) {
+  const number4 = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const pct = (base, value) => currencyPercentage(base, Math.max(0, number4(value)));
+  const subtotal = currencySum([number4(sums.verified), number4(sums.provisional)]);
+  const overhead = pct(subtotal, settings.overheadPercentage);
+  const withOverhead = currencySum([subtotal, overhead]);
+  const profit = pct(withOverhead, settings.profitPercentage);
+  const beforeDiscount = currencySum([withOverhead, profit]);
+  const discount = pct(beforeDiscount, settings.discountPercentage);
+  const taxable = quotationLineAmount({ quantity: Math.max(0, beforeDiscount - discount), rate: 1 });
+  const vat = pct(taxable, settings.vatPercentage);
+  return {
+    subtotal,
+    overhead,
+    profit,
+    discount,
+    vat,
+    total: currencySum([taxable, vat]),
+    displayed: currencySum([subtotal, number4(sums.pending)])
+  };
 }
 
 // src/lib/boqEvidence.mjs
@@ -5556,7 +4720,7 @@ var allowed = {
   driveway_area: ["paving_system"],
   landscape_area: ["landscape_system"]
 };
-for (const key2 of ["pcc_volume", "foundation_volume", "pedestal_volume", "column_volume", "beam_volume", "ground_slab_volume", "first_slab_volume", "roof_slab_volume"]) allowed[key2] = ["concrete_grade"];
+for (const key of ["pcc_volume", "foundation_volume", "pedestal_volume", "column_volume", "beam_volume", "ground_slab_volume", "first_slab_volume", "roof_slab_volume"]) allowed[key] = ["concrete_grade"];
 var unit2 = (s) => ({ nos: "nr", no: "nr", each: "nr", ea: "nr", set: "nr", sqm: "m2", cum: "m3", lm: "m" })[String(s || "").toLowerCase()] || String(s || "").toLowerCase().replace("\xB2", "2").replace("\xB3", "3");
 function metadata(item) {
   try {
@@ -5613,9 +4777,9 @@ function doorParts(item, takeoff, p, catalog, priceLevel) {
   if (!native.claims.length || native.schedules.some((s) => s.status !== "read") || count !== Number(item.quantity) || rows.length !== count) return null;
   const grouped = /* @__PURE__ */ new Map();
   for (const row of rows) {
-    const list = grouped.get(row.kind) || [];
-    list.push(row);
-    grouped.set(row.kind, list);
+    const list2 = grouped.get(row.kind) || [];
+    list2.push(row);
+    grouped.set(row.kind, list2);
   }
   const result = [];
   for (const [kind, group] of grouped) {
@@ -5656,20 +4820,20 @@ function applyPdfDefaultSpecifications(items, takeoff, catalog = [], priceLevel 
     byMetric.set(p.metric, entries);
   }
   return items.flatMap((item) => {
-    const key2 = item.pdfEvidence?.metricKey;
-    if (item.review?.confirmed || item.source === "manual" || item.defaultSpecification?.rateOverridden || item.defaultSpecification?.status && item.defaultSpecification.status !== "applied" || !(Number(item.quantity) > 0) || Number(item.rate) > 0 || unit2(item.unit) !== PDF_METRIC_UNITS[key2]) return [item];
-    if (items.filter((i) => i.quantity > 0 && (i.pdfEvidence?.metricKeys || [i.pdfEvidence?.metricKey]).includes(key2)).length !== 1 || conflicts.some((f) => f.metric === key2)) return [item];
-    if (hydronicSource && ["ac_count", "ac_pipe_length"].includes(key2)) return [item];
-    const source2 = facts.filter((f) => f.metric === key2), known = resolvedPdfSpecifications(takeoff, key2, facts);
-    const policies = (byMetric.get(key2) || []).filter(({ p: p2 }) => !source2.some((f) => !known.some((k) => k.property === f.property)) && !known.some((k) => p2.specification[k.property] !== k.value) && !(p2.source_required || []).some((prop) => !known.some((k) => k.property === prop)));
+    const key = item.pdfEvidence?.metricKey;
+    if (item.review?.confirmed || item.source === "manual" || item.defaultSpecification?.rateOverridden || item.defaultSpecification?.status && item.defaultSpecification.status !== "applied" || !(Number(item.quantity) > 0) || Number(item.rate) > 0 || unit2(item.unit) !== PDF_METRIC_UNITS[key]) return [item];
+    if (items.filter((i) => i.quantity > 0 && (i.pdfEvidence?.metricKeys || [i.pdfEvidence?.metricKey]).includes(key)).length !== 1 || conflicts.some((f) => f.metric === key)) return [item];
+    if (hydronicSource && ["ac_count", "ac_pipe_length"].includes(key)) return [item];
+    const source2 = facts.filter((f) => f.metric === key), known = resolvedPdfSpecifications(takeoff, key, facts);
+    const policies = (byMetric.get(key) || []).filter(({ p: p2 }) => !source2.some((f) => !known.some((k) => k.property === f.property)) && !known.some((k) => p2.specification[k.property] !== k.value) && !(p2.source_required || []).some((prop) => !known.some((k) => k.property === prop)));
     if (policies.length !== 1) return [item];
     const { p, rateItem } = policies[0], rate = resolvePdfCatalogRate(rateItem, priceLevel);
     if (rate.missingRate) return [item];
-    const claims = takeoff.pdf_analysis.quantity_evidence?.[key2], quantity = Number(item.quantity), expected = PDF_METRIC_UNITS[key2];
-    if (!claims?.length || claims.some((c) => c.key !== key2 || c.unit !== expected || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim() || !c.pages?.length) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) return [item];
+    const claims = takeoff.pdf_analysis.quantity_evidence?.[key], quantity = Number(item.quantity), expected = PDF_METRIC_UNITS[key];
+    if (!claims?.length || claims.some((c) => c.key !== key || c.unit !== expected || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim() || !c.pages?.length) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) return [item];
     if (expected === "nr" && !Number.isInteger(quantity)) return [item];
-    if (["water_pipe_length", "waste_pipe_length", "ac_pipe_length"].includes(key2) && !source2.length && claims.some((c) => /\b(?:dn|dia(?:meter)?)\s*[:=]?\s*\d+|\b(?:ppr|u?pvc|cpvc|hdpe|copper|steel|pex)\b|\d\s*mm|[øØ⌀]|\d\s*\/\s*\d/i.test(c.evidence))) return [item];
-    if (key2 === "door_count" && p.opening_components) {
+    if (["water_pipe_length", "waste_pipe_length", "ac_pipe_length"].includes(key) && !source2.length && claims.some((c) => /\b(?:dn|dia(?:meter)?)\s*[:=]?\s*\d+|\b(?:ppr|u?pvc|cpvc|hdpe|copper|steel|pex)\b|\d\s*mm|[øØ⌀]|\d\s*\/\s*\d/i.test(c.evidence))) return [item];
+    if (key === "door_count" && p.opening_components) {
       const parts = doorParts(item, takeoff, p, catalog, priceLevel);
       if (parts) return parts;
       if (claims.some((c) => /garage[_ ]door|roller shutter|overhead door/i.test(c.evidence))) return [item];
@@ -5688,8 +4852,8 @@ function operationRateContract(item) {
     return null;
   }
 }
-function pdfOperationProfile(operation) {
-  const family2 = operation.family, d = String(operation.sourceDescription || "").toLowerCase().replace(/[-–]/g, " "), p = { family: family2 };
+function pdfOperationProfile(operation2) {
+  const family2 = operation2.family, d = String(operation2.sourceDescription || "").toLowerCase().replace(/[-–]/g, " "), p = { family: family2 };
   const one = (name2, matches) => {
     const xs = [...new Set(matches)];
     if (xs.length === 1) p[name2] = xs[0];
@@ -5828,10 +4992,10 @@ function planPdfCatalogBindings(takeoff, candidates) {
     const evidence = pdfScheduledRule(takeoff, item.description, item.unit, specificationFacts);
     if (!evidence || evidence.quantity <= 0) continue;
     byCode.set(code, evidence);
-    for (const key2 of evidence.metricKeys || [evidence.metricKey]) {
-      const group = byMetric.get(key2) || /* @__PURE__ */ new Map();
+    for (const key of evidence.metricKeys || [evidence.metricKey]) {
+      const group = byMetric.get(key) || /* @__PURE__ */ new Map();
       group.set(code, evidence);
-      byMetric.set(key2, group);
+      byMetric.set(key, group);
     }
   }
   const bindings = /* @__PURE__ */ new Map(), warnings = [];
@@ -5933,18 +5097,18 @@ function retainUnboundPdfQuantities(items, takeoff) {
   const doorBreakdown = doorKeys.filter((k) => Number.isFinite(takeoff.scheduled_quantities?.[k]));
   const completeDoors = doorBreakdown.length > 0 && Math.abs(doorBreakdown.reduce((n, k) => n + takeoff.scheduled_quantities[k], 0) - (takeoff.scheduled_quantities?.door_count ?? -1)) < 1e-3;
   const bound = new Set(items.filter((i) => i.quantity > 0).flatMap((i) => i.pdfEvidence?.metricKeys || [i.pdfEvidence?.metricKey]).filter(Boolean));
-  for (const [key2, [sectionCode, section, description]] of Object.entries(operations)) {
-    if (nativeFinishReplacesMetric(takeoff, key2)) continue;
-    if (key2 === "door_count" && completeDoors) continue;
-    if (doorKeys.includes(key2) && !completeDoors) continue;
-    const quantity = takeoff.scheduled_quantities?.[key2];
-    const claims = takeoff.pdf_analysis.quantity_evidence?.[key2];
-    if (bound.has(key2) || !Number.isFinite(quantity) || quantity <= 0 || !claims?.length) continue;
-    const unit5 = PDF_METRIC_UNITS[key2];
-    if (claims.some((c) => c.key !== key2 || c.unit !== unit5 || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim()) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) continue;
+  for (const [key, [sectionCode, section, description]] of Object.entries(operations)) {
+    if (nativeFinishReplacesMetric(takeoff, key)) continue;
+    if (key === "door_count" && completeDoors) continue;
+    if (doorKeys.includes(key) && Number.isFinite(takeoff.scheduled_quantities?.door_count) && !completeDoors) continue;
+    const quantity = takeoff.scheduled_quantities?.[key];
+    const claims = takeoff.pdf_analysis.quantity_evidence?.[key];
+    if (bound.has(key) || !Number.isFinite(quantity) || quantity <= 0 || !claims?.length) continue;
+    const unit5 = PDF_METRIC_UNITS[key];
+    if (claims.some((c) => c.key !== key || c.unit !== unit5 || !Number.isFinite(c.value) || c.value < 0 || !c.evidence?.trim()) || Math.abs(claims.reduce((n, c) => n + c.value, 0) - quantity) > 1e-3) continue;
     const pages = [...new Set(claims.flatMap((c) => c.pages || []))];
     const basis = claims.map((c) => c.evidence).join(" | ");
-    const itemCode = `PDF-${key2.toUpperCase()}`;
+    const itemCode = `PDF-${key.toUpperCase()}`;
     if (next.some((i) => i.itemCode === itemCode)) continue;
     next.push({
       itemCode,
@@ -5972,10 +5136,10 @@ function retainUnboundPdfQuantities(items, takeoff) {
       quantityBasis: "pdf_schedule_evidence",
       quantitySource: "pdf_schedule_evidence",
       source: "PDF evidence - rate and specification pending",
-      pdfEvidence: { metricKey: key2, pages, basis },
+      pdfEvidence: { metricKey: key, pages, basis },
       notes: `PDF EVIDENCE (AI; REVIEW REQUIRED): pages ${pages.join(", ")}; ${basis}. Quantity retained without assuming a catalog specification or rate. Not included in tender or priced budget.`
     });
-    warnings.push(`PDF quantity ${key2} retained as an unpriced row; confirm specification and rate.`);
+    warnings.push(`PDF quantity ${key} retained as an unpriced row; confirm specification and rate.`);
   }
   for (const finish of [...nativePdfFinishLedger(takeoff) || [], ...nativePdfSourceOperationLedger(takeoff)]) {
     if (bound.has(finish.metricKey)) continue;
@@ -6018,6 +5182,574 @@ function retainUnboundPdfQuantities(items, takeoff) {
   return { items: next, warnings };
 }
 
+// src/lib/takeoffSource.mjs
+function takeoffBoqIssue(takeoff) {
+  if (!takeoff) return "";
+  const status = String(takeoff.extraction_status || takeoff.raw_result?.extraction_status || "").toLowerCase();
+  const cad = !!(takeoff.aps_urn || takeoff.apsUrn) || /autodesk|aps/i.test(takeoff.source || "") || /\.(dwg|dxf|ifc|rvt)$/i.test(takeoff.document_name || "");
+  const legacyPending = /Autodesk translation completed[\s\S]*geometry quantities have not been extracted yet/i.test(takeoff.notes || "");
+  if (legacyPending || cad && (["translation-complete", "geometry-ready-analysis-pending"].includes(status) || ["pending", "processing", "extracting"].includes(String(takeoff.geometry_status || "").toLowerCase())))
+    return "BOQ generation stopped: CAD conversion is complete, but quantity extraction is incomplete. Complete geometry quantity extraction before pricing. The saved draft has been preserved.";
+  return "";
+}
+function assertTakeoffReady(takeoff) {
+  const issue = takeoffBoqIssue(takeoff);
+  if (issue) throw Object.assign(new Error(issue), { code: "CAD_EXTRACTION_INCOMPLETE" });
+}
+function bindBoqSource(boq, takeoff = boq?.takeoff, projectId = boq?.projectId) {
+  if (!takeoff) return boq;
+  assertTakeoffSource(takeoff, null, projectId);
+  const savedProject = boq?.projectId || boq?.project_id || boq?.takeoff?.project_id || boq?.takeoff?.projectId;
+  if (savedProject && projectId && savedProject !== projectId) {
+    throw new Error("BOQ belongs to another project. Generate a new BOQ for the current project.");
+  }
+  const previous = boq?.boqSource;
+  if (previous?.documentId && takeoff.document_id && previous.documentId !== takeoff.document_id) {
+    throw new Error("BOQ source belongs to another drawing. Generate a new BOQ from the selected analysis.");
+  }
+  if (boq?.takeoff?.document_id && takeoff !== boq.takeoff && !savedBoqMatchesTakeoff(boq, takeoff)) {
+    throw new Error("BOQ source belongs to an earlier drawing or analysis.");
+  }
+  if (!takeoff.document_id) return boq;
+  return { ...boq, takeoff, boqSource: {
+    ...previous,
+    documentId: takeoff.document_id,
+    name: takeoff.document_name || previous?.name || "",
+    analyzedAt: takeoff.analyzed_at,
+    recordedBy: previous?.recordedBy || 157
+  } };
+}
+function assertTakeoffSource(takeoff, documentId, projectId) {
+  if (!takeoff) return;
+  const owner = takeoff.project_id || takeoff.projectId;
+  if (owner && projectId && owner !== projectId) {
+    throw new Error("Saved analysis belongs to another project. Analyze the selected drawing before generating BOQ.");
+  }
+  if (documentId && takeoff.document_id !== documentId) {
+    throw new Error("The selected drawing has no matching quantity takeoff. The saved analysis belongs to another drawing. Open Drawings and run Analyze for the selected file before generating BOQ. A 3D preview alone does not create a quantity takeoff.");
+  }
+  assertTakeoffReady(takeoff);
+}
+function savedBoqMatchesTakeoff(boq, takeoff) {
+  if (takeoffBoqIssue(takeoff) || takeoffBoqIssue(boq?.takeoff)) return false;
+  if (!takeoff) return true;
+  const currentProject = takeoff.project_id || takeoff.projectId;
+  const savedProjects = [boq?.projectId, boq?.project_id, boq?.takeoff?.project_id, boq?.takeoff?.projectId].filter(Boolean);
+  if (currentProject && savedProjects.some((id) => id !== currentProject)) return false;
+  const documentId = boq?.boqSource?.documentId || boq?.takeoff?.document_id;
+  if (takeoff.document_id && documentId !== takeoff.document_id) return false;
+  const previous = boq?.boqSource?.analyzedAt || boq?.takeoff?.analyzed_at;
+  return !previous || !takeoff.analyzed_at || previous === takeoff.analyzed_at;
+}
+
+// src/lib/rasterMeasurementAudit.mjs
+var round2 = (n) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+var finite2 = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+var areaKeys = ["floor_area", "ceiling_area"];
+function explicitHeight(t) {
+  if (t.wall_height_source === "user_confirmed_printed_dimension" && finite2(t.wall_height) && t.wall_height > 0) return t.wall_height;
+  const notes = String(t.notes || "");
+  if (/varying|variable|sloping|stepped|double.height/i.test(notes)) return null;
+  const values = [...notes.matchAll(/\b(?:wall|room|internal|enclosed)?\s*heights?\s*(?:=|:|is|of|at)?\s*(\d+(?:\.\d+)?)\s*m\b|\b(\d+(?:\.\d+)?)\s*m\s*(?:height|high)\b/gi)].map((m) => Number(m[1] || m[2]));
+  if (finite2(t.wall_height) && t.wall_height > 0 && typeof t.wall_height_evidence === "string" && t.wall_height_evidence.trim()) values.push(t.wall_height);
+  if (finite2(t.wall_height) && t.wall_height > 0 && /source|printed|explicit|measured/i.test(t.wall_height_source || "") && !/default|assum/i.test(t.wall_height_source || "")) values.push(t.wall_height);
+  return values.length && values.every((v) => v > 0 && v === values[0]) ? values[0] : null;
+}
+function operation(t, key) {
+  const page = t.page_evidence || {}, rows = (page.quantities || []).filter((q) => q.key === key);
+  const totals = rows.filter((q) => ["project", page.scope_id, page.drawing_id].includes(q.scope_id));
+  const selected = totals.length ? totals : rows;
+  if (!selected.length || selected.some((q) => !finite2(q.value) || !q.evidence?.trim() || q.unit !== (/count$/.test(key) ? "nr" : "m2")) || new Set(selected.map((q) => q.value)).size !== 1) return null;
+  return selected[0].value;
+}
+function netWall(t, gross) {
+  const doors = operation(t, "door_count"), windows = operation(t, "window_count");
+  if (!Number.isInteger(doors) || !Number.isInteger(windows)) return null;
+  const da = doors === 0 ? 0 : operation(t, "door_area"), wa = windows === 0 ? 0 : operation(t, "window_area");
+  if (doors === 0 && operation(t, "door_area") > 0 || windows === 0 && operation(t, "window_area") > 0) return null;
+  if (!finite2(da) || !finite2(wa) || doors > 0 && da <= 0 || windows > 0 && wa <= 0) return null;
+  let extra = 0;
+  if (doors > 0) {
+    const internal = operation(t, "internal_door_count"), entrance = operation(t, "entrance_door_count");
+    if (!Number.isInteger(internal) || !Number.isInteger(entrance) || internal + entrance !== doors) return null;
+    const inventory = (t.detected_items || []).filter((i) => /\bdoor\b/i.test(i.name || "")).map((i) => {
+      if (["m2", "m\xB2"].includes(i.unit)) return i;
+      if (!["nr", "nos", "no", "each"].includes(i.unit) || i.quantity !== 1) return { ...i, quantity: null };
+      const sizes = [...String(i.description || "").matchAll(/(\d+(?:\.\d+)?)\s*(?:m\s*)?[x×]\s*(\d+(?:\.\d+)?)\s*m\b/gi)];
+      return { ...i, quantity: sizes.length === 1 ? round2(Number(sizes[0][1]) * Number(sizes[0][2])) : null };
+    });
+    if (inventory.length !== doors || new Set(inventory.map((i) => i.name)).size !== doors || inventory.some((i) => !finite2(i.quantity) || i.quantity <= 0) || Math.abs(inventory.reduce((s, i) => s + i.quantity, 0) - da) > 1e-3 || inventory.some((i) => Math.abs(i.quantity - da / doors) > 1e-3)) return null;
+    extra = internal * da / doors;
+  }
+  const net = round2(gross - da - extra - wa);
+  return net >= 0 ? { value: net, basis: `Checked room perimeters \xD7 explicit height = ${gross} m2; deduct ${da} m2 door openings, ${extra} m2 additional internal-door faces and ${wa} m2 window openings. Finish specification remains unconfirmed.` } : null;
+}
+function reconcileRasterMeasurements(t = {}) {
+  if (t.pdf_analysis || t.page_evidence?.kind !== "floor_plan") return t;
+  const height = explicitHeight(t);
+  if (t.raster_measurement_audit?.version === 2 && t.raster_measurement_audit.height === height) return t;
+  const geometry = t.area_geometry;
+  if (geometry?.coverage !== "complete" || geometry?.basis !== "clear_internal") return t;
+  const checked = auditPdfAreaGeometry({ ...t, pageNumber: 1 });
+  const report = { version: 2, height, status: checked.audit?.status, wallMeasurementStatus: "height_required", corrections: [...t.raster_measurement_audit?.corrections || []], warnings: checked.warnings.map((s) => s.replaceAll("PDF", "Image")) };
+  if (checked.audit?.status !== "dimension_geometry_checked") return { ...t, raster_measurement_audit: { ...report, status: "needs_review", reason: checked.audit?.reason } };
+  const next = { ...t, page_evidence: { ...t.page_evidence, quantities: [...t.page_evidence.quantities] }, raster_measurement_audit: report };
+  const record = (key, value, basis) => {
+    if (!finite2(value)) return;
+    const claims = next.page_evidence.quantities.filter((q) => q.key === key);
+    if (Math.abs((t[key] ?? 0) - value) > 1e-6 || claims.some((q) => Math.abs(q.value - value) > 1e-6)) report.corrections.push({ key, reported: t[key], reportedClaims: claims, computed: round2(value), basis });
+    next[key] = round2(value);
+    next.page_evidence.quantities = next.page_evidence.quantities.filter((q) => q.key !== key);
+    next.page_evidence.quantities.push({ key, value: next[key], unit: "m2", scope_id: t.page_evidence.scope_id || "image", evidence: basis });
+  };
+  for (const key of areaKeys) record(key, checked.page[key], "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.");
+  const rooms = new Map(checked.page.detected_items.map((i) => [i.name, i]));
+  next.detected_items = (t.detected_items || []).map((i) => {
+    const measured = rooms.get(i.name);
+    if (!measured || !["m2", "m\xB2"].includes(i.unit)) return i;
+    if (Math.abs(i.quantity - measured.quantity) > 1e-6) report.corrections.push({ key: "room_area", tag: i.name, reported: i.quantity, computed: round2(measured.quantity) });
+    return { ...i, quantity: round2(measured.quantity) };
+  });
+  const enclosed = geometry.spaces.filter((s) => s.kind === "enclosed");
+  if (enclosed.length === t.rooms && height) {
+    const gross = round2(enclosed.reduce((sum, s) => sum + s.polygon.reduce((n, p, i) => {
+      const q = s.polygon[(i + 1) % s.polygon.length];
+      return n + Math.hypot(q.x - p.x, q.y - p.y);
+    }, 0) * height, 0));
+    record("wall_area", gross, `Gross INTERNAL wall faces from all ${enclosed.length} enclosed room perimeters \xD7 explicit height ${height} m; not wall centreline length \xD7 height.`);
+    report.wallMeasurementStatus = "computed";
+    const net = netWall(next, gross);
+    if (net) next.raster_measurement_audit.netInternalWall = net;
+  }
+  return next;
+}
+
+// src/lib/rasterBoqEvidence.mjs
+function isRasterTakeoff(takeoff = {}) {
+  return !takeoff.pdf_analysis && /\.(png|jpe?g|webp)$/i.test(takeoff.document_name || takeoff.analysis_source?.file_name || "");
+}
+var number3 = (x) => typeof x === "number" && Number.isFinite(x) && x >= 0;
+var round3 = (x) => Math.round((x + Number.EPSILON) * 1e6) / 1e6;
+function polygonArea(points) {
+  if (!Array.isArray(points) || points.length < 3 || points.length > 500 || points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return 0;
+  const cross4 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  for (let i = 0; i < points.length; i++) for (let j = i + 2; j < points.length; j++) {
+    if (i === 0 && j === points.length - 1) continue;
+    const a = points[i], b = points[(i + 1) % points.length], c = points[j], d = points[(j + 1) % points.length];
+    if (cross4(a, b, c) * cross4(a, b, d) <= 0 && cross4(c, d, a) * cross4(c, d, b) <= 0 && Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x)) <= Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x)) && Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) <= Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y))) return 0;
+  }
+  return Math.abs(points.reduce((s, p, i) => {
+    const q = points[(i + 1) % points.length];
+    return s + p.x * q.y - q.x * p.y;
+  }, 0)) / 2;
+}
+function wallPaintIssue(takeoff, page, quantities, evidence) {
+  const claim2 = evidence.paint_area?.[0], geometry = takeoff.area_geometry || takeoff.raw_result?.area_geometry;
+  if (!claim2 || page.kind !== "floor_plan" || geometry?.basis !== "clear_internal") return null;
+  const spaces = geometry.spaces || [], rooms = spaces.filter((s) => s.kind === "enclosed");
+  if (rooms.length < 2 || rooms.length !== takeoff.rooms || spaces.some((s) => !["enclosed", "outdoor"].includes(s.kind))) return null;
+  if (page.drawing_id && claim2.scope_id !== page.drawing_id) return null;
+  const basis = String(claim2.evidence || ""), notes = String(takeoff.notes || "");
+  const allFaces = /\binternal faces:\s*external perimeter\b/i.test(basis) && /\bboth faces\b/i.test(basis) || /\ball internal (?:wall )?faces\b/i.test(basis) || /\bwalls of\b/i.test(basis) && rooms.every((s) => String(s.tag || "").trim() && basis.toLowerCase().includes(s.tag.toLowerCase()));
+  if (!allFaces || !/\bnet\b/i.test(basis) || /\b(?:selected|partial|feature|half|cladding|panelling|tiled walls|wall tiles)\b/i.test(basis)) return null;
+  const heights2 = [...notes.matchAll(/\b(?:internal|enclosed|room|wall) heights?\s*(?:=|:|is|of)?\s*(\d+(?:\.\d+)?)\s*m\b/gi)].map((m) => Number(m[1]));
+  if (!heights2.length || heights2.some((h) => h <= 0 || h !== heights2[0]) || /\b(?:varying|variable|sloping|stepped|double.height)\b/i.test(notes)) return null;
+  const tags = /* @__PURE__ */ new Set(), bounds2 = [];
+  let perimeter = 0, enclosedArea = 0, totalArea = 0;
+  for (const s of spaces) {
+    const tag = String(s.tag || "").trim(), p = s.polygon, area3 = polygonArea(p);
+    if (!tag || tags.has(tag) || !area3 || !number3(s.reported_area) || Math.abs(area3 - s.reported_area) > 0.02 || p.length !== 4) return null;
+    tags.add(tag);
+    if (p.some((a, i) => {
+      const b = p[(i + 1) % 4];
+      return a.x !== b.x && a.y !== b.y || a.x === b.x && a.y === b.y;
+    })) return null;
+    const box = { left: Math.min(...p.map((a) => a.x)), right: Math.max(...p.map((a) => a.x)), bottom: Math.min(...p.map((a) => a.y)), top: Math.max(...p.map((a) => a.y)) };
+    if (bounds2.some((b) => Math.min(b.right, box.right) - Math.max(b.left, box.left) > 1e-3 && Math.min(b.top, box.top) - Math.max(b.bottom, box.bottom) > 1e-3)) return null;
+    bounds2.push(box);
+    totalArea += area3;
+    if (s.kind === "enclosed") {
+      enclosedArea += area3;
+      perimeter += 2 * (box.right - box.left + box.top - box.bottom);
+    }
+  }
+  if (!number3(takeoff.floor_area) || !number3(takeoff.ceiling_area) || Math.abs(totalArea - takeoff.floor_area) > 0.02 || Math.abs(enclosedArea - takeoff.ceiling_area) > 0.02) return null;
+  for (const [count, area3] of [[takeoff.doors, quantities.door_area], [takeoff.windows, quantities.window_area]])
+    if (!Number.isInteger(count) || count < 0 || !number3(area3) || count > 0 && area3 <= 0 || count === 0 && area3 !== 0) return null;
+  const gross = round3(perimeter * heights2[0]);
+  const minimum = round3(Math.max(0, gross - 2 * (quantities.door_area + quantities.window_area)));
+  const tolerance = Math.max(0.02, gross * 1e-3);
+  if (claim2.value >= minimum - tolerance && claim2.value <= gross + tolerance) return null;
+  return {
+    metricKey: "paint_area",
+    claimedQuantity: claim2.value,
+    unit: "m2",
+    minimum,
+    maximum: gross,
+    basis: `Measurement conflict: saved net wall paint ${claim2.value} m2 is outside ${minimum}\u2013${gross} m2 from dimensioned room perimeters (${perimeter} m), stated height (${heights2[0]} m), and at most two faces per measured opening. Review the source; quantity withheld, not automatically corrected.`,
+    originalEvidence: basis
+  };
+}
+function rasterOperationEvidence(takeoff) {
+  const page = takeoff.page_evidence || takeoff.raw_result?.page_evidence;
+  if (!page || !Array.isArray(page.quantities)) throw Error("This image has no saved operation evidence. Complete quantity analysis before generating BOQ.");
+  const warnings = [], groups = /* @__PURE__ */ new Map(), blocked = /* @__PURE__ */ new Set(), measurementIssues = [];
+  for (const q of page.quantities) {
+    if (!PDF_METRIC_UNITS[q.key] || q.unit !== PDF_METRIC_UNITS[q.key] || !number3(q.value) || q.unit === "nr" && !Number.isInteger(q.value) || !String(q.evidence || "").trim()) {
+      if (q.key) blocked.add(q.key);
+      warnings.push(`Image evidence rejected: ${q.key || "unknown metric"} has invalid units, value or measurement basis.`);
+      continue;
+    }
+    const scopes = groups.get(q.key) || /* @__PURE__ */ new Map(), scope2 = String(q.scope_id || page.scope_id || "image");
+    const old = scopes.get(scope2);
+    if (old && Math.abs(old.value - q.value) > 1e-3) {
+      blocked.add(q.key);
+      warnings.push(`Conflicting image quantity: ${q.key}.`);
+    } else scopes.set(scope2, { ...q, scope_id: scope2, pages: [1] });
+    groups.set(q.key, scopes);
+  }
+  const quantities = {}, evidence = {};
+  for (const [key, scopes] of groups) {
+    if (blocked.has(key)) continue;
+    const total = scopes.get("project") || scopes.get(String(page.scope_id || "")) || scopes.get(String(page.drawing_id || ""));
+    if (!total && scopes.size !== 1) {
+      blocked.add(key);
+      warnings.push(`Image quantity ${key} needs scope reconciliation.`);
+      continue;
+    }
+    const q = total || [...scopes.values()][0];
+    quantities[key] = q.value;
+    evidence[key] = [q];
+  }
+  const add = (key, value, basis) => {
+    if (blocked.has(key) || Object.hasOwn(quantities, key) || !number3(value) || value <= 0 || PDF_METRIC_UNITS[key] === "nr" && !Number.isInteger(value)) return;
+    quantities[key] = round3(value);
+    evidence[key] = [{ key, value: quantities[key], unit: PDF_METRIC_UNITS[key], scope_id: "image", pages: [1], evidence: basis }];
+  };
+  if (page.kind === "floor_plan") {
+    for (const [key, field] of [["door_count", "doors"], ["window_count", "windows"], ["window_area", "window_area"], ["door_area", "door_area"]])
+      add(key, takeoff[field], `Image extraction: ${field}; measured ${PDF_METRIC_UNITS[key]}, review against source.`);
+    const doorRoles = ["internal_door_count", "service_door_count", "entrance_door_count", "garage_door_count"];
+    const knownRoles = doorRoles.filter((k) => Object.hasOwn(quantities, k));
+    if (quantities.door_count === 0 && quantities.door_area > 0 || doorRoles.some((k) => blocked.has(k)) || knownRoles.reduce((s, k) => s + quantities[k], 0) > quantities.door_count || knownRoles.length === doorRoles.length && knownRoles.reduce((s, k) => s + quantities[k], 0) !== quantities.door_count) {
+      const basis = "Door breakdown conflicts with the recorded total or has invalid count evidence. Door quantities and rates withheld; reconcile opening tags and roles.";
+      measurementIssues.push({ metricKey: "door_count", basis, claimedQuantity: quantities.door_count, roleCounts: Object.fromEntries(knownRoles.map((k) => [k, quantities[k]])) });
+      warnings.push(basis);
+      for (const key of ["door_count", ...doorRoles]) {
+        delete quantities[key];
+        delete evidence[key];
+        blocked.add(key);
+      }
+    }
+    if (quantities.window_count === 0 && quantities.window_area > 0) {
+      const basis = "Positive window area conflicts with an explicit zero window count. Reconcile source openings before pricing.";
+      measurementIssues.push({ metricKey: "window_area", claimedQuantity: quantities.window_area, basis });
+      warnings.push(basis);
+      delete quantities.window_area;
+      delete evidence.window_area;
+    }
+    if (!Object.hasOwn(quantities, "door_count") && knownRoles.length) warnings.push("Only recorded door categories are available; the full opening inventory is unconfirmed.");
+    const geometry = takeoff.area_geometry || takeoff.raw_result?.area_geometry;
+    const spaces = geometry?.basis === "clear_internal" ? (geometry.spaces || []).filter((s) => s.kind === "enclosed") : [];
+    const inventory = takeoff.detected_items || [];
+    let ceramic = 0;
+    const tags = /* @__PURE__ */ new Set();
+    let valid2 = true;
+    for (const s of spaces) {
+      const tag = String(s.tag || "").trim();
+      if (!tag || tags.has(tag)) {
+        valid2 = false;
+        break;
+      }
+      tags.add(tag);
+      const matching = inventory.filter((i) => String(i.name || "").startsWith(tag));
+      const text2 = [s.evidence, ...matching.map((i) => i.description)].join(" ");
+      if (!/\bceramic\b/i.test(text2) || /\b(?:not|no|except|alternative)\b[^.;]*\bceramic\b/i.test(text2)) continue;
+      const area3 = polygonArea(s.polygon);
+      if (!area3 || number3(s.reported_area) && Math.abs(s.reported_area - area3) > 0.02) {
+        valid2 = false;
+        break;
+      }
+      ceramic += area3;
+    }
+    if (valid2 && Number(takeoff.rooms) === 1 && spaces.length === 1 && Math.abs(ceramic - Number(takeoff.floor_area)) <= 0.02)
+      add("ceramic_floor_area", ceramic, "Explicit ceramic room finish; dimensioned clear internal room polygon agrees with the saved floor area.");
+    const notes = String(takeoff.notes || "");
+    if (Number(takeoff.rooms) === 1 && /\bgross\b/i.test(notes) && /\b(?:painted walls|wall paint)\b/i.test(
+      [notes, ...spaces.map((s) => s.evidence), ...inventory.map((i) => i.description)].join(" ")
+    ) && number3(takeoff.wall_area) && number3(takeoff.door_area) && number3(takeoff.window_area) && (!(takeoff.doors > 0) || takeoff.door_area > 0) && (!(takeoff.windows > 0) || takeoff.window_area > 0))
+      add(
+        "paint_area",
+        Math.max(0, takeoff.wall_area - takeoff.door_area - takeoff.window_area),
+        `Gross internal wall faces ${takeoff.wall_area} minus measured door area ${takeoff.door_area} and window area ${takeoff.window_area}; single room.`
+      );
+    const issue = wallPaintIssue(takeoff, page, quantities, evidence);
+    if (issue) {
+      measurementIssues.push(issue);
+      warnings.push(issue.basis);
+      delete quantities.paint_area;
+      delete evidence.paint_area;
+    }
+    if (takeoff.raster_measurement_audit?.status === "dimension_geometry_checked") {
+      const floors = ["ceramic_floor_area", "wood_floor_area", "epoxy_floor_area", "terrace_floor_area"];
+      const conflicts = [];
+      if (floors.reduce((s, k) => s + (quantities[k] || 0), 0) > takeoff.floor_area + 0.02) conflicts.push(...floors.filter((k) => quantities[k] > 0));
+      for (const k of ["ceiling_paint_area", "gypsum_ceiling_area"]) if (quantities[k] > takeoff.ceiling_area + 0.02) conflicts.push(k);
+      const wallMaximum = takeoff.raster_measurement_audit.netInternalWall?.value ?? takeoff.wall_area;
+      if (quantities.paint_area > wallMaximum + 0.02) conflicts.push("paint_area");
+      for (const metricKey of conflicts) {
+        const basis = `Measured ${metricKey} exceeds the checked surface available to that operation. Original claim retained for review; no automatic material quantity correction.`;
+        measurementIssues.push({ metricKey, claimedQuantity: quantities[metricKey], basis });
+        warnings.push(basis);
+        delete quantities[metricKey];
+        delete evidence[metricKey];
+      }
+    }
+  }
+  return { adapter: { scheduled_quantities: quantities, pdf_analysis: { quantity_evidence: evidence } }, warnings, measurementIssues };
+}
+function applyRasterDoorBudget(items, takeoff, adapter, prices, priceLevel) {
+  const page = takeoff.page_evidence || takeoff.raw_result?.page_evidence;
+  if (page?.kind !== "floor_plan") return items;
+  const claims = adapter.pdf_analysis.quantity_evidence.door_count || [];
+  const detail = [
+    ...String(takeoff.notes || "").split(/[.;\n]/).filter((s) => /\bdoors?\b/i.test(s)),
+    ...claims.map((c) => c.evidence),
+    ...(page.quantities || []).filter((q) => /door/.test(q.key)).map((q) => q.evidence),
+    JSON.stringify(takeoff.object_details?.doors || [])
+  ].join(" ");
+  if (/\b(?:garage|roller|shutter|overhead|steel|stainless|metal|alumini?um|glass|glazed|fib(?:re|er)glass|frp|grp|wpc|composite|upvc|pvc|fire|fireproof|fd\d+|security|acoustic|external|weatherproof|double[- ]leaf|double[- ]door|sliding|folding|revolving)\b/i.test(detail)) return items;
+  const count = adapter.scheduled_quantities.door_count, area3 = adapter.scheduled_quantities.door_area;
+  if (area3 > 0 && count > 0 && area3 / count > 2.5) return items;
+  const doorRows = items.filter((i) => ["door_count", "internal_door_count", "entrance_door_count", "service_door_count"].includes(i.pdfEvidence?.metricKey));
+  if (!doorRows.length) return items;
+  const priced = doorRows.map((row) => {
+    const key = row.pdfEvidence.metricKey;
+    const configured = prices.some((p) => {
+      try {
+        const meta = typeof p.source_reference === "string" ? JSON.parse(p.source_reference) : p.source_reference;
+        return p.is_active !== false && meta?.kind === "pricing_default" && meta.enabled === true && meta.metric === key;
+      } catch {
+        return false;
+      }
+    });
+    const policies = configured || key === "door_count" ? prices : prices.map((p) => {
+      try {
+        const meta = typeof p.source_reference === "string" ? JSON.parse(p.source_reference) : p.source_reference;
+        return meta?.kind === "pricing_default" && meta.metric === "door_count" ? { ...p, source_reference: JSON.stringify({ ...meta, metric: key, opening_components: void 0 }) } : p;
+      } catch {
+        return p;
+      }
+    });
+    return applyPdfDefaultSpecifications([row], adapter, policies, priceLevel)[0];
+  });
+  const replacements = new Map(doorRows.map((row, i) => [row, priced[i]]));
+  return items.map((row) => {
+    const next = replacements.get(row) || row;
+    return next.defaultSpecification?.status === "applied" ? { ...next, source: "Image measured quantity + editable catalog specification assumption" } : next;
+  });
+}
+function appendUnallocatedSurfaces(items, takeoff, warnings) {
+  if (takeoff.raster_measurement_audit?.status !== "dimension_geometry_checked") return;
+  const metric = (i) => i.imageEvidence?.metricKey || i.pdfEvidence?.metricKey;
+  const total = (keys) => items.filter((i) => keys.includes(metric(i)) && i.quantity > 0).reduce((s, i) => s + i.quantity, 0);
+  const add = (surface, value, basis) => {
+    if (!(value > 1e-3)) return;
+    const key = `unallocated_${surface}_finish_area`;
+    items.push({
+      itemCode: `IMG-${key.toUpperCase()}`,
+      section: "Internal finishes",
+      boqTrade: "finishes",
+      description: `${surface[0].toUpperCase() + surface.slice(1)} finish \u2014 measured area; select material/system`,
+      unit: "m2",
+      quantity: round3(value),
+      rate: 0,
+      amount: 0,
+      rateMissing: true,
+      status: "measured_rate_pending",
+      verification: "pending",
+      includeInCommercialTotal: false,
+      measurementPlaceholder: { surface, status: "selection_required" },
+      pdfEvidence: { metricKey: key, pages: [1], basis },
+      imageEvidence: { metricKey: key, basis },
+      source: "Checked image room geometry; finish unspecified",
+      notes: `${basis} Material/system is not specified by the drawing. Select an applicable existing catalog item or enable and review the editable scope defaults. Area is retained, not silently omitted.`,
+      completion: { code: "finish_selection_required", required_information: ["Select floor/wall/ceiling finish and applicable catalog rate."] }
+    });
+    warnings.push(`${round3(value)} m2 of ${surface} finish remains unselected and is excluded from the priced budget. The displayed budget is incomplete.`);
+  };
+  add(
+    "floor",
+    takeoff.floor_area - total(["ceramic_floor_area", "wood_floor_area", "epoxy_floor_area", "terrace_floor_area", "stone_floor_area", "cement_floor_area"]),
+    "Complete checked clear floor area less explicitly allocated floor finishes; walls and voids excluded."
+  );
+  add(
+    "ceiling",
+    takeoff.ceiling_area - Math.max(total(["ceiling_paint_area"]), total(["gypsum_ceiling_area"])),
+    "Complete checked enclosed ceiling area less allocated ceiling finish; outdoor spaces and voids excluded."
+  );
+  const net = takeoff.raster_measurement_audit.netInternalWall;
+  if (net && !items.some((i) => i.measurementIssue?.metricKey === "paint_area")) add("wall", net.value - total(["paint_area", "wet_wall_tile_area"]), net.basis);
+}
+function buildRasterBoq({ takeoff, prices = [], rules = [], projectId, projectName, priceLevel = "standard", vatPercentage = 5 }) {
+  takeoff = reconcileRasterMeasurements(takeoff);
+  const { adapter, warnings, measurementIssues } = rasterOperationEvidence(takeoff);
+  warnings.push(...takeoff.raster_measurement_audit?.warnings || []);
+  if (takeoff.raster_measurement_audit?.corrections?.length) warnings.push("Saved arithmetic reconciled against complete dimensioned room geometry. Original values and calculation basis are retained in the measurement audit.");
+  const plan = planPdfCatalogRules(adapter, rules, prices);
+  warnings.push(...plan.warnings.map((s) => s.replaceAll("PDF", "Image")));
+  const items = [];
+  const byCode = new Map(prices.map((p) => [String(p.item_code || "").toUpperCase(), p]));
+  for (const [code, q] of plan.bindings) {
+    const p = byCode.get(code);
+    if (!p) continue;
+    if (q.metricKey === "window_area" && /alumini?um/i.test(p.description)) {
+      const specification = [q.evidence, ...(takeoff.detected_items || []).filter((i) => /window/i.test(i.name || "")).map((i) => i.description)].join(" ");
+      if (/\b(?:steel|timber|wood|upvc|pvc)\b/i.test(specification)) {
+        warnings.push("Recorded window material does not match the aluminium catalog package. Window quantity retained without that rate.");
+        continue;
+      }
+    }
+    const rate = resolvePdfCatalogRate(p, priceLevel);
+    items.push({
+      itemCode: code,
+      sectionCode: p.section_code || "07",
+      section: p.category || "Measured work",
+      description: p.description,
+      unit: p.unit,
+      quantity: q.quantity,
+      rate: rate.rate,
+      amount: boqLineAmount({ quantity: q.quantity, rate: rate.rate }),
+      rateSource: rate.source,
+      rateMissing: rate.missingRate,
+      status: rate.missingRate ? "measured_rate_pending" : "measured",
+      verification: "pending",
+      includeInCommercialTotal: false,
+      source: "Image operation evidence",
+      quantityBasis: "image_operation_evidence",
+      pdfEvidence: { metricKey: q.metricKey, metricKeys: q.metricKeys, pages: [1], basis: q.evidence },
+      imageEvidence: { metricKey: q.metricKey, basis: q.evidence },
+      notes: q.evidence
+    });
+    const row = items.at(-1);
+    if (q.metricKey === "window_area" && /alumini?um/i.test(p.description) && !/alumini?um/i.test(q.evidence || "")) {
+      const basis = "Existing catalog window package used provisionally; frame material and glazing are not established by the opening dimensions.";
+      row.description += " [assumed specification \u2014 editable]";
+      row.defaultSpecification = {
+        status: "applied",
+        metric: "window_area",
+        assumed: { window_system: p.description },
+        catalogItemCode: code,
+        rateBasis: basis,
+        policy: { label: p.description, conditions: "Confirm frame, glazing, hardware and performance.", rate_basis: basis }
+      };
+      row.notes += " PRICING ASSUMPTION (EDITABLE; NOT A DRAWING SPECIFICATION): " + basis;
+    }
+  }
+  const unbound = retainUnboundPdfQuantities(items, adapter);
+  warnings.push(...unbound.warnings.map((s) => s.replaceAll("PDF", "Image")));
+  for (const issue of measurementIssues) unbound.items.push({
+    itemCode: `IMG-${issue.metricKey.toUpperCase()}-MEASUREMENT-CONFLICT`,
+    section: issue.metricKey === "door_count" ? "Doors and Windows" : "Internal finishes",
+    description: `${issue.metricKey === "paint_area" ? "Wall paint" : issue.metricKey.replaceAll("_", " ")} \u2014 conflicting measurement, source review required`,
+    unit: PDF_METRIC_UNITS[issue.metricKey] || "m2",
+    quantity: 0,
+    rate: 0,
+    amount: 0,
+    rateMissing: true,
+    status: "quantity_pending",
+    verification: "pending",
+    includeInCommercialTotal: false,
+    source: "Image measurement consistency audit",
+    imageEvidence: { metricKey: issue.metricKey, basis: issue.basis },
+    measurementIssue: issue,
+    notes: issue.basis
+  });
+  if (adapter.scheduled_quantities.window_count > 0 && !adapter.scheduled_quantities.window_area) {
+    unbound.items.push({
+      itemCode: "IMG-WINDOW-COUNT",
+      section: "Doors and Windows",
+      description: "Window sets \u2014 opening dimensions required",
+      unit: "nr",
+      quantity: adapter.scheduled_quantities.window_count,
+      rate: 0,
+      amount: 0,
+      rateMissing: true,
+      status: "measured_rate_pending",
+      verification: "pending",
+      includeInCommercialTotal: false,
+      imageEvidence: { metricKey: "window_count", basis: "Saved window count; area unavailable." },
+      source: "Image operation evidence",
+      notes: "Count retained as count. Supply measured window dimensions before area-based pricing."
+    });
+  }
+  const doorItems = applyRasterDoorBudget(unbound.items, takeoff, adapter, prices, priceLevel);
+  const budgetItems = doorItems.map((item) => {
+    const key = item.pdfEvidence?.metricKey;
+    if (!["wood_floor_area", "ceiling_paint_area"].includes(key) || doorItems.filter((i) => i.pdfEvidence?.metricKey === key).length !== 1) return item;
+    const text2 = [
+      ...(adapter.pdf_analysis.quantity_evidence[key] || []).map((q) => q.evidence),
+      ...(takeoff.detected_items || []).filter((i) => new RegExp(key === "wood_floor_area" ? "wood|timber|parquet" : "ceiling", "i").test(i.name || "")).map((i) => i.description)
+    ].join(" ");
+    if (key === "wood_floor_area" && /\b(?:solid|engineered|laminate|parquet|vinyl|lvt|spc|oak|teak|bamboo|herringbone|outdoor)\b/i.test(text2)) return item;
+    if (key === "ceiling_paint_area" && /\b(?:epoxy|fire|acoustic|antibacterial|specialist|textured|enamel|exterior|exposed)\b/i.test(text2)) return item;
+    const next = applyPdfDefaultSpecifications([item], adapter, prices, priceLevel)[0];
+    return next.defaultSpecification?.status === "applied" ? { ...next, source: "Image measured quantity + editable catalog specification assumption" } : next;
+  });
+  for (let i = warnings.length - 1; i >= 0; i--) if (budgetItems.some((row) => row.rate > 0 && warnings[i].startsWith(`Image quantity ${row.pdfEvidence?.metricKey} retained as an unpriced row;`))) warnings.splice(i, 1);
+  const assumedDoors = budgetItems.filter((i) => /door_count$/.test(i.pdfEvidence?.metricKey || "") && i.defaultSpecification?.status === "applied");
+  if (assumedDoors.length) {
+    for (let i = warnings.length - 1; i >= 0; i--) if (assumedDoors.some((row) => warnings[i].startsWith(`Image quantity ${row.pdfEvidence.metricKey} retained as an unpriced row;`))) warnings.splice(i, 1);
+    warnings.push("Door budget uses the existing editable catalog specification assumption. Confirm material, opening size and required performance before tender approval.");
+  }
+  appendUnallocatedSurfaces(budgetItems, takeoff, warnings);
+  const finalItems = budgetItems.map((item, i) => {
+    const reviewed = requireBoqReview({
+      ...item,
+      itemNumber: String(i + 1).padStart(2, "0"),
+      itemCode: item.itemCode?.replace(/^PDF-/, "IMG-"),
+      source: String(item.source || "").replaceAll("PDF", "Image"),
+      notes: String(item.notes || "").replaceAll("PDF", "Image"),
+      quantityBasis: "image_operation_evidence",
+      quantitySource: "image_operation_evidence",
+      imageEvidence: item.imageEvidence || item.pdfEvidence,
+      amount: boqLineAmount(item)
+    });
+    return item.defaultSpecification?.status === "applied" ? { ...reviewed, specificationVerification: "assumed" } : reviewed;
+  });
+  if (!finalItems.length) throw Error("No supported measurable operations were found in this image. Review dimensions and operation evidence; no allowance was invented.");
+  const subtotal = currencySum(finalItems.filter((i) => !i.rateMissing).map(boqLineAmount));
+  const budget = calculateBoqBudget({ provisional: subtotal }, { vatPercentage });
+  return bindBoqSource({
+    projectId,
+    projectName,
+    currency: "AED",
+    priceLevel,
+    takeoff,
+    items: finalItems,
+    calculationVersion: "image-operation-evidence-v1",
+    measurementIssues,
+    measurementAudit: takeoff.raster_measurement_audit || null,
+    warnings: [...warnings, "Image quantities and catalog specifications require review. Unsupported work is not priced."],
+    assumptions: [
+      "Only saved image operation evidence is used. No CAD allowances or additional model requests.",
+      ...finalItems.filter((i) => i.defaultSpecification?.status === "applied").map((i) => `Editable budget assumption: ${i.defaultSpecification.policy.label}; ${i.defaultSpecification.rateBasis}. ${i.defaultSpecification.policy.conditions || ""}`)
+    ],
+    summary: {
+      totalItems: finalItems.length,
+      unpricedMeasuredItems: finalItems.filter((i) => i.rateMissing && i.quantity > 0).length,
+      verifiedSubtotal: 0,
+      provisionalSubtotal: subtotal,
+      subtotal,
+      vatPercentage,
+      vatAmount: budget.vat,
+      grandTotal: budget.total,
+      commercialSafe: false,
+      scopeCoverage: "unconfirmed"
+    }
+  }, takeoff, projectId);
+}
+
 // src/lib/pdfSourceRateBook.mjs
 var band4 = (spans, y) => spans.filter((s) => Math.abs(s.y - y) < 1.5).sort((a, b) => a.x - b.x);
 var unit4 = (v) => ({ "m\xB2": "m2", "m\xB3": "m3", nos: "nr", no: "nr", point: "nr", set: "nr" })[String(v).toLowerCase()] || String(v).toLowerCase();
@@ -6034,14 +5766,14 @@ function readPdfSourceRateBook(pages) {
         const anchors = spans.filter((s) => s.y < head.y - 3 && Math.abs(s.x - head.x) < 10 && /^[A-Z][A-Z0-9-]*\d[A-Z0-9-]*$/.test(s.text));
         if (!anchors.length || anchors.length > 500) throw Error("Empty/excessive source rate book");
         for (const anchor of anchors) {
-          const row = band4(spans, anchor.y), at3 = (i) => {
+          const row = band4(spans, anchor.y), at = (i) => {
             const matches = row.filter((s) => Math.abs(s.x - cols[i].x) < 10);
             if (matches.length !== 1) throw Error("Missing source rate cell");
             return matches[0].text;
           };
-          const raw = at3(3), u = unit4(at3(2));
+          const raw = at(3), u = unit4(at(2));
           if (!/^\d+(?:\.\d+)?$/.test(raw) || !["m", "m2", "m3", "nr"].includes(u) || !(Number(raw) > 0 && Number(raw) < 1e9)) throw Error("Unsupported source rate/unit");
-          rates.push({ code: anchor.text, description: at3(1), unit: u, rate: Number(raw), currency: "AED", page: page.pageNumber });
+          rates.push({ code: anchor.text, description: at(1), unit: u, rate: Number(raw), currency: "AED", page: page.pageNumber });
         }
       } catch (e) {
         rates.splice(start);
@@ -6079,16 +5811,16 @@ function bindPdfSourceRates(items, takeoff) {
   if (!book.rates.length) return items;
   return items.map((item) => {
     if (!(item.quantity > 0) || item.source === "manual" || item.review?.confirmed || item.catalogSelection || item.defaultSpecification?.rateOverridden || item.projectRateOverride || item.projectRateSelection || item.quantitySource === "manual" || item.quantityBasis === "manual_quantity_override") return item;
-    const op = item.pdfEvidence?.operation, key2 = item.pdfEvidence?.metricKey;
-    if (!key2) return item;
+    const op = item.pdfEvidence?.operation, key = item.pdfEvidence?.metricKey;
+    if (!key) return item;
     const candidates = book.rates.filter((r2) => {
       if (r2.unit !== unit4(item.unit)) return false;
       const scope2 = rateScope(r2);
       if (!scope2) return false;
       if (scope2.metric) {
-        if (scope2.metric !== key2) return false;
-        if (["external_block_area", "internal_block_area"].includes(key2)) {
-          const thickness = r2.description.match(/\b(\d+(?:\.\d+)?)\s*mm\b/i), kind = key2.startsWith("external") ? "external" : "internal";
+        if (scope2.metric !== key) return false;
+        if (["external_block_area", "internal_block_area"].includes(key)) {
+          const thickness = r2.description.match(/\b(\d+(?:\.\d+)?)\s*mm\b/i), kind = key.startsWith("external") ? "external" : "internal";
           if (thickness) {
             const pattern = new RegExp("Solid " + kind + " wall\\s+[A-Z]+\\d+\\s*=\\s*(\\d+(?:\\.\\d+)?)\\s*mm", "gi");
             const values = (takeoff.page_results || []).flatMap((p) => (p.native_plan_text?.spans || []).flatMap((s) => [...s.text.matchAll(pattern)].map((m) => Number(m[1]))));
@@ -6186,9 +5918,9 @@ function annotatePdfBoqCompletion(items, takeoff, catalog = [], priceLevel = "st
       return item;
     }
     summary.unpricedMeasuredOperations++;
-    const key2 = item.pdfEvidence?.metricKey || String(item.itemCode || "").replace(/^PDF-/, "").toLowerCase();
-    const matching = candidates.get(key2) || [];
-    let required = /_volume$/.test(key2) && key2 !== "excavation_volume" ? ["Concrete grade/specification for this element", "Applicable own catalog or project rate"] : requirements[key2] || ["Applicable scope/material specification and matching own catalog or project rate"];
+    const key = item.pdfEvidence?.metricKey || String(item.itemCode || "").replace(/^PDF-/, "").toLowerCase();
+    const matching = candidates.get(key) || [];
+    let required = /_volume$/.test(key) && key !== "excavation_volume" ? ["Concrete grade/specification for this element", "Applicable own catalog or project rate"] : requirements[key] || ["Applicable scope/material specification and matching own catalog or project rate"];
     let code = matching.length && matching.every((p) => !p.rateAvailable) ? "catalog_rate_missing" : matching.length > 1 ? "catalog_selection_required" : "specification_or_catalog_match_required";
     if (item.operationPricing?.status === "catalog_rate_missing") {
       code = "catalog_rate_missing";
@@ -6198,7 +5930,7 @@ function annotatePdfBoqCompletion(items, takeoff, catalog = [], priceLevel = "st
       code = "catalog_selection_required";
       required = ["Resolve competing specification-matched operation catalog records: " + item.operationPricing.candidate_codes.join(", ")];
     }
-    const known = resolvedPdfSpecifications(takeoff, key2, specificationFacts), conflicts = specificationConflicts.filter((f) => f.metric === key2);
+    const known = resolvedPdfSpecifications(takeoff, key, specificationFacts), conflicts = specificationConflicts.filter((f) => f.metric === key);
     if (conflicts.length) {
       code = "source_specification_breakdown_required";
       required = ["Provide disjoint measured quantities for the mixed/conflicting source specifications before selecting rates."];
@@ -6206,7 +5938,7 @@ function annotatePdfBoqCompletion(items, takeoff, catalog = [], priceLevel = "st
       code = "source_specification_without_catalog_match";
       required = ["Select or provide an applicable rate matching the known source specification; the source quantity is retained."];
     }
-    const completion = { code, metric: key2, required_information: required, candidate_codes: matching.map((p) => p.code), ...known.length ? { source_specifications: known } : {}, ...conflicts.length ? { specification_conflicts: conflicts } : {} };
+    const completion = { code, metric: key, required_information: required, candidate_codes: matching.map((p) => p.code), ...known.length ? { source_specifications: known } : {}, ...conflicts.length ? { specification_conflicts: conflicts } : {} };
     gaps.push({ itemCode: item.itemCode, description: item.description, quantity, unit: item.unit, ...completion });
     const sourceNote = known.length ? " Source: " + known.map((f) => `${f.property}=${f.value} (pages ${f.pages.join(", ")})`).join("; ") + "." : "";
     const note = `[BOQ GAP] ${code}: ${required.join("; ")}.${matching.length ? " Catalog candidates: " + matching.map((p) => p.code).join(", ") + "." : ""}${sourceNote} [/BOQ GAP]`;
@@ -6377,15 +6109,15 @@ function getDrawingEvidence(takeoff = {}) {
 }
 
 // src/lib/serverBoqAnalysis.js
-import { NextResponse as NextResponse2 } from "next/server.js";
+import { NextResponse as NextResponse3 } from "next/server.js";
 import { createClient as createClient3 } from "@supabase/supabase-js";
 
 // src/services/localBoqBuilder.js
 function toNumber(value) {
-  const number2 = Number(value);
-  return Number.isFinite(number2) ? number2 : 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : 0;
 }
-function round2(value, digits = 2) {
+function round4(value, digits = 2) {
   const factor2 = 10 ** digits;
   return Math.round((toNumber(value) + Number.EPSILON) * factor2) / factor2;
 }
@@ -6410,8 +6142,8 @@ function collectTakeoffSources(input) {
     if (!current || typeof current !== "object" || seen.has(current)) continue;
     seen.add(current);
     sources.push(current);
-    for (const key2 of nestedKeys) {
-      const nested = current[key2];
+    for (const key of nestedKeys) {
+      const nested = current[key];
       if (nested && typeof nested === "object") queue.push(nested);
     }
   }
@@ -6419,8 +6151,8 @@ function collectTakeoffSources(input) {
 }
 function firstPositive(sources, keys) {
   for (const source2 of sources) {
-    for (const key2 of keys) {
-      const value = toNumber(source2?.[key2]);
+    for (const key of keys) {
+      const value = toNumber(source2?.[key]);
       if (value > 0) return value;
     }
   }
@@ -6428,8 +6160,8 @@ function firstPositive(sources, keys) {
 }
 function firstValue(sources, keys, fallback = null) {
   for (const source2 of sources) {
-    for (const key2 of keys) {
-      const value = source2?.[key2];
+    for (const key of keys) {
+      const value = source2?.[key];
       if (value !== void 0 && value !== null && value !== "") return value;
     }
   }
@@ -6437,19 +6169,19 @@ function firstValue(sources, keys, fallback = null) {
 }
 function countDetected(sources, keys) {
   for (const source2 of sources) {
-    for (const key2 of keys) {
-      const value = source2?.[key2];
+    for (const key of keys) {
+      const value = source2?.[key];
       if (Array.isArray(value) && value.length > 0) return value.length;
-      const number2 = toNumber(value);
-      if (number2 > 0) return number2;
+      const number4 = toNumber(value);
+      if (number4 > 0) return number4;
     }
   }
   return 0;
 }
 function firstArray(sources, keys) {
   for (const source2 of sources) {
-    for (const key2 of keys) {
-      if (Array.isArray(source2?.[key2]) && source2[key2].length > 0) return source2[key2];
+    for (const key of keys) {
+      if (Array.isArray(source2?.[key]) && source2[key].length > 0) return source2[key];
     }
   }
   return [];
@@ -6500,9 +6232,9 @@ function createItem({
     section,
     description,
     unit: unit5,
-    quantity: round2(quantity),
-    rate: round2(rate),
-    amount: round2(toNumber(quantity) * toNumber(rate)),
+    quantity: round4(quantity),
+    rate: round4(rate),
+    amount: round4(toNumber(quantity) * toNumber(rate)),
     source: source2,
     confidence: toNumber(confidence),
     notes
@@ -6547,7 +6279,7 @@ function buildLocalBoq({
   const netWallArea = wallArea > 0 && totalOpeningArea > 0 ? Math.max(0, wallArea - totalOpeningArea) : wallArea;
   assumptions = [
     "Rates are editable starter budget rates in AED and must be reviewed before quotation or contract use.",
-    totalOpeningArea > 0 ? `Wall finishes use net wall area after deducting ${round2(totalOpeningArea)} m\xB2 of measured openings.` : "Wall finishes use gross wall area because opening dimensions are unavailable."
+    totalOpeningArea > 0 ? `Wall finishes use net wall area after deducting ${round4(totalOpeningArea)} m\xB2 of measured openings.` : "Wall finishes use gross wall area because opening dimensions are unavailable."
   ];
   const slabVolume = firstPositive(sources, ["slab_volume", "slabVolume"]);
   const skirtingLength = Math.max(0, roomPerimeter || wallLength || 0);
@@ -6658,8 +6390,8 @@ function buildLocalBoq({
   if (items.length === 0) {
     warnings.push("No measurable floor, wall, opening, or slab quantities were found in the latest takeoff.");
   }
-  const subtotal = round2(items.reduce((sum, item) => sum + item.amount, 0));
-  const vat = round2(subtotal * (toNumber(vatPercentage) / 100));
+  const subtotal = round4(items.reduce((sum, item) => sum + item.amount, 0));
+  const vat = round4(subtotal * (toNumber(vatPercentage) / 100));
   return {
     projectName,
     currency: "AED",
@@ -6667,7 +6399,7 @@ function buildLocalBoq({
     items,
     warnings,
     assumptions,
-    summary: { subtotal, vat, grandTotal: round2(subtotal + vat) },
+    summary: { subtotal, vat, grandTotal: round4(subtotal + vat) },
     generatedBy: "Ventra deterministic BOQ fallback",
     generatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
@@ -6858,18 +6590,18 @@ var matchSchema = {
   }
 };
 function responseJson(response) {
-  const text = response?.output_text || response?.output?.flatMap((item) => item?.content || [])?.find((item) => item?.type === "output_text")?.text;
-  if (!text) {
+  const text2 = response?.output_text || response?.output?.flatMap((item) => item?.content || [])?.find((item) => item?.type === "output_text")?.text;
+  if (!text2) {
     throw new Error("AI BOQ scope engine returned no JSON.");
   }
-  return JSON.parse(text);
+  return JSON.parse(text2);
 }
 function getSemanticRooms(rawTakeoff) {
   const rooms = rawTakeoff?.object_details?.rooms;
   return Array.isArray(rooms) ? rooms.map(compactRoom) : [];
 }
 function hydrateSemanticRoomQuantities(rooms, takeoff) {
-  const list = Array.isArray(rooms) ? rooms.map(
+  const list2 = Array.isArray(rooms) ? rooms.map(
     (room) => {
       const rawX = room?.centroid?.x;
       const rawY = room?.centroid?.y;
@@ -6890,24 +6622,24 @@ function hydrateSemanticRoomQuantities(rooms, takeoff) {
     }
   ) : [];
   const floorArea = Number(takeoff?.floor_area) || 0;
-  if (list.length === 0 || floorArea <= 0) {
+  if (list2.length === 0 || floorArea <= 0) {
     return {
-      rooms: list,
+      rooms: list2,
       applied: false,
       source: "unavailable"
     };
   }
-  const alreadyMeasured = list.every(
+  const alreadyMeasured = list2.every(
     (room) => Number(room?.area) > 0
   );
   if (alreadyMeasured) {
     return {
-      rooms: list,
+      rooms: list2,
       applied: false,
       source: "existing_room_quantities"
     };
   }
-  const hasCentroids = list.every(
+  const hasCentroids = list2.every(
     (room) => Number.isFinite(
       Number(
         room?.centroid?.x
@@ -6919,9 +6651,9 @@ function hydrateSemanticRoomQuantities(rooms, takeoff) {
     )
   );
   if (!hasCentroids) {
-    const equalArea = floorArea / list.length;
+    const equalArea = floorArea / list2.length;
     return {
-      rooms: list.map((room) => ({
+      rooms: list2.map((room) => ({
         ...room,
         area: Number(
           equalArea.toFixed(2)
@@ -6938,19 +6670,19 @@ function hydrateSemanticRoomQuantities(rooms, takeoff) {
     };
   }
   const gridSize = 140;
-  const counts = new Array(list.length).fill(0);
+  const counts = new Array(list2.length).fill(0);
   for (let gy = 0; gy < gridSize; gy += 1) {
     const y = (gy + 0.5) / gridSize;
     for (let gx = 0; gx < gridSize; gx += 1) {
       const x = (gx + 0.5) / gridSize;
       let bestIndex = 0;
       let bestDistance = Infinity;
-      for (let index = 0; index < list.length; index += 1) {
+      for (let index = 0; index < list2.length; index += 1) {
         const dx = x - Number(
-          list[index].centroid.x
+          list2[index].centroid.x
         );
         const dy = y - Number(
-          list[index].centroid.y
+          list2[index].centroid.y
         );
         const distance3 = dx * dx + dy * dy;
         if (distance3 < bestDistance) {
@@ -6963,10 +6695,10 @@ function hydrateSemanticRoomQuantities(rooms, takeoff) {
   }
   const totalCells = gridSize * gridSize;
   let assigned = 0;
-  const hydrated = list.map(
+  const hydrated = list2.map(
     (room, index) => {
       let area3;
-      if (index === list.length - 1) {
+      if (index === list2.length - 1) {
         area3 = floorArea - assigned;
       } else {
         area3 = floorArea * (counts[index] / totalCells);
@@ -7254,18 +6986,18 @@ function resolveAiQuantity({
 // src/lib/serverBoqAnalysis.js
 function createServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key2 = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url) {
     throw new Error(
       "NEXT_PUBLIC_SUPABASE_URL is missing."
     );
   }
-  if (!key2) {
+  if (!key) {
     throw new Error(
       "SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY is missing from .env.local."
     );
   }
-  return createClient3(url, key2, {
+  return createClient3(url, key, {
     db: {
       schema: "public"
     },
@@ -7277,10 +7009,10 @@ function createServerSupabase() {
   });
 }
 function toNumber2(value) {
-  const number2 = Number(value);
-  return Number.isFinite(number2) ? number2 : 0;
+  const number4 = Number(value);
+  return Number.isFinite(number4) ? number4 : 0;
 }
-function round3(value, precision = 2) {
+function round5(value, precision = 2) {
   const factor2 = 10 ** precision;
   return Math.round(
     (toNumber2(value) + Number.EPSILON) * factor2
@@ -7405,15 +7137,15 @@ function normalizeTakeoff(rawTakeoff) {
     duct_length: toNumber2(
       takeoff.duct_length ?? takeoff.ductLength
     ),
-    opening_area: round3(
+    opening_area: round5(
       resolvedOpeningArea,
       2
     ),
-    door_area: round3(
+    door_area: round5(
       estimatedDoorArea,
       2
     ),
-    window_area: round3(
+    window_area: round5(
       measuredWindowArea,
       2
     ),
@@ -7575,7 +7307,7 @@ function calculateQuantity(rule, takeoff) {
         source: "takeoff_electrical_subtype_count"
       }
     );
-    return round3(
+    return round5(
       measuredQuantity,
       Number.isInteger(
         rule.rounding_precision
@@ -7630,7 +7362,7 @@ function calculateQuantity(rule, takeoff) {
   if (quantity > 0 && quantity < minimumQuantity) {
     quantity = minimumQuantity;
   }
-  return round3(
+  return round5(
     quantity,
     Number.isInteger(
       rule.rounding_precision
@@ -7781,13 +7513,13 @@ function resolveRate(priceItem, priceLevel, allPriceItems) {
     ).filter(
       (word) => word.length >= 4
     );
-    const overlap = keywords.filter(
+    const overlap2 = keywords.filter(
       (word) => itemDescription.includes(
         word
       )
     ).length;
     score += Math.min(
-      overlap,
+      overlap2,
       4
     );
     const directPeer = chooseDirectRate(
@@ -8030,13 +7762,13 @@ function getMeasuredRuleFamily(rule, priceItem) {
   const description = String(
     priceItem?.description || ""
   ).toLowerCase();
-  const geometry2 = String(
+  const geometry = String(
     rule?.geometry_type || ""
   ).toLowerCase();
   const property = String(
     rule?.geometry_property || ""
   ).toLowerCase();
-  if (geometry2 === "wall" && property === "area" && /block\s*wall|blockwork|block work|masonry/.test(
+  if (geometry === "wall" && property === "area" && /block\s*wall|blockwork|block work|masonry/.test(
     description
   )) {
     return "wall_blockwork";
@@ -8116,7 +7848,7 @@ function getSafeQuantityBasis(match, priceItem) {
   return original;
 }
 function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
-  const geometry2 = String(
+  const geometry = String(
     rule?.geometry_type || ""
   ).toLowerCase();
   const description = String(
@@ -8155,7 +7887,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
   const wetRooms = bathrooms + kitchens + (Number(
     takeoff?.classifications?.room_types?.laundry
   ) || 0);
-  if (geometry2 === "preliminaries" && ["item", "ls", "l.s", "sum"].includes(
+  if (geometry === "preliminaries" && ["item", "ls", "l.s", "sum"].includes(
     unit5
   )) {
     return {
@@ -8164,7 +7896,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       confidence: 55
     };
   }
-  if (geometry2 === "earthwork") {
+  if (geometry === "earthwork") {
     if (/(excavat|soil removal|cut)/.test(
       description
     ) && ["m3", "cum", "cu.m"].includes(
@@ -8188,7 +7920,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "foundation") {
+  if (geometry === "foundation") {
     if (["m3", "cum", "cu.m"].includes(
       unit5
     ) && floorArea > 0) {
@@ -8208,7 +7940,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "column") {
+  if (geometry === "column") {
     if (["m3", "cum", "cu.m"].includes(
       unit5
     ) && columns > 0) {
@@ -8228,7 +7960,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "beam") {
+  if (geometry === "beam") {
     if (["m3", "cum", "cu.m"].includes(
       unit5
     ) && wallLength > 0) {
@@ -8248,7 +7980,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "slab") {
+  if (geometry === "slab") {
     if (["m3", "cum", "cu.m"].includes(
       unit5
     ) && floorArea > 0) {
@@ -8268,7 +8000,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "plumbing") {
+  if (geometry === "plumbing") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "set"].includes(
       unit5
     )) {
@@ -8328,7 +8060,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "electrical") {
+  if (geometry === "electrical") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "point"].includes(
       unit5
     ) && electricalItems > 0) {
@@ -8376,7 +8108,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       }
     }
   }
-  if (geometry2 === "hvac") {
+  if (geometry === "hvac") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit", "set"].includes(
       unit5
     ) && roomCount > 0) {
@@ -8405,7 +8137,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "fire") {
+  if (geometry === "fire") {
     if (["no", "nos", "nr", "item", "each", "ea", "unit"].includes(
       unit5
     )) {
@@ -8437,7 +8169,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       }
     }
   }
-  if (geometry2 === "external") {
+  if (geometry === "external") {
     if (["m2", "sqm", "sq.m"].includes(
       unit5
     ) && floorArea > 0) {
@@ -8457,7 +8189,7 @@ function estimatePendingRuleQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "handover" || geometry2 === "commissioning") {
+  if (geometry === "handover" || geometry === "commissioning") {
     if (["item", "ls", "l.s", "sum"].includes(
       unit5
     )) {
@@ -8478,7 +8210,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
   const code = String(
     rule?.item_code || ""
   ).trim().toUpperCase();
-  const geometry2 = String(
+  const geometry = String(
     rule?.geometry_type || ""
   ).toLowerCase();
   const description = String(
@@ -8565,7 +8297,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
   const saysFormwork = /\b(formwork|shuttering|form\s*work)\b/i.test(
     description
   );
-  if (geometry2 === "general" && isVolumeUnit && saysConcrete && saysColumn && columnVolume > 0 && structuralStatus?.columns?.volumeMeasured === true) {
+  if (geometry === "general" && isVolumeUnit && saysConcrete && saysColumn && columnVolume > 0 && structuralStatus?.columns?.volumeMeasured === true) {
     return {
       quantity: columnVolume,
       source: "aps_measured_column_volume_semantic_rule_bridge",
@@ -8574,7 +8306,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       mappedGeometry: "column"
     };
   }
-  if (geometry2 === "general" && isAreaUnit && saysColumn && saysFormwork && columnFormworkArea > 0 && structuralStatus?.columns?.formworkComplete === true) {
+  if (geometry === "general" && isAreaUnit && saysColumn && saysFormwork && columnFormworkArea > 0 && structuralStatus?.columns?.formworkComplete === true) {
     return {
       quantity: columnFormworkArea,
       source: "aps_measured_column_formwork_semantic_rule_bridge",
@@ -8583,7 +8315,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       mappedGeometry: "column"
     };
   }
-  if (geometry2 === "general" && isVolumeUnit && saysConcrete && saysBeam && beamVolume > 0 && structuralStatus?.beams?.volumeMeasured === true) {
+  if (geometry === "general" && isVolumeUnit && saysConcrete && saysBeam && beamVolume > 0 && structuralStatus?.beams?.volumeMeasured === true) {
     return {
       quantity: beamVolume,
       source: "aps_measured_beam_volume_semantic_rule_bridge",
@@ -8592,7 +8324,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       mappedGeometry: "beam"
     };
   }
-  if (geometry2 === "general" && isVolumeUnit && saysConcrete && saysSlab && slabVolume > 0 && structuralStatus?.slabs?.volumeMeasured === true) {
+  if (geometry === "general" && isVolumeUnit && saysConcrete && saysSlab && slabVolume > 0 && structuralStatus?.slabs?.volumeMeasured === true) {
     return {
       quantity: slabVolume,
       source: "aps_measured_slab_volume_semantic_rule_bridge",
@@ -8601,7 +8333,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       mappedGeometry: "slab"
     };
   }
-  if (geometry2 === "general" && isVolumeUnit && saysConcrete && saysFoundation && foundationVolume > 0 && structuralStatus?.foundations?.volumeMeasured === true) {
+  if (geometry === "general" && isVolumeUnit && saysConcrete && saysFoundation && foundationVolume > 0 && structuralStatus?.foundations?.volumeMeasured === true) {
     return {
       quantity: foundationVolume,
       source: "aps_measured_foundation_volume_semantic_rule_bridge",
@@ -8610,7 +8342,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       mappedGeometry: "foundation"
     };
   }
-  if (geometry2 === "foundation") {
+  if (geometry === "foundation") {
     if (isVolumeUnit && foundationVolume > 0 && structuralStatus?.foundations?.volumeMeasured === true) {
       return {
         quantity: foundationVolume,
@@ -8628,7 +8360,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "column") {
+  if (geometry === "column") {
     if (isVolumeUnit && columnVolume > 0 && structuralStatus?.columns?.volumeMeasured === true) {
       return {
         quantity: columnVolume,
@@ -8646,7 +8378,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "beam") {
+  if (geometry === "beam") {
     if (isVolumeUnit && beamVolume > 0 && structuralStatus?.beams?.volumeMeasured === true) {
       return {
         quantity: beamVolume,
@@ -8664,7 +8396,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
       };
     }
   }
-  if (geometry2 === "slab") {
+  if (geometry === "slab") {
     if (isVolumeUnit && slabVolume > 0 && structuralStatus?.slabs?.volumeMeasured === true) {
       return {
         quantity: slabVolume,
@@ -8893,7 +8625,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
     };
   }
   if (isAreaUnit) {
-    if (geometry2 === "roof") {
+    if (geometry === "roof") {
       return {
         quantity: Math.max(
           floorArea,
@@ -8903,7 +8635,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
         confidence: 22
       };
     }
-    if (geometry2 === "ceiling") {
+    if (geometry === "ceiling") {
       return {
         quantity: Math.max(
           ceilingArea,
@@ -8913,7 +8645,7 @@ function estimateRemainingPendingQuantity(rule, priceItem, takeoff) {
         confidence: 25
       };
     }
-    if (geometry2 === "wall") {
+    if (geometry === "wall") {
       return {
         quantity: Math.max(
           wallArea * 0.1,
@@ -9027,7 +8759,7 @@ function collectElectricalObjectEvidence(item) {
     }
     if (typeof value === "object") {
       for (const [
-        key2,
+        key,
         child
       ] of Object.entries(
         value
@@ -9036,10 +8768,10 @@ function collectElectricalObjectEvidence(item) {
           "centroid",
           "boundingBox",
           "bbox"
-        ].includes(key2)) {
+        ].includes(key)) {
           continue;
         }
-        pushValue(key2);
+        pushValue(key);
         visit(
           child,
           depth + 1
@@ -9047,7 +8779,7 @@ function collectElectricalObjectEvidence(item) {
       }
     }
   };
-  for (const key2 of [
+  for (const key of [
     "name",
     "displayName",
     "objectName",
@@ -9066,7 +8798,7 @@ function collectElectricalObjectEvidence(item) {
     "rawProperties"
   ]) {
     visit(
-      item?.[key2],
+      item?.[key],
       0
     );
   }
@@ -9090,14 +8822,14 @@ function classifyElectricalSubtypeFromAps(item) {
   ].includes(existing)) {
     return existing;
   }
-  const text = collectElectricalObjectEvidence(
+  const text2 = collectElectricalObjectEvidence(
     item
   );
-  if (!text) {
+  if (!text2) {
     return "other";
   }
   const hasAny = (patterns) => patterns.some(
-    (pattern) => pattern.test(text)
+    (pattern) => pattern.test(text2)
   );
   if (hasAny([
     /\bdistribution\s*board\b/i,
@@ -9281,7 +9013,7 @@ function buildWorldRoomLocalMepCounts(takeoff, semanticRooms) {
   );
   const rawAssignments = electrical.map(
     (item) => {
-      const point2 = {
+      const point3 = {
         x: (Number(
           item.centroid.x
         ) - minX) / width,
@@ -9293,8 +9025,8 @@ function buildWorldRoomLocalMepCounts(takeoff, semanticRooms) {
         (candidate) => ({
           ...candidate,
           distance: Math.hypot(
-            point2.x - candidate.x,
-            point2.y - candidate.y
+            point3.x - candidate.x,
+            point3.y - candidate.y
           )
         })
       ).sort(
@@ -9622,50 +9354,50 @@ function buildRoomCentroidElectricalCounts(takeoff, semanticRooms) {
     })
   );
   const transforms = [
-    (point2) => ({
-      x: point2.x,
-      y: point2.y
+    (point3) => ({
+      x: point3.x,
+      y: point3.y
     }),
-    (point2) => ({
-      x: point2.x,
-      y: 1 - point2.y
+    (point3) => ({
+      x: point3.x,
+      y: 1 - point3.y
     }),
-    (point2) => ({
-      x: 1 - point2.x,
-      y: point2.y
+    (point3) => ({
+      x: 1 - point3.x,
+      y: point3.y
     }),
-    (point2) => ({
-      x: 1 - point2.x,
-      y: 1 - point2.y
+    (point3) => ({
+      x: 1 - point3.x,
+      y: 1 - point3.y
     }),
-    (point2) => ({
-      x: point2.y,
-      y: point2.x
+    (point3) => ({
+      x: point3.y,
+      y: point3.x
     }),
-    (point2) => ({
-      x: point2.y,
-      y: 1 - point2.x
+    (point3) => ({
+      x: point3.y,
+      y: 1 - point3.x
     }),
-    (point2) => ({
-      x: 1 - point2.y,
-      y: point2.x
+    (point3) => ({
+      x: 1 - point3.y,
+      y: point3.x
     }),
-    (point2) => ({
-      x: 1 - point2.y,
-      y: 1 - point2.x
+    (point3) => ({
+      x: 1 - point3.y,
+      y: 1 - point3.x
     })
   ];
   const solutions = transforms.map(
     (transform, transformIndex) => {
       const assignments = normalizedElectrical.map(
         (entry) => {
-          const point2 = transform(entry);
+          const point3 = transform(entry);
           const ranked = roomCentroids.map(
             (candidate) => ({
               ...candidate,
               distance: Math.hypot(
-                point2.x - candidate.x,
-                point2.y - candidate.y
+                point3.x - candidate.x,
+                point3.y - candidate.y
               )
             })
           ).sort(
@@ -9707,13 +9439,13 @@ function buildRoomCentroidElectricalCounts(takeoff, semanticRooms) {
       )] : Infinity;
       const roomUseCounts = /* @__PURE__ */ new Map();
       for (const assignment of assignments) {
-        const key2 = String(
+        const key = String(
           assignment.room?.name || assignment.room?.type || "room"
         );
         roomUseCounts.set(
-          key2,
+          key,
           (roomUseCounts.get(
-            key2
+            key
           ) || 0) + 1
         );
       }
@@ -9798,13 +9530,13 @@ function buildRoomCentroidElectricalCounts(takeoff, semanticRooms) {
   const coverage = electrical.length ? accepted.length / electrical.length : 0;
   const acceptedRoomUse = /* @__PURE__ */ new Map();
   for (const assignment of accepted) {
-    const key2 = String(
+    const key = String(
       assignment.room?.name || assignment.room?.type || "room"
     );
     acceptedRoomUse.set(
-      key2,
+      key,
       (acceptedRoomUse.get(
-        key2
+        key
       ) || 0) + 1
     );
   }
@@ -9964,66 +9696,66 @@ function buildRoomLocalMepCounts(takeoff, semanticRooms) {
     electrical
   );
   const transforms = [
-    (point2) => ({
-      x: point2.x,
-      y: point2.y
+    (point3) => ({
+      x: point3.x,
+      y: point3.y
     }),
-    (point2) => ({
-      x: point2.x,
-      y: 1 - point2.y
+    (point3) => ({
+      x: point3.x,
+      y: 1 - point3.y
     }),
-    (point2) => ({
-      x: 1 - point2.x,
-      y: point2.y
+    (point3) => ({
+      x: 1 - point3.x,
+      y: point3.y
     }),
-    (point2) => ({
-      x: 1 - point2.x,
-      y: 1 - point2.y
+    (point3) => ({
+      x: 1 - point3.x,
+      y: 1 - point3.y
     }),
-    (point2) => ({
-      x: point2.y,
-      y: point2.x
+    (point3) => ({
+      x: point3.y,
+      y: point3.x
     }),
-    (point2) => ({
-      x: point2.y,
-      y: 1 - point2.x
+    (point3) => ({
+      x: point3.y,
+      y: 1 - point3.x
     }),
-    (point2) => ({
-      x: 1 - point2.y,
-      y: point2.x
+    (point3) => ({
+      x: 1 - point3.y,
+      y: point3.x
     }),
-    (point2) => ({
-      x: 1 - point2.y,
-      y: 1 - point2.x
+    (point3) => ({
+      x: 1 - point3.y,
+      y: 1 - point3.x
     })
   ];
-  const distanceToRegion = (point2, room) => {
+  const distanceToRegion = (point3, room) => {
     const box = room.regionBBox;
-    const dx = point2.x < box.x ? box.x - point2.x : point2.x > box.x + box.width ? point2.x - (box.x + box.width) : 0;
-    const dy = point2.y < box.y ? box.y - point2.y : point2.y > box.y + box.height ? point2.y - (box.y + box.height) : 0;
+    const dx = point3.x < box.x ? box.x - point3.x : point3.x > box.x + box.width ? point3.x - (box.x + box.width) : 0;
+    const dy = point3.y < box.y ? box.y - point3.y : point3.y > box.y + box.height ? point3.y - (box.y + box.height) : 0;
     return Math.hypot(
       dx,
       dy
     );
   };
-  const roomCenterDistance = (point2, room) => Math.hypot(
-    point2.x - (room.regionBBox.x + room.regionBBox.width / 2),
-    point2.y - (room.regionBBox.y + room.regionBBox.height / 2)
+  const roomCenterDistance = (point3, room) => Math.hypot(
+    point3.x - (room.regionBBox.x + room.regionBBox.width / 2),
+    point3.y - (room.regionBBox.y + room.regionBBox.height / 2)
   );
   const solutions = transforms.map(
     (transform, transformIndex) => {
       const assignments = normalizedElectrical.map(
         (entry) => {
-          const point2 = transform(entry);
+          const point3 = transform(entry);
           const ranked = rooms.map(
             (room) => ({
               room,
               regionDistance: distanceToRegion(
-                point2,
+                point3,
                 room
               ),
               centerDistance: roomCenterDistance(
-                point2,
+                point3,
                 room
               )
             })
@@ -10043,14 +9775,14 @@ function buildRoomLocalMepCounts(takeoff, semanticRooms) {
           }
           const insideRegion = best2.regionDistance === 0;
           const accepted = insideRegion || best2.regionDistance <= 0.055;
-          const separation3 = second ? second.regionDistance - best2.regionDistance : 1;
+          const separation = second ? second.regionDistance - best2.regionDistance : 1;
           return {
             entry,
             room: accepted ? best2.room : null,
             insideRegion,
             regionDistance: best2.regionDistance,
             centerDistance: best2.centerDistance,
-            separation: separation3
+            separation
           };
         }
       );
@@ -10296,12 +10028,14 @@ async function handleCommercialRequest2(request) {
       )
     );
     const rawTakeoff = body?.takeoff || {};
+    const pendingCad = takeoffBoqIssue(rawTakeoff);
+    if (pendingCad) return NextResponse3.json({ success: false, code: "CAD_EXTRACTION_INCOMPLETE", error: pendingCad }, { status: 409 });
     if (rawTakeoff.pdf_analysis) {
       const total = Number(rawTakeoff.total_pages || rawTakeoff.pdf_analysis.total_pages || 0);
       const analyzed = Array.isArray(rawTakeoff.page_results) ? new Set(rawTakeoff.page_results.map((p) => p.pageNumber)).size : Number(rawTakeoff.analyzed_pages || 0);
       const review = rawTakeoff.pdf_analysis.document_review_status?.status;
       if (rawTakeoff.pdf_analysis.summaryOnly || rawTakeoff.failed_pages?.length || rawTakeoff.pdf_analysis.failed_pages?.length || total > 0 && analyzed < total || ["failed", "pending"].includes(review)) {
-        return NextResponse2.json({ success: false, code: "PDF_ANALYSIS_INCOMPLETE", error: `BOQ generation stopped: PDF page extraction or document review is incomplete (${analyzed}/${total || "?"} pages; review: ${review || "unavailable"}). The saved BOQ was not replaced. Recover complete source evidence before generating again.` }, { status: 409 });
+        return NextResponse3.json({ success: false, code: "PDF_ANALYSIS_INCOMPLETE", error: `BOQ generation stopped: PDF page extraction or document review is incomplete (${analyzed}/${total || "?"} pages; review: ${review || "unavailable"}). The saved BOQ was not replaced. Recover complete source evidence before generating again.` }, { status: 409 });
       }
     }
     const takeoff = normalizeTakeoff(
@@ -10520,6 +10254,10 @@ async function handleCommercialRequest2(request) {
     }
     const rules = rulesResult.data || [];
     const prices = pricesResult.data || [];
+    if (isRasterTakeoff(rawTakeoff)) {
+      const boq = buildRasterBoq({ takeoff: rawTakeoff, prices, rules, projectId, projectName, priceLevel, vatPercentage });
+      return NextResponse3.json({ success: true, boq });
+    }
     if (prices.length === 0 || !takeoff.pdf_analysis && rules.length === 0) {
       const fallbackBoq = takeoff.pdf_analysis ? { items: [], warnings: [] } : buildLocalBoq({
         takeoff,
@@ -10536,7 +10274,7 @@ async function handleCommercialRequest2(request) {
       const fallbackSubtotal = fallbackItems.reduce((sum, item) => sum + (classifyEstimateItem(item) === "pending" ? 0 : Number(item.amount) || 0), 0);
       const fallbackVat = fallbackSubtotal * Number(vatPercentage || 0) / 100;
       if (fallbackItems.length === 0) {
-        return NextResponse2.json(
+        return NextResponse3.json(
           {
             success: false,
             error: "BOQ database is empty and the fallback builder found no measurable quantities.",
@@ -10554,7 +10292,7 @@ async function handleCommercialRequest2(request) {
           { status: 422 }
         );
       }
-      return NextResponse2.json({
+      return NextResponse3.json({
         success: true,
         boq: {
           ...fallbackBoq,
@@ -10683,7 +10421,7 @@ async function handleCommercialRequest2(request) {
         if (Number(
           quantityEstimate.quantity
         ) > 0) {
-          quantity = round3(
+          quantity = round5(
             Number(
               quantityEstimate.quantity
             ),
@@ -10781,7 +10519,7 @@ async function handleCommercialRequest2(request) {
           }
         );
       }
-      const amount = isQuantityPending ? 0 : round3(
+      const amount = isQuantityPending ? 0 : round5(
         quantity * unitRate,
         2
       );
@@ -10817,11 +10555,11 @@ async function handleCommercialRequest2(request) {
         transportRate: toNumber2(
           priceItem.transport_rate
         ),
-        rate: round3(
+        rate: round5(
           commercialRate,
           2
         ),
-        referenceRate: round3(
+        referenceRate: round5(
           unitRate,
           2
         ),
@@ -11028,18 +10766,18 @@ async function handleCommercialRequest2(request) {
           ...matched.matches || [],
           ...deterministicElectricalMatches
         ]) {
-          const key2 = `${normalizeCode(
+          const key = `${normalizeCode(
             match?.item_code
           )}|${String(
             match?.room_type || ""
           )}`;
           if (mergedMatchKeys.has(
-            key2
+            key
           )) {
             continue;
           }
           mergedMatchKeys.add(
-            key2
+            key
           );
           mergedMatches.push(
             match
@@ -11098,7 +10836,7 @@ async function handleCommercialRequest2(request) {
             match,
             roomLocalMep
           ) : 0;
-          const quantity = round3(
+          const quantity = round5(
             roomLocalElectricalQuantity > 0 ? roomLocalElectricalQuantity : resolveAiQuantity({
               match: effectiveMatch,
               rooms: semanticRooms,
@@ -11158,7 +10896,7 @@ async function handleCommercialRequest2(request) {
               }
             );
           }
-          const amount = round3(
+          const amount = round5(
             quantity * unitRate,
             2
           );
@@ -11166,19 +10904,19 @@ async function handleCommercialRequest2(request) {
             const firstMeasuredRoomForCode = !measuredRoomLocalCodes.has(
               code
             );
-            existingItem.quantity = round3(
+            existingItem.quantity = round5(
               firstMeasuredRoomForCode ? quantity : (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.rate = round3(
+            existingItem.rate = round5(
               unitRate,
               2
             );
             existingItem.rateSource = rateResolution.source;
             existingItem.rateMissing = rateResolution.missingRate;
-            existingItem.amount = round3(
+            existingItem.amount = round5(
               existingItem.quantity * unitRate,
               2
             );
@@ -11189,13 +10927,13 @@ async function handleCommercialRequest2(request) {
               code
             );
           } else if (roomLocalElectricalQuantity > 0 && existingItem && existingItem.source === "Autodesk APS Room-local Measurement") {
-            existingItem.quantity = round3(
+            existingItem.quantity = round5(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.amount = round3(
+            existingItem.amount = round5(
               existingItem.quantity * unitRate,
               2
             );
@@ -11204,19 +10942,19 @@ async function handleCommercialRequest2(request) {
               code
             );
           } else if (existingItem && existingItem.status === "quantity_pending") {
-            existingItem.quantity = round3(
+            existingItem.quantity = round5(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.rate = round3(
+            existingItem.rate = round5(
               unitRate,
               2
             );
             existingItem.rateSource = rateResolution.source;
             existingItem.rateMissing = rateResolution.missingRate;
-            existingItem.amount = round3(
+            existingItem.amount = round5(
               existingItem.quantity * unitRate,
               2
             );
@@ -11248,7 +10986,7 @@ async function handleCommercialRequest2(request) {
               transportRate: toNumber2(
                 priceItem.transport_rate
               ),
-              rate: round3(
+              rate: round5(
                 unitRate,
                 2
               ),
@@ -11264,13 +11002,13 @@ async function handleCommercialRequest2(request) {
               notes: `AI scope: ${match.reason} Quantity basis: ${effectiveQuantityBasis}. Room type: ${match.room_type}.`
             });
           } else if (existingItem.source === "Ventra AI Scope Engine" || existingItem.status === "measured_estimated") {
-            existingItem.quantity = round3(
+            existingItem.quantity = round5(
               (Number(
                 existingItem.quantity
               ) || 0) + quantity,
               2
             );
-            existingItem.amount = round3(
+            existingItem.amount = round5(
               existingItem.quantity * unitRate,
               2
             );
@@ -11404,7 +11142,7 @@ async function handleCommercialRequest2(request) {
         ).padStart(2, "0")}`;
       }
     );
-    const verifiedSubtotal = round3(
+    const verifiedSubtotal = round5(
       items.filter(
         (item) => item.includeInCommercialTotal === true
       ).reduce(
@@ -11413,7 +11151,7 @@ async function handleCommercialRequest2(request) {
       ),
       2
     );
-    const provisionalSubtotal = round3(
+    const provisionalSubtotal = round5(
       items.filter(
         (item) => item.status === "provisional_estimate"
       ).reduce(
@@ -11426,11 +11164,11 @@ async function handleCommercialRequest2(request) {
       (item) => ["quantity_pending", "measured_rate_pending"].includes(item.status)
     ).length;
     const subtotal = verifiedSubtotal;
-    const vatAmount = round3(
+    const vatAmount = round5(
       verifiedSubtotal * (vatPercentage / 100),
       2
     );
-    const grandTotal = round3(
+    const grandTotal = round5(
       verifiedSubtotal + vatAmount,
       2
     );
@@ -11483,7 +11221,7 @@ async function handleCommercialRequest2(request) {
       }
     }
     if (items.length === 0) {
-      return NextResponse2.json(
+      return NextResponse3.json(
         {
           success: false,
           error: `No BOQ items generated. Rules: ${rulesResult.data?.length || 0}, Prices: ${pricesResult.data?.length || 0}, Wall area: ${takeoff.wall_area}, Wall length: ${takeoff.wall_length}`,
@@ -11503,7 +11241,7 @@ async function handleCommercialRequest2(request) {
         { status: 422 }
       );
     }
-    return NextResponse2.json({
+    return NextResponse3.json({
       success: true,
       boq: {
         projectId,
@@ -11556,7 +11294,7 @@ async function handleCommercialRequest2(request) {
       "[Generate BOQ]",
       error
     );
-    return NextResponse2.json(
+    return NextResponse3.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unable to generate BOQ."

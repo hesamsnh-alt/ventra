@@ -90,3 +90,12 @@ test('actual latest-takeoff reader retains the matching PNG identity and quantit
   const result=await reader({...image,floor_area:46.5225},'png')('p');
   assert.equal(result.error,null);assert.equal(result.takeoff.document_id,'png');assert.equal(result.takeoff.floor_area,46.5225);
 });
+
+test('same document identifier cannot make a different project BOQ look current',()=>{
+ assert.equal(savedBoqMatchesTakeoff({projectId:'other',boqSource:{documentId:'png'},takeoff:{...image,project_id:'other'}},image),false);
+ assert.throws(()=>bindBoqSource({projectId:'other',items:[]},image,'p'),/another project/);
+});
+test('source-only saved BOQ timestamp must invalidate after reanalysis',()=>{
+ assert.equal(savedBoqMatchesTakeoff({projectId:'p',boqSource:{documentId:'png',analyzedAt:'2026-10-01'}},image),false);
+ assert.equal(savedBoqMatchesTakeoff({projectId:'p',boqSource:{documentId:'png',analyzedAt:image.analyzed_at}},image),true);
+});

@@ -4,6 +4,7 @@ import {createDrawingIndexedRecords} from './drawingIndexedRecords.mjs';
 // summary. Engineering and latest pointers share one stored CAD record.
 const cache=new Map();const writes=new Map();
 const rootKey=id=>`ventra:project-takeoff:${id}`,engKey=id=>`ventra:project-engineering-takeoff:${id}`;
+const archiveKey=(id,documentId)=>`${id}:engineering:document:${encodeURIComponent(documentId)}`;
 const isEngineering=t=>!!(t?.aps_urn||t?.apsUrn||t?.urn||t?.advanced_takeoff?.aps_urn||t?.raw_result?.aps_urn)&&!/image|raster/i.test(t?.source||'')&&!/^(jpg|jpeg|png|webp)$/i.test(t?.document_type||'');
 const local=()=>typeof window!=='undefined'?window.localStorage:null;
 export const indexedTakeoffRecords=createDrawingIndexedRecords();
@@ -14,7 +15,8 @@ export function compactTakeoff(takeoff,recordKey){
  out.__ventraTakeoffRecord=recordKey;out.__geometryStoredInIndexedDB=true;return out;
 }
 function parse(storage,key){try{return JSON.parse(storage?.getItem(key)||'null');}catch{return null;}}
-export function readTakeoffSync(id,kind='latest',storage=local()){
+export function readTakeoffSync(id,kind='latest',storage=local(),documentId=null){
+ if(kind==='engineering'&&documentId){const value=cache.get(archiveKey(id,documentId))||readTakeoffSync(id,kind,storage);return value?.document_id===documentId?value:null;}
  const key=kind==='engineering'?engKey(id):rootKey(id),value=parse(storage,key);
  if(cache.has(`${id}:${kind}`))return cache.get(`${id}:${kind}`);
  if(value?.__ventraTakeoffRecord&&cache.has(value.__ventraTakeoffRecord))return cache.get(value.__ventraTakeoffRecord);
@@ -24,10 +26,17 @@ async function persistRecord(id,takeoff,{kind='latest',storage=local(),records=i
  if(!id||!takeoff)return null;
  const engineering=isEngineering(takeoff),recordKey=`${id}:${engineering?'engineering':'raster'}`;
  const entries=[[recordKey,takeoff]];
+ if(engineering&&takeoff.document_id){
+  const key=archiveKey(id,takeoff.document_id),indexKey=`${id}:document-records`,index=await records.get(indexKey)||[];
+  const previous=await records.get(recordKey);
+  if(previous?.document_id&&previous.document_id!==takeoff.document_id){const priorKey=archiveKey(id,previous.document_id);if(!await records.get(priorKey))entries.push([priorKey,previous]);index.push(priorKey);}
+  entries.push([key,takeoff],[indexKey,[...new Set([...index,key])]]);
+ }
  if(kind==='latest')entries.push([`${id}:latest-pointer`,{recordKey}]);
  if(records.putMany)await records.putMany(entries);
  else for(const [key,value] of entries)await records.put(key,value);
  cache.set(recordKey,takeoff);cache.set(`${id}:${kind}`,takeoff);if(engineering)cache.set(`${id}:engineering`,takeoff);
+ if(engineering&&takeoff.document_id)cache.set(archiveKey(id,takeoff.document_id),takeoff);
  const summary=JSON.stringify(compactTakeoff(takeoff,recordKey));
  const keys=kind==='engineering'?[engKey(id)]:engineering?[engKey(id),rootKey(id)]:[rootKey(id)];
  for(const key of keys){try{storage?.setItem(key,summary);}catch(error){
@@ -45,8 +54,15 @@ export function persistTakeoff(id,takeoff,options={}){
  writes.set(id,task);task.finally(()=>{if(writes.get(id)===task)writes.delete(id);}).catch(()=>{});
  return task;
 }
-export async function readPersistedTakeoff(id,kind='latest',{storage=local(),records=indexedTakeoffRecords}={}){
+export async function readPersistedTakeoff(id,kind='latest',{storage=local(),records=indexedTakeoffRecords,documentId=null}={}){
  if(writes.has(id))await writes.get(id).catch(()=>{});
+ if(kind==='engineering'&&documentId){
+  const scoped=await records.get(archiveKey(id,documentId));
+  if(scoped?.document_id===documentId){cache.set(archiveKey(id,documentId),scoped);return scoped;}
+  const legacy=await readPersistedTakeoff(id,kind,{storage,records});
+  if(legacy?.document_id!==documentId)return null;
+  await persistTakeoff(id,legacy,{kind,storage,records});return legacy;
+ }
  const key=kind==='engineering'?engKey(id):rootKey(id),legacy=parse(storage,key);
  const pointer=kind==='latest'?await records.get(`${id}:latest-pointer`):null;
  const recordKey=pointer?.recordKey||legacy?.__ventraTakeoffRecord||`${id}:${kind==='engineering'?'engineering':'raster'}`;
@@ -64,6 +80,8 @@ export async function readPersistedTakeoff(id,kind='latest',{storage=local(),rec
 
 export async function clearPersistedTakeoff(id,{storage=local(),records=indexedTakeoffRecords}={}){
  if(writes.has(id))await writes.get(id).catch(()=>{});
+ for(const key of await records.get(`${id}:document-records`)||[]){await records.delete(key);cache.delete(key);}
+ await records.delete(`${id}:document-records`);
  await records.delete(`${id}:engineering`);await records.delete(`${id}:raster`);await records.delete(`${id}:latest-pointer`);
  for(const key of [`${id}:latest`,`${id}:engineering`,`${id}:raster`])cache.delete(key);
  storage?.removeItem(rootKey(id));storage?.removeItem(engKey(id));

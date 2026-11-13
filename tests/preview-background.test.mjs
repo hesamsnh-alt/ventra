@@ -19,6 +19,25 @@ test('retry resumes a pending job without submitting or charging again',async()=
  const r=await runPreviewAnalysis(()=>{throw Error('must not start');},{key:'x',storage:cache,delay:async()=>{},fetcher:async()=>Response.json({error:'credit exhausted'},{status:429})});
  assert.equal(r.status,429);assert.equal(cache.getItem('ventra:preview-job:x'),undefined);
 });
+test('persisted provider 502/503 failures stop polling and release the pending job ID',async()=>{
+ for(const status of [502,503]){
+  const cache=storage();cache.setItem('ventra:preview-job:x',id);let polls=0;
+  const response=await runPreviewAnalysis(()=>{throw Error('must not start');},{key:'x',storage:cache,delay:async()=>{},maxPolls:2,fetcher:async()=>{polls++;return Response.json({code:'RASTER_VISION_OUTPUT_LIMIT'},{status,headers:{'X-Ventra-Analysis-Status':'failed'}})}});
+  assert.equal(response.status,status);assert.equal(polls,1);assert.equal(cache.getItem('ventra:preview-job:x'),undefined);
+ }
+});
+test('terminal polling failures are marked by the server, transient database errors are not',async()=>{
+ const source=fs.readFileSync(new URL('../src/lib/serverPreviewJobs.js',import.meta.url),'utf8');
+ const code=source.slice(source.indexOf('export async function readPreviewJob'),source.indexOf('// Atomic queued')).replace('export async function','async function')+'\nthis.read=readPreviewJob;';
+ let row={id,status:'failed',result:{code:'RASTER_VISION_OUTPUT_LIMIT'},http_status:502};
+ const q={select(){return q},eq(){return q},maybeSingle:async()=>({data:row})};
+ const context=vm.createContext({account:async()=>({id:'actor'}),commercialAdmin:()=>({from:()=>q}),table:'jobs',URL,Date,Response,billingError:(m,status)=>Object.assign(Error(m),{status}),commercialError:error=>Response.json({error:error.message},{status:error.status||503})});
+ vm.runInContext(code,context);
+ const response=await context.read(new Request('https://example.invalid/api?jobId='+id));
+ assert.equal(response.status,502);assert.equal(response.headers.get('X-Ventra-Analysis-Status'),'failed');
+ row=null;const missing=await context.read(new Request('https://example.invalid/api?jobId='+id));
+ assert.equal(missing.status,404);assert.equal(missing.headers.get('X-Ventra-Analysis-Status'),null);
+});
 const source=fs.readFileSync(new URL('../src/lib/serverPreviewJobs.js',import.meta.url),'utf8');
 function workerHarness({claimed=true,user='actor'}={}){
  const updates=[];let accountCalls=0,runs=0;

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import OpenAI from 'openai';
+import {rasterPixelTraceSchemaForImage} from '../src/lib/rasterFloorplanGeometry.mjs';
 import { requestRasterVision, consumeRasterVisionStream } from '../src/lib/rasterVisionRequest.mjs';
 
 const completion = { id: 'resp_test', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: '{"footprint":[]}' }] }] };
@@ -45,11 +46,11 @@ test('timeout after provider acknowledgement preserves the stage and aborts the 
 });
 
 test('route timeout returns downloadable diagnostics even without any trace', async () => {
-  const source = readFileSync(new URL('../src/app/api/ai/design-3d/route.js', import.meta.url),'utf8');
-  const code = source.slice(source.indexOf('async function handleSchematicRequest('), source.indexOf('\nexport async function POST'));
-  const sandbox = { console:{log(){},error(){}}, process:{env:{}}, VENTRA_JPG_FLOORPLAN_ROUTE_VERSION:'test', RASTER_GEOMETRY_VERSION:'test', RASTER_TRACE_BUILD:'test-build', RASTER_TRACE_MAX_ATTEMPTS:2, shouldRetryRasterGeometry:()=>false, OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS:10, rasterPixelTraceSchema:{}, prepareRasterImageEvidence:async()=>({guides:[]}), rasterEvidencePrompt:()=>"", getOpenAIClient:()=>({responses:{create(){}}}), consumeRasterVisionStream:()=>{}, prepareVisionImage: async()=>({width:957,height:709,imageUrl:'data:fixture'}), requestRasterVision:async()=>{throw Object.assign(new Error('Time limit'),{code:'RASTER_VISION_TIMEOUT'});}, RasterGeometryError:class extends Error{}, NextResponse:{json:(body,options)=>({body,options})} };
+  const source = readFileSync(new URL('../src/lib/serverRasterPreview.js', import.meta.url),'utf8');
+  const code = source.slice(source.indexOf('export async function runRasterPreview('),source.indexOf('\nexport async function rasterPreviewFingerprint(')).replace('export async function','async function');
+  const sandbox = { console:{log(){},error(){}}, process:{env:{}}, VENTRA_JPG_FLOORPLAN_ROUTE_VERSION:'test', RASTER_GEOMETRY_VERSION:'test', RASTER_PREVIEW_VERSION:'test',createHash:()=>({update(){return this},digest(){return 'hash'}}),RASTER_TRACE_BUILD:'test-build', RASTER_TRACE_MAX_ATTEMPTS:2, shouldRetryRasterGeometry:()=>false, OPENAI_SCHEMATIC_TRACE_TIMEOUT_MS:10, rasterPixelTraceSchemaForImage, rasterCoordinateReference:async()=>({type:'input_image',image_url:'data:fixture',detail:'high'}), prepareRasterImageEvidence:async()=>({guides:[]}), rasterEvidencePrompt:()=>"", getOpenAIClient:()=>({responses:{create(){}}}), consumeRasterVisionStream:()=>{}, prepareVisionImage: async()=>({width:957,height:709,imageUrl:'data:fixture'}), requestRasterVision:async()=>{throw Object.assign(new Error('Time limit'),{code:'RASTER_VISION_TIMEOUT'});}, RasterGeometryError:class extends Error{}, NextResponse:{json:(body,options)=>({body,options})} };
   vm.createContext(sandbox);vm.runInContext(code,sandbox);
-  const result = await sandbox.handleSchematicRequest({imageUrl:'https://example.invalid/private',mode:'schematic_analyze'});
+  const result = await sandbox.runRasterPreview({imageUrl:'https://example.invalid/private',mode:'schematic_analyze'});
   assert.equal(result.options.status,504,JSON.stringify(result.body.diagnostics.failure));
   assert.equal(result.body.diagnostics.accepted,false);
   assert.equal(result.body.diagnostics.trace,null);
