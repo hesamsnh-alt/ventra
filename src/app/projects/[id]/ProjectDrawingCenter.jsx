@@ -9,6 +9,7 @@ import {latestPdfReportForExport} from '@/lib/pdfReportExport.mjs';
 import {resolveDrawingSelection,drawingTakeoffMatches,schematicRequestKey,isSelectedApsDrawing} from '@/lib/drawingSelection.mjs';
 import {apsManifestGeometry} from "@/lib/apsViewables.mjs";
 import {dwgReconstructionReadiness} from "@/lib/dwgCalibration.mjs";
+import {assertVerifiedPreview} from '@/lib/verifiedPreview.mjs';
 import {saveSchematic,saveActiveSource,selectSchematicDrawing,selectDrawingDocument,selectedDrawingSync,drawingSceneMatches} from "@/lib/schematicStorage.mjs";
 import {collectInteriorRoomLabels} from "@/lib/dwgRoomBoundaries.mjs";
 import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
@@ -2029,6 +2030,7 @@ export default function ProjectDrawingCenter({
         throw apiError;
       }
 
+      try{assertVerifiedPreview(payload);}catch(error){acknowledgePreviewJob(`${projectId}:${document.id||document.file_name}`,window.sessionStorage);throw error;}
       const scene = applyDesignDefaults({
         ...payload.scene,
         projectId,
@@ -2042,6 +2044,7 @@ export default function ProjectDrawingCenter({
         throw Object.assign(new Error('Analysis completed for another selected drawing. Select the analyzed drawing and press Analyze to recover its saved result.'),{code:'PREVIEW_SELECTION_CHANGED'});
       selectDrawingDocument(projectId,document.id);
       await saveSchematic(projectId,scene,{preserveBase:false});
+      await saveActiveSource(projectId,'schematic');
       acknowledgePreviewJob(`${projectId}:${document.id||document.file_name}`,window.sessionStorage);
       // Same-tab storage events do not fire. Tell the existing 3D Viewer to
       // switch to the new schematic scene immediately without touching APS state.

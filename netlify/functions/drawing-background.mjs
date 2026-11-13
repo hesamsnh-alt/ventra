@@ -1112,7 +1112,7 @@ function calculatePdfSourceMeasurements(basis, pages, metricUnits, availablePage
     if (typeof r?.value !== "boolean" || !r.evidence?.trim() || !r.pages?.length || r.pages.some((p) => !availablePages.has(p))) throw Error("Missing source finish rule");
     return r;
   };
-  const term2 = (id, operation, factors) => ({ id, operation, factors });
+  const term2 = (id, operation2, factors) => ({ id, operation: operation2, factors });
   const add = (key, terms, evidence) => calculations.push({ key, scope_id: "project", terms, evidence });
   const tryGroup = (keys, work) => {
     try {
@@ -1295,7 +1295,7 @@ function nativePdfSupplementaryScope(pages) {
   };
   const f = (value, unit2, pages2, evidence) => ({ value, unit: unit2, operation: "multiply", pages: [...new Set(pages2)], evidence, clip: null });
   const calc2 = (key, terms, evidence) => ({ key, scope_id: "project", terms, evidence });
-  const term2 = (id, operation, factors) => ({ id, operation, factors });
+  const term2 = (id, operation2, factors) => ({ id, operation: operation2, factors });
   const collect = (re) => texts.flatMap((p) => [...p.text.matchAll(re)].map((m) => ({ m, page: p.page })));
   const waterproof = collect(/WATERPROOFING:\s*roof excludes open terrace; terrace is a separate line\./gi);
   if (waterproof.length) {
@@ -1400,7 +1400,7 @@ var on3 = (p, w) => Math.abs((w.b.x - w.a.x) * (p.y - w.a.y) - (w.b.y - w.a.y) *
 var boundary = (p, r) => (near3(p.x, r.bounds.x0) || near3(p.x, r.bounds.x1)) && p.y >= r.bounds.y0 - E2 && p.y <= r.bounds.y1 + E2 || (near3(p.y, r.bounds.y0) || near3(p.y, r.bounds.y1)) && p.x >= r.bounds.x0 - E2 && p.x <= r.bounds.x1 + E2;
 var band = (spans, y) => spans.filter((s) => Math.abs(s.y - y) < 1.5).sort((a, b) => a.x - b.x);
 var factor = (value, unit2, pages, evidence) => ({ value, unit: unit2, operation: "multiply", pages: [...new Set(pages)], evidence, clip: null });
-var term = (id, operation, factors) => ({ id, operation, factors });
+var term = (id, operation2, factors) => ({ id, operation: operation2, factors });
 var calc = (key, scope_id, terms, evidence) => ({ key, scope_id, terms, evidence });
 function cellsAt(spans, y, cols) {
   const cells = cols.map(() => []);
@@ -2942,6 +2942,7 @@ Important rules:
 8. detected_items must include useful visible construction items.
 9. Ignore title blocks, logos, stamps, borders and revision tables.
 10. This is a preliminary AI takeoff and must be reviewed by a quantity surveyor.
+11. Preserve the printed vertical clear room/wall height in wall_height (metres) and quote its source note in wall_height_evidence. Do not confuse a room's plan width/depth or a door/window opening height with room height. If height is absent, varying or conflicting, return null for both fields; never assume 3 m or derive height from your wall_area result. Wall centerline length times height is not internal wall-face finish area.
 
 Project name:
 ${projectName || "Unknown"}
@@ -2973,6 +2974,7 @@ OPERATION COVERAGE CHECK (before returning JSON):
 - Do not copy reported_area into geometry: the application computes polygon areas, rejects overlaps/gaps/outside regions and reconciles the full floor. A room-area sum alone does not prove coverage. Match centreline vs clear measurement convention consistently. Void and terrace are separate physical polygons, not duplicated deductions.
 - For a clear_internal measurement basis, retain internal wall footprints as separate kind=wall polygons (finish=unknown). These complete coverage but are excluded from usable floor/ceiling/finish areas. For wall_centerline_zones follow the declared centreline zone convention instead; do not subtract physical wall strips a second time.
 - Do not leave a clearly printed operation quantity only in notes or detected_items. Put each complete, supported total in page_evidence.quantities. Top-level floor/room summaries cannot carry the separate operation quantities into BOQ.
+- For painted walls, provide paint_area as the NET total of the specified painted internal faces, with a transparent formula. A door in an internal partition is deducted from BOTH painted room faces; an exterior door/window is deducted only from the painted interior face. Never deduct openings again from a net figure. Keep wall_area as a diagnostic with its stated gross/net convention; BOQ wall paint uses the explicit paint_area operation, not a second interpretation of wall_area. Provide ceiling_paint_area separately only when ceiling painting is specified. A flat ceiling does not imply a suspended gypsum ceiling. Preserve explicit floor finish operation areas even on a single-room image.
 - Structural pages: check excavation_volume, pcc_volume, foundation_volume, pedestal_volume, column_volume, beam_volume, ground_slab_volume, first_slab_volume, roof_slab_volume, rebar_kg and each foundation/column/beam/slab_formwork_area. Keep concrete quantities even if concrete grade is unspecified; grade is a separate pricing decision. Never substitute one component total into another.
 - Finish/specification pages: check external_block_area, internal_block_area, wood_floor_area, ceramic_floor_area, epoxy_floor_area, terrace_floor_area, plaster_area, paint_area (walls only), ceiling_paint_area, gypsum_ceiling_area, wet_wall_tile_area and backsplash_area. Respect printed deductions. Report each quantity only when its complete dimensions/measurement basis are given on this page; do not assume dimensions from pages you cannot see.
 - Waterproofing is a separate operation from the finished surface. Extract roof_waterproofing_area, terrace_waterproofing_area, wet_floor_waterproofing_area and wet_wall_waterproofing_area only if that operation and its extent are explicitly declared. Do not turn wet_floor_area or roof_area into membrane work automatically.
@@ -3113,6 +3115,9 @@ takeoffSchema.properties.area_geometry = { type: ["object", "null"], additionalP
   } }
 }, required: ["coverage", "basis", "envelope", "envelope_evidence", "spaces"] };
 takeoffSchema.required.push("area_geometry");
+takeoffSchema.properties.wall_height = { type: ["number", "null"], minimum: 0 };
+takeoffSchema.properties.wall_height_evidence = { type: ["string", "null"] };
+takeoffSchema.required.push("wall_height", "wall_height_evidence");
 
 // src/services/pageAnalysisService.js
 var PAGE_MODEL = process.env.OPENAI_DRAWING_MODEL || "gpt-5";
@@ -4583,6 +4588,88 @@ async function analyzeDrawing(input) {
   return analyzeSingleDrawing(input);
 }
 
+// src/lib/rasterMeasurementAudit.mjs
+var round2 = (n) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+var finite = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+var areaKeys = ["floor_area", "ceiling_area"];
+function explicitHeight(t) {
+  if (t.wall_height_source === "user_confirmed_printed_dimension" && finite(t.wall_height) && t.wall_height > 0) return t.wall_height;
+  const notes = String(t.notes || "");
+  if (/varying|variable|sloping|stepped|double.height/i.test(notes)) return null;
+  const values = [...notes.matchAll(/\b(?:wall|room|internal|enclosed)?\s*heights?\s*(?:=|:|is|of|at)?\s*(\d+(?:\.\d+)?)\s*m\b|\b(\d+(?:\.\d+)?)\s*m\s*(?:height|high)\b/gi)].map((m) => Number(m[1] || m[2]));
+  if (finite(t.wall_height) && t.wall_height > 0 && typeof t.wall_height_evidence === "string" && t.wall_height_evidence.trim()) values.push(t.wall_height);
+  if (finite(t.wall_height) && t.wall_height > 0 && /source|printed|explicit|measured/i.test(t.wall_height_source || "") && !/default|assum/i.test(t.wall_height_source || "")) values.push(t.wall_height);
+  return values.length && values.every((v) => v > 0 && v === values[0]) ? values[0] : null;
+}
+function operation(t, key) {
+  const page = t.page_evidence || {}, rows = (page.quantities || []).filter((q) => q.key === key);
+  const totals = rows.filter((q) => ["project", page.scope_id, page.drawing_id].includes(q.scope_id));
+  const selected = totals.length ? totals : rows;
+  if (!selected.length || selected.some((q) => !finite(q.value) || !q.evidence?.trim() || q.unit !== (/count$/.test(key) ? "nr" : "m2")) || new Set(selected.map((q) => q.value)).size !== 1) return null;
+  return selected[0].value;
+}
+function netWall(t, gross) {
+  const doors = operation(t, "door_count"), windows = operation(t, "window_count");
+  if (!Number.isInteger(doors) || !Number.isInteger(windows)) return null;
+  const da = doors === 0 ? 0 : operation(t, "door_area"), wa = windows === 0 ? 0 : operation(t, "window_area");
+  if (doors === 0 && operation(t, "door_area") > 0 || windows === 0 && operation(t, "window_area") > 0) return null;
+  if (!finite(da) || !finite(wa) || doors > 0 && da <= 0 || windows > 0 && wa <= 0) return null;
+  let extra = 0;
+  if (doors > 0) {
+    const internal = operation(t, "internal_door_count"), entrance = operation(t, "entrance_door_count");
+    if (!Number.isInteger(internal) || !Number.isInteger(entrance) || internal + entrance !== doors) return null;
+    const inventory = (t.detected_items || []).filter((i) => /\bdoor\b/i.test(i.name || "")).map((i) => {
+      if (["m2", "m\xB2"].includes(i.unit)) return i;
+      if (!["nr", "nos", "no", "each"].includes(i.unit) || i.quantity !== 1) return { ...i, quantity: null };
+      const sizes = [...String(i.description || "").matchAll(/(\d+(?:\.\d+)?)\s*(?:m\s*)?[x×]\s*(\d+(?:\.\d+)?)\s*m\b/gi)];
+      return { ...i, quantity: sizes.length === 1 ? round2(Number(sizes[0][1]) * Number(sizes[0][2])) : null };
+    });
+    if (inventory.length !== doors || new Set(inventory.map((i) => i.name)).size !== doors || inventory.some((i) => !finite(i.quantity) || i.quantity <= 0) || Math.abs(inventory.reduce((s, i) => s + i.quantity, 0) - da) > 1e-3 || inventory.some((i) => Math.abs(i.quantity - da / doors) > 1e-3)) return null;
+    extra = internal * da / doors;
+  }
+  const net = round2(gross - da - extra - wa);
+  return net >= 0 ? { value: net, basis: `Checked room perimeters \xD7 explicit height = ${gross} m2; deduct ${da} m2 door openings, ${extra} m2 additional internal-door faces and ${wa} m2 window openings. Finish specification remains unconfirmed.` } : null;
+}
+function reconcileRasterMeasurements(t = {}) {
+  if (t.pdf_analysis || t.page_evidence?.kind !== "floor_plan") return t;
+  const height = explicitHeight(t);
+  if (t.raster_measurement_audit?.version === 2 && t.raster_measurement_audit.height === height) return t;
+  const geometry = t.area_geometry;
+  if (geometry?.coverage !== "complete" || geometry?.basis !== "clear_internal") return t;
+  const checked2 = auditPdfAreaGeometry({ ...t, pageNumber: 1 });
+  const report = { version: 2, height, status: checked2.audit?.status, wallMeasurementStatus: "height_required", corrections: [...t.raster_measurement_audit?.corrections || []], warnings: checked2.warnings.map((s) => s.replaceAll("PDF", "Image")) };
+  if (checked2.audit?.status !== "dimension_geometry_checked") return { ...t, raster_measurement_audit: { ...report, status: "needs_review", reason: checked2.audit?.reason } };
+  const next = { ...t, page_evidence: { ...t.page_evidence, quantities: [...t.page_evidence.quantities] }, raster_measurement_audit: report };
+  const record = (key, value, basis) => {
+    if (!finite(value)) return;
+    const claims = next.page_evidence.quantities.filter((q) => q.key === key);
+    if (Math.abs((t[key] ?? 0) - value) > 1e-6 || claims.some((q) => Math.abs(q.value - value) > 1e-6)) report.corrections.push({ key, reported: t[key], reportedClaims: claims, computed: round2(value), basis });
+    next[key] = round2(value);
+    next.page_evidence.quantities = next.page_evidence.quantities.filter((q) => q.key !== key);
+    next.page_evidence.quantities.push({ key, value: next[key], unit: "m2", scope_id: t.page_evidence.scope_id || "image", evidence: basis });
+  };
+  for (const key of areaKeys) record(key, checked2.page[key], "Computed from complete, non-overlapping clear room polygons; wall footprints and voids excluded; outdoor spaces excluded from ceiling. Source dimensions require review.");
+  const rooms = new Map(checked2.page.detected_items.map((i) => [i.name, i]));
+  next.detected_items = (t.detected_items || []).map((i) => {
+    const measured = rooms.get(i.name);
+    if (!measured || !["m2", "m\xB2"].includes(i.unit)) return i;
+    if (Math.abs(i.quantity - measured.quantity) > 1e-6) report.corrections.push({ key: "room_area", tag: i.name, reported: i.quantity, computed: round2(measured.quantity) });
+    return { ...i, quantity: round2(measured.quantity) };
+  });
+  const enclosed = geometry.spaces.filter((s) => s.kind === "enclosed");
+  if (enclosed.length === t.rooms && height) {
+    const gross = round2(enclosed.reduce((sum, s) => sum + s.polygon.reduce((n, p, i) => {
+      const q = s.polygon[(i + 1) % s.polygon.length];
+      return n + Math.hypot(q.x - p.x, q.y - p.y);
+    }, 0) * height, 0));
+    record("wall_area", gross, `Gross INTERNAL wall faces from all ${enclosed.length} enclosed room perimeters \xD7 explicit height ${height} m; not wall centreline length \xD7 height.`);
+    report.wallMeasurementStatus = "computed";
+    const net = netWall(next, gross);
+    if (net) next.raster_measurement_audit.netInternalWall = net;
+  }
+  return next;
+}
+
 // src/lib/serverDrawingAnalysis.js
 async function handleCommercialRequest(request) {
   const startedAt = Date.now();
@@ -4605,7 +4692,7 @@ async function handleCommercialRequest(request) {
       mode: fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf") ? "large-pdf" : "single-drawing"
     });
     await reportDrawingProgress({ stage: "analyzing" });
-    const result = await analyzeDrawing({
+    let result = await analyzeDrawing({
       fileUrl,
       fileName,
       fileType,
@@ -4616,6 +4703,7 @@ async function handleCommercialRequest(request) {
       localPdfRecoveryOnly: body?.localPdfRecoveryOnly === true,
       noAutomaticRetries: body?.noAutomaticRetries === true
     });
+    if (/\.(png|jpe?g|webp)$/i.test(fileName)) result = reconcileRasterMeasurements(result);
     if (!completeDrawingResult(result)) {
       const total = Number(result.total_pages || result.pdf_analysis?.total_pages || 0);
       const analyzed = Array.isArray(result.page_results) ? new Set(result.page_results.map((p) => p.pageNumber)).size : Number(result.analyzed_pages || 0);
