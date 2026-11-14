@@ -1,3 +1,4 @@
+import * as kitchenModel from '../src/lib/kitchenModel.mjs';
 import * as furnitureFinishes from '../src/lib/furnitureFinishes.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
 import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
@@ -21,7 +22,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console, ...furnitureFinishes, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
+const context = {THREE, console, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 

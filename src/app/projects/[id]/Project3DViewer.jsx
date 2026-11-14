@@ -1,6 +1,6 @@
 "use client";
 import {createFurnitureFinishMaterial} from '@/lib/furnitureFinishes.mjs';
-import {previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
+import {applyPresentationFinish, previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
 import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
 import DwgFloorPanel from "./DwgFloorPanel";
@@ -22,6 +22,7 @@ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
 import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
 import {waitForViewerSurface} from "@/lib/viewerSurface.mjs";
 import {schematicGeometryAudit} from "@/lib/schematicGeometryAudit.mjs";
+import {bindKitchenInputs, buildKitchenStorage, buildKitchenFridge, buildKitchenFaucet, bindKitchenSwitch} from "@/lib/kitchenModel.mjs";
 import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
@@ -5557,11 +5558,11 @@ function ventraTelevisionMeshes(THREE,w,d,h,variant,color){
  return parts;
 }
 
-function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
+function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth, interactiveKitchen = false }) {
   const meshes = [];
   const base=asset.renderingBaseDimensions;
   const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
-  const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
+  const objectScale=!interactiveKitchen&&ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
   const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
   const placement = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
   const {w,d,h,rot,cx,cy}=placement;const assetType=asset.customModelId?'personal_model':placement.assetType;
@@ -5628,6 +5629,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const potMat = new OpaqueMaterial({ color: 0x8f7358, side: THREE.DoubleSide, shininess: 6 });
   const glass = new GlassMaterial({ color: hexNumber(palette?.glass, 0x8fb6cc), transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, shininess: 80 });
   const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 110, specular:0xb8b6b1 });
+
+  if (interactiveKitchen) {
+    applyPresentationFinish(accent, "satinWood");
+    applyPresentationFinish(white, "polishedStone");
+    applyPresentationFinish(metal, "brushedSteel");
+  }
 
   const rotateOffset = (ox, oy) => ({
     x: ox * Math.cos(rot) - oy * Math.sin(rot),
@@ -5886,6 +5893,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       for(const mesh of ventraTelevisionMeshes(THREE,w,d,h,designVariant,asset.color||'#947050')){const shift=rotateOffset(mesh.position.x,mesh.position.y);mesh.position.set(cx+shift.x,cy+shift.y,mesh.position.z+(Number(asset.zMeters)||0));mesh.rotation.z+=rot;meshes.push(mesh);}break;
     }
     case 'cabinet': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal});
+        break;
+      }
       addBox(w, d, Math.min(h, assetType === 'tv_unit' ? 0.52 : h), 0, 0, Math.min(h, assetType === 'tv_unit' ? 0.52 : h) / 2, accent);
       addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), -w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
       addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
@@ -5908,6 +5919,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_counter': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal});
+        break;
+      }
       if(designVariant==='l-shape'){
         const run=Math.min(.6,d*.4,w*.4),body=Math.min(h,.88);
         addBox(w,run,body,0,d/2-run/2,body/2,accent);
@@ -5924,6 +5939,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_island': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal});
+        break;
+      }
       addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
       addBox(w, d, 0.05, 0, 0, Math.min(h, 0.88) + 0.03, white);
       break;
@@ -5950,6 +5969,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'freezer':
     case 'refrigerator': {
+      if(interactiveKitchen && assetType==='refrigerator'){
+        const stainless = new OpaqueMaterial({color:0xa5a6a5,side:THREE.DoubleSide,shininess:125,
+          specular:0xbcbcb8, ...finish('metal')});
+        buildKitchenFridge({w,d,h,rot,cx,cy,meshes,addBox,steel:applyPresentationFinish(stainless,"brushedSteel"),liner:light,dark});
+        break;
+      }
       addBox(w, d, h, 0, 0, h / 2, light);
       addBox(w * 0.03, d * 0.05, h * 0.34, w * 0.33, -d * 0.52, h * 0.60, metal);
       addBox(w * 0.84, d * 0.02, 0.02, 0, -d * 0.515, h * 0.36, metal);
@@ -5966,11 +5991,56 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         burner.rotation.x = Math.PI / 2;
         burner.rotation.z = rot;
         meshes.push(burner);
+        if (interactiveKitchen) {
+          const radius = Math.min(w, d) * 0.097;
+          const glow = new THREE.Mesh(new THREE.RingGeometry(radius * 0.69, radius, 32),
+            new THREE.MeshBasicMaterial({color:0xff4819,side:THREE.DoubleSide}));
+          glow.position.copy(burner.position);
+          glow.position.z += 0.012;
+          meshes.push(glow);
+          glow.visible=false;
+          glow.castShadow=false;
+          bindKitchenSwitch(burner, glow);
+        }
       }
       break;
     }
     case 'sink': {
       const vanityH = asset?.embeddedInCounter ? 0.90 : Math.min(h, 0.82);
+
+      if (interactiveKitchen) {
+        const rim = vanityH + 0.057;
+        const width = w * 0.62;
+        const depth = d * 0.53;
+        const base = rim - Math.min(0.16, d * 0.27);
+        const lip = Math.min(w, d) * 0.045;
+        if (!asset.embeddedInCounter) {
+          addBox(w, d, base, 0, 0, base / 2, accent);
+          const side = (w - width) / 2;
+          const end = (d - depth) / 2;
+          for (const sign of [-1, 1]) {
+            addBox(side, d, rim - base, sign * (w + width) / 4, 0, (rim + base) / 2, white);
+            addBox(width, end, rim - base, 0, sign * (d + depth) / 4, (rim + base) / 2, white);
+          }
+        }
+        const basinFloor = asset.embeddedInCounter ? rim - 0.01 : base + 0.009;
+        addBox(width, depth, 0.015, 0, 0, basinFloor, dark);
+        for (const sign of [-1, 1]) {
+          addBox(lip, depth + lip, 0.013, sign * width / 2, 0, rim, metal);
+          addBox(width, lip, 0.013, 0, sign * depth / 2, rim, metal);
+        }
+        const chrome = applyPresentationFinish(new OpaqueMaterial({
+          color:0xc0c2c1,shininess:125,specular:0xbbbbbb,
+        }),"chrome");
+        buildKitchenFaucet({
+          THREE, meshes, addBox, rim, basinFloor, depth:d, chrome, dark,
+          project(ox, oy, oz) {
+            const point = rotateOffset(ox, oy);
+            return new THREE.Vector3(cx + point.x, cy + point.y, oz + (Number(asset.zMeters) || 0));
+          },
+        });
+        break;
+      }
 
       if (!asset?.embeddedInCounter) addBox(w, d, vanityH, 0, 0, vanityH / 2, accent);
 
@@ -7248,6 +7318,9 @@ function renderStructuredSchematicScene(viewer, scene) {
 
   if(scene.exteriorDesign)buildExteriorDesignMeshes(THREE,scene).forEach(add);
 
+  const kitchenRooms = new Set((scene.rooms || []).filter(room =>
+    /kitchen|آشپزخانه|مطبخ/i.test([room.type, room.kind, room.name, room.label, room.roomType, room.use].join(" ")))
+    .map(room => room.id).filter(Boolean));
   for (const asset of (scene.sceneType === 'floorplan_interactive_preview' ? ventraPresentationAssets(scene) : scene.assets || [])) {
     const meshes = buildSchematicAssetMeshes({
       THREE,
@@ -7255,6 +7328,10 @@ function renderStructuredSchematicScene(viewer, scene) {
       palette,
       roomWidth: width,
       roomDepth: depth,
+      interactiveKitchen: viewer.ventraKitchenInteractions === true && (
+        ["kitchen_counter","kitchen_island","refrigerator","stove"].includes(ventraNormalizeSchematicAssetType(asset))
+        || kitchenRooms.has(asset.roomId)
+      ),
     });
     meshes.forEach(add);
     const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
@@ -7737,6 +7814,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
 
   const adapter = {
+    ventraKitchenInteractions: true,
     impl: {
       sceneAfter: threeScene,
       scene: threeScene,
@@ -7927,6 +8005,12 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
       offset.setLength(Math.max(fit*.025,Math.min(fit*20,offset.length()*factor)));camera.position.copy(target).add(offset);render();}
   });
 
+  const unbindKitchen = bindKitchenInputs(renderer.domElement, {
+    canInteract: () => !furnitureTool && !wallPointsGroup.children.length && !walker.isActive() && !renderer.isVRActive?.() && controlMode === "orbit",
+    pick: event => rayFor(event) ? meshHits().find(hit => !hit.object.userData?.nonSelectable)?.object : null,
+    render,
+  });
+
   const resize = () => {
     if (!container.isConnected || renderer.isVRActive?.()) return;
     const nextWidth = Math.max(1, container.clientWidth || width);
@@ -7983,6 +8067,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
       clearSelection();clearWallPoints();
       unbindFurniture();
       unbindInputs();
+      unbindKitchen();
       resizeObserver?.disconnect();
       threeScene.traverse?.((object) => {
         try { object.geometry?.dispose?.(); } catch {}

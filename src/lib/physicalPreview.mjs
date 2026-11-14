@@ -1,16 +1,12 @@
 import {createVRWalkthrough} from './vrWalkthrough.mjs';
-import {createReferenceLighting,interiorShadowCaster,REFERENCE_LIGHTING} from './referenceLighting.mjs';
-import {surfacePhysicalSettings,createSurfaceRelief} from './interiorRenderQuality.mjs';
+import {capturePresentationEnvironment,createReferenceLighting,interiorShadowCaster,REFERENCE_LIGHTING,setPresentationReflections} from './referenceLighting.mjs';
+import {surfacePhysicalSettings,createSurfaceRelief,presentationFinish,selectedPresentationFinish} from './interiorRenderQuality.mjs';
 import {syncTextureSource,textureSourceStamp,textureSourceResized,bridgeTextureSource} from './textureBridge.mjs';
 import * as T from 'three';
 import {createDetailedSurfaces} from './detailedSurfaces.mjs';
 import {createDetailedTextiles} from './detailedTextiles.mjs';
 import {createDetailedFurniture} from './detailedFurniture.mjs';
-import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
-import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
-import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
-import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
-import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
+import {createPresentationPost} from './presentationPost.mjs';
 
 export const PHYSICAL_PREVIEW_LIGHTING=REFERENCE_LIGHTING.overview;
 
@@ -39,7 +35,11 @@ export function physicalGeometry(source){
  g.computeBoundingBox();g.computeBoundingSphere();return g;
 }
 export function physicalMaterialSettings(source){
+ const selected=selectedPresentationFinish(source.userData?.furnitureFinish);
+ if(selected)return selected;
  if(source.userData?.furniturePbr)return source.userData.furniturePbr;
+ const finish=presentationFinish(source.userData?.presentationFinish);
+ if(finish)return finish;
  const surface=surfacePhysicalSettings(source);if(surface)return surface;
  const shininess=Number(source.shininess)||0;
  return {roughness:Math.max(.22,Math.min(.94,Math.sqrt(2/(shininess+2)))),metalness:shininess>=100?.72:0};
@@ -54,29 +54,25 @@ export function textilePhysicalSettings(source){
 }
 export function createPhysicalPreview(options){
  const renderer=new T.WebGLRenderer(options),nativeRender=renderer.render.bind(renderer);
- renderer.supportsPersonalModels=true;renderer.ventraLightingVersion='warm-interior-v1';
- renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=PHYSICAL_PREVIEW_LIGHTING.exposure;
+ renderer.supportsPersonalModels=true;renderer.ventraLightingVersion='warm-interior-v2';
+ renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.AgXToneMapping;renderer.toneMappingExposure=PHYSICAL_PREVIEW_LIGHTING.exposure;
  const scene=new T.Scene(),camera=new T.PerspectiveCamera(),objects=new Map(),geometries=new Map(),materials=new Map(),textures=new Map();
- const room=new RoomEnvironment(),pmrem=new T.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);
- scene.environment=environment.texture;scene.environmentIntensity=PHYSICAL_PREVIEW_LIGHTING.environment;room.dispose();pmrem.dispose();
+ const environment=capturePresentationEnvironment(renderer);
+ scene.environment=environment.texture;scene.environmentIntensity=PHYSICAL_PREVIEW_LIGHTING.environment;
  const anisotropy=Math.min(options.mobile?4:8,renderer.capabilities.getMaxAnisotropy());
  const relief=createSurfaceRelief(anisotropy);
  const lighting=createReferenceLighting(scene,renderer,options);
- renderer.setWalkthroughActive=active=>lighting.setInterior(active);
- // Screen-space occlusion gives corners, joints and furniture contact depth.
- // Mobile keeps a single-pass PBR renderer to bound memory and GPU use.
- let composer=null,occlusion=null,output=null;
- if(!options.mobile){
-  const target=new T.WebGLRenderTarget(1,1,{type:T.HalfFloatType,samples:4});
-  composer=new EffectComposer(renderer,target);occlusion=new SSAOPass(scene,camera,1,1,16);
-  occlusion.kernelRadius=.18;occlusion.minDistance=.001;occlusion.maxDistance=.055;
-  output=new OutputPass();composer.addPass(new RenderPass(scene,camera));composer.addPass(occlusion);composer.addPass(output);
- }
+ renderer.setWalkthroughActive=active=>{
+  lighting.setInterior(active);
+  renderer.shadowMap.needsUpdate=true;
+  for(const finish of materials.values()){
+   if(finish.isMeshPhysicalMaterial)setPresentationReflections(finish,scene);
+  }
+ };
+ const post=createPresentationPost(renderer,scene,camera,{mobile:options.mobile});
  const nativeSize=renderer.setSize.bind(renderer);
- renderer.setSize=(w,h,style)=>{nativeSize(w,h,style);if(!renderer.xr.enabled)composer?.setSize(w,h);};
- const nativeRatio=renderer.setPixelRatio.bind(renderer);
- renderer.setPixelRatio=ratio=>{nativeRatio(ratio);if(!renderer.xr.enabled)composer?.setPixelRatio(Math.min(ratio,1.5));};
- renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
+ renderer.setSize=(w,h,style)=>{nativeSize(w,h,style);if(w>0&&h>0&&!renderer.xr.enabled)post?.resize(w,h);};
+ renderer.shadowMap.enabled=true;
  function texture(old,color){
   if(!old?.image)return null;
   const cacheKey=old.uuid+':'+color;if(textures.has(cacheKey)){const cached=textures.get(cacheKey);if(!textureSourceResized(cached,old)){syncTextureSource(cached,old);return cached;}cached.dispose();textures.delete(cacheKey);}
@@ -96,7 +92,9 @@ export function createPhysicalPreview(options){
   let next=materials.get(old);
   if(!next){
    const basic=old.type==='MeshBasicMaterial',textile=options.mobile?null:textilePhysicalSettings(old);
-   next=old.userData?.ventraMaterial==='railing_glass'?new T.MeshPhysicalMaterial({roughness:.07,metalness:0,transmission:options.mobile?0:.88,thickness:.012,ior:1.5}):basic?new T.MeshBasicMaterial():textile?new T.MeshPhysicalMaterial(textile):new T.MeshStandardMaterial(physicalMaterialSettings(old));
+   const finish=physicalMaterialSettings(old);
+   const coated=finish.clearcoat!==undefined||finish.anisotropy!==undefined;
+   next=old.userData?.ventraMaterial==='railing_glass'?new T.MeshPhysicalMaterial({roughness:.07,metalness:0,transmission:options.mobile?0:.88,thickness:.012,ior:1.5}):basic?new T.MeshBasicMaterial():textile?new T.MeshPhysicalMaterial(textile):coated?new T.MeshPhysicalMaterial(finish):new T.MeshStandardMaterial(finish);
    next.map=texture(old.map,true);if(!basic){next.bumpMap=texture(old.bumpMap,false);next.bumpScale=old.bumpScale||0;}
    materials.set(old,next);
   }
@@ -104,6 +102,7 @@ export function createPhysicalPreview(options){
   if(old.color)next.color.setRGB(old.color.r,old.color.g,old.color.b,T.SRGBColorSpace);
   Object.assign(next,{opacity:old.opacity,transparent:old.transparent,depthWrite:old.depthWrite,depthTest:old.depthTest,side:old.side,polygonOffset:old.polygonOffset,polygonOffsetFactor:old.polygonOffsetFactor,polygonOffsetUnits:old.polygonOffsetUnits});
   if(old.userData?.ventraMaterial==='railing_glass'){next.opacity=options.mobile?.24:1;next.transparent=true;}
+  if(next.isMeshPhysicalMaterial)setPresentationReflections(next,scene);
   if(!basicMaterial(old))relief.apply(old,next);
   if(!options.sceneData?.palette?.designPreset)surfaces.apply(old,next);
   textiles.apply(old,next);
@@ -116,7 +115,7 @@ export function createPhysicalPreview(options){
  renderer.readyResources=()=>Promise.all([detailed.ready(),surfaces.ready(),textiles.ready()]);
  renderer.render=(oldScene,oldCamera)=>{
   if(oldCamera.isCamera)return nativeRender(oldScene,oldCamera);
-  if(vr.isActive()){renderer.shadowMap.needsUpdate=true;return;}
+  if(renderer.xr.isPresenting){renderer.shadowMap.needsUpdate=true;return;}
   lastSource=oldScene;lastCamera=oldCamera;
   oldScene.updateMatrixWorld(true);const active=new Set(),activeGeometry=new Set();activeMaterials=new Set();activeTextures=new Set();relief.begin();
   oldScene.traverse(old=>{
@@ -135,13 +134,13 @@ export function createPhysicalPreview(options){
   detailed.sync(oldScene,objects);
   if(oldScene.background)scene.background=new T.Color().setRGB(oldScene.background.r,oldScene.background.g,oldScene.background.b,T.SRGBColorSpace);
   camera.position.copy(oldCamera.position);camera.quaternion.copy(oldCamera.quaternion);camera.up.copy(oldCamera.up);
-  camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(composer)composer.render();else nativeRender(scene,camera);
+  camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(post&&!renderer.xr.enabled)post.render();else nativeRender(scene,camera);
  };
  let shadowBeforeVR=null;
  const vr=createVRWalkthrough({renderer,scene,sceneData:options.sceneData,draw:nativeRender,onState:state=>{if(state==='starting'){shadowBeforeVR=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;}if(state==='idle'&&shadowBeforeVR!==null){renderer.shadowMap.autoUpdate=shadowBeforeVR;shadowBeforeVR=null;}renderer.onVRState?.(state);if(state==='idle'&&lastSource&&lastCamera)renderer.render(lastSource,lastCamera);}});
  renderer.startVR=settings=>vr.start(settings);renderer.stopVR=()=>vr.stop();renderer.isVRActive=()=>vr.isActive();
  renderer.supportsVR=true;
  const nativeDispose=renderer.dispose.bind(renderer);
- renderer.dispose=()=>{vr.dispose();lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();textiles.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();occlusion?.ssaoMaterial.dispose();occlusion?.dispose();output?.dispose();composer?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
+ renderer.dispose=()=>{vr.dispose();lastSource=null;lastCamera=null;detailed.dispose();surfaces.dispose();textiles.dispose();relief.dispose();for(const g of geometries.values())g.dispose();for(const m of materials.values())m.dispose();for(const t of textures.values())t.dispose();post?.dispose();environment.dispose();lighting.dispose();objects.clear();geometries.clear();materials.clear();textures.clear();nativeDispose();};
  return renderer;
 }
