@@ -31,7 +31,8 @@ function place(s,room,type,index,pdfLayout=false){
   if(len<base.width+.2)continue;
   for(const sign of [1,-1])for(let k=1;k<=7;k++){
    const nx=-dy/len*sign,ny=dx/len*sign,offset=base.depth/2+.12;
-   const c={...base,xMeters:a.x+dx*k/8+nx*offset,yMeters:a.y+dy*k/8+ny*offset,rotation:Math.atan2(ny,nx)*180/Math.PI+90};
+   const rotation=Math.atan2(ny,nx)*180/Math.PI+(type==='dressing_table'?-90:90);
+   const c={...base,xMeters:a.x+dx*k/8+nx*offset,yMeters:a.y+dy*k/8+ny*offset,rotation};
    if(fits(c))return c;
   }
  }

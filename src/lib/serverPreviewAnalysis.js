@@ -1758,8 +1758,9 @@ function againstSideAsset(type, roomId, side, widthAlongWall, depthIntoRoom, hei
   const dep = Math.max(0.25, depthIntoRoom);
   const x = side.x + side.inwardX * (dep / 2 + inset);
   const y = side.y + side.inwardY * (dep / 2 + inset);
-  return asset(type, roomId, x, y, along, dep, height,
-    Number.isFinite(side.rotation) ? side.rotation : 0,
+  const wardrobeRotation = Math.atan2(side.inwardY, side.inwardX) * 180 / Math.PI + 90;
+  const rotation = type === "wardrobe" ? wardrobeRotation : Number.isFinite(side.rotation) ? side.rotation : 0;
+  return asset(type, roomId, x, y, along, dep, height, rotation,
     { wallSide: side.id, wallDirX: side.dirX, wallDirY: side.dirY, wallSupported: side.wallSupported !== false, ...metadata });
 }
 

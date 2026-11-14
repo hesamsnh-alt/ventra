@@ -5255,6 +5255,41 @@ function ventraResolveSchematicAssetPlacement(
   };
 }
 
+function ventraFaceBedroomFurnitureIntoRoom(asset,scene) {
+  const type=ventraNormalizeSchematicAssetType(asset);
+  if(!['dressing_table','wardrobe'].includes(type)||asset.customModelId||asset.userPlaced||
+    ['manual_furniture_editor','user_prompt_ai','source_image_observation_v1'].includes(asset.placementSource))return asset;
+  const {xMeters:x,yMeters:y}=asset;
+  if(!Number.isFinite(x)||!Number.isFinite(y))return asset;
+  const room=scene.rooms?.find(room=>room.id===asset.roomId);
+  const polygon=room?.polygon||[];
+  const angle=(Number(asset.rotation)||0)*Math.PI/180;
+  const frontSign=type==='dressing_table'?1:-1;
+  const front={x:-Math.sin(angle)*frontSign,y:Math.cos(angle)*frontSign};
+  const halfDepth=(Number(asset.depth)||(type==='wardrobe'?.6:.42))/2;
+  const candidates=(scene.walls||[]).filter(wall=>wall.type!=='railing');
+  if(polygon.length>=3)for(let i=0;i<polygon.length;i++)candidates.push({start:polygon[i],end:polygon[(i+1)%polygon.length],roomEdge:true});
+  let chosen=null;
+  for(const wall of candidates){
+    const {start:a,end:b}=wall;
+    if(!a||!b)continue;
+    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
+    if(length<.1)continue;
+    const projection=((x-a.x)*dx+(y-a.y)*dy)/length;
+    if(projection<0||projection>length)continue;
+    const nx=-dy/length,ny=dx/length;
+    const alignment=front.x*nx+front.y*ny;
+    if(Math.abs(alignment)<.9)continue;
+    const distance=(x-a.x)*nx+(y-a.y)*ny;
+    const gap=Math.abs(distance);
+    if(gap<.05||gap>halfDepth+.32)continue;
+    const supported=asset.againstWallId!=null&&asset.againstWallId===wall.id;
+    const score=gap+(wall.roomEdge?.03:0)-(supported?1:0);
+    if(!chosen||score<chosen.score)chosen={score,facing:alignment*Math.sign(distance)};
+  }
+  return chosen?.facing<0?{...asset,rotation:((Number(asset.rotation)||0)+180)%360}:asset;
+}
+
 function ventraPresentationAssets(scene) {
   if (scene.furnishingMode === "source_observed") return sourcePresentationAssets(scene);
   const inside = (p, poly) => {
@@ -7384,7 +7419,8 @@ function renderStructuredSchematicScene(viewer, scene) {
   const kitchenRooms = new Set((scene.rooms || []).filter(room =>
     /kitchen|آشپزخانه|مطبخ/i.test([room.type, room.kind, room.name, room.label, room.roomType, room.use, room.semanticType].join(" ")))
     .map(room => room.id).filter(Boolean));
-  const renderedAssets = scene.sceneType === 'floorplan_interactive_preview' ? ventraPresentationAssets(scene) : scene.assets || [];
+  const renderedAssets = (scene.sceneType === 'floorplan_interactive_preview' ? ventraPresentationAssets(scene) : scene.assets || [])
+    .map(asset=>ventraFaceBedroomFurnitureIntoRoom(asset,scene));
   const kitchenFixtures = viewer.ventraKitchenInteractions === true
     ? countertopFixtures(renderedAssets, asset => ventraResolveSchematicAssetPlacement(asset,width,depth))
     : null;
@@ -7729,7 +7765,7 @@ function renderSchematicScene(viewer, scene) {
   if(scene.exteriorDesign)buildExteriorDesignMeshes(THREE,scene).forEach(add);
 
   for(const asset of scene.assets || []){
-    const meshes=buildSchematicAssetMeshes({THREE,asset,palette,roomWidth:width,roomDepth:depth});
+    const meshes=buildSchematicAssetMeshes({THREE,asset:ventraFaceBedroomFurnitureIntoRoom(asset,scene),palette,roomWidth:width,roomDepth:depth});
     meshes.forEach(add); assetMeshCount += meshes.length;
     const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
     if(shade)schematicRoot.add(shade);

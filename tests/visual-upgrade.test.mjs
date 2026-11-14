@@ -355,3 +355,28 @@ test('reference furniture is categorized and uses distinct three-dimensional geo
   }
  }
 });
+
+test('saved bedroom defaults show wardrobe handles and vanity mirror on the room side',()=>{
+ const polygon=[{x:0,y:0},{x:8,y:0},{x:8,y:8},{x:0,y:8}];
+ const scene={rooms:[{id:'bedroom',polygon}]};
+ const cases=[
+  ['dressing_table',4,.33,180,0],
+  ['wardrobe',4,.42,0,180],
+  ['dressing_table',7.67,4,-90,90],
+  ['wardrobe',7.58,4,90,270],
+ ];
+ for(const [type,xMeters,yMeters,rotation,expected] of cases){
+  const asset={type,roomId:'bedroom',xMeters,yMeters,rotation,width:.9,depth:type==='wardrobe'?.6:.42,height:1.6};
+  const result=context.ventraFaceBedroomFurnitureIntoRoom(asset,scene);
+  assert.equal((result.rotation+360)%360,expected);
+  assert.equal(asset.rotation,rotation);
+  assert.equal(context.ventraFaceBedroomFurnitureIntoRoom(result,scene),result);
+  const edited={...asset,placementSource:'manual_furniture_editor'};
+  assert.equal(context.ventraFaceBedroomFurnitureIntoRoom(edited,scene),edited);
+  const meshes=context.buildSchematicAssetMeshes({THREE,asset:result,palette:{},roomWidth:8,roomDepth:8});
+  const detail=meshes.at(-1);
+  // The mirror is inset on the interior side of its backing; handles protrude into the room.
+  const reference=type==='wardrobe'?meshes[0]:meshes.at(-2);
+  assert.ok(xMeters>7?detail.position.x<reference.position.x:detail.position.y>reference.position.y);
+ }
+});
