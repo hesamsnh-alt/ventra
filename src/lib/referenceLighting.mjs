@@ -3,9 +3,47 @@ import {RectAreaLightUniformsLib} from 'three/addons/lights/RectAreaLightUniform
 
 // Presentation lights only. The rig does not add fixtures, walls or project data.
 export const REFERENCE_LIGHTING=Object.freeze({
- overview:{exposure:.82,environment:.38,bounce:.20,key:1.55,fill:.22,panel:.7},
- interior:{exposure:.88,environment:.42,bounce:.27,key:1.25,fill:.16,panel:1.45},
+ overview:{exposure:.86,environment:.42,bounce:.18,key:1.58,fill:.20,panel:.82},
+ interior:{exposure:.98,environment:.52,bounce:.31,key:1.32,fill:.24,panel:1.28},
 });
+export function capturePresentationEnvironment(renderer){
+ const studio=new T.Scene();
+ studio.background=new T.Color(0x37342f);
+ const daylight=new T.MeshBasicMaterial({color:new T.Color(5.5,6.1,7.1),toneMapped:false});
+ const bounce=new T.MeshBasicMaterial({color:new T.Color(1.75,1.6,1.42),toneMapped:false});
+ const add=(w,h,d,x,y,z,material)=>{
+  const mesh=new T.Mesh(new T.BoxGeometry(w,h,d),material);
+  mesh.position.set(x,y,z);
+  studio.add(mesh);
+ };
+ for(const z of [-.92,0,.92])for(const y of [.35,1.32])add(.024,.9,.84,-3.35,y,z,daylight);
+ add(1.8,1.25,.02,1.4,1.35,3.5,bounce);
+ add(2.8,.02,1.35,-.55,2.75,-1.9,bounce);
+ const generator=new T.PMREMGenerator(renderer);
+ try{
+  return generator.fromScene(studio,.018,.1,18,{size:256});
+ }finally{
+  studio.traverse(object=>object.geometry?.dispose());
+  daylight.dispose();
+  bounce.dispose();
+  generator.dispose();
+ }
+}
+
+export function setPresentationReflections(material, scene) {
+ const glossy=material.isMeshPhysicalMaterial&&(material.clearcoat>=.1||material.metalness>=.8);
+ const texture=glossy?scene.environment:null;
+ if(material.envMap!==texture){
+  material.envMap=texture;
+  material.needsUpdate=true;
+ }
+ if(!texture)return;
+ material.envMapRotation.copy(scene.environmentRotation);
+ // Use the same reflection image as the scene, with a material-specific response.
+ const response=material.metalness>=.8?2.45:material.clearcoat>=.65?2.10:1.52;
+ material.envMapIntensity=scene.environmentIntensity*response;
+}
+
 export function referenceRoomFrame(data={}){
  const finite=(value,fallback)=>Number.isFinite(Number(value))?Number(value):fallback;
  const width=Math.max(2,finite(data.width,12)),depth=Math.max(2,finite(data.depth,8));
@@ -33,8 +71,12 @@ export function createReferenceLighting(scene,renderer,{span=15,mobile=false,sce
  // Broad warm emitters give continuous highlights rather than a camera-following flash.
  const panel=new T.RectAreaLight(0xffdfb6,.7,Math.min(frame.width*.55,7),Math.min(frame.depth*.5,5));
  panel.position.set(frame.x-frame.width*.16,frame.y-frame.depth*.10,frame.z-.08);panel.lookAt(frame.x,frame.y,0);scene.add(panel);
+ const windowFill=new T.RectAreaLight(0xe1edff,0,Math.min(frame.depth*.58,4.4),Math.min(frame.z*.7,2.1));
+ windowFill.position.set(frame.x+frame.width*.44,frame.y+frame.depth*.19,frame.z*.65);
+ windowFill.lookAt(frame.x,frame.y,frame.z*.39);
+ scene.add(windowFill);
  let interior=false;
- function setInterior(value){interior=Boolean(value);const p=interior?REFERENCE_LIGHTING.interior:REFERENCE_LIGHTING.overview;if(renderer.shadowMap)renderer.shadowMap.type=interior&&!mobile?T.VSMShadowMap:T.PCFSoftShadowMap;renderer.toneMappingExposure=p.exposure;scene.environmentIntensity=p.environment;bounce.intensity=p.bounce;key.intensity=p.key;fill.intensity=p.fill;panel.intensity=p.panel*(mobile?.8:1);}
+ function setInterior(value){interior=Boolean(value);const p=interior?REFERENCE_LIGHTING.interior:REFERENCE_LIGHTING.overview;if(renderer.shadowMap)renderer.shadowMap.type=interior&&!mobile?T.VSMShadowMap:T.PCFSoftShadowMap;renderer.toneMappingExposure=p.exposure;scene.environmentIntensity=p.environment;bounce.intensity=p.bounce;key.intensity=p.key;fill.intensity=p.fill;panel.intensity=p.panel*(mobile?.9:1);windowFill.intensity=interior?1.22:.54;}
  setInterior(false);
- return {key,panel,setInterior,isInterior:()=>interior,dispose(){scene.remove(bounce,key,key.target,fill,panel);key.shadow.dispose();}};
+ return {key,panel,setInterior,isInterior:()=>interior,dispose(){scene.remove(bounce,key,key.target,fill,panel,windowFill);key.shadow.dispose();}};
 }
