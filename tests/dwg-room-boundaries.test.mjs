@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import {buildBedCover} from '../src/lib/bedCover.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
 import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
@@ -27,7 +28,7 @@ test('the actual viewer runtime builds two furnished scenes from DWG source evid
  const parser=createRequire(import.meta.url)('@babel/parser'),source=fs.readFileSync('src/app/projects/[id]/Project3DViewer.jsx','utf8');
  const ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});
  const THREE=createRequire(import.meta.url)('three-test');
- const ctx=vm.createContext({buildBedCover,...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,console,THREE,structuredClone,sourcePresentationAssets,resolveDwgCalibration,splitDwgRegions,recoverInteriorRoomBoundaries,collectInteriorRoomLabels});
+ const ctx=vm.createContext({buildReferenceBed,buildReferenceSofa,buildBedCover,...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,console,THREE,structuredClone,sourcePresentationAssets,resolveDwgCalibration,splitDwgRegions,recoverInteriorRoomBoundaries,collectInteriorRoomLabels});
  vm.runInContext(ast.program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name?.startsWith('VENTRA_'))).map(n=>source.slice(n.start,n.end)).join('\n'),ctx);
  const centroids=Object.fromEntries(evidence.labels.map(l=>[l.dbId,{...l.centroid,source:'aps_dbid_geometry_bounds'}]));
  ctx.getThree=()=>THREE;

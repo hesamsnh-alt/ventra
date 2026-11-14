@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -55,7 +56,7 @@ test('actual legacy Three renderer constructs every source opening and triangula
  const declarations=parser.parse(source,{sourceType:'module',plugins:['jsx']}).program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name?.startsWith('VENTRA_')));
  const {decorateSurfaceMesh,surfaceMaterialList}=await import('../src/lib/surfaceMaterials.mjs');
  const {configureFloorDepth}=await import('../src/lib/floorDepthLayers.mjs');const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');
- const ctx=vm.createContext({THREE,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});
+ const ctx=vm.createContext({buildReferenceBed,buildReferenceSofa,THREE,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});
  vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),ctx);ctx.getThree=()=>THREE;
  for(const floor of scene.pdfStoreys){const target=new THREE.Scene(),viewer={impl:{scene:target,removeOverlayScene(){},invalidate(){}},navigation:{}};
   const result=ctx.renderStructuredSchematicScene(viewer,floor);assert.equal(result.structured,true);assert.equal(result.openingCount,17);near(result.height,3.2);assert.equal(result.assetMeshCount,0);

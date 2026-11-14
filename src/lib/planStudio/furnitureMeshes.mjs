@@ -1,4 +1,5 @@
 // Read-only snapshot of Ventra's existing furniture renderer; existing viewer is untouched.
+import {buildReferenceBed,buildReferenceSofa} from "../referenceFurniture.mjs";
 import {buildBedCover} from "../bedCover.mjs";
 import {bindKitchenSwitch, buildKitchenFridge, buildKitchenStorage, buildKitchenFaucet} from '../kitchenModel.mjs';
 import {presentationFinish} from '../interiorRenderQuality.mjs';
@@ -539,6 +540,18 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'sofa': {
+      if(buildReferenceSofa({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addSurface(columns,rows,point,material){
+          const mesh=new THREE.Mesh(ventraTextileGrid(THREE,columns,rows,point),material);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          mesh.castShadow=mesh.receiveShadow=true;
+          meshes.push(mesh);
+        },
+      }))break;
+
       if(designVariant==='traditional'){traditionalSeat();break;}
       if(designVariant==='comfort'){comfortSeat();break;}
       if(designVariant==='minimal'){
@@ -633,6 +646,17 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'bed': {
+      if(buildReferenceBed({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addCover(width,depth,material,profile){
+          const mesh=buildBedCover(THREE,width,depth,material,profile);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          meshes.push(mesh);
+        },
+      }))break;
+
       addBox(w, d, 0.20, 0, 0, 0.10, accent);
       addCushion(w * 0.91, d * 0.88, 0.24, 0, 0.01 * d, 0.32, white);
       addBox(w, 0.11, Math.min(h, 1.05), 0, -d * 0.47, Math.min(h, 1.05) / 2, designVariant==='luxury'?light:accent);

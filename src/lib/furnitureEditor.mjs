@@ -101,6 +101,16 @@ export const FURNITURE_CATALOG=Object.freeze([
  ["tv-console-white", "tv_unit", "TV + white console", "تلویزیون و کنسول سفید", "تلفاز ووحدة بيضاء", 1.8, 0.42, 1.45, "console-white", "#deded6"],
  ["tv-pedestal", "tv_unit", "TV · Pedestal stand", "تلویزیون با پایه مرکزی", "تلفاز بقاعدة", 1.45, 0.4, 1.25, "pedestal", "#292e33"],
  ["tv-media-wall", "tv_unit", "Media wall · Timber slats", "تی‌وی وال با پنل چوبی", "جدار تلفاز خشبي", 2.4, 0.4, 2.4, "media-wall", "#987853"],
+ ['bed-walnut-hotel','bed','Hotel bed · Walnut tones','تخت هتلی گردویی','سرير فندقي بألوان الجوز',1.86,2.14,1.02,'walnut-hotel','#726258'],
+ ['bed-stone-tailored','bed','Tailored bed · Stone grey','تخت طوسی با تاج دو‌تکه','سرير رمادي بلوح مبطّن',1.92,2.19,.96,'stone-tailored','#9b9a90'],
+ ['bed-channel-linen','bed','Channel headboard · Linen','تخت کتان با تاج شیاردار','سرير كتاني بلوح مخدّد',1.78,2.12,1.19,'channel-linen','#bda78f'],
+ ['bed-oak-platform','bed','Oak platform bed','تخت چوب بلوط','سرير منصة من خشب البلوط',1.76,2.10,.91,'oak-platform','#ac8059'],
+ ['sofa-crescent-chaise','sofa','Crescent chaise · Cream','کاناپه هلالی کرم با شزلون','أريكة هلالية كريمية',3.08,1.34,.83,'crescent-chaise','#ddd0b8'],
+ ['sofa-boucle-arc','sofa','Bouclé arc sofa','کاناپه قوسی بوکله','أريكة بوكلية مقوّسة',2.74,1.10,.80,'boucle-arc','#dbccb6'],
+ ['sofa-cloud-modular','sofa','Cloud modular sofa','کاناپه ماژولار ابری','أريكة وحدات ناعمة',2.84,1.05,.89,'cloud-modular','#e3dace'],
+ ['sofa-set-crescent','sofa','Crescent living room set','ست نشیمن هلالی','طقم جلوس هلالي',4.5,3.45,.9,'crescent-chaise','#ddd0b8'],
+ ['sofa-set-boucle','sofa','Bouclé living room set','ست نشیمن بوکله','طقم جلوس بوكلية',4.2,3.4,.9,'boucle-arc','#dbccb6'],
+ ['sofa-set-cloud','sofa','Cloud modular living room set','ست نشیمن ماژولار ابری','طقم جلوس بوحدات ناعمة',4.2,3.4,.95,'cloud-modular','#e3dace'],
 ].map(([id,type,en,fa,ar,width,depth,height,variant,color,chairs])=>Object.freeze({id,type,en,fa,ar,width,depth,height,variant,color,chairs,...(SOFA_SET_LAYOUTS[id]?{layout:SOFA_SET_LAYOUTS[id]}:{})})));
 export const LOCKED_ARCHITECTURE=['rooms','walls','openings','footprint','holes','width','depth','height','palette','wallThickness','externalWallThickness'];
 const fail=m=>{throw new Error(m);};

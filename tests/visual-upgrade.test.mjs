@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import {OUTDOOR_GROUND_ID,outdoorGround} from '../src/lib/outdoorGround.mjs';
 import * as projectKitchenParts from '../src/lib/projectKitchenParts.mjs';
 import * as windowGardenView from '../src/lib/windowGardenView.mjs';
@@ -26,7 +27,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console, OUTDOOR_GROUND_ID, outdoorGround, buildBedCover, ...windowGardenView, ...projectKitchenParts, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
+const context = {THREE, console, OUTDOOR_GROUND_ID, outdoorGround, buildReferenceBed,buildReferenceSofa,buildBedCover, ...windowGardenView, ...projectKitchenParts, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 
@@ -321,4 +322,36 @@ test('window scene places the garden beyond the opening and faces indoors',()=>{
  assert.ok(view.position.y<0);
  assert.ok(new THREE.Vector3(0,0,1).applyQuaternion(view.quaternion).y>.999);
  assert.equal(view.visible,false);
+});
+
+test('reference furniture is categorized and uses distinct three-dimensional geometry',async()=>{
+ const {FURNITURE_CATALOG,applyFurnitureEdit}=await import('../src/lib/furnitureEditor.mjs');
+ const {filterFurniture}=await import('../src/lib/furnitureCategories.mjs');
+ const {buildSchematicAssetMeshes:studioMeshes}=await import('../src/lib/planStudio/furnitureMeshes.mjs');
+ const beds=['bed-walnut-hotel','bed-stone-tailored','bed-channel-linen','bed-oak-platform'];
+ const sofas=['sofa-crescent-chaise','sofa-boucle-arc','sofa-cloud-modular'];
+ const sets=['sofa-set-crescent','sofa-set-boucle','sofa-set-cloud'];
+ const footprint=[{x:0,y:0},{x:8,y:0},{x:8,y:8},{x:0,y:8}];
+ const scene={width:8,depth:8,footprint,rooms:[{id:'room',polygon:footprint}],assets:[],walls:[]};
+ for(const [category,ids] of [['beds',beds],['sofas',sofas],['sets',sets]]){
+  const models=filterFurniture(FURNITURE_CATALOG,category);
+  for(const id of ids){
+   const model=models.find(item=>item.id===id);assert.ok(model,id);
+   const result=applyFurnitureEdit(scene,{kind:'add',catalogId:id,point:{x:4,y:4},rotation:37});
+   assert.equal(result.assets.length,sets.includes(id)?4:1);
+   assert.deepEqual(result.footprint,footprint);
+   for(const asset of result.assets){
+    const opts={THREE,asset,palette:{},roomWidth:8,roomDepth:8};
+    const project=context.buildSchematicAssetMeshes(opts);
+    const studio=studioMeshes(opts);
+    for(const meshes of [project,studio]){
+     assert.ok(meshes.length>=(asset.type==='coffee_table'?2:4),asset.catalogId);
+     const box=new THREE.Box3();
+     for(const mesh of meshes){mesh.updateMatrixWorld(true);box.union(new THREE.Box3().setFromObject(mesh));}
+     assert.ok(box.max.z-box.min.z>.15);
+    }
+    if(asset.type==='bed')assert.ok(project.some(mesh=>mesh.userData.ventraComponent==='bed_fabric'));
+   }
+  }
+ }
 });

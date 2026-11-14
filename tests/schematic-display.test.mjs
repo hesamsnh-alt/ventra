@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import {applySceneStyle} from '../src/lib/sceneStyle.mjs';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -10,7 +11,7 @@ const THREE=require(process.env.VENTRA_THREE_TEST_MODULE || 'three-test');
 const src=readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8');
 const ast=parser.parse(src,{sourceType:'module',plugins:['jsx']});
 const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||(n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name==='VENTRA_SCHEMATIC_ASSET_DEFAULTS')));
-const ctx={THREE,console,applySceneStyle};vm.createContext(ctx);vm.runInContext(declarations.map(n=>src.slice(n.start,n.end)).join('\n'),ctx);
+const ctx={THREE,console,applySceneStyle,buildReferenceBed,buildReferenceSofa};vm.createContext(ctx);vm.runInContext(declarations.map(n=>src.slice(n.start,n.end)).join('\n'),ctx);
 test('furniture preserves zero placement and measured small dimensions',()=>{
  const p=ctx.ventraResolveSchematicAssetPlacement({type:'cabinet',x:0,y:0,xMeters:null,yMeters:null,width:.2,depth:.22,height:.3},12,10);
  assert.equal(p.cx,-6);assert.equal(p.cy,-5);assert.equal(p.w,.2);assert.equal(p.d,.22);assert.equal(p.h,.3);
