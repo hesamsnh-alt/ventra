@@ -12,7 +12,11 @@ function movingParts(meshes, build, apply) {
     opened = !opened;
     for (const pose of poses) apply(pose, opened);
   };
-  for (const mesh of parts) interactions.set(mesh, toggle);
+  registerSceneInteraction(parts, toggle);
+}
+
+export function registerSceneInteraction(meshes, toggle) {
+  for (const mesh of meshes) interactions.set(mesh, toggle);
 }
 
 export function toggleKitchenPart(mesh) {

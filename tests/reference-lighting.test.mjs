@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {REFERENCE_LIGHTING,referenceRoomFrame,interiorShadowCaster,createReferenceLighting,setPresentationReflections} from '../src/lib/referenceLighting.mjs';
+import {REFERENCE_LIGHTING,referenceRoomFrame,interiorShadowCaster,createReferenceLighting,createWindowLights,setPresentationReflections} from '../src/lib/referenceLighting.mjs';
 import {textilePhysicalSettings} from '../src/lib/physicalPreview.mjs';
 test('lighting anchors use Z-up scene coordinates without modifying the saved scene',()=>{
  const source={width:10,depth:8,wallHeightMeters:3,designDefaults:{viewOriginMeters:{x:2,y:1}}},before=JSON.stringify(source);
@@ -50,4 +50,16 @@ test('walkthrough lighting boosts tile and metal reflections while matte paint k
  for(const mat of [stone,paint,chrome])mat.dispose();
  scene.environment.dispose();
  rig.dispose();
+});
+
+test('window lighting is registered at exterior openings and aimed into the floor',()=>{
+ const scene={width:8,depth:6,walls:[{id:'outside',type:'external',start:{x:0,y:0},end:{x:8,y:0}},
+  {id:'inside',type:'interior',start:{x:0,y:1},end:{x:8,y:1}}],openings:[
+  {type:'window',wallId:'outside',offset:.25,width:1.5,height:1,sillHeight:1},
+  {type:'window',wallId:'inside',offset:.5,width:1,height:1},
+ ]};
+ const lights=createWindowLights(scene,referenceRoomFrame(scene));
+ assert.equal(lights.length,1);
+ assert.deepEqual(lights[0].position.toArray(),[-2,-2.82,1.5]);
+ assert.ok(new T.Vector3(0,0,-1).applyQuaternion(lights[0].quaternion).y>.99);
 });

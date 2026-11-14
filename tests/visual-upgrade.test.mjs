@@ -267,3 +267,22 @@ test('furniture finishes replace body and upholstery separately, protect TV scre
  const tv=assetMeshes('tv_unit',{variant:'console-oak',furnitureFinishes:{body:{id:'metal-brushed'}}});assert.ok(tv.some(m=>m.material.userData?.furnitureFinish==='metal-brushed'));const screen=tv.find(m=>m.userData.televisionScreen);assert.ok(screen.material.map);assert.equal(screen.material.userData?.furnitureFinish,undefined);
  const reset=assetMeshes('sofa',{variant:'modern'});assert.ok(reset.every(m=>!m.material.userData?.furnitureFinish));assert.equal(reset.length,plain.length);
 });
+
+test('project door leaves and handles toggle together without moving the jamb or changing the opening',()=>{
+ const opening={id:'door',start:{x:1,y:2},end:{x:2,y:2},height:2.1,hinge:'end',swing:'clockwise',openAngleDegrees:0};
+ const snapshot=JSON.stringify(opening);
+ const group=context.ventraCreateDoorLeafVisual({THREE,opening,material:new THREE.MeshPhongMaterial(),interactive:true});
+ const leaf=group.children.find(child=>child.userData.ventraType==='schematic_door_panel');
+ const jamb=group.children.find(child=>child.userData.ventraType==='schematic_door_jamb');
+ const details=group.children.find(child=>child.children.some(mesh=>mesh.userData.ventraType==='schematic_door_handle'));
+ const handle=details.children.find(child=>child.userData.ventraType==='schematic_door_handle');
+ const initial=leaf.position.clone(),angle=leaf.rotation.z,jambPosition=jamb.position.clone();
+ assert.equal(kitchenModel.toggleKitchenPart(handle),true);
+ assert.notEqual(leaf.rotation.z,angle);
+ assert.equal(leaf.rotation.z,details.rotation.z);
+ assert.ok(jamb.position.equals(jambPosition));
+ assert.equal(kitchenModel.toggleKitchenPart(leaf),true);
+ assert.ok(leaf.position.equals(initial));
+ assert.equal(leaf.rotation.z,angle);
+ assert.equal(JSON.stringify(opening),snapshot);
+});
