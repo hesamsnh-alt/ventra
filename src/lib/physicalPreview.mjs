@@ -80,6 +80,7 @@ export function createPhysicalPreview(options){
   next.repeat.set(old.repeat?.x||1,old.repeat?.y||1);next.offset.set(old.offset?.x||0,old.offset?.y||0);
   next.userData.ventraSourceVersion=textureSourceStamp(old);next.userData.ventraSourceWidth=old.image.width;next.userData.ventraSourceHeight=old.image.height;next.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;next.anisotropy=anisotropy;next.needsUpdate=true;textures.set(cacheKey,next);return next;
  }
+ const demoLights=new Map();
  const basicMaterial=old=>old?.type==='MeshBasicMaterial';
  let activeMaterials=new Set(),activeTextures=new Set();
  function material(old){
@@ -90,11 +91,21 @@ export function createPhysicalPreview(options){
   if(old.map)activeTextures.add(old.map.uuid+':true');
   if(old.bumpMap)activeTextures.add(old.bumpMap.uuid+':false');
   let next=materials.get(old);
+  const demo=old.userData?.demoMaterial;
+  if(demo){
+   if(!next){next=demo.clone();materials.set(old,next);}
+   if(demo.emissive)next.emissive.copy(demo.emissive);
+   if(demo.emissiveIntensity!==undefined)next.emissiveIntensity=demo.emissiveIntensity;
+   next.opacity=demo.opacity;
+   if(next.isMeshPhysicalMaterial)setPresentationReflections(next,scene);
+   return next;
+  }
   if(!next){
    const basic=old.type==='MeshBasicMaterial',textile=options.mobile?null:textilePhysicalSettings(old);
    const finish=physicalMaterialSettings(old);
    const coated=finish.clearcoat!==undefined||finish.anisotropy!==undefined;
    next=old.userData?.ventraMaterial==='railing_glass'?new T.MeshPhysicalMaterial({roughness:.07,metalness:0,transmission:options.mobile?0:.88,thickness:.012,ior:1.5}):basic?new T.MeshBasicMaterial():textile?new T.MeshPhysicalMaterial(textile):coated?new T.MeshPhysicalMaterial(finish):new T.MeshStandardMaterial(finish);
+   if(old.userData?.ventraOutdoorView)next.toneMapped=false;
    next.map=texture(old.map,true);if(!basic){next.bumpMap=texture(old.bumpMap,false);next.bumpScale=old.bumpScale||0;}
    materials.set(old,next);
   }
@@ -119,13 +130,30 @@ export function createPhysicalPreview(options){
   lastSource=oldScene;lastCamera=oldCamera;
   oldScene.updateMatrixWorld(true);const active=new Set(),activeGeometry=new Set();activeMaterials=new Set();activeTextures=new Set();relief.begin();
   oldScene.traverse(old=>{
+   if(old.userData?.demoLight){
+    active.add(old);
+    const source=old.userData.demoLight;
+    let light=demoLights.get(old);
+    if(!light){
+     light=new T.PointLight(source.color,0,source.distance,source.decay);
+     demoLights.set(old,light);scene.add(light);
+    }
+    light.position.setFromMatrixPosition(old.matrixWorld);
+    light.intensity=source.intensity;
+   }
    if(!old.geometry||!old.material)return;
    active.add(old);activeGeometry.add(old.geometry);let mesh=objects.get(old);
    if(!mesh){let g=geometries.get(old.geometry);if(!g){g=physicalGeometry(old.geometry);geometries.set(old.geometry,g);}mesh=old.type==='Line'?new (old.mode===1?T.LineSegments:T.Line)(g,new T.LineBasicMaterial({color:old.material.color?.getHex?.()||0x444444})):new T.Mesh(g,material(old.material));mesh.matrixAutoUpdate=false;objects.set(old,mesh);scene.add(mesh);}
+   if(old.geometry.userData?.ventraDynamic){
+    const target=mesh.geometry.attributes.position;
+    target.array.set(old.geometry.attributes.position.array);
+    target.needsUpdate=true;
+   }
    if(old.type!=='Line')mesh.material=material(old.material);mesh.matrix.fromArray(old.matrixWorld.elements);mesh.matrixWorldNeedsUpdate=true;
    let visible=true;for(let parent=old;parent;parent=parent.parent)if(!parent.visible){visible=false;break;}
    mesh.visible=visible;mesh.castShadow=interiorShadowCaster(old,lighting.isInterior());mesh.receiveShadow=old.receiveShadow;
   });
+  for(const [old,light] of demoLights)if(!active.has(old)){scene.remove(light);demoLights.delete(old);}
   for(const [old,mesh] of objects)if(!active.has(old)){scene.remove(mesh);if(old.type==='Line')mesh.material.dispose();objects.delete(old);}
   for(const [old,g] of geometries)if(!activeGeometry.has(old)){g.dispose();geometries.delete(old);}
   for(const [old,m] of materials)if(!activeMaterials.has(old)){m.dispose();materials.delete(old);}

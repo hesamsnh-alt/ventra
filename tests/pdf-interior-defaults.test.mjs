@@ -1,3 +1,4 @@
+import {buildBedCover} from '../src/lib/bedCover.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
 import {buildNativePdfScene} from '../src/services/pdfPlanSceneService.mjs';
 import {applyDesignDefaults} from '../src/lib/designDefaults.mjs';
@@ -60,7 +61,7 @@ test('furnished source floors render through the production Three renderer with 
   const source=readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8');
   const declarations=parser.parse(source,{sourceType:'module',plugins:['jsx']}).program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name?.startsWith('VENTRA_')));
   const {decorateSurfaceMesh,surfaceMaterialList}=await import('../src/lib/surfaceMaterials.mjs');const {configureFloorDepth}=await import('../src/lib/floorDepthLayers.mjs');const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');
-  const ctx=vm.createContext({THREE,document,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),ctx);ctx.getThree=()=>THREE;
+  const ctx=vm.createContext({THREE,buildBedCover,document,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),ctx);ctx.getThree=()=>THREE;
   for(const f of styled.pdfStoreys){const target=new THREE.Scene(),viewer={impl:{scene:target,removeOverlayScene(){},invalidate(){}},navigation:{}};
    const result=ctx.renderStructuredSchematicScene(viewer,f);assert.equal(result.openingCount,17);assert.ok(result.assetMeshCount>=f.assets.length);assert.equal(result.height,3.2);
    const panels=[],assemblies=[];target.traverse(m=>{if(m.userData?.ventraType==='schematic_door_panel')panels.push(m);if(m.userData?.ventraType==='schematic_door_leaf')assemblies.push(m);});

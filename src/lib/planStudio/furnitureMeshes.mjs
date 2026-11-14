@@ -1,4 +1,5 @@
 // Read-only snapshot of Ventra's existing furniture renderer; existing viewer is untouched.
+import {buildBedCover} from "../bedCover.mjs";
 import {bindKitchenSwitch, buildKitchenFridge, buildKitchenStorage, buildKitchenFaucet} from '../kitchenModel.mjs';
 import {presentationFinish} from '../interiorRenderQuality.mjs';
 import {createFurnitureFinishMaterial} from '../furnitureFinishes.mjs';
@@ -639,21 +640,11 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addCushion(w * 0.30, d * 0.17, 0.11, -w * 0.19, -d * 0.29, 0.50, white);
       addCushion(w * 0.30, d * 0.17, 0.11,  w * 0.19, -d * 0.29, 0.50, white);
       if(THREE.Geometry&&THREE.Face3){
-        const geometry=new THREE.Geometry(),nx=16,ny=20;
-        for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
-          const x=(i/nx-.5)*w*.88,y=(j/ny-.5)*d*.50+d*.16;
-          const edge=Math.pow(Math.abs(i/nx-.5)*2,8);
-          const z=.478+.012*Math.sin(i*.8+j*.32)+.008*Math.cos(j*.75)-edge*.055;
-          geometry.vertices.push(new THREE.Vector3(x,y,z));
-        }
-        for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
-          const a=j*(nx+1)+i,b=a+1,c=a+nx+1,e=c+1;
-          geometry.faces.push(new THREE.Face3(a,b,e),new THREE.Face3(a,e,c));
-        }
-        geometry.computeFaceNormals();geometry.computeVertexNormals();
-        ventraApplyFloorMaterialUVs(THREE,geometry);
-        const blanket=new THREE.Mesh(geometry,sage);blanket.position.set(cx,cy,0);blanket.rotation.z=rot;
-        blanket.castShadow=blanket.receiveShadow=true;blanket.userData={ventraComponent:'bed_fabric'};meshes.push(blanket);
+        const fabric=ventraTextileMaterial(THREE,asset.color||'#8b8a77',w,d,'fabric');
+        const blanket=buildBedCover(THREE,w,d,fabric);
+        blanket.position.set(cx,cy,Number(asset.zMeters)||0);
+        blanket.rotation.z=rot;
+        meshes.push(blanket);
       }else addCushion(w*.88,d*.5,.035,0,d*.16,.478,sage);
       addBox(w * 0.88, d * 0.05, 0.07, 0, d * 0.45, 0.07, dark);
       break;

@@ -31,7 +31,7 @@ export function bindKitchenSwitch(control, effect, ...additionalControls) {
   for (const mesh of [control, effect, ...additionalControls]) interactions.set(mesh, toggle);
 }
 
-export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshes, addBox, wood, liner, stone, metal }) {
+export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshes, addBox, wood, liner, stone, metal, apertures = [] }) {
   const wall = Math.min(0.019, w * 0.06, d * 0.08, h * 0.08);
   const counter = type !== "cabinet";
   const top = counter ? Math.min(0.045, h * 0.08) : 0;
@@ -39,17 +39,36 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
   const s = Math.sin(rot);
   const c = Math.cos(rot);
 
+  function addPanel(width,depth,thickness,x,y,level,finish) {
+    let sections=[{left:x-width/2,right:x+width/2,back:y-depth/2,front:y+depth/2}];
+    for(const aperture of apertures){
+      sections=sections.flatMap(({left,right,back,front})=>{
+        const a=Math.max(left,aperture.x-aperture.width/2),b=Math.min(right,aperture.x+aperture.width/2);
+        const c=Math.max(back,aperture.y-aperture.depth/2),d=Math.min(front,aperture.y+aperture.depth/2);
+        if(a>=b||c>=d)return [{left,right,back,front}];
+        return [{left,right:a,back,front},{left:b,right,back,front},
+          {left:a,right:b,back,front:c},{left:a,right:b,back:d,front}];
+      });
+    }
+    for(const {left,right,back,front} of sections){
+      if(right-left>.001&&front-back>.001)addBox(right-left,front-back,thickness,(left+right)/2,(back+front)/2,level,finish);
+    }
+  }
+
   function run(width, depth, x, y, frontDirection) {
     const columns = Math.min(10, Math.max(1, Math.ceil(width / 0.62)));
     const front = y + frontDirection * (depth / 2 - wall / 2);
     addBox(width, wall, body, x, y - frontDirection * (depth - wall) / 2, body / 2, liner);
-    for (const level of [wall / 2, body / 2, body - wall / 2]) {
+    for (const level of [wall / 2, body / 2]) {
       addBox(width, depth - wall, wall, x, y, level, liner);
     }
+    addPanel(width,depth-wall,wall,x,y,body-wall/2,liner);
     const columnWidth = width / columns;
     for (let index = 0; index <= columns; index++) {
       const divider = Math.min(width / 2 - wall / 2, -width / 2 + index * columnWidth + wall / 2);
-      addBox(wall, depth, body, x + divider, y, body / 2, liner);
+      const underSink=apertures.some(hole=>Math.abs(x+divider-hole.x)<(hole.width+wall)/2&&Math.abs(y-hole.y)<(depth+hole.depth)/2);
+      const dividerHeight=underSink?body*.65:body;
+      addBox(wall,depth,dividerHeight,x+divider,y,dividerHeight/2,liner);
     }
     for (let index = 0; index < columns; index++) {
       const center = x - width / 2 + (index + 0.5) * columnWidth;
@@ -91,7 +110,7 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
         pose.mesh.position.set(pose.x - s * slide, pose.y + c * slide, pose.z);
       });
     }
-    if (counter) addBox(width, depth, top, x, y, h - top / 2, stone);
+    if (counter) addPanel(width,depth,top,x,y,h-top/2,stone);
   }
 
   if (type === "kitchen_counter" && variant === "l-shape") {
@@ -109,6 +128,7 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
       type: "kitchen_counter", w: d - corner, d: corner, h, rot: rot + Math.PI / 2,
       cx: cx + across * c - along * s, cy: cy + across * s + along * c, meshes, addBox: localAdd,
       wood, liner, stone, metal,
+      apertures:apertures.map(hole=>({x:hole.y-along,y:across-hole.x,width:hole.depth,depth:hole.width})),
     });
     return;
   }

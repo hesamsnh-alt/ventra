@@ -1,3 +1,7 @@
+import {OUTDOOR_GROUND_ID,outdoorGround} from '../src/lib/outdoorGround.mjs';
+import * as projectKitchenParts from '../src/lib/projectKitchenParts.mjs';
+import * as windowGardenView from '../src/lib/windowGardenView.mjs';
+import {buildBedCover} from '../src/lib/bedCover.mjs';
 import * as kitchenModel from '../src/lib/kitchenModel.mjs';
 import * as furnitureFinishes from '../src/lib/furnitureFinishes.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
@@ -22,7 +26,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
+const context = {THREE, console, OUTDOOR_GROUND_ID, outdoorGround, buildBedCover, ...windowGardenView, ...projectKitchenParts, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 
@@ -285,4 +289,36 @@ test('project door leaves and handles toggle together without moving the jamb or
  assert.ok(leaf.position.equals(initial));
  assert.equal(leaf.rotation.z,angle);
  assert.equal(JSON.stringify(opening),snapshot);
+});
+
+test('project kitchen reuses the interactive demo meshes through legacy raycasting',()=>{
+ const types=['sink','stove','refrigerator'];
+ for(const type of types){
+  const root=projectKitchenParts.buildProjectKitchenPart({THREE,type,w:.7,d:.6,h:1.85,cx:0,cy:0,rot:0,z:.2});
+  const parts=[];
+  root.traverse(part=>{if(part.geometry)parts.push(part);});
+  assert.ok(parts.length>20);
+  assert.ok(parts.every(part=>part.material.userData.demoMaterial));
+  let changed=false;
+  for(const part of parts){
+   if(!kitchenModel.toggleKitchenPart(part))continue;
+   const active=root.userData.updateDemoPart(500);
+   if(type==='sink')assert.ok(active);
+   changed=true;break;
+  }
+  assert.ok(changed);
+  root.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(0,0,4),new THREE.Vector3(0,0,-1));
+  assert.ok(raycastVisibleMeshes(ray,root,THREE).length);
+  root.userData.disposeDemoPart();
+ }
+});
+
+test('window scene places the garden beyond the opening and faces indoors',()=>{
+ const opening={start:{x:0,y:0},end:{x:2,y:0},height:1,sillHeight:1};
+ const normal=windowGardenView.outdoorWindowNormal(opening.start,opening.end,{x:1,y:2});
+ const view=windowGardenView.createGardenView({THREE,opening,normal,wallThickness:.2,material:new THREE.MeshBasicMaterial()});
+ assert.ok(view.position.y<0);
+ assert.ok(new THREE.Vector3(0,0,1).applyQuaternion(view.quaternion).y>.999);
+ assert.equal(view.visible,false);
 });

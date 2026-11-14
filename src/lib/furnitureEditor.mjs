@@ -1,3 +1,4 @@
+import {outdoorGround} from './outdoorGround.mjs';
 import {applyFurnitureFinish} from './furnitureFinishes.mjs';
 import {SOFA_SET_LAYOUTS} from './sofaSets.mjs';
 import {personalFurnitureModel} from './personalAssets.mjs';
@@ -144,6 +145,15 @@ export function roomAtPoint(scene,point){
  const rooms=classified.length?classified:hits;
  return rooms.length===1?rooms[0]:scene.source==='dwg-engineering-interior'?hits.find(r=>r.scopeOnly)||null:null;
 }
+export function furnitureAnchorAtPoint(scene,point,allowOutdoor){
+ if(!Number.isFinite(point?.x)||!Number.isFinite(point?.y))return null;
+ const rooms=scene.source==='dwg-engineering-interior'
+  ?scene.rooms.find(room=>room.scopeOnly&&inside(point,room.polygon))||roomAtPoint(scene,point)
+  :roomAtPoint(scene,point);
+ if(rooms||!allowOutdoor)return rooms;
+ const ground=outdoorGround(scene);
+ return ground&&!inside(point,ground.footprint)&&inside(point,ground.polygon)?ground:null;
+}
 // Snap wall-adjacent furniture onto the visible wall face, never its centreline.
 export function snapFurnitureToWall(draft,scene){
  if(!['cabinet','kitchen_counter','kitchen_island','wardrobe','tv_unit','refrigerator','freezer','washing_machine','stove','sink','dressing_table','curtain','picture_frame','wall_tv'].includes(draft.type))return draft;
@@ -178,11 +188,10 @@ export function furnitureDraft(scene,edit){
  const p=edit.point||{x:original?.xMeters,y:original?.yMeters};
  // DWG room faces may be incomplete/overlapping. Manual design uses the floor
  // envelope; actual walls, openings, voids and other furniture still constrain it.
- const room=scene.source==='dwg-engineering-interior'
-  ?scene.rooms.find(r=>r.scopeOnly&&inside(p,r.polygon))||roomAtPoint(scene,p)
-  :roomAtPoint(scene,p);if(!room)fail('Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
+ const anchor=furnitureAnchorAtPoint(scene,p,edit.allowOutdoor===true);
+ if(!anchor)fail(edit.allowOutdoor?'Choose a room or open ground outside the building. / اتاق یا فضای آزاد بیرون ساختمان را انتخاب کن.':'Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
  const model=edit.kind==='add'||edit.kind==='replace'?catalog:null;
- const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:room.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
+ const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:anchor.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
  if(edit.kind==='add'&&model){const scale=furniturePlacementScale(edit.scale??1);for(const k of ['width','depth','height'])draft[k]*=scale;}
  if(draft.type==='range_hood')draft.zMeters=1.95;
  else if(['picture_frame','wall_tv'].includes(draft.type))draft.zMeters=1.1;
@@ -226,7 +235,7 @@ export function applyFurnitureEdit(scene,edit){
   let next=scene;
   try{for(const piece of chosen.layout){
    const before=next.assets.length;
-   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,scale,freePlacement:edit.freePlacement,point:{x:edit.point.x+scale*(piece.x*Math.cos(angle)-piece.y*Math.sin(angle)),y:edit.point.y+scale*(piece.x*Math.sin(angle)+piece.y*Math.cos(angle))},rotation:(edit.rotation||0)+piece.rotation});
+   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,scale,freePlacement:edit.freePlacement,allowOutdoor:edit.allowOutdoor,point:{x:edit.point.x+scale*(piece.x*Math.cos(angle)-piece.y*Math.sin(angle)),y:edit.point.y+scale*(piece.x*Math.sin(angle)+piece.y*Math.cos(angle))},rotation:(edit.rotation||0)+piece.rotation});
    next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,furnitureSetScale:scale,seatingCapacity:piece.seats}:a);
   }}catch(error){fail('Not enough clear space for the complete set; nothing was added. / فضای آزاد کافی برای ست کامل نیست؛ هیچ وسیله‌ای اضافه نشد. '+error.message);}
   if(next.assets.length!==originalCount+chosen.layout.length)fail('Incomplete furniture set.');

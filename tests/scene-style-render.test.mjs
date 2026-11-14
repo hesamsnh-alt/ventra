@@ -1,8 +1,9 @@
+import {buildBedCover} from '../src/lib/bedCover.mjs';
 import {createRequire} from 'node:module';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import parser from '@babel/parser';import {applySceneStyle} from '../src/lib/sceneStyle.mjs';
 const src=fs.readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8'),ast=parser.parse(src,{sourceType:'module',plugins:['jsx']});
 const selected=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name==='VENTRA_SCHEMATIC_ASSET_DEFAULTS'));
-const c=vm.createContext({applySceneStyle});vm.runInContext(selected.map(n=>src.slice(n.start,n.end)).join('\n'),c);
+const c=vm.createContext({buildBedCover,applySceneStyle});vm.runInContext(selected.map(n=>src.slice(n.start,n.end)).join('\n'),c);
 const THREE=createRequire(import.meta.url)('three-test'),{CylinderGeometry}=THREE;
 function meshes(type,preset){const scene=applySceneStyle({assets:[{type,xMeters:3,yMeters:2,width:2,depth:1,height:.9}]},preset);return c.buildSchematicAssetMeshes({THREE,asset:scene.assets[0],palette:scene.palette||{},roomWidth:10,roomDepth:8});}
 test('preset changes are consumed by mesh construction, not only inspector text',()=>{
