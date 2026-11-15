@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {clickPoint,editorState,startCommand,submit} from '../src/lib/planStudio/controller.mjs';
+import {chooseRoomLayout,clickPoint,editorState,startCommand,submit} from '../src/lib/planStudio/controller.mjs';
 import {newDocument} from '../src/lib/planStudio/document.mjs';
 import {ROOM_LAYOUTS} from '../src/lib/planStudio/roomLayout.mjs';
 import {exportDXF} from '../src/lib/planStudio/export.mjs';
@@ -50,7 +50,7 @@ for(const [face,expected] of [['left',-.1],['right',.1]]){
 for(const [kind,,,items] of ROOM_LAYOUTS){
  test(`AF places a ${kind} from two corners, with one undo`,()=>{
   let s=startCommand(state(),'AF');
-  s={...s,options:{...s.options,roomLayout:kind}};
+  s=chooseRoomLayout(s,kind);
   s=click(click(s,0,0),4,4);
   const assets=s.doc.entities.filter(e=>e.type==='asset');
   assert.equal(assets.length,kind==='dining'?5:items.length);
@@ -69,8 +69,28 @@ for(const [kind,,,items] of ROOM_LAYOUTS){
 
 test('AF leaves the plan intact when all the fixtures cannot fit',()=>{
  let s=startCommand(state(),'AF');
- s={...s,options:{...s.options,roomLayout:'bathroom'}};
+ s=chooseRoomLayout(s,'bathroom');
  s=click(s,0,0);
  assert.throws(()=>click(s,1,1),/space/);
  assert.equal(s.doc.entities.length,0);
+});
+
+
+test('AF asks for a fresh template before drawing and cancels without changing the plan',()=>{
+ const initial=state();
+ const pending=submit(initial,'af');
+ assert.equal(pending.phase,'room-type');
+ assert.throws(()=>click(pending,1,1),/room type/);
+ assert.throws(()=>chooseRoomLayout(pending,'unknown'),/room type/);
+ assert.equal(submit(pending,'ESC').doc,initial.doc);
+ const chosen=chooseRoomLayout(pending,'bathroom',false);
+ const placed=click(click(chosen,0,0),4,4);
+ assert.deepEqual(placed.doc.entities.map(e=>e.catalogId),['bath','toilet','basin']);
+ const next=submit(placed,'AF');
+ assert.equal(next.phase,'room-type');
+ assert.throws(()=>click(next,5,5),/room type/);
+ const kitchen=click(click(chooseRoomLayout(next,'kitchen'),5,5),9,9);
+ assert.deepEqual(kitchen.doc.entities.slice(3).filter(e=>e.type==='asset').map(e=>e.catalogId),
+  ['counter','cooker','basin','fridge']);
+ assert.equal(kitchen.doc.entities.at(-1).hatch,'tile');
 });

@@ -3,7 +3,7 @@ import {guides,normal,dot,unit,perimeterDimensions} from './draftingGeometry.mjs
 import {columnSymbols,labelGrid} from './gridDrafting.mjs';
 import {planSectionCut} from './planSectionCut.mjs';
 import {stairStations, projectedStairSection, railingElevation} from './stairDetails.mjs';
-import {arrangePlanRoom} from './roomLayout.mjs';
+import {ROOM_LAYOUTS,arrangePlanRoom} from './roomLayout.mjs';
 import {GRID_COMMANDS,SECTION_DEFAULTS,sectionSelection,saveSectionGeometry,staircaseSection,ceilingSection,parallelLines} from './sections.mjs';
 import {shaftOutline} from './structures.mjs';
 import {openingCandidate,openingHitDistance,slideOpening} from './openings.mjs';
@@ -13,7 +13,7 @@ import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
 export const ALIASES={ZZBZ:'GRIDCOLUMNS',GRIDCOLUMNS:'GRIDCOLUMNS',AZH:'GRIDLABELS',GRIDLABELS:'GRIDLABELS',LM:'PLANSECTIONCUT',PLANSECTIONCUT:'PLANSECTIONCUT',DPL:'PERIMETERDIMENSIONS',PERIMETERDIMENSIONS:'PERIMETERDIMENSIONS',ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LXTB:'STEPSSECTION',STEPSSECTION:'STEPSSECTION',LG:'RAILINGELEVATION',RAIL:'RAILINGELEVATION',RAILINGELEVATION:'RAILINGELEVATION',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
-export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:'living',roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
+export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:null,roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
 export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
 }
@@ -30,8 +30,8 @@ export function startCommand(s,raw){
  if(command==='SELECT'||command==='ZOOM')return {...finish(s),lastCommand:command};
  if(command==='ERASE'){if(!s.selection.length)throw Error('Select objects first.');layerGuard(s);const ids=new Set(s.selection);for(const e of s.doc.entities)if(e.type==='opening'&&ids.has(e.wall))ids.add(e.id);return finish(commitDocument({...s,selection:[]},{...s.doc,entities:s.doc.entities.filter(e=>!ids.has(e.id))},'ERASE'));}
  if(['MOVE','COPY','ROTATE','SCALE'].includes(command)&&!s.selection.length)throw Error('Select objects before this command. / ابتدا اجسام را انتخاب کن.');
- let phase=['TRIM','EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':'';
- const selection=draftingSelectionCommand(command)?draftingSources(s,s.selection,command).map(e=>e.id):sectionSelectionCommand(command)?s.selection.filter(id=>s.doc.entities.find(e=>e.id===id)?.role!=='section'):s.selection;
+ let phase=['TRIM','EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':command==='ROOMLAYOUT'?'room-type':'';
+ const selection=command==='ROOMLAYOUT'?[]:draftingSelectionCommand(command)?draftingSources(s,s.selection,command).map(e=>e.id):sectionSelectionCommand(command)?s.selection.filter(id=>s.doc.entities.find(e=>e.id===id)?.role!=='section'):s.selection;
  return note({...s,selection,command,phase,points:[],boundary:[],value:null,segmentLength:null,lastCommand:command},command+' → '+(phase||'first point'));
 }
 // Exact length is a transient drawing constraint, never a project/BOQ setting.
@@ -81,6 +81,12 @@ function applyDraftingSelection(s,ids){
  return commitSection(s,saveSectionGeometry(s.doc,geometry,s.command));
 }
 
+export function chooseRoomLayout(state,kind,tiles=true){
+ if(state.command!=='ROOMLAYOUT'||state.phase!=='room-type'||!ROOM_LAYOUTS.some(([id])=>id===kind))
+  throw Error('Choose a room type before placing the layout. / پیش از درج چیدمان، نوع فضا را انتخاب کن.');
+ return {...state,phase:'room-corners',options:{...state.options,roomLayout:kind,roomTiles:tiles}};
+}
+
 export function clickPoint(s,raw,event={}){
  if(!point(raw))throw Error('Invalid point.');const p=event.raw||s.command==='HATCH'?raw:snappedPoint(s,raw,event),cmd=s.command,hit=event.entityId?s.doc.entities.find(e=>e.id===event.entityId):hitEntity(s,p,event.tolerance),n=s.points.length;
  if(!point(p))throw Error('Coordinates outside drawing range. / نقطه خارج از محدودهٔ ترسیم است.');
@@ -110,6 +116,7 @@ export function clickPoint(s,raw,event={}){
   return commitSection(s,saveSectionGeometry(s.doc,planSectionCut(s.doc,...s.points,p,s.options.section),cmd));
  }
  if(cmd==='ROOMLAYOUT'){
+  if(s.phase!=='room-corners')throw Error('Choose a room type first. / ابتدا نوع فضا را انتخاب کن.');
   if(!n)return {...s,points:[p]};
   return commitSection(s,arrangePlanRoom(s.doc,s.points[0],p,{kind:s.options.roomLayout,z:s.options.z,tiles:s.options.roomTiles}));
  }
