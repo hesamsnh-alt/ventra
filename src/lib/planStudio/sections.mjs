@@ -2,8 +2,11 @@ import {id} from './document.mjs';
 import {at,dist,point,EPS,validPolygon} from './geometry.mjs';
 
 export const SECTION_LAYER='section-details';
-export const SECTION_COMMANDS=['SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
+export const GRID_COMMANDS=['GRIDCOLUMNS','GRIDLABELS'];
+export const SECTION_COMMANDS=['PLANSECTIONCUT','PERIMETERDIMENSIONS',...GRID_COMMANDS,'SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
 export const SECTION_DEFAULTS=Object.freeze({
+ gridColumnWidth:.4,gridColumnDepth:.4,gridLabelOffset:.35,gridBubbleRadius:.13,
+ perimeterDimOffset:.45,cutDepth:6,cutLabel:'A',
  wallThickness:.2,slabThickness:.3,multilineWidth:.2,
  stairStyle:'return',firstRun:'right',risers:18,landing:.95,waist:.16,beamWidth:.2,beamHeight:.35,stories:1,
  stepRiseMode:'step',stepRise:.175,stepTotal:1.575,stepDirection:'up',stepRun:'right',
@@ -168,7 +171,7 @@ export function saveSectionGeometry(doc,geometry,command,replaced=new Set()){
  if(layer?.locked||layer?.visible===false)throw Error('Show and unlock the section layer first. / ابتدا لایهٔ برش را روشن و باز کن.');
  if(geometry.length>2000||geometry.some(e=>[...(e.points||[]),...[e.a,e.b,e.center].filter(Boolean)].some(p=>!point(p))))
   throw Error('Section exceeds the drawing limits. / برش از محدودهٔ ترسیم خارج است.');
- const colors={SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',STEPSSECTION:'#e7ce93',RAILINGELEVATION:'#a8c5dc',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
+ const colors={GRIDCOLUMNS:'#f3aa9b',GRIDLABELS:'#9dd6a5',PERIMETERDIMENSIONS:'#b9d9a4',PLANSECTIONCUT:'#cecdba',SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',STEPSSECTION:'#e7ce93',RAILINGELEVATION:'#a8c5dc',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
  const items=geometry.map(e=>({id:id(),layer:SECTION_LAYER,role:'section',color:colors[command],...e}));
  return {doc:{...doc,layers:layer?doc.layers:[...doc.layers,{id:SECTION_LAYER,name:'Sections / برش‌ها',color:'#bccfdd',dash:'solid',weight:.25,visible:true,locked:false}],
   entities:[...doc.entities.filter(e=>!replaced.has(e.id)),...items]},selection:items.map(e=>e.id)};

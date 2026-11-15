@@ -1,5 +1,20 @@
+import {GRID_COMMANDS} from '@/lib/planStudio/sections.mjs';
+
 export function sectionPrompt(command,count,t){
   switch(command){
+    case 'GRIDCOLUMNS':
+    case 'GRIDLABELS':
+      return count?t('Pick the opposite corner around the axes.','گوشهٔ مقابل کادرِ آکس‌ها را بزن.'):
+        t('Pick a corner around the axes, or press Enter to apply to preselected lines.','گوشهٔ کادر آکس‌ها را بزن یا برای اعمال به خطوط انتخاب‌شده اینتر بزن.');
+    case 'PERIMETERDIMENSIONS':
+      return t('Click a closed polyline, or press Enter to dimension preselected outlines.','روی پلی‌لاین بسته بزن یا برای اندازه‌گذاری دورخط‌های انتخاب‌شده اینتر بزن.');
+    case 'PLANSECTIONCUT':
+      return [
+        t('Pick the first endpoint of the cut across the plan.','ابتدای خط برش روی پلان را بزن.'),
+        t('Pick the other endpoint of the cut.','انتهای خط برش را بزن.'),
+        t('Pick the side to look toward.','سمتی را که به آن نگاه می‌کنی انتخاب کن.'),
+        t('Place the section at its datum outside the plan.','تراز مبنای مقطع را بیرون پلان درج کن.'),
+      ][count];
     case 'SECTIONWALL':
     case 'SECTIONSLAB':
       return t('Select guide lines, arcs or polylines, then press Enter.','خط، قوس یا پلی‌لاین‌های راهنما را انتخاب کن و اینتر بزن.');
@@ -46,6 +61,10 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
     <summary>{t('Sections & elevations','برش و نما')}</summary>
     <div className="ps-tools">
       {[
+        ['ZZBZ','GRIDCOLUMNS','Columns at grid crossings','ستون‌گذاری تقاطع آکس‌ها'],
+        ['AZH','GRIDLABELS','Grid labels and dimensions','شماره و اندازهٔ آکس‌ها'],
+        ['LM','PLANSECTIONCUT','Section from plan','برش از پلان'],
+        ['DPL','PERIMETERDIMENSIONS','Dimension outline','اندازه‌گذاری دورخط'],
         ['WW','SECTIONWALL','Wall section','ضخامت دیوار'],
         ['SSL','SECTIONSLAB','Slab section','ضخامت دال'],
         ['LTP','SECTIONSTAIR','Stair section','مقطع پله'],
@@ -56,6 +75,20 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
         ['ML','MULTILINE','Parallel lines','دو خط موازی'],
       ].map(([code,name,en,fa])=><button key={code} aria-pressed={command===name} onClick={()=>onStart(code)}><kbd>{code}</kbd>{t(en,fa)}</button>)}
     </div>
+    {command==='GRIDCOLUMNS'&&<fieldset><legend>{t('Column symbol dimensions','ابعاد علامت ستون')}</legend>
+      {size('gridColumnWidth','Width','عرض',.05)}
+      {size('gridColumnDepth','Depth','عمق',.05)}
+    </fieldset>}
+    {command==='GRIDLABELS'&&<fieldset><legend>{t('Axis annotation','اندازه و علامت آکس')}</legend>
+      {size('gridLabelOffset','Dimension offset','فاصلهٔ خط اندازه',.1)}
+      {size('gridBubbleRadius','Bubble radius','شعاع دایرهٔ آکس',.04)}
+    </fieldset>}
+    {command==='PLANSECTIONCUT'&&<fieldset><legend>{t('Plan section settings','تنظیمات برش از پلان')}</legend>
+      {size('cutDepth','Projection depth (0 for cut only)','عمق نمایش پشت برش (صفر برای خود برش)',0)}
+      <label>{t('Section label','عنوان برش')}<input maxLength={4} dir="ltr" value={settings.cutLabel}
+        onChange={event=>onChange('cutLabel',event.target.value.toUpperCase())}/></label>
+    </fieldset>}
+    {command==='PERIMETERDIMENSIONS'&&size('perimeterDimOffset','Dimension offset','فاصلهٔ خط اندازه',.05)}
     {command==='SECTIONWALL'&&thickness('wallThickness','Wall thickness','ضخامت دیوار')}
     {command==='SECTIONSLAB'&&thickness('slabThickness','Slab thickness','ضخامت دال')}
     {command==='MULTILINE'&&size('multilineWidth','Distance between lines','فاصلهٔ بین دو خط',.01)}
@@ -106,7 +139,7 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
       {size('board','Gypsum board thickness','ضخامت پنل گچی',.005)}
       {size('hangerSpacing','Maximum hanger spacing','حداکثر فاصلهٔ آویزها',.15)}
     </fieldset>}
-    {['SECTIONWALL','SECTIONSLAB','WINDOWELEVATION'].includes(command)&&<button disabled={!selectionCount} onClick={onFinish}>
+    {[...GRID_COMMANDS,'PERIMETERDIMENSIONS','SECTIONWALL','SECTIONSLAB','WINDOWELEVATION'].includes(command)&&<button disabled={!selectionCount} onClick={onFinish}>
       {t('Apply to selection','اعمال به موارد انتخاب‌شده')} ({selectionCount})
     </button>}
     {command==='MULTILINE'&&<button onClick={onFinish}>{t('Finish lines','پایان دو خط')}</button>}

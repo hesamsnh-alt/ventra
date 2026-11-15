@@ -97,7 +97,7 @@ export default function Plan3DPreview({ doc }) {
           }
           root = nextRoot;
           scene.add(root);
-          currentBounds = bounds(next.entities);
+          currentBounds = bounds(next.entities.filter(entity => entity.role !== 'section'));
           const { x, y, width, height } = currentBounds;
           const boundsChanged = [x, y, width, height].join("|");
           if (lightingBounds !== boundsChanged) {
