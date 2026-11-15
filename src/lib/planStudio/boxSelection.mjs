@@ -1,3 +1,4 @@
+import {canDimension} from './draftingGeometry.mjs';
 import {openingPlanGeometry} from './openings.mjs';
 import {shaftOuter} from './structures.mjs';
 import {at,segments,curveIntersections,param,bounds,inside,EPS} from './geometry.mjs';
@@ -30,6 +31,9 @@ export function boxSelection(doc,a,b,{crossing=false}={}){
  }).map(e=>e.id);
 }
 export function applyBoxSelection(state,box,{append=false}={}){
- const picked=boxSelection(state.doc,box.a,box.b,{crossing:box.crossing});
+ const measure=state.command==='PERIMETERDIMENSIONS';
+ const doc=measure?{...state.doc,entities:state.doc.entities.filter(canDimension)}:state.doc;
+ const picked=boxSelection(doc,box.a,box.b,{crossing:box.crossing});
+ if(measure)append=true;
  return{...state,selection:append?[...new Set([...state.selection,...picked])]:picked};
 }

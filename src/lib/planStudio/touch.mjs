@@ -9,7 +9,7 @@ export function createPlanTouchInput({getState,getView,getRect,isPan,onView,onPo
  const midpoint=()=>{const a=[...fingers.values()];return{x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};};
  function down(e){
   fingers.set(e.pointerId,position(e));
-  if(fingers.size===1){const s=getState(),p=position(e);const target=s.command==='SELECT'&&!isPan()?getDragTarget?.(world(p)):null;gesture={target,start:p,view:{...getView()},multi:false,moved:false,pan:isPan()||s.command==='SELECT'&&!onSelectionBox,select:!target&&s.command==='SELECT'&&!isPan()&&!!onSelectionBox,explicitPan:isPan(),command:s.command,pointCount:s.points.length};}
+  if(fingers.size===1){const s=getState(),p=position(e);const target=s.command==='SELECT'&&!isPan()?getDragTarget?.(world(p)):null;gesture={target,start:p,view:{...getView()},multi:false,moved:false,pan:isPan()||s.command==='SELECT'&&!onSelectionBox,select:!target&&['SELECT','PERIMETERDIMENSIONS'].includes(s.command)&&!isPan()&&!!onSelectionBox,explicitPan:isPan(),command:s.command,pointCount:s.points.length};}
   else if(fingers.size===2){onSelectionPreview?.(null);onDragPreview?.(null);onSweepPreview?.(null);const a=[...fingers.values()],mid=midpoint(),view={...getView()};gesture={...gesture,multi:true,view,distance:Math.max(1,Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)),anchor:world(mid,view)};}
  }
  function move(e){

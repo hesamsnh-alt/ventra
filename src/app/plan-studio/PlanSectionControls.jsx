@@ -10,7 +10,7 @@ export function sectionPrompt(command,count,t){
       return count?t('Pick the opposite corner around the axes.','گوشهٔ مقابل کادرِ آکس‌ها را بزن.'):
         t('Pick a corner around the axes, or press Enter to apply to preselected lines.','گوشهٔ کادر آکس‌ها را بزن یا برای اعمال به خطوط انتخاب‌شده اینتر بزن.');
     case 'PERIMETERDIMENSIONS':
-      return t('Click a closed polyline, or press Enter to dimension preselected outlines.','روی پلی‌لاین بسته بزن یا برای اندازه‌گذاری دورخط‌های انتخاب‌شده اینتر بزن.');
+      return t('Click or drag to select lines and outlines. Click a selected object to remove it. Press Enter to dimension the selection.','با کلیک یا کادر، خط‌ها و پلی‌لاین‌ها را انتخاب کن. کلیک دوباره انتخاب را برمی‌دارد. برای اندازه‌گذاری همه، اینتر بزن.');
     case 'PLANSECTIONCUT':
       return [
         t('Pick the first endpoint of the cut across the plan.','ابتدای خط برش روی پلان را بزن.'),
@@ -67,7 +67,7 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
         ['ZZBZ','GRIDCOLUMNS','Columns at grid crossings','ستون‌گذاری تقاطع آکس‌ها'],
         ['AZH','GRIDLABELS','Grid labels and dimensions','شماره و اندازهٔ آکس‌ها'],
         ['LM','PLANSECTIONCUT','Section from plan','برش از پلان'],
-        ['DPL','PERIMETERDIMENSIONS','Dimension outline','اندازه‌گذاری دورخط'],
+        ['DPL','PERIMETERDIMENSIONS','Dimension selection','اندازه‌گذاری انتخاب'],
         ['WW','SECTIONWALL','Wall section','ضخامت دیوار'],
         ['SSL','SECTIONSLAB','Slab section','ضخامت دال'],
         ['LTP','SECTIONSTAIR','Stair section','مقطع پله'],

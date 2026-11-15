@@ -2,8 +2,9 @@ import {FURNITURE_CATALOG} from '../furnitureEditor.mjs';
 import {placePdfFurniture,pdfFurnitureClear} from '../pdfFurnitureLayout.mjs';
 import {placementProblem} from '../scenePromptActions.mjs';
 import {furnitureOverlaps} from '../interiorPresentation.mjs';
-import {id} from './document.mjs';
+import {id,visibleEntities} from './document.mjs';
 import {shaftOuter} from './structures.mjs';
+import {multilinePreview} from './multilineWalls.mjs';
 import {openingPlanGeometry} from './openings.mjs';
 import {at,dist,inside,segments,curveIntersections} from './geometry.mjs';
 
@@ -38,10 +39,13 @@ export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
  const furnitureLayer=doc.layers.find(l=>l.id==='furniture');
  if(!furnitureLayer?.visible||furnitureLayer.locked)throw Error('Show and unlock the furniture layer. / لایهٔ مبلمان را روشن و باز کن.');
  const polygon=[{x,y},{x:x+width,y},{x:x+width,y:y+depth},{x,y:y+depth}],room={id:'arrange-room',polygon};
- const walls=floorWalls(doc.entities,z),wallIds=new Set(walls.map(w=>w.id));
+ const visible=visibleEntities(doc);
+ const preview=multilinePreview(visible);
+ const wallBands=preview.bands.filter(band=>band.z<=z+.01&&band.z+band.height>z);
+ const walls=floorWalls(visible,z),wallIds=new Set(walls.map(w=>w.id));
  const openings=doc.entities.filter(e=>e.type==='opening'&&wallIds.has(e.wall));
- const holes=doc.entities.filter(e=>e.role==='shaft'&&(e.z||0)<=z+.01&&(e.z||0)+e.height>=z).map(e=>({polygon:shaftOuter(e)}));
- const scene={width,depth,walls,holes,rooms:[room],assets:doc.entities.filter(e=>e.type==='asset').map(toSceneAsset),
+ const holes=visible.filter(e=>e.role==='shaft'&&(e.z||0)<=z+.01&&(e.z||0)+e.height>=z).map(e=>({polygon:shaftOuter(e)}));
+ const scene={width,depth,walls,holes,rooms:[room],assets:visible.filter(e=>e.type==='asset').map(toSceneAsset),
   openings:openings.map(e=>({...e,type:e.kind==='window'?'window':'door',wallId:e.wall,sillHeight:(e.z||0)+(doc.entities.find(w=>w.id===e.wall)?.z||0)}))};
  const swingLines=openings.filter(e=>e.kind!=='window').flatMap(e=>{
   const g=openingPlanGeometry(doc,e),arc=g?.curves.find(curve=>curve.type==='arc');
@@ -51,8 +55,19 @@ export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
     rotation:Math.atan2(end.y-start.y,end.x-start.x)*180/Math.PI};
   });
  });
+ const hitsBand=c=>{
+  if(!wallBands.length)return false;
+  const angle=c.rotation*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle);
+  const footprint=[[-.5,-.5],[.5,-.5],[.5,.5],[-.5,.5]].map(([u,v])=>({
+   x:c.xMeters+u*c.width*cos-v*c.depth*sin,y:c.yMeters+u*c.width*sin+v*c.depth*cos,
+  }));
+  return wallBands.some(band=>overlapping(footprint,band.points)&&
+   !band.holes.some(hole=>footprint.every(p=>inside(p,hole))&&
+    !segments({type:'polyline',points:footprint,closed:true}).some(a=>
+     segments({type:'polyline',points:hole,closed:true}).some(b=>curveIntersections(a,b).length))));
+ };
  const fits=c=>!placementProblem(c,scene,{manualFurniturePlacement:true})&&pdfFurnitureClear(c,scene)&&
-  !swingLines.some(leaf=>furnitureOverlaps(c,leaf,scene));
+  !swingLines.some(leaf=>furnitureOverlaps(c,leaf,scene))&&!hitsBand(c);
  const group=id(),placed=[];
  const make=model=>({id:id(),type:model.type,catalogId:model.id,roomId:room.id,width:model.width,depth:model.depth,height:model.height,zMeters:z});
  for(const catalogId of spec[3]){
@@ -75,10 +90,11 @@ export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
  if(tiles&&['kitchen','bathroom'].includes(kind)){
   const border=.015;
   const outline=[{x:x+border,y:y+border},{x:x+width-border,y:y+border},{x:x+width-border,y:y+depth-border},{x:x+border,y:y+depth-border}];
+  const autoFloor=preview.floors.find(floor=>Math.abs(floor.z-z)<.01&&outline.every(p=>inside(p,floor.points)));
   if(!doc.entities.some(e=>e.role==='floor'&&Math.abs((e.z||0)-z)<.01&&overlapping(outline,e.points))){
    const architecture=doc.layers.find(l=>l.id==='architecture');
    if(!architecture?.visible||architecture.locked)throw Error('Show and unlock the architecture layer for floor tiles. / برای کاشی، لایهٔ معماری را روشن و باز کن.');
-   output.push({id:id(),type:'polyline',role:'floor',layer:'architecture',points:outline,closed:true,height:.12,z,hatch:'tile',hatchScale:.3,color:'bylayer',surfaceColor:'#dcd7cb'});
+   output.push({id:id(),type:'polyline',role:'floor',layer:'architecture',points:outline,closed:true,height:autoFloor ? .003 : .12,z:z+(autoFloor ? .003 : 0),roomFinish:Boolean(autoFloor),hatch:'tile',hatchScale:.3,color:'bylayer',surfaceColor:'#dcd7cb'});
   }
  }
  return {doc:{...doc,entities:[...doc.entities,...output]},selection:output.map(e=>e.id)};

@@ -24,12 +24,25 @@ export function basis(origin, u) {
 }
 export const guides = e => !e.hatch && (!e.role || e.role === 'line') && ['line','polyline'].includes(e.type);
 
+export const canDimension=e=>['line','polyline'].includes(e.type)&&e.role!=='hatch'&&e.detailKind!=='dpl-extension';
+const edgeKey=(a,b)=>[a,b].map(p=>[p.x,p.y].map(n=>Math.round(n*1e7)).join(',')).sort().join('|');
+
 export function perimeterDimensions(entities, offset) {
-  if (!entities.length || !entities.every(e => e.type === 'polyline' && e.closed) || !range(offset,.05,10)) {
-    throw Error('Select closed polylines and set a positive dimension offset. / پلی‌لاین بسته و فاصلهٔ معتبر انتخاب کن.');
+  if (!entities.length || !entities.every(canDimension) || !range(offset,.05,10)) {
+    throw Error('Select lines or polylines and set a valid offset. / خط یا پلی‌لاین و فاصلهٔ معتبر انتخاب کن.');
   }
+  const closedEdges=new Set(entities.filter(e=>e.closed).flatMap(segments).map(({a,b})=>edgeKey(a,b)));
   return entities.flatMap(entity => {
     const edges = segments(entity);
+    if(!entity.closed){
+      return edges.flatMap(({a,b})=>{
+        const key=edgeKey(a,b);
+        if(closedEdges.has(key))return [];
+        closedEdges.add(key);
+        if(a.x>b.x||a.x===b.x&&a.y>b.y)[a,b]=[b,a];
+        return [dimension(a,b,a.x===b.x?-offset:offset)];
+      });
+    }
     const ccw = edges.reduce((area,{a,b})=>area+a.x*b.y-a.y*b.x,0)>0;
     const result = [];
     const axisEdges = edges.every(({a,b})=> Math.abs(a.x-b.x)<EPS || Math.abs(a.y-b.y)<EPS);
@@ -52,7 +65,7 @@ export function perimeterDimensions(entities, offset) {
           const base = p(station);
           const nearest = corners.filter(corner=>Math.abs(coord(corner)-station)<EPS)
             .reduce((a,b)=>dist(a,base)<dist(b,base)?a:b);
-          if (dist(nearest,base)>EPS) result.push(line(nearest,base));
+          if (dist(nearest,base)>EPS) result.push({...line(nearest,base),detailKind:'dpl-extension'});
         }
         for (let i=1;i<stations.length;i++) {
           result.push(dimension(p(stations[i-1]),p(stations[i]),sign*offset));

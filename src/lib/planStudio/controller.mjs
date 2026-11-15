@@ -1,7 +1,7 @@
 import {createWallMultiline,DEFAULT_MULTILINE_HEIGHT} from './multilineWalls.mjs';
 import {chosenWallPair,pairedWallEdges,selectWallEdge,useWallEdges} from './wallEdges.mjs';
 import {boxSelection} from './boxSelection.mjs';
-import {guides,normal,dot,unit,perimeterDimensions} from './draftingGeometry.mjs';
+import {canDimension,guides,normal,dot,unit,perimeterDimensions} from './draftingGeometry.mjs';
 import {columnSymbols,labelGrid} from './gridDrafting.mjs';
 import {planSectionCut} from './planSectionCut.mjs';
 import {stairPlanNumbers,stairStations, projectedStairSection, railingElevation} from './stairDetails.mjs';
@@ -9,10 +9,10 @@ import {ROOM_LAYOUTS,arrangePlanRoom} from './roomLayout.mjs';
 import {GRID_COMMANDS,STAIR_NUMBER_COMMAND,SECTION_DEFAULTS,sectionSelection,saveSectionGeometry,staircaseSection,ceilingSection,parallelLines} from './sections.mjs';
 import {shaftOutline} from './structures.mjs';
 import {openingCandidate,openingHitDistance,slideOpening} from './openings.mjs';
-import {findHatchBoundary,hatchContains} from './hatchBoundary.mjs';
+import {findHatchBoundary,hatchContains,outlineFromDraftEdge} from './hatchBoundary.mjs';
 import {triangleShape,regularPolygonShape} from './shapes.mjs';
-import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document.mjs';
-import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
+import {id,newDocument,validateDocument,parsePoint,lengthValue,visibleEntities} from './document.mjs';
+import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,boundarySide,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
 export const ALIASES={W2:'WALLEDGES',WALLEDGES:'WALLEDGES',SN:STAIR_NUMBER_COMMAND,STAIRNUMBERS:STAIR_NUMBER_COMMAND,ZZBZ:'GRIDCOLUMNS',GRIDCOLUMNS:'GRIDCOLUMNS',AZH:'GRIDLABELS',GRIDLABELS:'GRIDLABELS',LM:'PLANSECTIONCUT',PLANSECTIONCUT:'PLANSECTIONCUT',DPL:'PERIMETERDIMENSIONS',PERIMETERDIMENSIONS:'PERIMETERDIMENSIONS',ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LXTB:'STEPSSECTION',STEPSSECTION:'STEPSSECTION',LG:'RAILINGELEVATION',RAIL:'RAILINGELEVATION',RAILINGELEVATION:'RAILINGELEVATION',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
 export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:null,roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:DEFAULT_MULTILINE_HEIGHT,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
@@ -37,7 +37,7 @@ export function startCommand(s,raw){
   if(selected.length===2)return applyWallEdges(s,chosenWallPair(...selected.map(e=>({...e,segment:0}))));
  }
  if(['MOVE','COPY','ROTATE','SCALE'].includes(command)&&!s.selection.length)throw Error('Select objects before this command. / ابتدا اجسام را انتخاب کن.');
- let phase=['TRIM','EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':command==='ROOMLAYOUT'?'room-type':'';
+ let phase=command==='TRIM'?'target':['EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':command==='ROOMLAYOUT'?'room-type':'';
  const selection=command==='ROOMLAYOUT'?[]:draftingSelectionCommand(command)?draftingSources(s,s.selection,command).map(e=>e.id):sectionSelectionCommand(command)?s.selection.filter(id=>s.doc.entities.find(e=>e.id===id)?.role!=='section'):s.selection;
  return note({...s,selection,command,phase,points:[],boundary:[],value:null,segmentLength:null,lastCommand:command},command+' → '+(phase||'first point'));
 }
@@ -58,7 +58,7 @@ function exactEndpoint(s,p){
  return{x:from.x+(p.x-from.x)/d*length,y:from.y+(p.y-from.y)/d*length};
 }
 export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
- const freePick=(s.command==='STEPSSECTION'||s.command==='PLANSECTIONCUT')&&s.points.length>=2||GRID_COMMANDS.includes(s.command);
+ const freePick=(s.command==='STEPSSECTION'||s.command==='PLANSECTIONCUT')&&s.points.length>=2||GRID_COMMANDS.includes(s.command)||s.command==='ROOMLAYOUT';
  const from=freePick?null:s.points.at(-1);if((shift||s.ortho)&&from){const dx=Math.abs(p.x-from.x),dy=Math.abs(p.y-from.y);p=dx>=dy?{x:p.x,y:from.y}:{x:from.x,y:p.y};}
  if(!s.snap)return exactEndpoint(s,p);let candidates=[];const visible=s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false);
  for(const e of visible)for(const seg of segments(e)){candidates.push(at(seg,0),at(seg,1),at(seg,.5));if(seg.type!=='line')candidates.push(seg.center);}
@@ -78,7 +78,7 @@ function draftingSources(s,ids,command=s.command){
  const selected=new Set(ids);
  const visible=new Set(s.doc.layers.filter(layer=>layer.visible!==false).map(layer=>layer.id));
  return s.doc.entities.filter(e=>selected.has(e.id)&&visible.has(e.layer)&&
-  (command==='PERIMETERDIMENSIONS'?e.type==='polyline'&&e.closed&&e.role!=='section'&&e.role!=='hatch':guides(e)));
+  (command==='PERIMETERDIMENSIONS'?canDimension(e):guides(e)));
 }
 function applyDraftingSelection(s,ids){
  const sources=draftingSources(s,ids),options=s.options.section;
@@ -140,8 +140,9 @@ export function clickPoint(s,raw,event={}){
  }
  if(cmd==='PERIMETERDIMENSIONS'){
   const sources=draftingSources(s,s.doc.entities.map(e=>e.id));
-  const outline=event.entityId?sources.find(e=>e.id===event.entityId):hitEntity({...s,doc:{...s.doc,entities:sources}},raw,event.tolerance);
-  return applyDraftingSelection(s,outline?[outline.id]:[]);
+  sources.sort((a,b)=>Number(Boolean(b.closed))-Number(Boolean(a.closed)));
+  const target=event.entityId?sources.find(e=>e.id===event.entityId):hitEntity({...s,doc:{...s.doc,entities:sources}},raw,event.tolerance);
+  return target?{...s,selection:s.selection.includes(target.id)?s.selection.filter(id=>id!==target.id):[...s.selection,target.id]}:s;
  }
  if(cmd==='PLANSECTIONCUT'){
   if(n===1&&dist(p,s.points[0])<.15)throw Error('Pick a longer cut line. / خط برش بلندتری انتخاب کن.');
@@ -207,15 +208,48 @@ export function clickPoint(s,raw,event={}){
   return commitSection(s,saveSectionGeometry(s.doc,geometry,cmd));
  }
  if(['TRIM','EXTEND'].includes(cmd)){
-  if(s.phase==='boundary'){if(!hit)return note(s,'Select cutting/boundary edge, then Enter (or Enter for all).');return{...s,boundary:[...new Set([...s.boundary,hit.id])]};}
-  if(!hit)throw Error('Pick the part/end to trim or extend.');const cutters=s.doc.entities.filter(e=>e.id!==hit.id&&(!s.boundary.length||s.boundary.includes(e.id))),operation=event.shift?(cmd==='TRIM'?'EXTEND':'TRIM'):cmd;
-  return operation==='TRIM'?replace(s,hit,trimCurve(hit,cutters,p),'TRIM'):replace(s,hit,[extendCurve(hit,cutters,p)],'EXTEND');
+  const candidates=visibleEntities(s.doc).filter(c=>segments(c).length&&!['floor','shaft','hatch'].includes(c.role)&&c.detailKind!=='dpl-extension');
+  const target=event.entityId?candidates.find(e=>e.id===event.entityId):
+   hitEntity({...s,doc:{...s.doc,entities:candidates}},raw,event.tolerance);
+  if(s.phase==='boundary'){
+   if(!target)return note(s,'Select cutting edges, then Enter. / خطوط برش را انتخاب کن و اینتر بزن.');
+   const boundary=s.boundary.includes(target.id)?s.boundary.filter(id=>id!==target.id):[...s.boundary,target.id];
+   return {...s,boundary,selection:boundary};
+  }
+  if(!target)throw Error('Pick the part/end to edit. / روی بخش یا سرخط موردنظر بزن.');
+  const cutters=candidates.filter(c=>c.id!==target.id&&(!s.boundary.length||s.boundary.includes(c.id)));
+  const operation=event.shift?(cmd==='TRIM'?'EXTEND':'TRIM'):cmd;
+  return operation==='TRIM'?replace(s,target,trimCurve(target,cutters,raw),'TRIM'):
+   replace(s,target,[extendCurve(target,cutters,raw)],'EXTEND');
  }
  if(cmd==='EXTRIM'){
-  if(s.phase==='boundary'){if(!hit||!(hit.type==='circle'||hit.type==='polyline'&&hit.closed))throw Error('Pick a closed polyline/circle boundary.');return{...s,boundary:[hit.id],phase:'side'};}
-  const b=s.doc.entities.find(e=>e.id===s.boundary[0]),poly=b.type==='circle'?Array.from({length:96},(_,i)=>at(b,i/96)):b.points,removeInside=inside(p,poly);layerGuard(s,s.doc.entities.filter(e=>e.id!==b.id&&segments(e).length).map(e=>e.id));
-  const removedParents=new Set();const entities=s.doc.entities.flatMap(e=>{if(e.id===b.id||!segments(e).length||s.doc.layers.find(l=>l.id===e.layer)?.visible===false)return[e];removedParents.add(e.id);return extrimCurve(e,b,removeInside).map(r=>({...r,id:id(),role:e.role==='floor'?'line':e.role}));}).filter(e=>e.type!=='opening'||!removedParents.has(e.wall));
-  return finish(commitDocument(s,{...s.doc,entities},'EXTRIM '+(removeInside?'inside':'outside')));
+  if(s.phase==='boundary'){
+   const closed=visibleEntities(s.doc).filter(e=>!['hatch','shaft'].includes(e.role)&&
+     (e.type==='circle'||e.type==='polyline'&&e.closed));
+   const picked=event.entityId?closed.find(e=>e.id===event.entityId):
+     hitEntity({...s,doc:{...s.doc,entities:closed}},raw,event.tolerance);
+   const found=picked?null:outlineFromDraftEdge(s.doc,raw,event.tolerance??.15)??findHatchBoundary(s.doc,raw);
+   if(!picked&&!found)throw Error('Pick a closed outline, including one made from separate lines. / مرز بسته را انتخاب کن، حتی اگر از چند خط جدا ساخته شده.');
+   const boundary=picked??{type:'polyline',points:found.points,closed:true};
+   const sources=picked?[picked.id]:found.sources;
+   return {...s,boundary:sources,value:boundary,phase:'side',selection:sources};
+  }
+  const b=s.value,side=boundarySide(b,raw);
+  if(!side)throw Error('Pick clearly inside or outside the boundary. / داخل یا بیرون مرز کلیک کن.');
+  const removedParents=new Set(),rebound=[];
+  const boundaries=new Set(s.boundary),visible=new Set(visibleEntities(s.doc).map(e=>e.id));
+  const locked=new Set(s.doc.layers.filter(l=>l.locked).map(l=>l.id));
+  const entities=s.doc.entities.flatMap(e=>{
+   if(boundaries.has(e.id)||!visible.has(e.id)||locked.has(e.layer)||['floor','shaft','hatch'].includes(e.role)||
+    e.detailKind==='dpl-extension'||!segments(e).length)return [e];
+   const clipped=extrimCurve(e,b,side<0);
+   if(clipped.length===1&&clipped[0]===e)return [e];
+   removedParents.add(e.id);
+   const fragments=clipped.map(value=>({...value,id:id()}));
+   rebound.push(...reboundOpenings(e,fragments,s.doc.entities.filter(o=>o.type==='opening'&&o.wall===e.id)));
+   return fragments;
+  }).filter(e=>e.type!=='opening'||!removedParents.has(e.wall));
+  return finish(commitDocument({...s,selection:[]},{...s.doc,entities:[...entities,...rebound]},'EXTRIM'));
  }
  if(cmd==='OFFSET'){if(s.phase==='distance')throw Error('Enter offset distance first.');if(s.phase==='object'){if(!hit)throw Error('Pick a line, circle or arc.');return{...s,boundary:[hit.id],phase:'side'};}const e=s.doc.entities.find(e=>e.id===s.boundary[0]);return {...add(s,[{...offsetCurve(e,s.value,p),id:id()}],'OFFSET'),phase:'object',boundary:[]};}
  if(['MOVE','COPY','ROTATE','SCALE'].includes(cmd)){
@@ -304,7 +338,8 @@ export function submit(s,raw){
  if(sectionSelectionCommand(s.command)&&!text)return commitSection(s,sectionSelection(s.doc,s.selection,s.command,s.options.section));
 
  if(upper==='U'&&['TRIM','EXTEND'].includes(s.command)){const next=startCommand(s,'UNDO');return{...next,command:s.command,phase:s.phase,boundary:s.boundary};}
- if(['TRIM','EXTEND'].includes(s.command)&&!text)return{...s,phase:'target'};
+ if(['TRIM','EXTEND'].includes(s.command)&&upper==='B')return {...s,phase:'boundary',boundary:[],selection:[]};
+ if(['TRIM','EXTEND'].includes(s.command)&&!text)return s.phase==='boundary'?{...s,phase:'target',selection:[]}:s;
  if(['LINE','WALL','SHEARWALL','PLINE','PIPE','FLOOR'].includes(s.command)&&['C','CLOSE'].includes(upper)){
   if(s.points.length<3)throw Error('At least 3 points to close.');if(['LINE','WALL','SHEARWALL'].includes(s.command)){if(dist(s.points.at(-1),s.points[0])<EPS)return finish(s);const next=clickPoint(s,s.points[0],{raw:true});return finish(next);}return finish(add(s,[{type:'polyline',points:s.points,closed:true,...drawRole(s),...(s.command==='FLOOR'?{role:'floor',height:.12,hatch:s.options.hatch,hatchScale:s.options.hatchScale}: {})}],s.command+' Close'));
  }

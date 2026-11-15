@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {clickPoint, editorState, snappedPoint, startCommand, submit} from '../src/lib/planStudio/controller.mjs';
+import {applyBoxSelection} from '../src/lib/planStudio/boxSelection.mjs';
 import {newDocument} from '../src/lib/planStudio/document.mjs';
 import {exportDXF} from '../src/lib/planStudio/export.mjs';
 import {dist, EPS, inside} from '../src/lib/planStudio/geometry.mjs';
@@ -70,10 +71,14 @@ test('DPL measures each step of a concave outline and links dimension extensions
 
 test('DPL clicks the closed outline even when an ordinary line is coincident',()=>{
  const source=[line('duplicate',p(0,0),p(8,0)),L];
- const s=click(startCommand(state(source),'DPL'),3,0);
+ const picked=click(startCommand(state(source),'DPL'),3,0);
+ assert.deepEqual(picked.selection,[L.id]);
+ assert.deepEqual(picked.doc.entities,source);
+ const s=submit(picked,'');
  assert.deepEqual(s.doc.entities.slice(0,2),source);
  assert.equal(outlines(s.doc.entities).length,8);
- assert.throws(()=>click(startCommand(state([source[0]]),'DPL'),3,0),/closed polylines/);
+ const onlyLine=click(startCommand(state([source[0]]),'DPL'),3,0);
+ assert.deepEqual(spaces(submit(onlyLine,'').doc.entities),[8]);
 });
 
 test('DPL measures sloped segments by their true aligned length',()=>{
@@ -139,4 +144,22 @@ test('LM inserts a labelled section and arrows in one edit, outside the plan eve
  assert.ok(s.doc.entities.find(e=>e.text==='A-A').position.x>=25);
  assert.equal(s.history.length,1);
  assert.match(exportDXF(s.doc),/A-A/);
+});
+
+
+test('DPL accumulates a mouse marquee and click selection, ignoring existing dimensions and duplicate segments',()=>{
+ const straight=line('horizontal',p(1,1),p(4,1));
+ const same=line('duplicate',p(4,1),p(1,1));
+ const open={...poly('open',[p(7,1),p(7,3),p(10,7)]),closed:false};
+ const existing=e('dimension',{type:'dimension',a:p(1,1),b:p(4,1),offsetDistance:.4});
+ const original=state([straight,same,open,existing]);
+ let s=startCommand(original,'DPL');
+ s=applyBoxSelection(s,{a:p(0,0),b:p(5,2),crossing:false});
+ assert.deepEqual(s.selection,['horizontal','duplicate']);
+ s=click(s,7,2);
+ assert.deepEqual(s.selection,['horizontal','duplicate','open']);
+ assert.deepEqual(s.doc,original.doc);
+ s=submit(s,'');
+ assert.deepEqual(spaces(s.doc.entities.slice(4)),[3,2,5]);
+ assert.deepEqual(startCommand(s,'U').doc,original.doc);
 });

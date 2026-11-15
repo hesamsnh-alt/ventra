@@ -54,3 +54,39 @@ export function findHatchBoundary(doc,p){
  const existing=selected.entity||visible.find(e=>e.type==='polyline'&&e.closed&&key(e.points)===key(outer));
  return{...selected,points:outer,holes,existingId:existing?.id||null};
 }
+
+// A clicked edge in a separately drafted outline should follow its endpoint
+// joints, even when a line to be trimmed crosses the interior.
+export function outlineFromDraftEdge(doc,point,tolerance){
+ const paths=doc.entities.filter(e=>['line','polyline'].includes(e.type)&&!['hatch','floor','shaft'].includes(e.role)&&
+  doc.layers.find(layer=>layer.id===e.layer)?.visible!==false);
+ const edges=paths.flatMap(entity=>segments(entity).map(edge=>({...edge,sourceId:entity.id})));
+ if(edges.length>MAX_SEGMENTS)return null;
+ const picked=edges.map((edge,i)=>({i,distance:nearest(edge,point)?.distance??Infinity}))
+  .sort((a,b)=>a.distance-b.distance)[0];
+ if(!picked||picked.distance>tolerance)return null;
+ const seed=edges[picked.i], key=p=>`${Math.round(p.x/TOL)}:${Math.round(p.y/TOL)}`,ends=new Map();
+ edges.forEach(({a,b},i)=>{
+  if(i===picked.i)return;
+  for(const [at,next] of [[a,b],[b,a]]){
+   const k=key(at);
+   if(!ends.has(k))ends.set(k,[]);
+   ends.get(k).push({point:next,index:i});
+  }
+ });
+ const queue=[{point:seed.b,previous:null,index:picked.i}],start=key(seed.a),visited=new Set([key(seed.b)]);
+ for(let i=0;i<queue.length;i++){
+  const next=queue[i];
+  if(key(next.point)===start){
+   const points=[],sources=new Set();
+   for(let entry=next;entry;entry=entry.previous){points.push(entry.point);sources.add(edges[entry.index].sourceId);}
+   return points.length<=300&&validPolygon(points)?{points,sources:[...sources]}:null;
+  }
+  for(const entry of ends.get(key(next.point))??[]){
+   const k=key(entry.point);
+   if(visited.has(k))continue;
+   visited.add(k);queue.push({...entry,previous:next});
+  }
+ }
+ return null;
+}

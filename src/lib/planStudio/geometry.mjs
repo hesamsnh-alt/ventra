@@ -39,11 +39,45 @@ export function inside(p,poly){let yes=false;for(let i=0,j=poly.length-1;i<poly.
 export function polygonArea(p){return Math.abs(p.reduce((sum,a,i)=>sum+a.x*p[(i+1)%p.length].y-p[(i+1)%p.length].x*a.y,0))/2;}
 export function validPolygon(p){if(!Array.isArray(p)||p.length<3||p.some(v=>!point(v))||polygonArea(p)<1e-6)return false;for(let i=0;i<p.length;i++)for(let j=i+1;j<p.length;j++){if(j===i+1||i===0&&j===p.length-1)continue;if(curveIntersections({type:'line',a:p[i],b:p[(i+1)%p.length]},{type:'line',a:p[j],b:p[(j+1)%p.length]}).length)return false;}return true;}
 export function curveSlice(e,a,b){if(e.type==='line')return {...e,a:at(e,a),b:at(e,b)};return {...e,type:'arc',start:e.start+e.sweep*a,sweep:e.sweep*(b-a)};}
+function rejoinPolyline(entity,pieces){
+ const paths=[];
+ for(const {a,b} of pieces){
+  const last=paths.at(-1);
+  if(last&&dist(last.at(-1),a)<EPS)last.push(b);
+  else paths.push([a,b]);
+ }
+ if(entity.closed&&paths.length>1&&dist(paths.at(-1).at(-1),paths[0][0])<EPS){
+  const tail=paths.pop();
+  paths[0]=[...tail,...paths[0].slice(1)];
+ }
+ return paths.map(points=>({...entity,points,closed:false}));
+}
+const breakpoints=values=>values.map(t=>Math.max(0,Math.min(1,t))).sort((a,b)=>a-b)
+ .filter((t,i,all)=>i===0||t-all[i-1]>EPS);
+
 export function trimCurve(entity,cutters,click){
- const picked=nearest(entity,click);if(!picked)throw Error('Choose a line, arc or polyline.');const e=picked.segment,t=picked.t,cuts=[0,1,...cutters.flatMap(c=>segments(c).flatMap(b=>curveIntersections(e,b).map(p=>param(e,p))))].filter(t=>t>=-EPS&&t<=1+EPS).sort((a,b)=>a-b).filter((t,i,a)=>i===0||Math.abs(t-a[i-1])>EPS);
- if(cuts.length<3)throw Error('No cutting intersection. / تقاطعی برای تریم پیدا نشد.');let i=cuts.findIndex((v,i)=>i<cuts.length-1&&t>=v-EPS&&t<=cuts[i+1]+EPS);if(i<0)i=cuts.length-2;
- const remaining=[];if(cuts[i]>EPS)remaining.push(curveSlice(e,0,cuts[i]));if(cuts[i+1]<1-EPS)remaining.push(curveSlice(e,cuts[i+1],1));
- if(entity.type==='polyline')return [...segments(entity).filter(s=>s.segment!==picked.segment.segment),...remaining].map(s=>{const next={...s};delete next.points;delete next.closed;delete next.segment;return next;});return remaining;
+ const picked=nearest(entity,click);
+ if(!picked)throw Error('Choose a line, arc or polyline.');
+ const e=picked.segment,t=picked.t;
+ const hits=cutters.flatMap(c=>segments(c).flatMap(b=>curveIntersections(e,b).map(p=>param(e,p))))
+  .filter(t=>t>=-EPS&&t<=1+EPS);
+ if(entity.type==='circle'){
+  const cuts=breakpoints(hits).filter(v=>v<1-EPS);
+  if(cuts.length<2)throw Error('No cutting intersection. / تقاطعی برای تریم پیدا نشد.');
+  const index=cuts.findLastIndex(c=>c<=t+EPS);
+  const from=cuts[(index+1)%cuts.length],to=cuts.at(index);
+  return [curveSlice(e,from,to>from?to:to+1)];
+ }
+ const cuts=breakpoints([0,1,...hits]);
+ if(cuts.length<3)throw Error('No cutting intersection. / تقاطعی برای تریم پیدا نشد.');
+ let i=cuts.findIndex((v,i)=>i<cuts.length-1&&t>=v-EPS&&t<=cuts[i+1]+EPS);
+ if(i<0)i=cuts.length-2;
+ const remaining=[];
+ if(cuts[i]>EPS)remaining.push(curveSlice(e,0,cuts[i]));
+ if(cuts[i+1]<1-EPS)remaining.push(curveSlice(e,cuts[i+1],1));
+ if(entity.type==='polyline')return rejoinPolyline(entity,segments(entity)
+  .flatMap(segment=>segment.segment===e.segment?remaining:[segment]));
+ return remaining;
 }
 export function extendCurve(entity,cutters,click){
  const pick=nearest(entity,click);if(!pick||entity.type==='circle'||entity.type==='polyline'&&entity.closed)throw Error('Extend needs an open line or arc.');
@@ -52,9 +86,39 @@ export function extendCurve(entity,cutters,click){
  if(!ts.length)throw Error('No boundary in the extension direction. / مرزی در جهت امتداد پیدا نشد.');const t=first?Math.max(...ts):Math.min(...ts),next=curveSlice(e,first?t:0,first?1:t);
  if(entity.type==='polyline'){const p=entity.points.map(p=>({...p}));p[first?0:p.length-1]=at(next,first?0:1);return {...entity,points:p};}return {...entity,...next};
 }
+export function boundarySide(boundary,p){
+ if(boundary.type==='circle'){
+  const delta=dist(boundary.center,p)-boundary.radius;
+  return Math.abs(delta)<EPS?0:Math.sign(delta);
+ }
+ if(nearest(boundary,p)?.distance<EPS)return 0;
+ return inside(p,boundary.points)?-1:1;
+}
 export function extrimCurve(entity,boundary,removeInside){
- const poly=boundary.type==='circle'?Array.from({length:128},(_,i)=>at({...boundary,start:0,sweep:TAU},i/128)):boundary.points;if(!validPolygon(poly))throw Error('EXTRIM needs a closed, simple boundary. / مرز EXTRIM باید بسته و بدون تقاطع باشد.');
- return segments(entity).flatMap(e=>{const cuts=[0,1,...segments(boundary).flatMap(b=>curveIntersections(e,b).map(p=>param(e,p)))].sort((a,b)=>a-b).filter((t,i,a)=>t>=0&&t<=1&&(i===0||Math.abs(t-a[i-1])>EPS));return cuts.slice(0,-1).flatMap((t,i)=>inside(at(e,(t+cuts[i+1])/2),poly)===removeInside?[]:[curveSlice(e,t,cuts[i+1])]);});
+ if(boundary.type!=='circle'&&!validPolygon(boundary.points))
+  throw Error('EXTRIM needs a closed, simple boundary. / مرز EXTRIM باید بسته و بدون تقاطع باشد.');
+ const cutters=segments(boundary);
+ let changed=false;
+ const pieces=segments(entity).flatMap(e=>{
+  const cuts=breakpoints([0,1,...cutters.flatMap(b=>curveIntersections(e,b).map(p=>param(e,p)))]);
+  const retained=cuts.slice(1).flatMap((end,i)=>{
+   const start=cuts[i],side=boundarySide(boundary,at(e,(start+end)/2));
+   if(side===(removeInside?-1:1)){changed=true;return [];}
+   return [curveSlice(e,start,end)];
+  });
+  return retained.length===cuts.length-1?[e]:retained;
+ });
+ if(!changed)return [entity];
+ if(entity.type==='polyline')return rejoinPolyline(entity,pieces);
+ // Merge fragments that merely cross the artificial zero-angle seam.
+ if(entity.type==='circle'&&pieces.length>1){
+  const first=pieces[0],last=pieces.at(-1);
+  if(dist(at(first,0),at(last,1))<EPS){
+   pieces.shift();pieces.pop();
+   pieces.push({...last,sweep:last.sweep+first.sweep});
+  }
+ }
+ return pieces;
 }
 export function offsetCurve(entity,distance,side){
  const n=nearest(entity,side);if(!n)throw Error('Offset needs a curve.');if(entity.type==='line'){const v=sub(entity.b,entity.a),l=dist(entity.a,entity.b),sign=cross(v,sub(side,entity.a))>=0?1:-1,dx=-v.y/l*distance*sign,dy=v.x/l*distance*sign;return {...entity,a:{x:entity.a.x+dx,y:entity.a.y+dy},b:{x:entity.b.x+dx,y:entity.b.y+dy}};}

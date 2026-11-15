@@ -136,9 +136,9 @@ export function multilinePreview(entities){
     const ring=openBand(a,b);
     if(ring)bands.push({...style,points:ring,holes:[]});
    }
-  }else if(walls.length){
+  }else if(walls.length||sides.every(side=>side.length)){
    remainingWallBands(sides).forEach(points=>bands.push({...style,points,holes:[]}));
-   if(inner!==null&&inner!==undefined){
+   if(walls.length&&inner!==null&&inner!==undefined){
     const segmentsOfInner=sides[inner].flatMap(segments);
     const completed=walls.filter(w=>[0,1].includes(w.mlInnerFace)).map(w=>
       wallFaceLines({entities:[]},w)[w.mlInnerFace]);
@@ -147,7 +147,7 @@ export function multilinePreview(entities){
    }
   }
  }
- const explicit=entities.filter(e=>e.role==='floor'&&e.closed), floors=[];
+ const explicit=entities.filter(e=>e.role==='floor'&&e.closed&&!e.roomFinish), floors=[];
  floorCandidates.sort((a,b)=>polygonArea(b.points)-polygonArea(a.points));
  for(const floor of floorCandidates){
   if([...explicit,...floors].some(other=>Math.abs(level(other)-floor.z)<.01&&overlaps(other.points,floor.points)))continue;
