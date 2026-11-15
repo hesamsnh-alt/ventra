@@ -3,7 +3,7 @@ import {openingProblem} from './openings.mjs';
 import {LINE_TYPES} from './lineTypes.mjs';
 import {point,dist,validPolygon,segments,at,sub,EPS,inside,curveIntersections} from './geometry.mjs';
 export const SCHEMA='ventra-plan-studio/1';
-export const HATCHES=['diagonal','cross','concrete','steel','brick','interlock','sand','insulation','solid'];
+export const HATCHES=['tile','diagonal','cross','concrete','steel','brick','interlock','sand','insulation','solid'];
 export const id=()=>globalThis.crypto.randomUUID();
 export const DEFAULT_LAYERS=[['architecture','Architecture','معماری','#dce6ed'],['mechanical','Mechanical','مکانیک','#faac59'],['electrical','Electrical','برق','#ffe04c'],['fluids','Fluids / piping','سیالات و لوله','#52c6ef'],['dimensions','Dimensions','اندازه‌گذاری','#b593fc'],['furniture','Furniture','مبلمان','#78d9a2'],['notes','Notes','یادداشت','#d8dce2']].map(([id,name,fa,color])=>({id,name,fa,color,visible:true,locked:false,weight:.25,dash:'solid'}));
 export function newDocument(name='Untitled plan'){return {schema:SCHEMA,id:id(),name,units:'cm',printScale:50,layers:structuredClone(DEFAULT_LAYERS),entities:[],lighting:{intensity:1,color:'#fff2d7'},createdAt:new Date().toISOString()};}

@@ -1,3 +1,4 @@
+import {arrangePlanRoom} from './roomLayout.mjs';
 import {SECTION_DEFAULTS,sectionSelection,saveSectionGeometry,staircaseSection,ceilingSection,parallelLines} from './sections.mjs';
 import {shaftOutline} from './structures.mjs';
 import {openingCandidate,openingHitDistance,slideOpening} from './openings.mjs';
@@ -6,8 +7,8 @@ import {triangleShape,regularPolygonShape} from './shapes.mjs';
 import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document.mjs';
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
-export const ALIASES={ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
-export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
+export const ALIASES={ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
+export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:'living',roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
 export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
 }
@@ -67,6 +68,28 @@ export function clickPoint(s,raw,event={}){
   if(!hit)throw Error('Pick a drawing guide, then press Enter. / خط راهنما را بزن و سپس اینتر بزن.');
   return {...s,selection:s.selection.includes(hit.id)?s.selection.filter(id=>id!==hit.id):[...s.selection,hit.id]};
  }
+ if(cmd==='ROOMLAYOUT'){
+  if(!n)return {...s,points:[p]};
+  return commitSection(s,arrangePlanRoom(s.doc,s.points[0],p,{kind:s.options.roomLayout,z:s.options.z,tiles:s.options.roomTiles}));
+ }
+ if(cmd==='WINDOWSPAN'){
+  if(!n){
+   const start=openingCandidate(s.doc,'WINDOW',p,s.options,{tolerance:event.tolerance??.15});
+   if(!start)throw Error('Pick the first end on a straight wall. / سر اول پنجره را روی دیوار مستقیم بزن.');
+   layerGuard(s,[start.wall]);
+   return {...s,points:[at(s.doc.entities.find(w=>w.id===start.wall),start.offset)],boundary:[start.wall]};
+  }
+  const wall=s.doc.entities.find(w=>w.id===s.boundary[0]),end=nearest(wall,p),start=nearest(wall,s.points[0]);
+  if(end.distance>wall.thickness/2+(event.tolerance??.15))throw Error('Pick the other end on the same wall. / سر دوم را روی همان دیوار بزن.');
+  layerGuard(s,[wall.id]);
+  const opening=openingCandidate(s.doc,'WINDOW',at(wall,(start.t+end.t)/2),s.options,{wallId:wall.id});
+  const next=add(s,[{...opening,width:Math.abs(end.t-start.t)*dist(wall.a,wall.b)}],cmd);
+  return {...next,points:[],boundary:[],selection:[next.doc.entities.at(-1).id]};
+ }
+ if(cmd==='WALL'&&s.options.wallAlignment!=='center'){
+  if(n>=3&&dist(p,s.points[0])<EPS)return submit(s,'C');
+  return {...s,points:[...s.points,p]};
+ }
  if(cmd==='MULTILINE'){
   if(n>=3&&dist(p,s.points[0])<EPS)return submit(s,'C');
   return {...s,points:[...s.points,p]};
@@ -109,9 +132,9 @@ export function clickPoint(s,raw,event={}){
  if(cmd==='SHAFT')return finish(add(s,[{type:'polyline',role:'shaft',points:shaftOutline(p,s.options.shaftWidth,s.options.shaftDepth),closed:true,thickness:s.options.shaftThickness,height:s.options.shaftHeight,pitDepth:s.options.shaftPitDepth,z:s.options.z}],'Elevator shaft'));
  if(cmd==='BASEPLATE')return finish(add(s,[{type:'plate',center:p,width:s.options.plateWidth,depth:s.options.plateDepth,thickness:s.options.plateThickness,boltDiameter:s.options.boltDiameter,edge:s.options.edge,rotation:0,z:s.options.z}],'BASEPLATE'));
  if(cmd==='LIGHT')return finish(add(s,[{type:'light',center:p,z:2.7,intensity:1,color:'#fff2d7'}],'LIGHT'));
- if(['DOOR','WINDOW','ARCHDOOR'].includes(cmd)){
+ if(['DOOR','DOORRUN','WINDOW','ARCHDOOR'].includes(cmd)){
   const opening=openingCandidate(s.doc,cmd,raw,s.options,{wallId:event.entityId&&s.doc.entities.find(e=>e.id===event.entityId)?.role==='wall'?event.entityId:undefined,tolerance:event.tolerance??.15});
-  if(!opening)throw Error('Choose an existing straight wall. / روی دیوار مستقیم موجود کلیک کن.');layerGuard(s,[opening.wall]);const next=add(s,[opening],cmd);return{...finish(next),selection:[next.doc.entities.at(-1).id]};
+  if(!opening)throw Error('Choose an existing straight wall. / روی دیوار مستقیم موجود کلیک کن.');layerGuard(s,[opening.wall]);const next=add(s,[opening],cmd);return{...(cmd==='DOORRUN'?next:finish(next)),selection:[next.doc.entities.at(-1).id]};
  }
 
  if(['LINE','WALL','SHEARWALL'].includes(cmd)){
@@ -147,6 +170,15 @@ function transformSelection(s,kind,value){layerGuard(s);const selected=new Set(s
 export function submit(s,raw){
  const text=String(raw).trim(),upper=text.toUpperCase();if(s.command==='SELECT')return text?startCommand(s,text):s.lastCommand?startCommand(s,s.lastCommand):s;
  if(upper==='ESC')return finish(s);
+ if(s.command==='WALL'&&s.options.wallAlignment!=='center'){
+  if(upper==='U')return {...s,points:s.points.slice(0,-1)};
+  if(!text||['C','CLOSE'].includes(upper)){
+   if(!text&&!s.points.length)return finish(s);
+   const sides=parallelLines(s.points,s.options.thickness,Boolean(text));
+   const axis=sides[s.options.wallAlignment==='left'?1:0];
+   return finish(add(s,segments(axis).map(({a,b})=>({type:'line',a,b,...drawRole(s)})),'WALL'));
+  }
+ }
  if(s.command==='MULTILINE'){
   if(upper==='U')return {...s,points:s.points.slice(0,-1)};
   if(!text||['C','CLOSE'].includes(upper)){

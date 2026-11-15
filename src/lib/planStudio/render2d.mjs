@@ -1,3 +1,4 @@
+import {planAssetSymbol} from './furnitureSymbols.mjs';
 import {shaftOuter,shaftSize,shaftFitsFloor} from './structures.mjs';
 import {openingPlanGeometry,wallOpeningSegments} from './openings.mjs';
 import {lineDash} from './lineTypes.mjs';
@@ -5,6 +6,7 @@ import {segments,at,bounds,dist} from './geometry.mjs';
 import {styleFor,visibleEntities,displayLength} from './document.mjs';
 export const escapeXML=s=>String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
 export function hatchPattern(type,scale=.2,color='#999'){const gap=Math.max(.01,scale),s=gap;let body='';const line=(x1,y1,x2,y2)=>`<path d="M${x1},${y1}L${x2},${y2}"/>`;
+ if(type==='tile')return `<path d="M0,0H${s}M0,0V${s}" fill="none" stroke="${color}" stroke-width="${Math.max(.0005,s*.035)}"/>`;
  if(type==='solid')return `<rect width="${s}" height="${s}" fill="${color}" opacity=".3"/>`;
  if(['diagonal','steel','cross'].includes(type)){body=line(-s,0,s,2*s)+line(0,-s,2*s,s);if(type==='steel')body+=line(-s*.85,0,s*1.15,s*2);if(type==='cross')body+=line(0,s,s,0);}
  if(type==='brick')body=`<path d="M0,0H${s}M0,${s/2}H${s}M${s/2},0V${s/2}M0,${s/2}V${s}"/>`;
@@ -42,7 +44,11 @@ function renderEntitySVG(doc,e,{print=false,selected=false,screen=false}={}){
  if(e.type==='text')return `<text transform="translate(${e.position.x},${e.position.y}) rotate(${e.rotation||0}) scale(1,-1)" fill="${color}" font-size="${e.textHeight}" font-family="Arial,sans-serif" direction="${/[\u0600-\u06ff]/.test(e.text)?'rtl':'ltr'}">${escapeXML(e.text)}</text>`;
  if(e.type==='dimension'){const d=dimensionGeometry(e),size=Math.max(.09,.0025*(print?doc.printScale:50));return`<g ${attrs}><path d="M${e.a.x},${e.a.y}L${d.a.x+d.normal.x*.1},${d.a.y+d.normal.y*.1}M${e.b.x},${e.b.y}L${d.b.x+d.normal.x*.1},${d.b.y+d.normal.y*.1}M${d.a.x},${d.a.y}L${d.b.x},${d.b.y}"/>${[d.a,d.b].map(p=>`<path d="M${p.x-size*.3},${p.y-size*.3}l${size*.6},${size*.6}"/>`).join('')}<text transform="translate(${d.mid.x},${d.mid.y+size*.3}) scale(1,-1)" text-anchor="middle" fill="${color}" stroke="none" font-family="Arial,sans-serif" font-size="${size}">${displayLength(d.length,doc.units)}</text></g>`;}
  if(e.type==='plate')return `<g transform="translate(${e.center.x},${e.center.y}) rotate(${e.rotation||0})" ${attrs}><rect x="${-e.width/2}" y="${-e.depth/2}" width="${e.width}" height="${e.depth}" fill="${color}" fill-opacity=".12"/>${plateHoles(e).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="${e.boltDiameter/2}"/>`).join('')}</g>`;
- if(e.type==='asset')return `<g transform="translate(${e.center.x},${e.center.y}) rotate(${e.rotation||0})" ${attrs}><rect x="${-e.width/2}" y="${-e.depth/2}" width="${e.width}" height="${e.depth}" rx=".05" fill="${color}" fill-opacity=".13"/><path d="M${-e.width/2},${-e.depth/2}L${e.width/2},${e.depth/2}"/></g>`;
+ if(e.type==='asset'){
+  const [outline,...details]=planAssetSymbol(e);
+  return `<path d="${pathData(outline)}" ${attrs.replace(' fill="none"','')} fill="${color}" fill-opacity=".13"/>`+
+   details.map(detail=>`<path d="${pathData(detail)}" ${attrs}/>`).join('');
+ }
  if(e.type==='opening'){
   const geometry=openingPlanGeometry(doc,e);if(!geometry)return '';
   // All symbol lines are thin pens; the host wall already contains the gap.

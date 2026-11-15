@@ -14,7 +14,8 @@ function material(color,metal=false){return new T.MeshStandardMaterial({color,ro
 function floorMaterial(e){const m=material(e.surfaceColor||'#b5a694');if(!e.hatch||e.hatch==='solid'||typeof document==='undefined')return m;
  const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');if(!ctx)return m;ctx.fillStyle='#f5f3ee';ctx.fillRect(0,0,128,128);ctx.strokeStyle='#99958b';ctx.lineWidth=2;ctx.beginPath();
  const line=(x,y,a,b)=>{ctx.moveTo(x*128,y*128);ctx.lineTo(a*128,b*128);};
- if(e.hatch==='interlock'){line(0,0,.6,0);line(.6,0,.6,.3);line(.6,.3,1,.3);line(0,.5,.3,.5);line(.3,.5,.3,1);line(.6,.3,.6,.7);line(.6,.7,1,.7);line(.3,.5,.6,.5);}
+ if(e.hatch==='tile'){line(0,0,1,0);line(0,0,0,1);}
+ else if(e.hatch==='interlock'){line(0,0,.6,0);line(.6,0,.6,.3);line(.6,.3,1,.3);line(0,.5,.3,.5);line(.3,.5,.3,1);line(.6,.3,.6,.7);line(.6,.7,1,.7);line(.3,.5,.6,.5);}
  else if(e.hatch==='brick'){line(0,0,1,0);line(0,.5,1,.5);line(.5,0,.5,.5);line(0,.5,0,1);}
  else if(['sand','concrete'].includes(e.hatch)){for(const[x,y]of [[.2,.3],[.7,.8],[.5,.15]]){ctx.moveTo(x*128,y*128);ctx.arc(x*128,y*128,3,0,Math.PI*2);}}
  else{line(-1,0,1,2);line(0,-1,2,1);if(e.hatch==='cross')line(0,1,1,0);if(e.hatch==='steel')line(-.85,0,1.15,2);}
