@@ -48,7 +48,40 @@ export default function PlanStudio(){
  const update=value=>{stateRef.current=typeof value==='function'?value(stateRef.current):value;setState(stateRef.current);};
  const attempt=fn=>{setError('');try{const next=fn(stateRef.current);if(next)update(next);return true;}catch(e){setError(e.message);return false;}};
  const fit=doc=>{const current=doc||stateRef.current?.doc;const next=fitPlanView(current?visibleEntities(current):[],sizeRef.current);viewRef.current=next;setView(next);};
- useEffect(()=>{if(window.matchMedia('(max-width: 680px)').matches)setMode('2d');let live=true;const initialize=async()=>{try{const list=await listPlans();if(!live)return;setPlans(list);const last=localStorage.getItem('ventra-plan-studio:last'),doc=last&&list.some(d=>d.id===last)?await loadPlan(last):newDocument();const model=last===doc.id?await loadPlanModel(doc.id):null;if(!live)return;setImportedModel(model);if(model)setMode('3d');update(editorState(doc));setSaved(t('Saved locally on this device','ذخیره روی همین دستگاه'));fit(doc);}catch(e){if(live){update(editorState());setError(e.message);}}if(live){setReady(true);root.current?.focus();}};initialize();return()=>{live=false;};},[]);
+ useEffect(()=>{
+  if(window.matchMedia('(max-width: 680px)').matches)setMode('2d');
+  let live=true;
+  const initialize=async()=>{
+   try{
+    const list=await listPlans();
+    if(!live)return;
+    setPlans(list);
+    const url=new URL(window.location.href), requested=url.searchParams.get('drawing');
+    const last=localStorage.getItem('ventra-plan-studio:last');
+    const selected=[requested,last].find(id=>id&&list.some(d=>d.id===id));
+    const doc=selected?await loadPlan(selected):newDocument();
+    const model=selected?await loadPlanModel(selected):null;
+    if(!live)return;
+    if(requested){
+     url.searchParams.delete('drawing');
+     window.history.replaceState(window.history.state,'',url);
+     if(requested!==selected)setError(t('The requested drawing is unavailable on this device.','نقشهٔ درخواستی روی این دستگاه پیدا نشد.'));
+     else if(!model)setMode('2d');
+    }
+    if(selected)localStorage.setItem('ventra-plan-studio:last',selected);
+    if(doc.importedCad?.skipped)setImportNotice(t(
+     `${doc.importedCad.skipped} vectors could not be imported.`,
+     `${doc.importedCad.skipped} جزء از نقشه وارد نشد.`));
+    setImportedModel(model);if(model)setMode('3d');
+    update(editorState(doc));
+    setSaved(t('Saved locally on this device','ذخیره روی همین دستگاه'));
+    fit(doc);
+   }catch(error){if(live){update(editorState());setError(error.message);}}
+   if(live){setReady(true);root.current?.focus();}
+  };
+  initialize();
+  return()=>{live=false;};
+ },[]);
  useEffect(()=>{if(!ready||!s)return;setSaved(t('Unsaved changes…','تغییرات ذخیره نشده…'));const version=++autosave.current,doc=s.doc;const timer=setTimeout(async()=>{try{await savePlan(doc);if(version===autosave.current){localStorage.setItem('ventra-plan-studio:last',doc.id);setSaved(t('Saved locally · export JSON for backup','ذخیرهٔ محلی · برای نسخهٔ پشتیبان JSON بگیر'));setPlans(await listPlans());}}catch(e){if(version===autosave.current){setSaved(t('Save failed','ذخیره ناموفق'));setError(e.message);}}},650);return()=>clearTimeout(timer);},[s?.doc,ready]);
  useEffect(()=>{const node=stage.current;if(!node)return;const resize=new ResizeObserver(([entry])=>setSize({width:entry.contentRect.width,height:entry.contentRect.height}));resize.observe(node);return()=>resize.disconnect();},[ready,mode]);
  function toWorld(e){const r=svg.current.getBoundingClientRect(),v=viewRef.current,h=v.width*r.height/r.width;return{x:v.x+(e.clientX-r.left)/r.width*v.width,y:v.y+(1-(e.clientY-r.top)/r.height)*h};}

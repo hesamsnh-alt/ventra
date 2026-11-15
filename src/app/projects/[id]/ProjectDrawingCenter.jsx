@@ -1598,6 +1598,8 @@ export default function ProjectDrawingCenter({
   const [analysisRunId,setAnalysisRunId]=useState('initial');
   const [pdfPreviewStatus,setPdfPreviewStatus]=useState(null);
   const pdfPreviewInFlightRef=useRef(false);
+  const [editableCad,setEditableCad]=useState(null);
+  const editableCadBusyRef=useRef(false);
   const apsPreviewOnlyRef=useRef(null);
   const [buildImageAfterAnalysis,setBuildImageAfterAnalysis]=useState(true);
   const [printedRoomHeight,setPrintedRoomHeight]=useState('');
@@ -2312,6 +2314,25 @@ export default function ProjectDrawingCenter({
       window.dispatchEvent(new CustomEvent('ventra:3d-source-updated',{detail:{projectId,source:'schematic',scene}}));
       onOpen3D?.();
     } catch(error){setErrorMessage(error.message);}
+  }
+
+  async function prepareEditableCad(document) {
+    if(!document||editableCadBusyRef.current)return;
+    const workflow=beginDrawingWorkflow(projectId,'preview');
+    if(!workflow){setErrorMessage(language==='fa'?'یک عملیات دیگر در این پروژه در حال اجراست.':'Another drawing operation is running.');return;}
+    editableCadBusyRef.current=true;
+    setEditableCad({documentId:document.id,projectId,status:'loading'});
+    try {
+      const {urn}=await uploadDocumentToAps(document);
+      await startApsTranslation(urn,projectId);
+      await waitForApsTranslation(urn);
+      setEditableCad({documentId:document.id,projectId,urn,status:'ready'});
+    } catch(error) {
+      setEditableCad({documentId:document.id,projectId,status:'error',error:error.message});
+    } finally {
+      editableCadBusyRef.current=false;
+      finishDrawingWorkflow(projectId,workflow);
+    }
   }
 
   async function handleAnalyzeDrawing({localPdfRecoveryOnly = false,resumeExistingOnly = false,resumeDocumentId = null,previewOnly = false,apsGeometryOnly = false} = {}) {
@@ -5448,6 +5469,13 @@ async function handleApsGeometryExtracted(analysis) {
         <p><strong>{selectedDocumentForPreview?.file_name||'Select a drawing from Uploaded Drawings'}</strong></p>
         <p>{language==='fa'?'PDF برداری: ساخت بدون AI. فایل CAD: هندسه Autodesk APS. تصویر: ساخت با AI یا باز کردن صحنه ذخیره‌شده بدون AI.':'Vector PDF: build without AI. CAD: Autodesk APS geometry. Image: build with AI or open its saved scene without AI.'}</p>
         {getFileExtension(selectedDocumentForPreview?.file_name||'')==='pdf'&&<button type="button" disabled={analyzing||generatingBoq} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,cursor:'pointer',border:0}} onClick={handleBuildPdf3D}>{language==='fa'?'ساخت / باز کردن 3D از PDF بدون AI':language==='ar'?'إنشاء / فتح 3D من PDF دون ذكاء اصطناعي':'Build / open 3D from PDF without AI'}</button>}
+        {["dwg","dxf"].includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&
+          !isSelectedApsDrawing(takeoffResult,selectedDocumentForPreview)&&
+          !(editableCad?.projectId===projectId&&editableCad?.documentId===selectedDocumentForPreview.id&&editableCad.status==="ready")&&
+          <button type="button" disabled={analyzing||generatingBoq||editableCad?.status==="loading"}
+            onClick={()=>prepareEditableCad(selectedDocumentForPreview)}>
+            {language==="fa"?"آماده‌سازی نقشه برای ویرایش با APS":"Prepare CAD for editing with APS"}
+          </button>}
         {APS_SUPPORTED_EXTENSIONS.includes(getFileExtension(selectedDocumentForPreview?.file_name||''))&&<button type="button" disabled={analyzing||generatingBoq} onClick={()=>handleAnalyzeDrawing({apsGeometryOnly:true})}>{language==='fa'?'ساخت / باز کردن 3D با APS بدون AI':'Build / open 3D with APS without AI'}</button>}
         {selectedDocumentIsImage&&<>
           <button type="button" disabled={analyzing||generatingBoq||uploading} style={{background:'#ffd21a',color:'#111',padding:'12px 18px',borderRadius:10,fontWeight:700,border:0,cursor:'pointer'}} onClick={()=>handleAnalyzeDrawing({previewOnly:true})}>{language==='fa'?'ساخت سه‌بعدی از همین تصویر (با AI)':'Build image 3D preview (separate from quantity takeoff)'}</button>
@@ -6055,12 +6083,21 @@ async function handleApsGeometryExtracted(analysis) {
         </LocalizedElement>
       )}
 
+      {editableCad?.projectId===projectId&&editableCad?.documentId===selectedDocumentForPreview?.id&&(
+        editableCad.status==="ready"?<ApsViewer key={editableCad.urn} urn={editableCad.urn}
+          title={selectedDocumentForPreview.file_name} editableProjectId={projectId} editOnly/>:
+          <p role={editableCad.status==="error"?"alert":"status"}>
+            {editableCad.error||(language==="fa"?"در حال آماده‌سازی نقشهٔ دوبعدی در Autodesk…":"Preparing the Autodesk 2D drawing…")}
+          </p>
+      )}
+
       {isSelectedApsDrawing(takeoffResult,selectedDocumentForPreview) && (
           <div>
           <DwgUnitConfirmation key={takeoffResult.aps_urn} value={confirmedUnits[takeoffResult.aps_urn]} onConfirm={value=>{const units={...confirmedUnits,[takeoffResult.aps_urn]:value};localStorage.setItem(`ventra:confirmed-dwg-units:${projectId}`,JSON.stringify(units));setConfirmedUnits(units);}}/>
           <ApsViewer
             key={`${takeoffResult.document_id || "document"}:${takeoffResult.aps_urn}:${analysisRunId}:${confirmedUnits[takeoffResult.aps_urn]?.unit||"auto"}`}
             urn={takeoffResult.aps_urn}
+            editableProjectId={["dwg","dxf"].includes(getFileExtension(selectedDocumentForPreview?.file_name||''))?projectId:null}
             confirmedUnit={confirmedUnits[takeoffResult.aps_urn]||null}
             title={
               takeoffResult.document_name ||

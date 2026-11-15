@@ -1125,7 +1125,22 @@ if (!instanceTree) {
               endAngle
             );
 
+            // Editable arcs need model-space angles. A paper-space viewport
+            // can rotate or mirror the drawing while preserving radii.
+            const localY = transformPoint(viewer, model, centerX, centerY + radius, viewportId);
+            const xAxis = {x:radiusPoint.x-center.x,y:radiusPoint.y-center.y};
+            const yAxis = {x:localY.x-center.x,y:localY.y-center.y};
+            const xLength = Math.hypot(xAxis.x,xAxis.y), yLength = Math.hypot(yAxis.x,yAxis.y);
+            const determinant = xAxis.x*yAxis.y-xAxis.y*yAxis.x;
+            const editArc = xLength>0 && Math.abs(xLength-yLength)<=xLength*1e-5 &&
+                Math.abs(xAxis.x*yAxis.x+xAxis.y*yAxis.y)<=xLength*yLength*1e-5 ? {
+              editRadius:xLength,
+              editStart:Math.atan2(xAxis.y*Math.cos(startAngle)+yAxis.y*Math.sin(startAngle),
+                xAxis.x*Math.cos(startAngle)+yAxis.x*Math.sin(startAngle)),
+              editSweep:Math.sign(determinant)*angle,
+            } : {};
             circularArcs.push({
+              ...editArc,
               dbId,
               fragmentId,
               viewportId,

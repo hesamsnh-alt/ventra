@@ -1,4 +1,5 @@
 "use client";
+import EditApsDrawing from "./EditApsDrawing";
 import {resolveApsDocumentView} from '@/lib/apsDocumentView.mjs';
 import {isPlanCadUrn} from "@/lib/apsViewables.mjs";
 import {commercialFetch} from "@/lib/commercialFetch";
@@ -1956,6 +1957,8 @@ export default function ApsViewer({
   onGeometryExtracted,
   analysisRunId = null,
   confirmedUnit = null,
+  editableProjectId = null,
+  editOnly = false,
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -1967,6 +1970,7 @@ export default function ApsViewer({
   const [status, setStatus] = useState("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [objectCount, setObjectCount] = useState(null);
+  const [editableModel,setEditableModel]=useState(null);
   const [geometryResult, setGeometryResult] =
     useState(null);
 
@@ -2045,6 +2049,7 @@ export default function ApsViewer({
         setErrorMessage("");
         setObjectCount(null);
         setGeometryResult(null);
+        setEditableModel(null);
 
         await loadViewerSdk();
 
@@ -2259,6 +2264,15 @@ export default function ApsViewer({
           return;
         }
 
+        if (editOnly) {
+          if (!model.is2d?.()) throw new Error("An Autodesk 2D view is required for Plan Studio editing.");
+          setEditableModel(model);
+          setGeometryResult({...geometry,objects,properties});
+          setObjectCount(objects.length);
+          setStatus("ready");
+          return;
+        }
+
         console.log(
           "[VENTRA APS CALIBRATION EXTRACTED]",
           {
@@ -2395,6 +2409,7 @@ export default function ApsViewer({
 
         setObjectCount(completeAnalysis.objects.length);
         setGeometryResult(completeAnalysis);
+        if(editableProjectId&&model.is2d?.())setEditableModel(model);
         setStatus("ready");
 
         console.log(
@@ -2459,7 +2474,7 @@ export default function ApsViewer({
         }
       );
     };
-  }, [urn, analysisRunId, confirmedUnit]);
+  }, [urn, analysisRunId, confirmedUnit, editOnly, editableProjectId]);
 
   if (!urn) {
     return null;
@@ -2496,7 +2511,11 @@ export default function ApsViewer({
             <LocalizedElement as="p">{objectCount} model objects detected</LocalizedElement>
           )}
 
-          {geometryResult && (
+          {editableModel&&editableProjectId&&geometryResult&&<EditApsDrawing
+            geometry={geometryResult} viewerRef={viewerRef} model={editableModel}
+            title={title} projectId={editableProjectId}/>}
+
+          {geometryResult && !editOnly && (
             <>
               <LocalizedElement as="button"
                 type="button"
