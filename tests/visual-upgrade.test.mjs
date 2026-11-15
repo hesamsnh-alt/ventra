@@ -1,3 +1,9 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
+import {OUTDOOR_GROUND_ID,outdoorGround} from '../src/lib/outdoorGround.mjs';
+import * as projectKitchenParts from '../src/lib/projectKitchenParts.mjs';
+import * as windowGardenView from '../src/lib/windowGardenView.mjs';
+import {buildBedCover} from '../src/lib/bedCover.mjs';
+import * as kitchenModel from '../src/lib/kitchenModel.mjs';
 import * as furnitureFinishes from '../src/lib/furnitureFinishes.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
 import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
@@ -21,7 +27,7 @@ const source = readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.js
 const ast = parser.parse(source, {sourceType:'module', plugins:['jsx']});
 const declarations = ast.program.body.filter(node => node.type === 'FunctionDeclaration' ||
   (node.type === 'VariableDeclaration' && node.declarations.some(item => ['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(item.id.name))));
-const context = {THREE, console, ...furnitureFinishes, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
+const context = {THREE, console, OUTDOOR_GROUND_ID, outdoorGround, buildReferenceBed,buildReferenceSofa,buildBedCover, ...windowGardenView, ...projectKitchenParts, ...furnitureFinishes, ...kitchenModel, ...surfaceMaterials, ...renderQuality, configureFloorDepth, raycastVisibleMeshes, createWalkthrough};
 vm.createContext(context);
 vm.runInContext(declarations.map(node => source.slice(node.start, node.end)).join('\n'), context);
 
@@ -265,4 +271,112 @@ test('furniture finishes replace body and upholstery separately, protect TV scre
  assert.equal(plain.length,finished.length);assert.ok(finished.some(m=>m.material.userData?.furnitureFinish==='wood-walnut'));assert.ok(finished.some(m=>m.material.userData?.furnitureFinish==='fabric-linen'));
  const tv=assetMeshes('tv_unit',{variant:'console-oak',furnitureFinishes:{body:{id:'metal-brushed'}}});assert.ok(tv.some(m=>m.material.userData?.furnitureFinish==='metal-brushed'));const screen=tv.find(m=>m.userData.televisionScreen);assert.ok(screen.material.map);assert.equal(screen.material.userData?.furnitureFinish,undefined);
  const reset=assetMeshes('sofa',{variant:'modern'});assert.ok(reset.every(m=>!m.material.userData?.furnitureFinish));assert.equal(reset.length,plain.length);
+});
+
+test('project door leaves and handles toggle together without moving the jamb or changing the opening',()=>{
+ const opening={id:'door',start:{x:1,y:2},end:{x:2,y:2},height:2.1,hinge:'end',swing:'clockwise',openAngleDegrees:0};
+ const snapshot=JSON.stringify(opening);
+ const group=context.ventraCreateDoorLeafVisual({THREE,opening,material:new THREE.MeshPhongMaterial(),interactive:true});
+ const leaf=group.children.find(child=>child.userData.ventraType==='schematic_door_panel');
+ const jamb=group.children.find(child=>child.userData.ventraType==='schematic_door_jamb');
+ const details=group.children.find(child=>child.children.some(mesh=>mesh.userData.ventraType==='schematic_door_handle'));
+ const handle=details.children.find(child=>child.userData.ventraType==='schematic_door_handle');
+ const initial=leaf.position.clone(),angle=leaf.rotation.z,jambPosition=jamb.position.clone();
+ assert.equal(kitchenModel.toggleKitchenPart(handle),true);
+ assert.notEqual(leaf.rotation.z,angle);
+ assert.equal(leaf.rotation.z,details.rotation.z);
+ assert.ok(jamb.position.equals(jambPosition));
+ assert.equal(kitchenModel.toggleKitchenPart(leaf),true);
+ assert.ok(leaf.position.equals(initial));
+ assert.equal(leaf.rotation.z,angle);
+ assert.equal(JSON.stringify(opening),snapshot);
+});
+
+test('project kitchen reuses the interactive demo meshes through legacy raycasting',()=>{
+ const types=['sink','stove','refrigerator'];
+ for(const type of types){
+  const root=projectKitchenParts.buildProjectKitchenPart({THREE,type,w:.7,d:.6,h:1.85,cx:0,cy:0,rot:0,z:.2});
+  const parts=[];
+  root.traverse(part=>{if(part.geometry)parts.push(part);});
+  assert.ok(parts.length>20);
+  assert.ok(parts.every(part=>part.material.userData.demoMaterial));
+  let changed=false;
+  for(const part of parts){
+   if(!kitchenModel.toggleKitchenPart(part))continue;
+   const active=root.userData.updateDemoPart(500);
+   if(type==='sink')assert.ok(active);
+   changed=true;break;
+  }
+  assert.ok(changed);
+  root.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(0,0,4),new THREE.Vector3(0,0,-1));
+  assert.ok(raycastVisibleMeshes(ray,root,THREE).length);
+  root.userData.disposeDemoPart();
+ }
+});
+
+test('window scene places the garden beyond the opening and faces indoors',()=>{
+ const opening={start:{x:0,y:0},end:{x:2,y:0},height:1,sillHeight:1};
+ const normal=windowGardenView.outdoorWindowNormal(opening.start,opening.end,{x:1,y:2});
+ const view=windowGardenView.createGardenView({THREE,opening,normal,wallThickness:.2,material:new THREE.MeshBasicMaterial()});
+ assert.ok(view.position.y<0);
+ assert.ok(new THREE.Vector3(0,0,1).applyQuaternion(view.quaternion).y>.999);
+ assert.equal(view.visible,false);
+});
+
+test('reference furniture is categorized and uses distinct three-dimensional geometry',async()=>{
+ const {FURNITURE_CATALOG,applyFurnitureEdit}=await import('../src/lib/furnitureEditor.mjs');
+ const {filterFurniture}=await import('../src/lib/furnitureCategories.mjs');
+ const {buildSchematicAssetMeshes:studioMeshes}=await import('../src/lib/planStudio/furnitureMeshes.mjs');
+ const beds=['bed-walnut-hotel','bed-stone-tailored','bed-channel-linen','bed-oak-platform'];
+ const sofas=['sofa-crescent-chaise','sofa-boucle-arc','sofa-cloud-modular'];
+ const sets=['sofa-set-crescent','sofa-set-boucle','sofa-set-cloud'];
+ const footprint=[{x:0,y:0},{x:8,y:0},{x:8,y:8},{x:0,y:8}];
+ const scene={width:8,depth:8,footprint,rooms:[{id:'room',polygon:footprint}],assets:[],walls:[]};
+ for(const [category,ids] of [['beds',beds],['sofas',sofas],['sets',sets]]){
+  const models=filterFurniture(FURNITURE_CATALOG,category);
+  for(const id of ids){
+   const model=models.find(item=>item.id===id);assert.ok(model,id);
+   const result=applyFurnitureEdit(scene,{kind:'add',catalogId:id,point:{x:4,y:4},rotation:37});
+   assert.equal(result.assets.length,sets.includes(id)?4:1);
+   assert.deepEqual(result.footprint,footprint);
+   for(const asset of result.assets){
+    const opts={THREE,asset,palette:{},roomWidth:8,roomDepth:8};
+    const project=context.buildSchematicAssetMeshes(opts);
+    const studio=studioMeshes(opts);
+    for(const meshes of [project,studio]){
+     assert.ok(meshes.length>=(asset.type==='coffee_table'?2:4),asset.catalogId);
+     const box=new THREE.Box3();
+     for(const mesh of meshes){mesh.updateMatrixWorld(true);box.union(new THREE.Box3().setFromObject(mesh));}
+     assert.ok(box.max.z-box.min.z>.15);
+    }
+    if(asset.type==='bed')assert.ok(project.some(mesh=>mesh.userData.ventraComponent==='bed_fabric'));
+   }
+  }
+ }
+});
+
+test('saved bedroom defaults show wardrobe handles and vanity mirror on the room side',()=>{
+ const polygon=[{x:0,y:0},{x:8,y:0},{x:8,y:8},{x:0,y:8}];
+ const scene={rooms:[{id:'bedroom',polygon}]};
+ const cases=[
+  ['dressing_table',4,.33,180,0],
+  ['wardrobe',4,.42,0,180],
+  ['dressing_table',7.67,4,-90,90],
+  ['wardrobe',7.58,4,90,270],
+ ];
+ for(const [type,xMeters,yMeters,rotation,expected] of cases){
+  const asset={type,roomId:'bedroom',xMeters,yMeters,rotation,width:.9,depth:type==='wardrobe'?.6:.42,height:1.6};
+  const result=context.ventraFaceBedroomFurnitureIntoRoom(asset,scene);
+  assert.equal((result.rotation+360)%360,expected);
+  assert.equal(asset.rotation,rotation);
+  assert.equal(context.ventraFaceBedroomFurnitureIntoRoom(result,scene),result);
+  const edited={...asset,placementSource:'manual_furniture_editor'};
+  assert.equal(context.ventraFaceBedroomFurnitureIntoRoom(edited,scene),edited);
+  const meshes=context.buildSchematicAssetMeshes({THREE,asset:result,palette:{},roomWidth:8,roomDepth:8});
+  const detail=meshes.at(-1);
+  // The mirror is inset on the interior side of its backing; handles protrude into the room.
+  const reference=type==='wardrobe'?meshes[0]:meshes.at(-2);
+  assert.ok(xMeters>7?detail.position.x<reference.position.x:detail.position.y>reference.position.y);
+ }
 });

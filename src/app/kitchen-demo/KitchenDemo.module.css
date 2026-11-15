@@ -1,0 +1,76 @@
+.page {
+  min-height: 100svh;
+  background: #171916;
+  color: #f4f0e7;
+  font-family: Tahoma, Arial, sans-serif;
+  padding: clamp(16px, 4vw, 56px);
+}
+.header, .layout { max-width: 1440px; margin-inline: auto; }
+.header { margin-bottom: 24px; }
+.brand { color: #e5b77b; letter-spacing: .22em; font: 600 12px/1.3 Arial, sans-serif; }
+.title { font-size: clamp(25px, 4vw, 42px); line-height: 1.35; margin: 10px 0 0; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 245px; gap: 16px; }
+.viewer {
+  position: relative;
+  min-width: 0;
+  min-height: 490px;
+  height: min(73svh, 880px);
+  background: #2b2b26;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.canvas { position: absolute; inset: 0; touch-action: none; }
+.canvas canvas { display: block; width: 100%; height: 100%; }
+.hint {
+  position: absolute;
+  bottom: 12px;
+  inset-inline: 12px;
+  margin: 0;
+  padding: 8px 10px;
+  width: fit-content;
+  background: #191a16e8;
+  border-radius: 7px;
+  color: #f4f0e7;
+  font-size: 11px;
+  pointer-events: none;
+}
+.error { display: grid; place-items: center; height: 100%; padding: 20px; margin: 0; }
+.controls { border: 1px solid #454139; background: #21221e; border-radius: 16px; padding: 15px; }
+.group { min-width: 0; margin: 0 0 18px; padding: 0; border: 0; }
+.group legend { margin-bottom: 10px; color: #ded3c1; font-size: 13px; }
+.options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.button {
+  min-height: 44px;
+  border: 1px solid #534b3e;
+  border-radius: 8px;
+  background: #292922;
+  color: #fffbef;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px;
+  cursor: pointer;
+}
+.button[aria-pressed="true"] { border-color: #edbd7a; background: #493b2b; }
+.button:focus-visible { outline: 2px solid #edbd7a; outline-offset: 2px; }
+.button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .viewer { min-height: 340px; height: 58svh; }
+  .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .group { margin-bottom: 0; }
+}
+.swatch {
+  display: block;
+  width: 24px;
+  height: 11px;
+  border: 1px solid #ffffff54;
+  border-radius: 4px;
+  margin: 0 auto 4px;
+}
+.storage { min-width: 0; margin-bottom: 18px; }
+.storage summary { cursor: pointer; color: #ded3c1; font-size: 13px; }
+.storage[open] summary { margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .storage { grid-column: 1 / -1; margin-bottom: 0; }
+  .storage > fieldset + fieldset { margin-top: 13px; }
+}

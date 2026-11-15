@@ -1,4 +1,4 @@
-import {roomAtPoint,LOCKED_ARCHITECTURE} from './furnitureEditor.mjs';
+import {furnitureAnchorAtPoint,LOCKED_ARCHITECTURE} from './furnitureEditor.mjs';
 import {placementProblem,PROMPT_ASSET_DEFAULTS} from './scenePromptActions.mjs';
 const fail=m=>{throw new Error(m);};
 export function toggleFurnitureSelection(ids,id,extend=false){if(!id)return extend?ids:[];return extend?(ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]):[id];}
@@ -24,7 +24,8 @@ export function applyFurnitureBatch(scene,edit){
   added=source.map((a,i)=>{
    if(!PROMPT_ASSET_DEFAULTS[a.type])fail('Only furniture can be copied.');
    const p={x:edit.point.x+a.xMeters-center.x,y:edit.point.y+a.yMeters-center.y};
-   const room=scene.source==='dwg-engineering-interior'?scene.rooms.find(r=>r.scopeOnly)||roomAtPoint(scene,p):roomAtPoint(scene,p);if(!room)fail('Copy must fit inside a room. / کپی باید داخل اتاق قرار بگیرد.');
+   const room=furnitureAnchorAtPoint(scene,p,edit.allowOutdoor===true);
+   if(!room)fail('Copy must fit inside a room or the outdoor ground. / کپی باید داخل اتاق یا محوطه جا شود.');
    const b={...structuredClone(a),id:globalThis.crypto?.randomUUID?.()||`furniture-copy-${Date.now()}-${i}`,roomId:room.id,xMeters:p.x,yMeters:p.y,userPlaced:true,provenance:'proposed',excludeFromTakeoff:true,placementSource:'manual_furniture_editor',embeddedInCounter:false};
    for(const key of ['againstWallId','wallSupported','_presentationOmit'])delete b[key];
    if(!['width','depth','height','xMeters','yMeters'].every(k=>Number.isFinite(b[k]))||b.width<=0||b.depth<=0||b.height<=0||(Number(b.zMeters)||0)+b.height>(scene.height||3.2))fail('Invalid furniture copy size.');

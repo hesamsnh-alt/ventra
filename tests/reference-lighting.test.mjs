@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {REFERENCE_LIGHTING,referenceRoomFrame,interiorShadowCaster,createReferenceLighting} from '../src/lib/referenceLighting.mjs';
+import {REFERENCE_LIGHTING,referenceRoomFrame,interiorShadowCaster,createReferenceLighting,createWindowLights,setPresentationReflections} from '../src/lib/referenceLighting.mjs';
 import {textilePhysicalSettings} from '../src/lib/physicalPreview.mjs';
 test('lighting anchors use Z-up scene coordinates without modifying the saved scene',()=>{
  const source={width:10,depth:8,wallHeightMeters:3,designDefaults:{viewOriginMeters:{x:2,y:1}}},before=JSON.stringify(source);
@@ -27,4 +27,39 @@ test('subtle fabric sheen does not turn stone, paint or personal photos into clo
  const fabric={bumpMap:{},bumpScale:.0005,shininess:3};assert.equal(textilePhysicalSettings(fabric).metalness,0);assert.ok(textilePhysicalSettings(fabric).sheen<.5);
  assert.equal(textilePhysicalSettings({shininess:110}),null);assert.equal(textilePhysicalSettings({bumpMap:{}}),null);assert.equal(textilePhysicalSettings({bumpMap:{},bumpScale:.0012}),null);
  assert.equal(textilePhysicalSettings({...fabric,userData:{ventraSurfaceMaterial:'paint-white'}}),null);
+});
+
+test('walkthrough lighting boosts tile and metal reflections while matte paint keeps scene lighting',()=>{
+ const scene=new T.Scene(),renderer={shadowMap:{}},rig=createReferenceLighting(scene,renderer);
+ scene.environment=new T.Texture();
+ const stone=new T.MeshPhysicalMaterial({clearcoat:.86,roughness:.16});
+ const paint=new T.MeshPhysicalMaterial({roughness:.87});
+ const chrome=new T.MeshPhysicalMaterial({metalness:1,roughness:.10});
+ for(const mat of [stone,paint,chrome])setPresentationReflections(mat,scene);
+ const overview=stone.envMapIntensity;
+ rig.setInterior(true);
+ for(const mat of [stone,paint,chrome])setPresentationReflections(mat,scene);
+ assert.equal(stone.envMap,scene.environment);
+ assert.equal(stone.envMapRotation.x,scene.environmentRotation.x);
+ assert.ok(stone.envMapIntensity>overview);
+ assert.ok(chrome.envMapIntensity>stone.envMapIntensity);
+ assert.equal(paint.envMap,null);
+ rig.setInterior(false);
+ setPresentationReflections(stone,scene);
+ assert.equal(stone.envMapIntensity,overview);
+ for(const mat of [stone,paint,chrome])mat.dispose();
+ scene.environment.dispose();
+ rig.dispose();
+});
+
+test('window lighting is registered at exterior openings and aimed into the floor',()=>{
+ const scene={width:8,depth:6,walls:[{id:'outside',type:'external',start:{x:0,y:0},end:{x:8,y:0}},
+  {id:'inside',type:'interior',start:{x:0,y:1},end:{x:8,y:1}}],openings:[
+  {type:'window',wallId:'outside',offset:.25,width:1.5,height:1,sillHeight:1},
+  {type:'window',wallId:'inside',offset:.5,width:1,height:1},
+ ]};
+ const lights=createWindowLights(scene,referenceRoomFrame(scene));
+ assert.equal(lights.length,1);
+ assert.deepEqual(lights[0].position.toArray(),[-2,-2.82,1.5]);
+ assert.ok(new T.Vector3(0,0,-1).applyQuaternion(lights[0].quaternion).y>.99);
 });

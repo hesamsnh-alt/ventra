@@ -4,7 +4,7 @@ import * as T from 'three';
 export const INTERIOR_LIGHTING=Object.freeze({exposure:.88,environment:.46,bounce:.42});
 export function previewPixelRatio(width,height,deviceRatio=1,mobile=false){
  const pixels=Math.max(1,Number(width)||1)*Math.max(1,Number(height)||1);
- return Math.min(Math.max(.5,Number(deviceRatio)||1),mobile?1.5:1.75,Math.sqrt((mobile?1200000:2800000)/pixels));
+ return Math.min(Math.max(.5,Number(deviceRatio)||1),mobile?2:2.4,Math.sqrt((mobile?1200000:2800000)/pixels));
 }
 const finishes=Object.freeze({
  stone:{roughness:.38,metalness:0,bumpScale:.0012},
@@ -20,10 +20,36 @@ export function physicalSurfaceKind(source){
  if(typeof id!=='string'||id.startsWith('personal:'))return null;
  const kind=id.split('-')[0];return finishes[kind]?kind:null;
 }
+// Keep material response independent from the selected pigment and geometry.
+const finishProfiles = Object.freeze({
+ polishedStone: Object.freeze({roughness:.16,metalness:0,clearcoat:.86,clearcoatRoughness:.10}),
+ satinWood: Object.freeze({roughness:.37,metalness:0,clearcoat:.44,clearcoatRoughness:.24}),
+ chrome: Object.freeze({roughness:.10,metalness:1,clearcoat:.12,clearcoatRoughness:.1}),
+ brushedSteel: Object.freeze({roughness:.28,metalness:.94,anisotropy:.65}),
+});
+
+export function presentationFinish(kind){
+ return Object.hasOwn(finishProfiles,kind)?finishProfiles[kind]:undefined;
+}
+
+export function selectedPresentationFinish(id){
+ if(id==='stone-marble'||id==='stone-nero')return presentationFinish('polishedStone');
+ if(id==='metal-chrome')return presentationFinish('chrome');
+ if(id==='metal-brushed')return presentationFinish('brushedSteel');
+ if(typeof id==='string'&&id.startsWith('wood-'))return presentationFinish('satinWood');
+ return undefined;
+}
+
+export function applyPresentationFinish(material, kind){
+ material.userData ||= {};
+ material.userData.presentationFinish = kind;
+ return material;
+}
 export function surfacePhysicalSettings(source){
  const kind=physicalSurfaceKind(source);
+ if(kind==='wood')return presentationFinish('satinWood');
  if(kind){const {roughness,metalness}=finishes[kind];return {roughness,metalness};}
- if(source?.userData?.ventraFloorFinish==='marble')return {roughness:.26,metalness:0};
+ if(source?.userData?.ventraFloorFinish==='marble')return presentationFinish('polishedStone');
  if(source?.userData?.ventraFloorFinish==='warm_oak')return {roughness:.53,metalness:0};
  return null;
 }

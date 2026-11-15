@@ -19,7 +19,7 @@ test('set orientation, independent color editing and saved metadata preserve the
  assert.throws(()=>applyFurnitureEdit(a,{kind:'replace',catalogId:'sofa-set-modern-7',assetId:id}),/cannot replace/);
 });
 test('sets have a dedicated dropdown category and never recurse into another set',()=>{
- const sets=filterFurniture(FURNITURE_CATALOG,'sets');assert.equal(sets.length,6);assert.equal(filterFurniture(sets,'sofas').length,0);
+ const sets=filterFurniture(FURNITURE_CATALOG,'sets');assert.equal(sets.length,9);assert.equal(filterFurniture(sets,'sofas').length,0);
  for(const set of sets)for(const p of set.layout){const child=FURNITURE_CATALOG.find(m=>m.id===p.catalogId);assert.ok(child);assert.equal(child.layout,undefined);}
 });
 

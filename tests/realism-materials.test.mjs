@@ -1,8 +1,9 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';import {createRequire} from 'node:module';import parser from '@babel/parser';
 const require=createRequire(import.meta.url),THREE=require('three-test');
 const source=fs.readFileSync(new URL('../src/app/projects/[id]/Project3DViewer.jsx',import.meta.url),'utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});
 const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>['VENTRA_SCHEMATIC_ASSET_DEFAULTS','VENTRA_SCHEMATIC_TEXTURE_CACHE'].includes(d.id.name)));
-const c=vm.createContext({THREE,console});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),c);
+const c=vm.createContext({buildReferenceBed,buildReferenceSofa,THREE,console});vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),c);
 test('soft furniture edges preserve exact box dimensions and central anchor',()=>{
  for(const size of [[2,1,.8],[.04,.04,.5],[1.2,.7,.04]]){
   const g=c.ventraSoftFurnitureBox(THREE,...size);g.computeBoundingBox();const bounds=g.boundingBox;

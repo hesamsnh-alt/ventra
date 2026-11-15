@@ -1,12 +1,12 @@
 import {createWalkWorld,walkSpawn,moveWalk,WALK_EYE_HEIGHT} from './walkthrough.mjs';
 // Explicit session lifecycle; keyboard ownership stays on the canvas/controls.
-export function createWalkthrough({canvas,scene,camera,target,render,onExit=()=>{},raf=cb=>requestAnimationFrame(cb),caf=id=>cancelAnimationFrame(id)}){
+export function createWalkthrough({canvas,scene,camera,target,render,onTap=()=>{},onExit=()=>{},raf=cb=>requestAnimationFrame(cb),caf=id=>cancelAnimationFrame(id)}){
  let active=false,world,point,yaw=0,pitch=0,saved,frame=0,last=0,pointer=null,axis={forward:0,right:0},keys=new Set();const listeners=[];
- const touches=new Map();let touchAxis={forward:0,right:0};
+ const touches=new Map();let touchAxis={forward:0,right:0},tap=null;
  const doc=canvas.ownerDocument,win=doc.defaultView;
  const listen=(t,n,f,o)=>{t.addEventListener(n,f,o);listeners.push(()=>t.removeEventListener(n,f,o));};
  const pose=()=>{camera.position.set(point.x-world.origin.x,point.y-world.origin.y,WALK_EYE_HEIGHT);camera.up.set(0,0,1);target.set(camera.position.x+Math.sin(yaw)*Math.cos(pitch),camera.position.y+Math.cos(yaw)*Math.cos(pitch),camera.position.z+Math.sin(pitch));camera.lookAt(target);render();};
- const clear=()=>{keys.clear();axis={forward:0,right:0};touchAxis={forward:0,right:0};
+ const clear=()=>{tap=null;keys.clear();axis={forward:0,right:0};touchAxis={forward:0,right:0};
   const ids=[...touches.keys()];touches.clear();for(const id of ids){try{canvas.releasePointerCapture(id);}catch{}}
   if(pointer!==null){try{canvas.releasePointerCapture(pointer);}catch{}pointer=null;}};
  function stop(){if(!active)return;active=false;caf(frame);clear();listeners.splice(0).forEach(fn=>fn());camera.position.fromArray(saved.position);camera.up.fromArray(saved.up);target.fromArray(saved.target);camera.fov=saved.fov;camera.near=saved.near;camera.updateProjectionMatrix();canvas.style.cursor=saved.cursor;canvas.style.touchAction=saved.touchAction;render();onExit();}
@@ -35,6 +35,7 @@ export function createWalkthrough({canvas,scene,camera,target,render,onExit=()=>
   const mobileTouch=e=>e.pointerType==='touch'&&win.matchMedia?.('(max-width: 1000px)').matches;
   listen(canvas,'pointerdown',e=>{
    claimed(e);canvas.focus({preventScroll:true});if(e.button>0)return;
+   tap=pointer===null&&touches.size===0?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;
    if(mobileTouch(e)){
     const bounds=canvas.getBoundingClientRect(),role=e.clientX<bounds.left+bounds.width/2?'move':'look';
     if([...touches.values()].some(t=>t.role===role))return;
@@ -43,7 +44,9 @@ export function createWalkthrough({canvas,scene,camera,target,render,onExit=()=>
    }
    if(pointer!==null)return;pointer=e.pointerId;x=e.clientX;y=e.clientY;try{canvas.setPointerCapture(pointer);}catch{}
   },{capture:true,passive:false});
+  const movedTooFar=e=>tap?.id===e.pointerId&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>7;
   listen(canvas,'pointermove',e=>{
+   if(movedTooFar(e))tap=null;
    const touch=touches.get(e.pointerId);
    if(touch){claimed(e);
     if(touch.role==='move'){
@@ -55,6 +58,9 @@ export function createWalkthrough({canvas,scene,camera,target,render,onExit=()=>
    if(pointer!==e.pointerId)return;claimed(e);yaw+=(e.clientX-x)*.004;pitch=Math.max(-1.15,Math.min(1.15,pitch-(e.clientY-y)*.004));x=e.clientX;y=e.clientY;pose();
   },{capture:true,passive:false});
   const up=e=>{
+   const clicked=e.type==='pointerup'&&tap?.id===e.pointerId&&!movedTooFar(e)&&(canvas.contains?.(e.target)??true);
+   if(tap?.id===e.pointerId)tap=null;
+   if(clicked)onTap(e);
    const touch=touches.get(e.pointerId);
    if(touch){touches.delete(e.pointerId);if(touch.role==='move')touchAxis={forward:0,right:0};try{canvas.releasePointerCapture(e.pointerId);}catch{}}
    if(pointer===e.pointerId){pointer=null;try{canvas.releasePointerCapture(e.pointerId);}catch{}}

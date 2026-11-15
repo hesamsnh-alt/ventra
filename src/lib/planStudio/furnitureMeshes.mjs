@@ -1,4 +1,8 @@
 // Read-only snapshot of Ventra's existing furniture renderer; existing viewer is untouched.
+import {buildReferenceBed,buildReferenceSofa} from "../referenceFurniture.mjs";
+import {buildBedCover} from "../bedCover.mjs";
+import {bindKitchenSwitch, buildKitchenFridge, buildKitchenStorage, buildKitchenFaucet} from '../kitchenModel.mjs';
+import {presentationFinish} from '../interiorRenderQuality.mjs';
 import {createFurnitureFinishMaterial} from '../furnitureFinishes.mjs';
 const VENTRA_SCHEMATIC_ASSET_DEFAULTS = {
   sofa: { width: 2.35, depth: 0.95, height: 0.88 },
@@ -367,10 +371,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const meshes = [];
   const base=asset.renderingBaseDimensions;
   const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
-  const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
+  const objectScale=!["kitchen_counter","kitchen_island","refrigerator","stove","sink"].includes(ventraNormalizeSchematicAssetType(asset))&&ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
   const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
   const placement = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
   const {w,d,h,rot,cx,cy}=placement;const assetType=asset.customModelId?'personal_model':placement.assetType;
+  const interactiveKitchen = ['kitchen_counter', 'kitchen_island', 'refrigerator', 'stove'].includes(assetType)
+    || (assetType === 'sink' && (asset.embeddedInCounter || asset.variant === 'kitchen'));
   // Tiny, deterministic surface grain adds material depth without a network asset.
   // Textures belong to this asset and are released with its mesh materials.
   const surfaceTexture = (kind) => {
@@ -434,6 +440,22 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const potMat = new OpaqueMaterial({ color: 0x8f7358, side: THREE.DoubleSide, shininess: 6 });
   const glass = new GlassMaterial({ color: hexNumber(palette?.glass, 0x8fb6cc), transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, shininess: 80 });
   const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 110, specular:0xb8b6b1 });
+
+  const applyPresentationFinish = (mat, kind) => {
+    if (!THREE.MeshPhysicalMaterial) return mat;
+    const replacement = new THREE.MeshPhysicalMaterial({
+      color: mat.color, side: mat.side, map: mat.map, bumpMap: mat.bumpMap,
+      bumpScale: mat.bumpScale, ...presentationFinish(kind),
+    });
+    mat.dispose();
+    return replacement;
+  };
+  const kitchenWood = interactiveKitchen ? applyPresentationFinish(new OpaqueMaterial({
+    color: accent.color, side: accent.side, ...finish("wood"),
+  }), "satinWood") : accent;
+  const kitchenStone = interactiveKitchen ? applyPresentationFinish(new OpaqueMaterial({
+    color: white.color, side: white.side, ...finish("stone"),
+  }), "polishedStone") : white;
 
   const rotateOffset = (ox, oy) => ({
     x: ox * Math.cos(rot) - oy * Math.sin(rot),
@@ -518,6 +540,18 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'sofa': {
+      if(buildReferenceSofa({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addSurface(columns,rows,point,material){
+          const mesh=new THREE.Mesh(ventraTextileGrid(THREE,columns,rows,point),material);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          mesh.castShadow=mesh.receiveShadow=true;
+          meshes.push(mesh);
+        },
+      }))break;
+
       if(designVariant==='traditional'){traditionalSeat();break;}
       if(designVariant==='comfort'){comfortSeat();break;}
       if(designVariant==='minimal'){
@@ -612,6 +646,17 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'bed': {
+      if(buildReferenceBed({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addCover(width,depth,material,profile){
+          const mesh=buildBedCover(THREE,width,depth,material,profile);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          meshes.push(mesh);
+        },
+      }))break;
+
       addBox(w, d, 0.20, 0, 0, 0.10, accent);
       addCushion(w * 0.91, d * 0.88, 0.24, 0, 0.01 * d, 0.32, white);
       addBox(w, 0.11, Math.min(h, 1.05), 0, -d * 0.47, Math.min(h, 1.05) / 2, designVariant==='luxury'?light:accent);
@@ -619,21 +664,11 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addCushion(w * 0.30, d * 0.17, 0.11, -w * 0.19, -d * 0.29, 0.50, white);
       addCushion(w * 0.30, d * 0.17, 0.11,  w * 0.19, -d * 0.29, 0.50, white);
       if(THREE.Geometry&&THREE.Face3){
-        const geometry=new THREE.Geometry(),nx=16,ny=20;
-        for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
-          const x=(i/nx-.5)*w*.88,y=(j/ny-.5)*d*.50+d*.16;
-          const edge=Math.pow(Math.abs(i/nx-.5)*2,8);
-          const z=.478+.012*Math.sin(i*.8+j*.32)+.008*Math.cos(j*.75)-edge*.055;
-          geometry.vertices.push(new THREE.Vector3(x,y,z));
-        }
-        for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
-          const a=j*(nx+1)+i,b=a+1,c=a+nx+1,e=c+1;
-          geometry.faces.push(new THREE.Face3(a,b,e),new THREE.Face3(a,e,c));
-        }
-        geometry.computeFaceNormals();geometry.computeVertexNormals();
-        ventraApplyFloorMaterialUVs(THREE,geometry);
-        const blanket=new THREE.Mesh(geometry,sage);blanket.position.set(cx,cy,0);blanket.rotation.z=rot;
-        blanket.castShadow=blanket.receiveShadow=true;blanket.userData={ventraComponent:'bed_fabric'};meshes.push(blanket);
+        const fabric=ventraTextileMaterial(THREE,asset.color||'#8b8a77',w,d,'fabric');
+        const blanket=buildBedCover(THREE,w,d,fabric);
+        blanket.position.set(cx,cy,Number(asset.zMeters)||0);
+        blanket.rotation.z=rot;
+        meshes.push(blanket);
       }else addCushion(w*.88,d*.5,.035,0,d*.16,.478,sage);
       addBox(w * 0.88, d * 0.05, 0.07, 0, d * 0.45, 0.07, dark);
       break;
@@ -714,24 +749,13 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_counter': {
-      if(designVariant==='l-shape'){
-        const run=Math.min(.6,d*.4,w*.4),body=Math.min(h,.88);
-        addBox(w,run,body,0,d/2-run/2,body/2,accent);
-        addBox(run,d-run,body,-w/2+run/2,-run/2,body/2,accent);
-        addBox(w,run,.04,0,d/2-run/2,body+.02,white);
-        addBox(run,d-run,.04,-w/2+run/2,-run/2,body+.02,white);
-        for(let i=0;i<4;i++)addBox(w/4-.02,.02,body*.8,-w/2+w*(i+.5)/4,d/2-run-.01,body/2,light);
-        break;
-      }
-      addBox(w, d, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
-      addBox(w * 1.03, d * 1.04, 0.045, 0, 0, Math.min(h, 0.88) + 0.03, white);
-      addBox(w * 0.44, d * 0.03, Math.min(h, 0.72), -w * 0.25, -d * 0.52, Math.min(h, 0.72) / 2, light);
-      addBox(w * 0.44, d * 0.03, Math.min(h, 0.72), w * 0.25, -d * 0.52, Math.min(h, 0.72) / 2, light);
+      buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,
+        wood:kitchenWood,liner:dark,stone:kitchenStone,metal});
       break;
     }
     case 'kitchen_island': {
-      addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
-      addBox(w, d, 0.05, 0, 0, Math.min(h, 0.88) + 0.03, white);
+      buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,
+        wood:kitchenWood,liner:dark,stone:kitchenStone,metal});
       break;
     }
     case 'floor_lamp': {
@@ -756,6 +780,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'freezer':
     case 'refrigerator': {
+      if(interactiveKitchen && assetType==='refrigerator'){
+        const stainless = new OpaqueMaterial({color:0xa5a6a5,side:THREE.DoubleSide,shininess:125,
+          specular:0xbcbcb8, ...finish('metal')});
+        buildKitchenFridge({w,d,h,rot,cx,cy,meshes,addBox,steel:applyPresentationFinish(stainless,"brushedSteel"),liner:light,dark});
+        break;
+      }
       addBox(w, d, h, 0, 0, h / 2, light);
       addBox(w * 0.03, d * 0.05, h * 0.34, w * 0.33, -d * 0.52, h * 0.60, metal);
       addBox(w * 0.84, d * 0.02, 0.02, 0, -d * 0.515, h * 0.36, metal);
@@ -772,11 +802,56 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         burner.rotation.x = Math.PI / 2;
         burner.rotation.z = rot;
         meshes.push(burner);
+        if (interactiveKitchen) {
+          const radius = Math.min(w, d) * 0.097;
+          const glow = new THREE.Mesh(new THREE.RingGeometry(radius * 0.69, radius, 32),
+            new THREE.MeshBasicMaterial({color:0xff4819,side:THREE.DoubleSide}));
+          glow.position.copy(burner.position);
+          glow.position.z += 0.012;
+          meshes.push(glow);
+          glow.visible=false;
+          glow.castShadow=false;
+          bindKitchenSwitch(burner, glow);
+        }
       }
       break;
     }
     case 'sink': {
       const vanityH = asset?.embeddedInCounter ? 0.90 : Math.min(h, 0.82);
+
+      if (interactiveKitchen) {
+        const rim = vanityH + 0.057;
+        const width = w * 0.62;
+        const depth = d * 0.53;
+        const base = rim - Math.min(0.16, d * 0.27);
+        const lip = Math.min(w, d) * 0.045;
+        if (!asset.embeddedInCounter) {
+          addBox(w, d, base, 0, 0, base / 2, accent);
+          const side = (w - width) / 2;
+          const end = (d - depth) / 2;
+          for (const sign of [-1, 1]) {
+            addBox(side, d, rim - base, sign * (w + width) / 4, 0, (rim + base) / 2, kitchenStone);
+            addBox(width, end, rim - base, 0, sign * (d + depth) / 4, (rim + base) / 2, kitchenStone);
+          }
+        }
+        const basinFloor = asset.embeddedInCounter ? rim - 0.01 : base + 0.009;
+        addBox(width, depth, 0.015, 0, 0, basinFloor, dark);
+        for (const sign of [-1, 1]) {
+          addBox(lip, depth + lip, 0.013, sign * width / 2, 0, rim, metal);
+          addBox(width, lip, 0.013, 0, sign * depth / 2, rim, metal);
+        }
+        const chrome = applyPresentationFinish(new OpaqueMaterial({
+          color:0xc0c2c1,shininess:125,specular:0xbbbbbb,
+        }),"chrome");
+        buildKitchenFaucet({
+          THREE, meshes, addBox, rim, basinFloor, depth:d, chrome, dark,
+          project(ox, oy, oz) {
+            const point = rotateOffset(ox, oy);
+            return new THREE.Vector3(cx + point.x, cy + point.y, oz + (Number(asset.zMeters) || 0));
+          },
+        });
+        break;
+      }
 
       if (!asset?.embeddedInCounter) addBox(w, d, vanityH, 0, 0, vanityH / 2, accent);
 
@@ -996,7 +1071,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   }
 
   const usedMaterials = new Set(meshes.map((mesh) => mesh.material));
-  for (const material of [accent, light, white, dark, sage, rugMat, leafMat, potMat, glass, metal]) {
+  for (const material of new Set([accent, light, white, dark, sage, rugMat, leafMat, potMat, glass, metal, kitchenWood, kitchenStone])) {
     if (!usedMaterials.has(material)) {
       material.map?.dispose?.();
       if(material.bumpMap!==material.map)material.bumpMap?.dispose?.();

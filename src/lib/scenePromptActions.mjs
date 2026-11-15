@@ -1,3 +1,4 @@
+import {OUTDOOR_GROUND_ID,outdoorGround} from './outdoorGround.mjs';
 import {furnitureOverlaps} from './interiorPresentation.mjs';
 
 export const PROMPT_ASSET_DEFAULTS={
@@ -36,13 +37,17 @@ const onBoundary=(p,poly,tolerance=.002)=>poly.some((a,i)=>{
 const contained=(p,poly,manual)=>inside(p,poly)||(manual&&onBoundary(p,poly));
 
 export function placementProblem(a,s,{manualDwgPlacement=false,manualFurniturePlacement=false}={}){
- const relaxed=manualDwgPlacement&&s.source==='dwg-engineering-interior';
- const room=s.rooms.find(r=>r.id===a.roomId);
+ const outdoor=manualFurniturePlacement&&a.roomId===OUTDOOR_GROUND_ID?outdoorGround(s):null;
+ const relaxed=!outdoor&&manualDwgPlacement&&s.source==='dwg-engineering-interior';
+ const room=outdoor||s.rooms.find(r=>r.id===a.roomId);
  if(!room?.polygon?.length)return 'unknown room';
  const ps=points(a);
  if(!ps.every(p=>contained(p,room.polygon,manualFurniturePlacement))||crossing(a,room.polygon,s))return 'outside target room';
- if(s.footprint?.length&&(!ps.every(p=>contained(p,s.footprint,manualFurniturePlacement))||crossing(a,s.footprint,s)))return 'outside building';
  const corners=[ps[0],ps[2],ps[8],ps[6]];
+ if(outdoor){
+  if(ps.some(p=>contained(p,outdoor.footprint,true))||outdoor.footprint.some(p=>inside(p,corners))||crossing(a,outdoor.footprint,s))return 'overlaps building';
+  if(['curtain','picture_frame','wall_tv','range_hood'].includes(a.type))return 'requires an interior mounting surface';
+ }else if(s.footprint?.length&&(!ps.every(p=>contained(p,s.footprint,manualFurniturePlacement))||crossing(a,s.footprint,s)))return 'outside building';
  if((s.holes||[]).some(h=>ps.some(p=>inside(p,h.polygon))||(h.polygon||[]).some(p=>inside(p,corners))||crossing(a,h.polygon||[],s)))return 'inside shaft or void';
  if(!relaxed&&(s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,manualFurniturePlacement?-.002:.03)))return 'intersects wall';
  if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,manualFurniturePlacement?-.002:.03)))return 'overlaps furniture';

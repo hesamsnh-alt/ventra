@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import {configureFloorDepth} from '../src/lib/floorDepthLayers.mjs';
 import {raycastVisibleMeshes} from '../src/lib/raycastMeshes.mjs';
 import * as surfaceMaterials from '../src/lib/surfaceMaterials.mjs';
@@ -60,7 +61,7 @@ test('actual Three renderer creates manual doors/windows and companion wall cuts
  const require=createRequire(import.meta.url),parser=require('@babel/parser'),THREE=require('three-test');
  const source=readFileSync('src/app/projects/[id]/Project3DViewer.jsx','utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']});
  const declarations=ast.program.body.filter(n=>n.type==='FunctionDeclaration'||n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name?.startsWith('VENTRA_')));
- const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');const context=vm.createContext({...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,THREE,console,structuredClone,sourcePresentationAssets});
+ const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');const context=vm.createContext({buildReferenceBed,buildReferenceSofa,...surfaceMaterials,...renderQuality,configureFloorDepth,raycastVisibleMeshes,THREE,console,structuredClone,sourcePresentationAssets});
  vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),context);context.getThree=()=>THREE;
  for(const model of ['manual-door','manual-double-door','manual-passage','manual-window']){
   const s=applyOpeningEdit(scene(),{kind:'add',catalogId:model,wallId:'host',offset:.5});

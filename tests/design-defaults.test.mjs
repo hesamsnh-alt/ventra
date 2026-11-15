@@ -49,3 +49,10 @@ test('combined living kitchens recognize Persian and Arabic and center irregular
   assert.deepEqual(r.designDefaults.viewOriginMeters,{x:6,y:4,z:0});
  }
 });
+
+test('a new bedroom vanity places the mirror face inward',()=>{
+ const result=applyDesignDefaults(scene('Bedroom'));
+ const vanity=result.assets.find(a=>a.type==='dressing_table');
+ assert.ok(vanity.yMeters<.5);
+ assert.ok(Math.cos(vanity.rotation*Math.PI/180)>.99);
+});

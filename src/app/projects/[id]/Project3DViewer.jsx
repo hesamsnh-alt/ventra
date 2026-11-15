@@ -1,6 +1,10 @@
 "use client";
+import {OUTDOOR_GROUND_ID,outdoorGround} from "@/lib/outdoorGround.mjs";
+import {createGardenView, loadGardenMaterial, outdoorWindowNormal} from "@/lib/windowGardenView.mjs";
+import {buildReferenceBed,buildReferenceSofa} from "@/lib/referenceFurniture.mjs";
+import {buildBedCover} from "@/lib/bedCover.mjs";
 import {createFurnitureFinishMaterial} from '@/lib/furnitureFinishes.mjs';
-import {previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
+import {applyPresentationFinish, previewPixelRatio} from '@/lib/interiorRenderQuality.mjs';
 import {apsGeometryNodes} from "@/lib/apsViewables.mjs";
 import PlanRenderPanel from "./PlanRenderPanel";
 import DwgFloorPanel from "./DwgFloorPanel";
@@ -22,6 +26,8 @@ import {LOCKED_ARCHITECTURE} from '@/lib/furnitureEditor.mjs';
 import {repairObservedDoors} from "@/lib/repairObservedDoors.mjs";
 import {waitForViewerSurface} from "@/lib/viewerSurface.mjs";
 import {schematicGeometryAudit} from "@/lib/schematicGeometryAudit.mjs";
+import {buildProjectKitchenPart, sinkOpening, countertopFixtures} from "@/lib/projectKitchenParts.mjs";
+import {bindKitchenInputs, buildKitchenStorage, registerSceneInteraction, toggleKitchenPart} from "@/lib/kitchenModel.mjs";
 import {createPhysicalPreview} from "@/lib/physicalPreview.mjs";
 import {configureSchematicLighting} from "@/lib/schematicLighting.mjs";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
@@ -4536,6 +4542,7 @@ function clearSchematicOverlay(viewer) {
     if (previous) {
       sceneAfter.remove(previous);
       previous.traverse?.((object) => {
+        object.userData?.disposeDemoPart?.();
         try { object.geometry?.dispose?.(); } catch {}
         const materials = surfaceMaterialList(object.material);
         for (const material of materials) {
@@ -5248,6 +5255,41 @@ function ventraResolveSchematicAssetPlacement(
   };
 }
 
+function ventraFaceBedroomFurnitureIntoRoom(asset,scene) {
+  const type=ventraNormalizeSchematicAssetType(asset);
+  if(!['dressing_table','wardrobe'].includes(type)||asset.customModelId||asset.userPlaced||
+    ['manual_furniture_editor','user_prompt_ai','source_image_observation_v1'].includes(asset.placementSource))return asset;
+  const {xMeters:x,yMeters:y}=asset;
+  if(!Number.isFinite(x)||!Number.isFinite(y))return asset;
+  const room=scene.rooms?.find(room=>room.id===asset.roomId);
+  const polygon=room?.polygon||[];
+  const angle=(Number(asset.rotation)||0)*Math.PI/180;
+  const frontSign=type==='dressing_table'?1:-1;
+  const front={x:-Math.sin(angle)*frontSign,y:Math.cos(angle)*frontSign};
+  const halfDepth=(Number(asset.depth)||(type==='wardrobe'?.6:.42))/2;
+  const candidates=(scene.walls||[]).filter(wall=>wall.type!=='railing');
+  if(polygon.length>=3)for(let i=0;i<polygon.length;i++)candidates.push({start:polygon[i],end:polygon[(i+1)%polygon.length],roomEdge:true});
+  let chosen=null;
+  for(const wall of candidates){
+    const {start:a,end:b}=wall;
+    if(!a||!b)continue;
+    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
+    if(length<.1)continue;
+    const projection=((x-a.x)*dx+(y-a.y)*dy)/length;
+    if(projection<0||projection>length)continue;
+    const nx=-dy/length,ny=dx/length;
+    const alignment=front.x*nx+front.y*ny;
+    if(Math.abs(alignment)<.9)continue;
+    const distance=(x-a.x)*nx+(y-a.y)*ny;
+    const gap=Math.abs(distance);
+    if(gap<.05||gap>halfDepth+.32)continue;
+    const supported=asset.againstWallId!=null&&asset.againstWallId===wall.id;
+    const score=gap+(wall.roomEdge?.03:0)-(supported?1:0);
+    if(!chosen||score<chosen.score)chosen={score,facing:alignment*Math.sign(distance)};
+  }
+  return chosen?.facing<0?{...asset,rotation:((Number(asset.rotation)||0)+180)%360}:asset;
+}
+
 function ventraPresentationAssets(scene) {
   if (scene.furnishingMode === "source_observed") return sourcePresentationAssets(scene);
   const inside = (p, poly) => {
@@ -5557,14 +5599,20 @@ function ventraTelevisionMeshes(THREE,w,d,h,variant,color){
  return parts;
 }
 
-function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth }) {
+function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth, interactiveKitchen = false, kitchenFixtures }) {
   const meshes = [];
   const base=asset.renderingBaseDimensions;
   const ratios=base?['width','depth','height'].map(key=>asset[key]/base[key]):[];
-  const objectScale=ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
+  const objectScale=!interactiveKitchen&&ratios.length&&ratios.every(n=>Number.isFinite(n)&&n>0&&Math.abs(n-ratios[0])<.000001)?ratios[0]:1;
   const renderAsset=base&&objectScale!==1?{...asset,...base}:asset;
   const placement = ventraResolveSchematicAssetPlacement(renderAsset, roomWidth, roomDepth);
   const {w,d,h,rot,cx,cy}=placement;const assetType=asset.customModelId?'personal_model':placement.assetType;
+  const z = Number(asset.zMeters) || 0;
+  const addDemoPart = () => {
+    const part = buildProjectKitchenPart({THREE,type:assetType,w,d,h,cx,cy,rot,z,
+      embedded:asset.embeddedInCounter,surfaceHeight:kitchenFixtures?.heights.get(asset)});
+    if (part) meshes.push(part);
+  };
   // Tiny, deterministic surface grain adds material depth without a network asset.
   // Textures belong to this asset and are released with its mesh materials.
   const surfaceTexture = (kind) => {
@@ -5583,7 +5631,16 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         const noise = seed / 4294967296 - 0.5;
         const wave = Math.sin(2 * Math.PI * y / 256);
         const grain = Math.sin(2 * Math.PI * (x * 13 / 256 + 0.28 * wave));
-        const value = kind === 'wood'
+        const u=x/256,v=y/256;
+        const grainWarp=7*Math.sin(v*7+u*4)+3*Math.sin(v*16-u*2);
+        const woodVein=Math.pow(.5+.5*Math.sin((x+grainWarp)*.22+Math.sin(v*5)*1.8),8);
+        const marbleField=y+x*.65+15*Math.sin(x*.028)+7*Math.sin((x+y)*.040);
+        const marbleVein=Math.exp(-Math.abs(marbleField-158)/2.4)+.48*Math.exp(-Math.abs(marbleField-247)/1.5);
+        const value = interactiveKitchen && kind === 'stone'
+          ? 237-marbleVein*63+noise*6
+          : interactiveKitchen && kind === 'wood'
+          ? 236-woodVein*23+grain*4+noise*5
+          : kind === 'wood'
           ? 240 + Math.sin(2 * Math.PI * (x * 79 / 256 + 0.28 * wave)) * 6 + Math.sin(2 * Math.PI * (x * 173 / 256 + 0.15 * wave)) * 2 + noise * 3
           : kind === 'fabric'
             ? 242 + ((x % 4 < 2) !== (y % 4 < 2) ? 4 : -4) + noise * 5
@@ -5628,6 +5685,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const potMat = new OpaqueMaterial({ color: 0x8f7358, side: THREE.DoubleSide, shininess: 6 });
   const glass = new GlassMaterial({ color: hexNumber(palette?.glass, 0x8fb6cc), transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, shininess: 80 });
   const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 110, specular:0xb8b6b1 });
+
+  if (interactiveKitchen) {
+    applyPresentationFinish(accent, "satinWood");
+    applyPresentationFinish(white, "polishedStone");
+    applyPresentationFinish(metal, "brushedSteel");
+  }
 
   const rotateOffset = (ox, oy) => ({
     x: ox * Math.cos(rot) - oy * Math.sin(rot),
@@ -5712,6 +5775,18 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'sofa': {
+      if(buildReferenceSofa({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addSurface(columns,rows,point,material){
+          const mesh=new THREE.Mesh(ventraTextileGrid(THREE,columns,rows,point),material);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          mesh.castShadow=mesh.receiveShadow=true;
+          meshes.push(mesh);
+        },
+      }))break;
+
       if(designVariant==='traditional'){traditionalSeat();break;}
       if(designVariant==='comfort'){comfortSeat();break;}
       if(designVariant==='minimal'){
@@ -5806,6 +5881,17 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'bed': {
+      if(buildReferenceBed({
+        variant:designVariant,w,d,h,accent,addBox,addCushion,
+        textile:color=>ventraTextileMaterial(THREE,color,w,d),
+        addCover(width,depth,material,profile){
+          const mesh=buildBedCover(THREE,width,depth,material,profile);
+          mesh.position.set(cx,cy,Number(asset.zMeters)||0);
+          mesh.rotation.z=rot;
+          meshes.push(mesh);
+        },
+      }))break;
+
       addBox(w, d, 0.20, 0, 0, 0.10, accent);
       addCushion(w * 0.91, d * 0.88, 0.24, 0, 0.01 * d, 0.32, white);
       addBox(w, 0.11, Math.min(h, 1.05), 0, -d * 0.47, Math.min(h, 1.05) / 2, designVariant==='luxury'?light:accent);
@@ -5813,21 +5899,11 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       addCushion(w * 0.30, d * 0.17, 0.11, -w * 0.19, -d * 0.29, 0.50, white);
       addCushion(w * 0.30, d * 0.17, 0.11,  w * 0.19, -d * 0.29, 0.50, white);
       if(THREE.Geometry&&THREE.Face3){
-        const geometry=new THREE.Geometry(),nx=16,ny=20;
-        for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
-          const x=(i/nx-.5)*w*.88,y=(j/ny-.5)*d*.50+d*.16;
-          const edge=Math.pow(Math.abs(i/nx-.5)*2,8);
-          const z=.478+.012*Math.sin(i*.8+j*.32)+.008*Math.cos(j*.75)-edge*.055;
-          geometry.vertices.push(new THREE.Vector3(x,y,z));
-        }
-        for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
-          const a=j*(nx+1)+i,b=a+1,c=a+nx+1,e=c+1;
-          geometry.faces.push(new THREE.Face3(a,b,e),new THREE.Face3(a,e,c));
-        }
-        geometry.computeFaceNormals();geometry.computeVertexNormals();
-        ventraApplyFloorMaterialUVs(THREE,geometry);
-        const blanket=new THREE.Mesh(geometry,sage);blanket.position.set(cx,cy,0);blanket.rotation.z=rot;
-        blanket.castShadow=blanket.receiveShadow=true;blanket.userData={ventraComponent:'bed_fabric'};meshes.push(blanket);
+        const fabric=ventraTextileMaterial(THREE,asset.color||'#8b8a77',w,d,'fabric');
+        const blanket=buildBedCover(THREE,w,d,fabric);
+        blanket.position.set(cx,cy,Number(asset.zMeters)||0);
+        blanket.rotation.z=rot;
+        meshes.push(blanket);
       }else addCushion(w*.88,d*.5,.035,0,d*.16,.478,sage);
       addBox(w * 0.88, d * 0.05, 0.07, 0, d * 0.45, 0.07, dark);
       break;
@@ -5886,6 +5962,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       for(const mesh of ventraTelevisionMeshes(THREE,w,d,h,designVariant,asset.color||'#947050')){const shift=rotateOffset(mesh.position.x,mesh.position.y);mesh.position.set(cx+shift.x,cy+shift.y,mesh.position.z+(Number(asset.zMeters)||0));mesh.rotation.z+=rot;meshes.push(mesh);}break;
     }
     case 'cabinet': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        break;
+      }
       addBox(w, d, Math.min(h, assetType === 'tv_unit' ? 0.52 : h), 0, 0, Math.min(h, assetType === 'tv_unit' ? 0.52 : h) / 2, accent);
       addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), -w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
       addBox(w * 0.42, d * 0.04, Math.min(h * 0.78, 0.32), w * 0.24, -d * 0.52, Math.min(h * 0.78, 0.32) * 0.72, light);
@@ -5908,6 +5988,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_counter': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        break;
+      }
       if(designVariant==='l-shape'){
         const run=Math.min(.6,d*.4,w*.4),body=Math.min(h,.88);
         addBox(w,run,body,0,d/2-run/2,body/2,accent);
@@ -5924,6 +6008,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_island': {
+      if(interactiveKitchen){
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        break;
+      }
       addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);
       addBox(w, d, 0.05, 0, 0, Math.min(h, 0.88) + 0.03, white);
       break;
@@ -5950,6 +6038,10 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'freezer':
     case 'refrigerator': {
+      if(interactiveKitchen && assetType==='refrigerator'){
+        addDemoPart();
+        break;
+      }
       addBox(w, d, h, 0, 0, h / 2, light);
       addBox(w * 0.03, d * 0.05, h * 0.34, w * 0.33, -d * 0.52, h * 0.60, metal);
       addBox(w * 0.84, d * 0.02, 0.02, 0, -d * 0.515, h * 0.36, metal);
@@ -5958,6 +6050,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     case 'stove': {
       const top = asset?.embeddedInCounter ? 0.93 : Math.min(h, 0.88);
       if (!asset?.embeddedInCounter) addBox(w, d, top, 0, 0, top / 2, accent);
+      if (interactiveKitchen) { addDemoPart(); break; }
       addBox(w * 0.95, d * 0.95, 0.035, 0, 0, top + 0.025, dark);
       for (const sx of [-0.23, 0.23]) for (const sy of [-0.22, 0.22]) {
         const burner = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w, d) * 0.10, Math.min(w, d) * 0.10, 0.02, 18), dark);
@@ -5966,11 +6059,27 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         burner.rotation.x = Math.PI / 2;
         burner.rotation.z = rot;
         meshes.push(burner);
+
       }
       break;
     }
     case 'sink': {
       const vanityH = asset?.embeddedInCounter ? 0.90 : Math.min(h, 0.82);
+
+      if (interactiveKitchen) {
+        if (!asset.embeddedInCounter) {
+          const rim = vanityH + 0.057;
+          const {width,depth,drop} = sinkOpening(w,d);
+          const base = rim - drop - 0.012;
+          addBox(w,d,base,0,0,base/2,accent);
+          for (const side of [-1,1]) {
+            addBox((w-width)/2,d,rim-base,side*(w+width)/4,0,(rim+base)/2,white);
+            addBox(width,(d-depth)/2,rim-base,0,side*(d+depth)/4,(rim+base)/2,white);
+          }
+        }
+        addDemoPart();
+        break;
+      }
 
       if (!asset?.embeddedInCounter) addBox(w, d, vanityH, 0, 0, vanityH / 2, accent);
 
@@ -6187,6 +6296,12 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
 
       schematic: true,
     };
+    if (mesh.userData.updateDemoPart) mesh.traverse(child => {
+      if (child.userData?.demoPart) {
+        const {updateDemoPart,disposeDemoPart,...metadata} = mesh.userData;
+        Object.assign(child.userData,metadata);
+      }
+    });
   }
 
   const usedMaterials = new Set(meshes.map((mesh) => mesh.material));
@@ -6201,7 +6316,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   return meshes;
 }
 
-function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8 }) {
+function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8, interactive = false }) {
   if (!THREE || !opening?.start || !opening?.end) return null;
   const preserveTrace = opening.preserveRasterTrace === true;
   if (preserveTrace && (!["start", "end"].includes(opening.hinge) || !["clockwise", "counterclockwise"].includes(opening.swing))) return null;
@@ -6231,7 +6346,7 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
   if(opening.variant==='double'){
     const mid={x:(sx+ex)/2,y:(sy+ey)/2},group=new THREE.Group();
     for(const half of [{start:{x:sx,y:sy},end:mid,hinge:'start'},{start:mid,end:{x:ex,y:ey},hinge:'end'}]){
-      const leaf=ventraCreateDoorLeafVisual({THREE,opening:{...opening,...half,width:openingWidth/2,variant:'single'},material,wallHeight});
+      const leaf=ventraCreateDoorLeafVisual({THREE,opening:{...opening,...half,width:openingWidth/2,variant:'single'},material,wallHeight,interactive});
       if(leaf)group.add(leaf);
     }
     return group;
@@ -6291,10 +6406,12 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
   frameHeader.userData = { ventraType: 'schematic_door_frame_header', schematic: true };
   group.add(frameHeader);
 
+  if(interactive)applyPresentationFinish(handleMaterial, "brushedSteel");
   const woodTexture=ventraGetSchematicTexture({THREE,kind:'doorwood',baseColor:'#ad8965',detailColor:'#71543d',accentColor:'#cfb99a'});
   const leafMaterial=material.clone();
   if(woodTexture){leafMaterial.color.setHex(0xffffff);leafMaterial.map=woodTexture;leafMaterial.bumpMap=woodTexture;leafMaterial.bumpScale=.002;}
   leafMaterial.shininess=18;
+  if(interactive)applyPresentationFinish(leafMaterial, "satinWood");
   // Leaf dimensions and hinge rotation remain tied to the observed opening.
   const leaf = new THREE.Mesh(
     new THREE.BoxGeometry(leafWidth, leafThickness, leafHeight),
@@ -6331,6 +6448,17 @@ function ventraCreateDoorLeafVisual({ THREE, opening, material, wallHeight = 2.8
     const hingeBar=addDetail(new THREE.CylinderGeometry(.012,.012,.075,16),handleMaterial,.01,0,leafHeight*fraction,'schematic_door_hinge');hingeBar.rotation.x=Math.PI/2;
   }
   group.add(details);
+  if(interactive){
+    const swingAngle = angleDegrees >= 12 ? openAngle : closedAngle + sign * Math.PI * 0.45;
+    let opened = angleDegrees >= 12;
+    registerSceneInteraction([leaf,...details.children],()=>{
+      opened=!opened;
+      const angle=opened?swingAngle:closedAngle;
+      leaf.position.x=hinge.x+Math.cos(angle)*leafWidth/2;
+      leaf.position.y=hinge.y+Math.sin(angle)*leafWidth/2;
+      leaf.rotation.z=details.rotation.z=angle;
+    });
+  }
 
   // Plan swing arc stays near floor so opening direction remains readable.
   const arcPoints = [];
@@ -7053,6 +7181,10 @@ function renderStructuredSchematicScene(viewer, scene) {
     }
   }
 
+  let gardenMaterial;
+  const exteriorPane=glassMat.clone();
+  exteriorPane.opacity=.11;
+  exteriorPane.color.setHex(0xdceaf0);
   const railingPostKeys = new Set();
   const wallMap = new Map();
   for (const wall of scene.walls || []) {
@@ -7212,14 +7344,39 @@ function renderStructuredSchematicScene(viewer, scene) {
         if(headerWall){headerWall.userData={...headerWall.userData,ventraType:'schematic_plan_wall',wallId:wall.id,schematic:true};decorateSurfaceMesh(THREE,headerWall,{kind:'wall',id:String(wall.id)},scene,surfaceMaterialCache);}
         add(headerWall);
 
+        const perimeter=scene.footprint||[];
+        const center={x:(opening.start.x+opening.end.x)/2,y:(opening.start.y+opening.end.y)/2};
+        const nearFootprint=perimeter.some((a,index)=>{
+          const b=perimeter[(index+1)%perimeter.length];
+          const ax=a.x-width/2,ay=a.y-depth/2,dx=b.x-a.x,dy=b.y-a.y;
+          const t=Math.max(0,Math.min(1,((center.x-ax)*dx+(center.y-ay)*dy)/(dx*dx+dy*dy||1)));
+          return Math.hypot(center.x-ax-t*dx,center.y-ay-t*dy)<thickness*.95;
+        });
+        const outside = viewer.ventraKitchenInteractions && (wallType==='external'||nearFootprint);
+        if(outside && !opening.cutOnly && gardenMaterial===undefined){
+          gardenMaterial=loadGardenMaterial(THREE,()=>viewer.impl?.invalidate?.(true,true,true));
+        }
+        const showGarden = Boolean(outside && gardenMaterial);
         const windowAssembly = opening.cutOnly ? null : ventraCreateWindowVisual({
           THREE,
           opening,
-          glassMaterial: glassMat,
+          glassMaterial: showGarden ? exteriorPane : glassMat,
           frameMaterial: windowFrameMat,
           wallThickness: thickness,
         });
-        if(!opening.cutOnly)add(windowAssembly);
+        if(windowAssembly){
+          add(windowAssembly);
+          if(showGarden){
+            const room=(scene.rooms||[]).find(room=>room.id&&(room.id===wall.roomId||room.id===wall.roomAId||room.id===wall.roomBId));
+            const points=room?.polygon||[];
+            const interior=points.length?{
+              x:points.reduce((sum,point)=>sum+point.x,0)/points.length-width/2,
+              y:points.reduce((sum,point)=>sum+point.y,0)/points.length-depth/2,
+            }:{x:0,y:0};
+            const outdoor=createGardenView({THREE,opening,normal:outdoorWindowNormal(start,end,interior),material:gardenMaterial,wallThickness:thickness});
+            if(outdoor)windowAssembly.add(outdoor);
+          }
+        }
       } else {
         // Fill wall above the door opening; otherwise the renderer leaves an
         // unrealistic floor-to-ceiling slot above every door.
@@ -7239,6 +7396,7 @@ function renderStructuredSchematicScene(viewer, scene) {
           opening,
           material: doorMat,
           wallHeight: displayHeight,
+          interactive: viewer.ventraKitchenInteractions === true,
         });
         if(!opening.cutOnly&&opening.variant!=='passage')add(doorLeaf);
       }
@@ -7248,13 +7406,37 @@ function renderStructuredSchematicScene(viewer, scene) {
 
   if(scene.exteriorDesign)buildExteriorDesignMeshes(THREE,scene).forEach(add);
 
-  for (const asset of (scene.sceneType === 'floorplan_interactive_preview' ? ventraPresentationAssets(scene) : scene.assets || [])) {
+  const ground=viewer.ventraKitchenInteractions===true ? outdoorGround(scene) : null;
+  if(ground){
+    const local=vertices=>vertices.map(point=>ventraScenePointToLocal(point,width,depth));
+    const material=new OpaqueMaterial({color:0xa19e86,side:THREE.DoubleSide,shininess:4});
+    const {mesh}=ventraBuildTracedRasterFloor({THREE,polygon:local(ground.polygon),holes:[local(ground.footprint)],z:-.02,material});
+    mesh.userData={ventraType:'schematic_outdoor_ground',schematic:true};
+    decorateSurfaceMesh(THREE,mesh,{kind:'outdoor-ground',id:OUTDOOR_GROUND_ID},scene,surfaceMaterialCache);
+    mesh.receiveShadow=true;schematicRoot.add(mesh);
+  }
+
+  const kitchenRooms = new Set((scene.rooms || []).filter(room =>
+    /kitchen|آشپزخانه|مطبخ/i.test([room.type, room.kind, room.name, room.label, room.roomType, room.use, room.semanticType].join(" ")))
+    .map(room => room.id).filter(Boolean));
+  const renderedAssets = (scene.sceneType === 'floorplan_interactive_preview' ? ventraPresentationAssets(scene) : scene.assets || [])
+    .map(asset=>ventraFaceBedroomFurnitureIntoRoom(asset,scene));
+  const kitchenFixtures = viewer.ventraKitchenInteractions === true
+    ? countertopFixtures(renderedAssets, asset => ventraResolveSchematicAssetPlacement(asset,width,depth))
+    : null;
+  for (const asset of renderedAssets) {
     const meshes = buildSchematicAssetMeshes({
       THREE,
       asset,
       palette,
       roomWidth: width,
       roomDepth: depth,
+      kitchenFixtures,
+      interactiveKitchen: viewer.ventraKitchenInteractions === true && (
+        ["kitchen_counter","kitchen_island","refrigerator","stove"].includes(ventraNormalizeSchematicAssetType(asset))
+        || kitchenRooms.has(asset.roomId)
+        || kitchenFixtures?.heights.has(asset)
+      ),
     });
     meshes.forEach(add);
     const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
@@ -7583,7 +7765,7 @@ function renderSchematicScene(viewer, scene) {
   if(scene.exteriorDesign)buildExteriorDesignMeshes(THREE,scene).forEach(add);
 
   for(const asset of scene.assets || []){
-    const meshes=buildSchematicAssetMeshes({THREE,asset,palette,roomWidth:width,roomDepth:depth});
+    const meshes=buildSchematicAssetMeshes({THREE,asset:ventraFaceBedroomFurnitureIntoRoom(asset,scene),palette,roomWidth:width,roomDepth:depth});
     meshes.forEach(add); assetMeshCount += meshes.length;
     const shade=ventraFurnitureContactShade({THREE,asset,roomWidth:width,roomDepth:depth});
     if(shade)schematicRoot.add(shade);
@@ -7731,12 +7913,26 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   const target = new THREE.Vector3(0, 0, 1);
   let controlMode = "orbit";
 
+  const demoParts = [];
+  const gardenViews = [];
+  const enterInterior = active => {
+    for(const view of gardenViews)view.visible=active;
+    renderer.setWalkthroughActive?.(active);
+  };
+  let demoFrame = null;
   const render = () => {
+    let animating = false;
+    const now = globalThis.performance?.now() ?? Date.now();
+    for (const part of demoParts) animating = part.userData.updateDemoPart(now) || animating;
     camera.lookAt(target);
     renderer.render(threeScene, camera);
+    if (animating && demoFrame === null && !renderer.isVRActive?.()) {
+      demoFrame = window.requestAnimationFrame(() => { demoFrame = null; render(); });
+    }
   };
 
   const adapter = {
+    ventraKitchenInteractions: true,
     impl: {
       sceneAfter: threeScene,
       scene: threeScene,
@@ -7770,6 +7966,10 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   };
 
   const model = renderSchematicScene(adapter, sceneData);
+  threeScene.traverse(object => {
+    if(object.userData?.updateDemoPart)demoParts.push(object);
+    if(object.userData?.ventraType==='schematic_window_outdoor_view')gardenViews.push(object);
+  });
   const selectionGroup=new THREE.Object3D();selectionGroup.name='ventra-furniture-selection';threeScene.add(selectionGroup);
   const clearSelection=()=>{for(const child of [...selectionGroup.children]){selectionGroup.remove(child);child.geometry?.dispose?.();child.material?.dispose?.();}};
   const setSelectedAssetIds=ids=>{
@@ -7911,13 +8111,17 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     }
   });
 
+  const pickInteractive = event => rayFor(event)
+    ? meshHits().find(hit => !hit.object.userData?.nonSelectable)?.object : null;
   let interiorRequested=false;
-  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onExit:()=>{
-    renderer.setWalkthroughActive?.(false);setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
+  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onTap:event=>{
+    if(toggleKitchenPart(pickInteractive(event)))render();
+  },onExit:()=>{
+    enterInterior(false);setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
   }});
   renderer.onVRState=state=>{
-    if(state==='starting'){walker.stop();clearFurniturePreview();furnitureTool=null;renderer.setWalkthroughActive?.(true);setInteriorView(false);render();}
-    if(state==='idle'){renderer.setWalkthroughActive?.(false);setInteriorView(interiorRequested);render();}
+    if(state==='starting'){walker.stop();clearFurniturePreview();furnitureTool=null;enterInterior(true);setInteriorView(false);render();}
+    if(state==='idle'){enterInterior(false);setInteriorView(interiorRequested);render();}
     window.dispatchEvent(new CustomEvent('ventra:vr-state',{detail:{projectId,state}}));
   };
   const stopMotion=()=>{walker.stop();renderer.stopVR?.().catch(()=>{});};
@@ -7925,6 +8129,12 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     orbit,pan,getMode:()=>controlMode,home:()=>setNamedView('iso'),
     zoom:factor=>{const offset=camera.position.clone().sub(target),fit=getBoundsInfo().distance;
       offset.setLength(Math.max(fit*.025,Math.min(fit*20,offset.length()*factor)));camera.position.copy(target).add(offset);render();}
+  });
+
+  const unbindKitchen = bindKitchenInputs(renderer.domElement, {
+    canInteract: () => !furnitureTool && !wallPointsGroup.children.length && !walker.isActive() && !renderer.isVRActive?.() && controlMode === "orbit",
+    pick: pickInteractive,
+    render,
   });
 
   const resize = () => {
@@ -7948,7 +8158,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     startVR:settings=>{if(!renderer.startVR)throw Error("VR needs the modern renderer. / VR به نمایشگر جدید نیاز دارد.");render();return renderer.startVR(settings);},
     stopVR:()=>renderer.stopVR?.(),
     supportsVR:renderer.supportsVR===true,
-    startWalkthrough:()=>{if(renderer.isVRActive?.())return;clearFurniturePreview();walker.start();renderer.setWalkthroughActive?.(true);setInteriorView(false);render();},
+    startWalkthrough:()=>{if(renderer.isVRActive?.())return;clearFurniturePreview();walker.start();enterInterior(true);setInteriorView(false);render();},
     stopWalkthrough:()=>walker.stop(),
     setWalkAxis:(forward,right)=>walker.setAxis(forward,right),
     turnWalk:(yaw,pitch)=>walker.turn(yaw,pitch),
@@ -7979,10 +8189,12 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     zoomOut: () => {stopMotion();zoomBy(-1);},
     dispose: () => {
       walker.dispose();
+      if (demoFrame !== null) window.cancelAnimationFrame(demoFrame);
       window.removeEventListener('ventra:surface-resource',surfaceResource);
       clearSelection();clearWallPoints();
       unbindFurniture();
       unbindInputs();
+      unbindKitchen();
       resizeObserver?.disconnect();
       threeScene.traverse?.((object) => {
         try { object.geometry?.dispose?.(); } catch {}

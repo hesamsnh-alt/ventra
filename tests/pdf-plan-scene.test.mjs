@@ -1,3 +1,4 @@
+import {buildReferenceBed,buildReferenceSofa} from '../src/lib/referenceFurniture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -75,7 +76,7 @@ test('full structured Three renderer uses native heights, glass walls and exact 
  const {decorateSurfaceMesh,surfaceMaterialList}=await import('../src/lib/surfaceMaterials.mjs');
  const {configureFloorDepth}=await import('../src/lib/floorDepthLayers.mjs');
  const {sourcePresentationAssets}=await import('../src/lib/sourceFurniture.mjs');
- const context=vm.createContext({THREE,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});
+ const context=vm.createContext({buildReferenceBed,buildReferenceSofa,THREE,console:{log(){},warn(){},error(){}},structuredClone,decorateSurfaceMesh,surfaceMaterialList,configureFloorDepth,sourcePresentationAssets});
  vm.runInContext(declarations.map(n=>source.slice(n.start,n.end)).join('\n'),context);context.getThree=()=>THREE;
  for(const data of scene.pdfStoreys){const target=new THREE.Scene(),viewer={impl:{scene:target,removeOverlayScene(){},invalidate(){}},navigation:{}};
   const result=context.renderStructuredSchematicScene(viewer,data);assert.equal(result.structured,true);assert.equal(result.openingCount,data.openings.length);assert.equal(result.height,data.height);assert.equal(result.assetMeshCount,0);

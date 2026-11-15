@@ -1,3 +1,4 @@
+import {OUTDOOR_GROUND_ID,outdoorGround} from './outdoorGround.mjs';
 import {loadPersonalTexture} from './personalTextureResources.mjs';
 import {markTextureResourceReady} from './textureBridge.mjs';
 import {validAssetId} from './personalAssets.mjs';
@@ -66,6 +67,7 @@ export const surfaceKey=target=>JSON.stringify([target.kind,String(target.id),..
 export function validSurfaceTarget(scene,target){
   if(!target||typeof target.id!=='string'||!target.id)return false;
   if(target.side!==undefined&&(target.kind!=='wall'||!WALL_SURFACE_SIDES.includes(target.side)))return false;
+  if(target.kind==='outdoor-ground')return target.id===OUTDOOR_GROUND_ID&&Boolean(outdoorGround(scene));
   if(target.kind==='floor-base')return target.id==='footprint'&&scene.footprint?.length>=3;
   if(target.kind==='floor')return scene.rooms?.some(r=>String(r.id)===target.id&&!r.scopeOnly);
   if(target.kind==='wall')return scene.walls?.some(w=>String(w.id)===target.id&&w.type!=='railing');

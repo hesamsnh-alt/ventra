@@ -6,3 +6,15 @@ test('physical materials distinguish textiles and reflective metals',()=>{assert
 test('balanced lighting preserves highlight headroom instead of increasing white exposure',()=>{
  assert.ok(PHYSICAL_PREVIEW_LIGHTING.exposure<1);assert.ok(PHYSICAL_PREVIEW_LIGHTING.key<2);assert.ok(PHYSICAL_PREVIEW_LIGHTING.environment<.5);assert.ok(PHYSICAL_PREVIEW_LIGHTING.fill<PHYSICAL_PREVIEW_LIGHTING.key);
 });
+
+test('polished marble, satin wood and chrome keep different physical responses',()=>{
+ const marble=physicalMaterialSettings({userData:{furnitureFinish:'stone-nero',furniturePbr:{roughness:.28,metalness:0}}});
+ const wood=physicalMaterialSettings({userData:{presentationFinish:'satinWood'}});
+ const chrome=physicalMaterialSettings({userData:{presentationFinish:'chrome'}});
+ const paint=physicalMaterialSettings({userData:{ventraSurfaceMaterial:'paint-white'}});
+ assert.ok(marble.roughness<wood.roughness&&wood.roughness<paint.roughness);
+ assert.ok(marble.clearcoat>wood.clearcoat);
+ assert.equal(marble.metalness,0);
+ assert.equal(chrome.metalness,1);
+ assert.equal(paint.clearcoat,undefined);
+});
