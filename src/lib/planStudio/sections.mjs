@@ -2,10 +2,14 @@ import {id} from './document.mjs';
 import {at,dist,point,EPS,validPolygon} from './geometry.mjs';
 
 export const SECTION_LAYER='section-details';
-export const SECTION_COMMANDS=['SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','WINDOWELEVATION','CEILINGSECTION'];
+export const SECTION_COMMANDS=['SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
 export const SECTION_DEFAULTS=Object.freeze({
  wallThickness:.2,slabThickness:.3,multilineWidth:.2,
  stairStyle:'return',firstRun:'right',risers:18,landing:.95,waist:.16,beamWidth:.2,beamHeight:.35,stories:1,
+ stepRiseMode:'step',stepRise:.175,stepTotal:1.575,stepDirection:'up',stepRun:'right',
+ stepStartLanding:0,stepEndLanding:0,stepWaist:.3,stepHatch:'concrete',
+ railHeight:.95,handrailSize:.05,handrailExtension:0,railBottomGap:.08,railTopGap:.08,
+ railBar:.016,railPost:.04,railSpacing:.12,railPostSpacing:1.2,railEndPosts:'yes',
  windowStyle:'sliding',sashes:2,frame:.05,sash:.035,transom:.5,
  board:.013,hangerSpacing:.6,
 });
@@ -164,7 +168,7 @@ export function saveSectionGeometry(doc,geometry,command,replaced=new Set()){
  if(layer?.locked||layer?.visible===false)throw Error('Show and unlock the section layer first. / ابتدا لایهٔ برش را روشن و باز کن.');
  if(geometry.length>2000||geometry.some(e=>[...(e.points||[]),...[e.a,e.b,e.center].filter(Boolean)].some(p=>!point(p))))
   throw Error('Section exceeds the drawing limits. / برش از محدودهٔ ترسیم خارج است.');
- const colors={SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
+ const colors={SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',STEPSSECTION:'#e7ce93',RAILINGELEVATION:'#a8c5dc',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
  const items=geometry.map(e=>({id:id(),layer:SECTION_LAYER,role:'section',color:colors[command],...e}));
  return {doc:{...doc,layers:layer?doc.layers:[...doc.layers,{id:SECTION_LAYER,name:'Sections / برش‌ها',color:'#bccfdd',dash:'solid',weight:.25,visible:true,locked:false}],
   entities:[...doc.entities.filter(e=>!replaced.has(e.id)),...items]},selection:items.map(e=>e.id)};

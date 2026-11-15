@@ -1,3 +1,4 @@
+import {stairStations, projectedStairSection, railingElevation} from './stairDetails.mjs';
 import {arrangePlanRoom} from './roomLayout.mjs';
 import {SECTION_DEFAULTS,sectionSelection,saveSectionGeometry,staircaseSection,ceilingSection,parallelLines} from './sections.mjs';
 import {shaftOutline} from './structures.mjs';
@@ -7,7 +8,7 @@ import {triangleShape,regularPolygonShape} from './shapes.mjs';
 import {id,newDocument,validateDocument,parsePoint,lengthValue} from './document.mjs';
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
-export const ALIASES={ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
+export const ALIASES={ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LXTB:'STEPSSECTION',STEPSSECTION:'STEPSSECTION',LG:'RAILINGELEVATION',RAIL:'RAILINGELEVATION',RAILINGELEVATION:'RAILINGELEVATION',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
 export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:'living',roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:3,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
 export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
@@ -46,7 +47,7 @@ function exactEndpoint(s,p){
  return{x:from.x+(p.x-from.x)/d*length,y:from.y+(p.y-from.y)/d*length};
 }
 export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
- const from=s.points.at(-1);if((shift||s.ortho)&&from){const dx=Math.abs(p.x-from.x),dy=Math.abs(p.y-from.y);p=dx>=dy?{x:p.x,y:from.y}:{x:from.x,y:p.y};}
+ const from=s.command==='STEPSSECTION'&&s.points.length===2?null:s.points.at(-1);if((shift||s.ortho)&&from){const dx=Math.abs(p.x-from.x),dy=Math.abs(p.y-from.y);p=dx>=dy?{x:p.x,y:from.y}:{x:from.x,y:p.y};}
  if(!s.snap)return exactEndpoint(s,p);let candidates=[];const visible=s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false);
  for(const e of visible)for(const seg of segments(e)){candidates.push(at(seg,0),at(seg,1),at(seg,.5));if(seg.type!=='line')candidates.push(seg.center);}
  // Intersection snap is bounded to nearby curves; large drawings do not do O(n²) every move.
@@ -93,6 +94,16 @@ export function clickPoint(s,raw,event={}){
  if(cmd==='MULTILINE'){
   if(n>=3&&dist(p,s.points[0])<EPS)return submit(s,'C');
   return {...s,points:[...s.points,p]};
+ }
+ if(cmd==='STEPSSECTION'){
+  if(!n)return {...s,points:[p]};
+  const stations=stairStations(s.doc,s.points[0],n===1?p:s.points[1]);
+  if(n===1)return note({...s,points:[...s.points,p]},`${stations.length} tread lines / ${stations.length} خط پله`);
+  return commitSection(s,saveSectionGeometry(s.doc,projectedStairSection(stations,p,s.options.section),cmd));
+ }
+ if(cmd==='RAILINGELEVATION'){
+  if(!n)return {...s,points:[p]};
+  return commitSection(s,saveSectionGeometry(s.doc,railingElevation(s.points[0],p,s.options.section),cmd));
  }
  if(cmd==='SECTIONSTAIR'){
   if(!n)return {...s,points:[p]};

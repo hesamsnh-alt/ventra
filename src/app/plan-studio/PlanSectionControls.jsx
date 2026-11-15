@@ -7,6 +7,14 @@ export function sectionPrompt(command,count,t){
       return t('Select window rectangles, then press Enter.','مستطیل‌های پنجره را انتخاب کن و اینتر بزن.');
     case 'SECTIONSTAIR':
       return count?t('Pick the opposite corner at the next floor level.','گوشهٔ مقابل را روی تراز طبقهٔ بعد انتخاب کن.'):t('Pick a lower corner of the stair bay.','گوشهٔ پایین دهانهٔ پله را انتخاب کن.');
+    case 'STEPSSECTION':
+      return [
+        t('Pick just before the first tread line of one flight.','در امتداد یک بازو، کمی قبل از خط اول پله بزن.'),
+        t('Pick just after the last tread line of that flight.','در همان امتداد، کمی بعد از آخرین خط پله بزن.'),
+        t('Place the first riser of the section at its starting level.','جای اولین پله را در تراز شروع مقطع بزن.'),
+      ][count];
+    case 'RAILINGELEVATION':
+      return count?t('Pick the other end of the railing baseline.','سر دیگر خط مبنای نرده را بزن.'):t('Pick one end of the railing baseline.','یک سر خط مبنای نرده را بزن.');
     case 'CEILINGSECTION':
       return [t('Pick the first overhead support.','تکیه‌گاه اول بالای سقف را انتخاب کن.'),
         t('Pick the opposite overhead support.','تکیه‌گاه مقابل را انتخاب کن.'),
@@ -41,6 +49,8 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
         ['WW','SECTIONWALL','Wall section','ضخامت دیوار'],
         ['SSL','SECTIONSLAB','Slab section','ضخامت دال'],
         ['LTP','SECTIONSTAIR','Stair section','مقطع پله'],
+        ['LXTB','STEPSSECTION','Section from treads','مقطع از خطوط پله'],
+        ['LG','RAILINGELEVATION','Railing elevation','نمای نرده'],
         ['WDE','WINDOWELEVATION','Window elevation','نمای پنجره'],
         ['SGB','CEILINGSECTION','Suspended ceiling','سقف کاذب'],
         ['ML','MULTILINE','Parallel lines','دو خط موازی'],
@@ -60,6 +70,28 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
       {size('waist','Flight thickness','ضخامت شمشیری',.04)}
       {size('beamWidth','Beam width','عرض تیر',.03)}
       {size('beamHeight','Beam depth','ارتفاع تیر',.04)}
+    </fieldset>}
+    {command==='STEPSSECTION'&&<fieldset><legend>{t('Section from treads','مقطع از خطوط پله')}</legend>
+      {choice('stepRiseMode','Height input','روش تعیین ارتفاع',[['step','Per riser','هر پله'],['total','Total flight rise','ارتفاع کل بازو']])}
+      {settings.stepRiseMode==='total'?size('stepTotal','Total flight rise','ارتفاع کل بازو',.02):size('stepRise','Height per riser','ارتفاع هر پله',.01)}
+      {choice('stepDirection','Elevation change','تغییر تراز',[['up','Ascending','بالارونده'],['down','Descending','پایین‌رونده']])}
+      {choice('stepRun','Direction in section','جهت در مقطع',[['right','Right','به راست'],['left','Left','به چپ']])}
+      {size('stepStartLanding','Start landing','طول پاگرد ابتدا',0)}
+      {size('stepEndLanding','End landing','طول پاگرد انتها',0)}
+      {size('stepWaist','Waist depth (0 for outline only)','ضخامت شمشیری (صفر برای خط مقطع)',0)}
+      {settings.stepWaist>0&&choice('stepHatch','Hatch','هاشور',[['concrete','Concrete','بتن'],['none','None','بدون هاشور']])}
+    </fieldset>}
+    {command==='RAILINGELEVATION'&&<fieldset><legend>{t('Railing settings','تنظیمات نرده')}</legend>
+      {size('railHeight','Total height','ارتفاع کل',.15)}
+      {size('handrailSize','Handrail thickness','ضخامت دست‌انداز',.005)}
+      {size('handrailExtension','Handrail extension at each end','بیرون‌زدگی دست‌انداز در هر سر',0)}
+      {size('railTopGap','Gap below handrail','فاصلهٔ زیر دست‌انداز',0)}
+      {size('railBottomGap','Gap below lower rail','فاصلهٔ زیر ریل پایین',0)}
+      {size('railBar','Bar thickness','ضخامت میله',.005)}
+      {size('railSpacing','Maximum bar spacing','حداکثر فاصلهٔ محور میله‌ها',.005)}
+      {size('railPost','Post thickness','ضخامت پایه',.005)}
+      {size('railPostSpacing','Maximum post spacing','حداکثر فاصلهٔ محور پایه‌ها',.01)}
+      {choice('railEndPosts','Posts at both ends','پایه در ابتدا و انتها',[['yes','Yes','بله'],['no','No','خیر']])}
     </fieldset>}
     {command==='WINDOWELEVATION'&&<fieldset><legend>{t('Window elevation settings','تنظیمات نمای پنجره')}</legend>
       {choice('windowStyle','Window type','نوع پنجره',[
