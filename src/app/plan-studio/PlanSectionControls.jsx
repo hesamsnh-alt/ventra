@@ -75,7 +75,7 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
         ['LG','RAILINGELEVATION','Railing elevation','نمای نرده'],
         ['WDE','WINDOWELEVATION','Window elevation','نمای پنجره'],
         ['SGB','CEILINGSECTION','Suspended ceiling','سقف کاذب'],
-        ['ML','MULTILINE','Parallel lines','دو خط موازی'],
+        ['ML','MULTILINE','Multiline wall','دیوار دولاینه'],
       ].map(([code,name,en,fa])=><button key={code} aria-pressed={command===name} onClick={()=>onStart(code)}><kbd>{code}</kbd>{t(en,fa)}</button>)}
     </div>
     {command==='GRIDCOLUMNS'&&<fieldset><legend>{t('Column symbol dimensions','ابعاد علامت ستون')}</legend>
@@ -94,7 +94,13 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
     {command==='PERIMETERDIMENSIONS'&&size('perimeterDimOffset','Dimension offset','فاصلهٔ خط اندازه',.05)}
     {command==='SECTIONWALL'&&thickness('wallThickness','Wall thickness','ضخامت دیوار')}
     {command==='SECTIONSLAB'&&thickness('slabThickness','Slab thickness','ضخامت دال')}
-    {command==='MULTILINE'&&size('multilineWidth','Distance between lines','فاصلهٔ بین دو خط',.01)}
+    {command==='MULTILINE'&&<fieldset>
+      <legend>{t('Multiline settings','تنظیمات دیوار دولاینه')}</legend>
+      {choice('multilinePurpose','Use in 3D','کاربرد در سه‌بعدی',[
+        ['wall','Wall with height','دیوار با ارتفاع'],['drafting','2D drafting lines','خط ترسیمی دوبعدی'],
+      ])}
+      {size('multilineWidth','Distance between lines','فاصلهٔ بین دو خط',.01)}
+    </fieldset>}
     {['SECTIONSTAIR','STEPSSECTION',STAIR_NUMBER_COMMAND].includes(command)&&<fieldset>
       <legend>{t('Stair numbering','شماره‌گذاری پله')}</legend>
       {command!==STAIR_NUMBER_COMMAND&&choice('stairNumbering','Number steps on creation','شماره‌گذاری هنگام ترسیم',

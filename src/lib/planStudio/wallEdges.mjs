@@ -1,3 +1,5 @@
+import {DEFAULT_MULTILINE_HEIGHT,legacyMultilinePair} from './multilineWalls.mjs';
+import {wallFaceLines} from './openings.mjs';
 import {id} from './document.mjs';
 import {dist,EPS,nearest,segments,sub} from './geometry.mjs';
 import {dot,guides,normal,unit} from './draftingGeometry.mjs';
@@ -90,11 +92,27 @@ export function useWallEdges(doc,pair,options){
  const sources=[first,second];
  if(sources.some(edge=>doc.layers.find(layer=>layer.id===edge.layer)?.locked))
   throw Error('Unlock both wall edge layers first. / ابتدا لایهٔ هر دو خط را باز کن.');
- const wall={id:id(),type:'line',role:'wall',a,b,thickness,height:options.wallHeight,z:first.z??options.z,
+ const legacy=legacyMultilinePair(doc,first.id,second.id);
+ const mlGroup=first.mlGroup&&first.mlGroup===second.mlGroup?first.mlGroup:legacy?.first.id;
+ const mlInner=legacy?legacy.inner:first.mlInner;
+ const faceSide=edge=>legacy?Number(edge.id===legacy.second.id):edge.mlSide;
+ const wall={id:id(),type:'line',role:'wall',a,b,thickness,
+  height:mlGroup?(first.height??DEFAULT_MULTILINE_HEIGHT):options.wallHeight,z:first.z??options.z,
   layer:first.layer,color:first.color??'bylayer',wallFromEdges:true};
+ if(mlGroup){
+  wall.mlGroup=mlGroup;
+  wall.mlInner=mlInner;
+  if(mlInner!==null&&mlInner!==undefined){
+   const expected=edgeEnds[sources.findIndex(source=>faceSide(source)===mlInner)][0];
+   const [f0,f1]=wallFaceLines({entities:[]},wall);
+   wall.mlInnerFace=dist(f0.a,expected)<=dist(f1.a,expected)?0:1;
+  }
+ }
  const entities=doc.entities.flatMap(entity=>{
   const index=sources.findIndex(edge=>edge.id===entity.id);
-  return index<0?[entity]:withoutWallSpan(entity,sources[index].segment,edgeEnds[index]);
+  if(index<0)return [entity];
+  const face=mlGroup?{...entity,mlGroup,mlInner,mlSide:faceSide(entity),height:wall.height,z:wall.z}:entity;
+  return withoutWallSpan(face,sources[index].segment,edgeEnds[index]);
  });
  return {wall,doc:{...doc,entities:[...entities,wall]}};
 }

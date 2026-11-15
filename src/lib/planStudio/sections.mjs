@@ -9,7 +9,7 @@ export const SECTION_COMMANDS=['PLANSECTIONCUT','PERIMETERDIMENSIONS',...GRID_CO
 export const SECTION_DEFAULTS=Object.freeze({
  gridColumnWidth:.4,gridColumnDepth:.4,gridLabelOffset:.35,gridBubbleRadius:.13,
  perimeterDimOffset:.45,cutDepth:6,cutLabel:'A',
- wallThickness:.2,slabThickness:.3,multilineWidth:.2,
+ wallThickness:.2,slabThickness:.3,multilineWidth:.2,multilinePurpose:'wall',
  stairStyle:'return',firstRun:'right',risers:18,landing:.95,waist:.16,beamWidth:.2,beamHeight:.35,stories:1,
  stairNumbering:'yes',stairFirstNumber:1,stairNumberSize:.12,
  stepRiseMode:'step',stepRise:.175,stepTotal:1.575,stepDirection:'up',stepRun:'right',

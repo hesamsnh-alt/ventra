@@ -1,3 +1,4 @@
+import {multilinePreview} from './multilineWalls.mjs';
 import {openingPlanGeometry} from './openings.mjs';
 import {shaftOuter,shaftFitsFloor} from './structures.mjs';
 import * as T from 'three';
@@ -32,6 +33,20 @@ export function planWallGeometry(e,openings=[]){
 }
 export function createPlanScene(doc){
  const root=new T.Group(),entities=visibleEntities(doc),b=bounds(entities),matCache=new Map();const mat=(color,metal=false)=>{const k=color+metal;if(!matCache.has(k))matCache.set(k,material(color,metal));return matCache.get(k);};
+ const {bands,floors}=multilinePreview(entities);
+ for(const band of bands){
+  const shape=shapeFromPoints(band.points);
+  for(const hole of band.holes)shape.holes.push(new T.Path(hole.map(p=>new T.Vector2(p.x,p.y))));
+  const mesh=addMesh(root,new T.ExtrudeGeometry(shape,{depth:band.height,bevelEnabled:false}),mat(band.surfaceColor||'#d9d3c5'));
+  mesh.position.z=band.z;mesh.userData={mlGroup:band.group,planRole:'multiline-wall'};
+ }
+ for(const floor of floors){
+  const shape=shapeFromPoints(floor.points);
+  for(const shaft of entities.filter(e=>e.role==='shaft'&&Math.abs((e.z||0)-floor.z)<1e-6&&shaftFitsFloor(e,floor)))
+   shape.holes.push(new T.Path(shaftOuter(shaft).map(p=>new T.Vector2(p.x,p.y))));
+  const mesh=addMesh(root,new T.ExtrudeGeometry(shape,{depth:floor.height,bevelEnabled:false}),floorMaterial({}));
+  mesh.position.z=floor.z-floor.height;mesh.userData={mlGroup:floor.group,planRole:'automatic-floor'};
+ }
  for(const e of entities){if(e.role==='hatch'||e.role==='section')continue;const group=new T.Group();group.userData={planEntityId:e.id};root.add(group);const color=styleFor(doc,e).color;
   if(e.role==='floor'&&e.type==='polyline'&&e.closed){const floor=shapeFromPoints(e.points);for(const shaft of entities.filter(x=>x.role==='shaft'&&Math.abs((x.z||0)-(e.z||0))<1e-6&&shaftFitsFloor(x,e)))floor.holes.push(new T.Path(shaftOuter(shaft).map(p=>new T.Vector2(p.x,p.y))));const mesh=addMesh(group,new T.ExtrudeGeometry(floor,{depth:e.height||.12,bevelEnabled:false}),floorMaterial(e));mesh.position.z=(e.z||0)-(e.height||.12);}
   if(e.role==='shaft'){const ring=shapeFromPoints(shaftOuter(e));ring.holes.push(new T.Path(e.points.map(p=>new T.Vector2(p.x,p.y))));const walls=addMesh(group,new T.ExtrudeGeometry(ring,{depth:e.height+e.pitDepth,bevelEnabled:false}),mat(e.surfaceColor||'#929795'));walls.position.z=(e.z||0)-e.pitDepth;const slab=addMesh(group,new T.ExtrudeGeometry(shapeFromPoints(shaftOuter(e)),{depth:e.thickness,bevelEnabled:false}),mat(e.surfaceColor||'#929795'));slab.position.z=(e.z||0)-e.pitDepth-e.thickness;}
