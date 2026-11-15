@@ -94,3 +94,21 @@ test('AF asks for a fresh template before drawing and cancels without changing t
   ['counter','cooker','basin','fridge']);
  assert.equal(kitchen.doc.entities.at(-1).hatch,'tile');
 });
+
+for(const [kind,width,depth,catalogIds] of [
+ ['bathroom',1.6,2,['shower','toilet','basin']],
+ ['bathroom',1.2,1.5,['toilet','basin']],
+ ['kitchen',1.65,1.8,['counter','cooker','basin','fridge']],
+ ['living',1.8,2.1,['sofa-modern','tv-console-oak']],
+ ['bedroom',1.25,2.1,['bed-modern']],
+]){
+ test(`AF fits a compact ${kind} in ${width} m × ${depth} m without placing failed full-layout assets`,()=>{
+  const original=state();
+  const options=chooseRoomLayout(startCommand(original,'AF'),kind);
+  const placed=click(click(options,0,0),width,depth);
+  const assets=placed.doc.entities.filter(e=>e.type==='asset');
+  assert.deepEqual(assets.map(e=>e.catalogId),catalogIds);
+  assert.match(placed.log.at(-1),/Compact room layout|Only essential items/);
+  assert.deepEqual(startCommand(placed,'UNDO').doc,original.doc);
+ });
+}

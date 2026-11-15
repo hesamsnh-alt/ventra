@@ -30,10 +30,11 @@ export function boxSelection(doc,a,b,{crossing=false}={}){
   return g.points.some(contains)||g.curves.some(c=>edges.some(edge=>curveIntersections(c,edge).length))||!!g.fill&&corners.some(g.fill);
  }).map(e=>e.id);
 }
+export const sweepTransform=s=>['MOVE','ROTATE'].includes(s.command)&&s.phase==='select';
 export function applyBoxSelection(state,box,{append=false}={}){
  const measure=state.command==='PERIMETERDIMENSIONS';
  const doc=measure?{...state.doc,entities:state.doc.entities.filter(canDimension)}:state.doc;
  const picked=boxSelection(doc,box.a,box.b,{crossing:box.crossing});
- if(measure)append=true;
+ if(measure||sweepTransform(state))append=true;
  return{...state,selection:append?[...new Set([...state.selection,...picked])]:picked};
 }

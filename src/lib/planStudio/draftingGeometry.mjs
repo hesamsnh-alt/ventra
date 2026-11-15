@@ -78,3 +78,53 @@ export function perimeterDimensions(entities, offset) {
     return result;
   });
 }
+
+const dimensionNumber=new Intl.NumberFormat('en',{maximumFractionDigits:3});
+function dimensionLane(entity,labelHeight,units){
+  const axis=unit(entity.a,entity.b), perpendicular=normal(axis);
+  const offset=entity.offsetDistance||.3, shift=p=>xy(p.x+perpendicular.x*offset,p.y+perpendicular.y*offset);
+  const a=shift(entity.a),b=shift(entity.b),center=xy((a.x+b.x)/2,(a.y+b.y)/2);
+  const unitsPerMetre=units==='in'?1/.0254:100;
+  const number=dimensionNumber.format(dist(entity.a,entity.b)*unitsPerMetre);
+  const halfWidth=(number.length+3)*labelHeight*.34;
+  const label={left:center.x-halfWidth,right:center.x+halfWidth,bottom:center.y-labelHeight*.58,top:center.y+labelHeight*.58};
+  return {a,b,axis,perpendicular,label};
+}
+
+function dimensionsConflict(candidate,other,spacing){
+  const a=candidate.label,b=other.label;
+  const labelsOverlap=a.left<b.right&&a.right>b.left&&a.bottom<b.top&&a.top>b.bottom;
+  if(labelsOverlap)return true;
+  if(Math.abs(dot(candidate.axis,other.axis))<.9999)return false;
+  const deltas=[sub(other.a,candidate.a),sub(other.b,candidate.a)];
+  const gap=Math.min(...deltas.map(delta=>Math.abs(dot(delta,candidate.perpendicular))));
+  if(gap>=spacing)return false;
+  const projected=deltas.map(delta=>dot(delta,candidate.axis));
+  return Math.min(dist(candidate.a,candidate.b),Math.max(...projected))-Math.max(0,Math.min(...projected))>EPS;
+}
+
+export function layoutDplDimensions(geometry,existing,{units,printScale,offset}){
+  const height=Math.max(.125,Math.min(.3,.0025*printScale));
+  const spacing=Math.max(.28,Math.min(offset,.65),height*1.3);
+  const dimensions=existing.filter(e=>e.type==='dimension');
+  const occupied=dimensions.map(e=>dimensionLane(e,height,units));
+  const covered=new Set(dimensions.map(e=>edgeKey(e.a,e.b)));
+  const placements=new Map();
+  const newDimensions=geometry.filter(e=>e.type==='dimension')
+    .sort((a,b)=>Math.abs(a.offsetDistance)-Math.abs(b.offsetDistance));
+  for(const entity of newDimensions){
+    const key=edgeKey(entity.a,entity.b);
+    if(covered.has(key))continue;
+    const outward=Math.sign(entity.offsetDistance)||1;
+    let next=entity, lane=dimensionLane(next,height,units);
+    for(let attempt=1;attempt<=64&&occupied.some(item=>dimensionsConflict(lane,item,spacing-EPS));attempt++){
+      next={...entity,offsetDistance:entity.offsetDistance+outward*spacing*attempt};
+      lane=dimensionLane(next,height,units);
+    }
+    covered.add(key);
+    occupied.push(lane);
+    placements.set(entity,next);
+  }
+  if(!placements.size)return [];
+  return geometry.flatMap(e=>e.type==='dimension'?(placements.has(e)?[placements.get(e)]:[]):[e]);
+}

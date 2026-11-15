@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clickPoint,chooseRoomLayout,editorState,startCommand,submit} from '../src/lib/planStudio/controller.mjs';
+import {previewTransform,clickPoint,chooseRoomLayout,editorState,startCommand,submit} from '../src/lib/planStudio/controller.mjs';
+import {applyBoxSelection} from '../src/lib/planStudio/boxSelection.mjs';
 import {newDocument} from '../src/lib/planStudio/document.mjs';
 import {multilinePreview} from '../src/lib/planStudio/multilineWalls.mjs';
 import {trimCurve,at,TAU} from '../src/lib/planStudio/geometry.mjs';
@@ -65,4 +66,59 @@ test('AF uses diagonal opposite picks with ORTHO enabled and retains the ML floo
  assert.ok(s.doc.entities.some(e=>e.catalogId==='toilet'));
  assert.ok(s.doc.entities.some(e=>e.roomFinish&&e.hatch==='tile'));
  assert.equal(multilinePreview(s.doc.entities).floors.length,1);
+});
+
+test('Move can start before selection, accumulates the marquee, and previews before saving',()=>{
+ const sources=[line('a',p(0,0),p(1,0)),line('b',p(0,1),p(1,1))];
+ const original=state(sources);
+ let s=startCommand(original,'M');
+ assert.equal(s.phase,'select');
+ s=applyBoxSelection(s,{a:p(-1,-1),b:p(2,2),crossing:false});
+ assert.deepEqual(s.selection,['a','b']);
+ s=clickPoint(submit(s,''),p(0,0),{raw:true});
+ const preview=previewTransform(s,p(3,2));
+ assert.deepEqual(preview.doc.entities.map(e=>e.a),[p(3,2),p(3,3)]);
+ assert.deepEqual(s.doc,original.doc);
+ s=clickPoint(s,p(3,2),{raw:true});
+ assert.deepEqual(s.doc.entities,preview.doc.entities);
+ assert.deepEqual(startCommand(s,'U').doc,original.doc);
+});
+
+test('Rotate accepts a pointer direction, a typed angle, and a typed direction coordinate',()=>{
+ const original=state([line('a',p(0,0),p(1,0))]);
+ let s=click(startCommand(original,'RO'),.5,0);
+ s=clickPoint(submit(s,''),p(0,0),{raw:true});
+ const preview=previewTransform(s,p(0,2));
+ for(const rotated of [clickPoint(s,p(0,2),{raw:true}),submit(s,'90'),submit(s,'@0,200')]){
+  assert.ok(Math.abs(rotated.doc.entities[0].b.x)<1e-8);
+  assert.equal(rotated.doc.entities[0].b.y,1);
+  assert.deepEqual(rotated.doc.entities,preview.doc.entities);
+ }
+});
+
+test('Move preserves a complete ML wall when only one face is selected',()=>{
+ let s=startCommand(state(),'ML');
+ for(const pt of [p(0,0),p(8,0),p(8,6),p(0,6)])s=clickPoint(s,pt,{raw:true});
+ s=submit(s,'C');
+ const before=s.doc.entities.map(e=>e.points[0].x);
+ s=startCommand({...s,selection:[s.doc.entities[0].id]},'M');
+ s=clickPoint(clickPoint(s,p(0,0),{raw:true}),p(5,0),{raw:true});
+ assert.deepEqual(s.doc.entities.map(e=>e.points[0].x),before.map(x=>x+5));
+ assert.equal(multilinePreview(s.doc.entities).floors.length,1);
+});
+
+test('Rotate can transform a host and its selected opening together',()=>{
+ const wall={...line('host',p(0,0),p(6,0)),role:'wall',height:3,thickness:.2};
+ const door={id:'door',layer:'architecture',type:'opening',kind:'door',wall:'host',width:1,height:2,offset:.5,z:0};
+ let s=startCommand({...state([wall,door]),selection:['host','door']},'RO');
+ s=clickPoint(clickPoint(s,p(0,0),{raw:true}),p(0,2),{raw:true});
+ assert.deepEqual(s.doc.entities.find(e=>e.id==='door'),door);
+ assert.equal(s.doc.entities[0].b.y,6);
+});
+
+test('Move can select a rendered dimension away from the measured source line',()=>{
+ const dimension={id:'size',layer:'dimensions',type:'dimension',a:p(0,0),b:p(5,0),offsetDistance:.45};
+ let s=startCommand(state([dimension]),'M');
+ s=click(s,2,.45);
+ assert.deepEqual(s.selection,['size']);
 });

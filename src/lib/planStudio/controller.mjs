@@ -1,7 +1,8 @@
+import {dimensionGeometry} from './render2d.mjs';
 import {createWallMultiline,DEFAULT_MULTILINE_HEIGHT} from './multilineWalls.mjs';
 import {chosenWallPair,pairedWallEdges,selectWallEdge,useWallEdges} from './wallEdges.mjs';
 import {boxSelection} from './boxSelection.mjs';
-import {canDimension,guides,normal,dot,unit,perimeterDimensions} from './draftingGeometry.mjs';
+import {canDimension,layoutDplDimensions,guides,normal,dot,unit,perimeterDimensions} from './draftingGeometry.mjs';
 import {columnSymbols,labelGrid} from './gridDrafting.mjs';
 import {planSectionCut} from './planSectionCut.mjs';
 import {stairPlanNumbers,stairStations, projectedStairSection, railingElevation} from './stairDetails.mjs';
@@ -36,8 +37,8 @@ export function startCommand(s,raw){
    s.doc.layers.find(layer=>layer.id===e.layer)?.visible!==false);
   if(selected.length===2)return applyWallEdges(s,chosenWallPair(...selected.map(e=>({...e,segment:0}))));
  }
- if(['MOVE','COPY','ROTATE','SCALE'].includes(command)&&!s.selection.length)throw Error('Select objects before this command. / ابتدا اجسام را انتخاب کن.');
- let phase=command==='TRIM'?'target':['EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':command==='ROOMLAYOUT'?'room-type':'';
+ if(['COPY','SCALE'].includes(command)&&!s.selection.length)throw Error('Select objects before this command. / ابتدا اجسام را انتخاب کن.');
+ let phase=['MOVE','ROTATE'].includes(command)&&!s.selection.length?'select':command==='TRIM'?'target':['EXTEND','EXTRIM'].includes(command)?'boundary':command==='OFFSET'?'distance':command==='ROOMLAYOUT'?'room-type':'';
  const selection=command==='ROOMLAYOUT'?[]:draftingSelectionCommand(command)?draftingSources(s,s.selection,command).map(e=>e.id):sectionSelectionCommand(command)?s.selection.filter(id=>s.doc.entities.find(e=>e.id===id)?.role!=='section'):s.selection;
  return note({...s,selection,command,phase,points:[],boundary:[],value:null,segmentLength:null,lastCommand:command},command+' → '+(phase||'first point'));
 }
@@ -66,7 +67,11 @@ export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
  const near=visible.filter(e=>(nearest(e,p)?.distance??Infinity)<tolerance*3).slice(0,32);for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++)for(const a of segments(near[i]))for(const b of segments(near[j]))candidates.push(...curveIntersections(a,b));
  candidates=candidates.filter(q=>dist(q,p)<tolerance&&(!(shift||s.ortho)||!from||Math.abs(q.x-from.x)<EPS||Math.abs(q.y-from.y)<EPS));if(candidates.length)p=candidates.sort((a,b)=>dist(a,p)-dist(b,p))[0];return exactEndpoint(s,p);
 }
-export function hitEntity(s,p,tolerance=.15){return s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false).map(e=>{const n=nearest(e,p);let distance=n?.distance??Infinity;if(e.role==='wall'&&e.type==='line')distance=Math.max(0,distance-e.thickness/2);if(e.type==='opening')distance=openingHitDistance(s.doc,e,p);if(e.role==='shaft'&&inside(p,e.points))distance=0;if(e.role==='hatch'&&hatchContains(e,p))distance=0;if(e.center){distance=Math.min(distance,dist(e.center,p));if(['asset','plate'].includes(e.type)){const a=-(e.rotation||0)*Math.PI/180,dx=p.x-e.center.x,dy=p.y-e.center.y;if(Math.abs(dx*Math.cos(a)-dy*Math.sin(a))<=e.width/2&&Math.abs(dx*Math.sin(a)+dy*Math.cos(a))<=e.depth/2)distance=0;}}if(e.position)distance=dist(e.position,p);if(e.type==='dimension')distance=nearest({type:'line',a:e.a,b:e.b},p)?.distance??Infinity;return{e,distance};}).filter(x=>x.distance<=tolerance).sort((a,b)=>a.distance-b.distance||(a.e.type==='opening'?-1:0)-(b.e.type==='opening'?-1:0))[0]?.e;}
+export function hitEntity(s,p,tolerance=.15){return s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false).map(e=>{const n=nearest(e,p);let distance=n?.distance??Infinity;if(e.role==='wall'&&e.type==='line')distance=Math.max(0,distance-e.thickness/2);if(e.type==='opening')distance=openingHitDistance(s.doc,e,p);if(e.role==='shaft'&&inside(p,e.points))distance=0;if(e.role==='hatch'&&hatchContains(e,p))distance=0;if(e.center){distance=Math.min(distance,dist(e.center,p));if(['asset','plate'].includes(e.type)){const a=-(e.rotation||0)*Math.PI/180,dx=p.x-e.center.x,dy=p.y-e.center.y;if(Math.abs(dx*Math.cos(a)-dy*Math.sin(a))<=e.width/2&&Math.abs(dx*Math.sin(a)+dy*Math.cos(a))<=e.depth/2)distance=0;}}if(e.position)distance=dist(e.position,p);if(e.type==='dimension'){
+ const d=dimensionGeometry(e);
+ distance=Math.min(...[[d.a,d.b],[e.a,d.a],[e.b,d.b]].map(([a,b])=>
+  nearest({type:'line',a,b},p)?.distance??Infinity));
+ }return{e,distance};}).filter(x=>x.distance<=tolerance).sort((a,b)=>a.distance-b.distance||(a.e.type==='opening'?-1:0)-(b.e.type==='opening'?-1:0))[0]?.e;}
 function drawRole(s){return s.command==='WALL'?{role:'wall',height:s.options.wallHeight,thickness:s.options.thickness,z:s.options.z}:s.command==='PIPE'?{role:'pipe',diameter:s.options.diameter,z:s.options.z}:{role:'line'};}
 const sectionSelectionCommand=command=>['SECTIONWALL','SECTIONSLAB','WINDOWELEVATION'].includes(command);
 function commitSection(s,result){
@@ -83,8 +88,12 @@ function draftingSources(s,ids,command=s.command){
 function applyDraftingSelection(s,ids){
  const sources=draftingSources(s,ids),options=s.options.section;
  const geometry=s.command==='GRIDCOLUMNS'?columnSymbols(sources,s.doc.entities,options):
-  s.command==='GRIDLABELS'?labelGrid(sources,options):perimeterDimensions(sources,options.perimeterDimOffset);
- if(!geometry.length)return note(finish(s),'Columns already placed. / ستون‌ها قبلاً درج شده‌اند.');
+  s.command==='GRIDLABELS'?labelGrid(sources,options):layoutDplDimensions(
+   perimeterDimensions(sources,options.perimeterDimOffset),visibleEntities(s.doc),
+   {units:s.doc.units,printScale:s.doc.printScale,offset:options.perimeterDimOffset});
+ if(!geometry.length)return note(finish(s),s.command==='PERIMETERDIMENSIONS'?
+  'The selection already has these dimensions. / این اندازه‌ها قبلاً ثبت شده‌اند.':
+  'Columns already placed. / ستون‌ها قبلاً درج شده‌اند.');
  return commitSection(s,saveSectionGeometry(s.doc,geometry,s.command));
 }
 
@@ -158,7 +167,9 @@ export function clickPoint(s,raw,event={}){
  if(cmd==='ROOMLAYOUT'){
   if(s.phase!=='room-corners')throw Error('Choose a room type first. / ابتدا نوع فضا را انتخاب کن.');
   if(!n)return {...s,points:[p]};
-  return commitSection(s,arrangePlanRoom(s.doc,s.points[0],p,{kind:s.options.roomLayout,z:s.options.z,tiles:s.options.roomTiles}));
+  const result=arrangePlanRoom(s.doc,s.points[0],p,{kind:s.options.roomLayout,z:s.options.z,tiles:s.options.roomTiles});
+  const next=commitSection(s,result);
+  return result.status?note(next,result.status):next;
  }
  if(cmd==='WALLEDGES'){
   const edge=selectWallEdge(s.doc,raw,event.tolerance??.15);
@@ -253,8 +264,14 @@ export function clickPoint(s,raw,event={}){
  }
  if(cmd==='OFFSET'){if(s.phase==='distance')throw Error('Enter offset distance first.');if(s.phase==='object'){if(!hit)throw Error('Pick a line, circle or arc.');return{...s,boundary:[hit.id],phase:'side'};}const e=s.doc.entities.find(e=>e.id===s.boundary[0]);return {...add(s,[{...offsetCurve(e,s.value,p),id:id()}],'OFFSET'),phase:'object',boundary:[]};}
  if(['MOVE','COPY','ROTATE','SCALE'].includes(cmd)){
-  if(!n)return{...s,points:[p]};if(cmd==='ROTATE'||cmd==='SCALE')throw Error('Enter rotation angle or scale factor.');
-  const v={x:p.x-s.points[0].x,y:p.y-s.points[0].y};return transformSelection(s,cmd.toLowerCase(),v);
+  if(s.phase==='select'){
+   const target=event.entityId?hit:hitEntity(s,raw,event.tolerance);
+   if(!target)return s;
+   return {...s,selection:s.selection.includes(target.id)?s.selection.filter(id=>id!==target.id):[...s.selection,target.id]};
+  }
+  if(!n)return {...s,points:[p],phase:'destination'};
+  if(cmd==='SCALE')throw Error('Enter a positive scale factor. / ضریب مثبت مقیاس را وارد کن.');
+  return transformSelection(s,cmd.toLowerCase(),transformPointerValue(s,p));
  }
  if(cmd==='HATCH'){
   const boundary=findHatchBoundary(s.doc,p);if(!boundary)throw Error('No closed boundary here. Join the endpoints or close the outline. / مرز بسته پیدا نشد؛ اتصال سرخط‌ها را بررسی کن.');
@@ -298,26 +315,75 @@ export function clickPoint(s,raw,event={}){
  }
  return s;
 }
-function transformSelection(s,kind,value){layerGuard(s);const selected=new Set(s.selection),map=new Map();for(const e of s.doc.entities)if(selected.has(e.id))map.set(e.id,id());const items=s.doc.entities.filter(e=>selected.has(e.id));if(items.some(e=>e.type==='opening')){
- if(kind!=='move'||items.length!==1||items[0].type!=='opening')throw Error('Move one opening along its wall; use its hinge/swing controls to turn it. / یک بازشو را روی دیوارش جابه‌جا کن.');
- layerGuard(s,[items[0].wall]);let delta=value;
- if(s.segmentLength){const wall=s.doc.entities.find(w=>w.id===items[0].wall),length=dist(wall.a,wall.b),sign=Math.sign(value.x*(wall.b.x-wall.a.x)+value.y*(wall.b.y-wall.a.y));delta={x:(wall.b.x-wall.a.x)/length*sign*s.segmentLength,y:(wall.b.y-wall.a.y)/length*sign*s.segmentLength};}
- const moved=slideOpening(s.doc,items[0],delta);return finish(commitDocument(s,{...s.doc,entities:s.doc.entities.map(e=>e.id===moved.id?moved:e)},'Move opening along wall'));
+function transformIds(s,kind){
+ const selected=new Set(s.selection);
+ if(kind!=='move'&&kind!=='rotate')return selected;
+ const groups=new Set(s.doc.entities.filter(e=>selected.has(e.id)&&e.mlGroup).map(e=>e.mlGroup));
+ for(const e of s.doc.entities)if(groups.has(e.mlGroup))selected.add(e.id);
+ return selected;
+}
+
+function transformPointerValue(s,p){
+ const base=s.points[0],x=p.x-base.x,y=p.y-base.y;
+ if(s.command!=='ROTATE')return {x,y};
+ if(Math.hypot(x,y)<EPS)throw Error('Pick a direction away from the base point. / جهت چرخش را دورتر از نقطهٔ مبنا انتخاب کن.');
+ return Math.atan2(y,x)*180/Math.PI;
+}
+
+function transformEntities(s,kind,value){
+ const selected=transformIds(s,kind);
+ layerGuard(s,[...selected]);
+ const attached=s.doc.entities.filter(e=>e.type==='opening'&&selected.has(e.wall));
+ layerGuard(s,attached.map(e=>e.id));
+ const items=s.doc.entities.filter(e=>selected.has(e.id)&&!(e.type==='opening'&&selected.has(e.wall)));
+ if(!items.length)throw Error('Select objects first. / ابتدا اجسام را انتخاب کن.');
+ if(items.some(e=>e.type==='opening')){
+  if(kind!=='move'||items.length!==1||items[0].type!=='opening')
+   throw Error('Move a single opening along its wall or select the host wall too. / یک بازشو را در امتداد دیوار حرکت بده یا دیوارش را هم انتخاب کن.');
+  layerGuard(s,[items[0].wall]);
+  let delta=value;
+  if(s.segmentLength){
+   const wall=s.doc.entities.find(w=>w.id===items[0].wall),length=dist(wall.a,wall.b);
+   const sign=Math.sign(value.x*(wall.b.x-wall.a.x)+value.y*(wall.b.y-wall.a.y));
+   delta={x:(wall.b.x-wall.a.x)/length*sign*s.segmentLength,y:(wall.b.y-wall.a.y)/length*sign*s.segmentLength};
+  }
+  const moved=slideOpening(s.doc,items[0],delta);
+  return s.doc.entities.map(e=>e.id===moved.id?moved:e);
  }
+ const transformed=new Map(items.map(e=>[e.id,transformEntity(e,kind,s.points[0],value)]));
+ if(kind!=='copy')return s.doc.entities.map(e=>{
+  if(kind==='scale'&&e.type==='opening'&&selected.has(e.wall))return {...e,width:e.width*value,height:e.height*value,z:e.z*value};
+  return transformed.get(e.id)??e;
+ });
  const copiedGroups=new Map();
- const transformed=items.map(e=>{
-  const entity=transformEntity(e,kind,s.points[0],value);
-  if(kind!=='copy')return entity;
-  entity.id=map.get(e.id);
+ for(const e of transformed.values()){
+  e.id=id();
   if(e.mlGroup){
    if(!copiedGroups.has(e.mlGroup))copiedGroups.set(e.mlGroup,id());
-   entity.mlGroup=copiedGroups.get(e.mlGroup);
+   e.mlGroup=copiedGroups.get(e.mlGroup);
   }
-  return entity;
- });let entities=kind==='copy'?[...s.doc.entities,...transformed]:s.doc.entities.map(e=>transformed.find(x=>x.id===e.id)||e);if(kind==='copy')entities.push(...s.doc.entities.filter(e=>e.type==='opening'&&selected.has(e.wall)).map(e=>({...e,id:id(),wall:map.get(e.wall)})));if(kind==='scale')entities=entities.map(e=>e.type==='opening'&&selected.has(e.wall)?{...e,width:e.width*value,height:e.height*value,z:e.z*value}:e);return finish(commitDocument(s,{...s.doc,entities},kind.toUpperCase()));}
+ }
+ return [...s.doc.entities,...transformed.values(),...attached.map(e=>({...e,id:id(),wall:transformed.get(e.wall).id}))];
+}
+
+export function previewTransform(s,p){
+ if(!p||!s.points.length||!['MOVE','ROTATE'].includes(s.command))return null;
+ try{
+  const kind=s.command.toLowerCase();
+  return {doc:{...s.doc,entities:transformEntities(s,kind,transformPointerValue(s,p))},selected:transformIds(s,kind)};
+ }catch{return null;}
+}
+
+function transformSelection(s,kind,value){
+ return finish(commitDocument(s,{...s.doc,entities:transformEntities(s,kind,value)},kind.toUpperCase()));
+}
 export function submit(s,raw){
  const text=String(raw).trim(),upper=text.toUpperCase();if(s.command==='SELECT')return text?startCommand(s,text):s.lastCommand?startCommand(s,s.lastCommand):s;
  if(upper==='ESC')return finish(s);
+ if(['MOVE','ROTATE'].includes(s.command)&&s.phase==='select'&&!text){
+  if(!s.selection.length)throw Error('Select objects first. / ابتدا اجسام را انتخاب کن.');
+  return {...s,phase:'base'};
+ }
  if(s.command==='WALL'&&s.options.wallAlignment!=='center'){
   if(upper==='U')return {...s,points:s.points.slice(0,-1)};
   if(!text||['C','CLOSE'].includes(upper)){
@@ -346,7 +412,7 @@ export function submit(s,raw){
  if(['LINE','WALL','SHEARWALL','PLINE','PIPE','FLOOR','TRIANGLE'].includes(s.command)&&upper==='U')return ['LINE','WALL','SHEARWALL'].includes(s.command)?{...startCommand(s,'UNDO'),command:s.command,segmentLength:s.segmentLength,points:s.points.slice(0,-1)}:{...s,points:s.points.slice(0,-1)};
  if(!text){if(['PLINE','PIPE'].includes(s.command)&&s.points.length>=2)return finish(add(s,[{type:'polyline',points:s.points,closed:false,...drawRole(s)}],s.command));if(s.command==='FLOOR'&&s.points.length>=3)return submit(s,'C');return finish(s);}
  if(s.command==='OFFSET'&&s.phase==='distance'){const value=lengthValue(text,s.doc.units);if(value<=0)throw Error('Offset must be positive.');return{...s,value,phase:'object'};}
- if(['ROTATE','SCALE'].includes(s.command)&&s.points.length){const value=Number(text);if(!Number.isFinite(value))throw Error('Enter a number.');return transformSelection(s,s.command.toLowerCase(),value);}
+ if(['ROTATE','SCALE'].includes(s.command)&&s.points.length&&!(s.command==='ROTATE'&&/[,<]/.test(text))){const value=Number(text);if(!Number.isFinite(value))throw Error('Enter a number.');return transformSelection(s,s.command.toLowerCase(),value);}
  if(s.command==='CIRCLE'&&s.points.length&&!text.includes(',')&&!text.includes('<')){const radius=lengthValue(text,s.doc.units);return finish(add(s,[{type:'circle',center:s.points[0],radius,start:0,sweep:TAU,role:'line'}],'CIRCLE'));}
  return clickPoint(s,parsePoint(text,s.points.at(-1),s.doc.units,s.cursor),{raw:true});
 }

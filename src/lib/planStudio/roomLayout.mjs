@@ -16,6 +16,21 @@ export const ROOM_LAYOUTS=[
  ['kitchen','Kitchen','آشپزخانه',['counter','cooker','basin','fridge']],
  ['bathroom','Bathroom','حمام و سرویس',['bath','toilet','basin']],
 ];
+// Smaller fixtures use explicit catalogue footprints. Every preset still
+// passes the same geometry, door swing and overlap checks.
+const compactLayouts={
+ living:[{items:[['sofa-modern',1.35,.78],['tv-console-oak',.9,.32]]},
+  {items:[['sofa-modern',1.25,.72]],essential:true}],
+ dining:[{items:[['dining-small',.75,.65]],chairs:2}],
+ bedroom:[{items:[['bed-modern',.9,1.95],['nightstand',.32,.32]]},
+  {items:[['bed-modern',.9,1.9]],essential:true}],
+ office:[{items:[['desk',.85,.48],['chair',.43,.45]]}],
+ kitchen:[{items:[['counter',.85,.52],['cooker',.45,.52],['basin',.42,.42],['fridge',.5,.56]]},
+  {items:[['counter',.8,.47],['basin',.42,.4]],essential:true}],
+ bathroom:[{items:['shower','toilet',['basin',.43,.35]]},
+  {items:['toilet','shower',['basin',.43,.35]]},
+  {items:['toilet',['basin',.43,.35]],essential:true}],
+};
 const models=new Map(FURNITURE_CATALOG.map(model=>[model.id,model]));
 const overlapping=(a,b)=>a.some(p=>inside(p,b))||b.some(p=>inside(p,a))||
  segments({type:'polyline',points:a,closed:true}).some(x=>
@@ -35,7 +50,7 @@ const toSceneAsset=e=>({id:e.id,type:models.get(e.catalogId)?.type,xMeters:e.cen
 export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
  const spec=ROOM_LAYOUTS.find(option=>option[0]===kind);
  const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),width=Math.abs(a.x-b.x),depth=Math.abs(a.y-b.y);
- if(!spec||width<1||depth<1)throw Error('Choose a room at least 1 m wide and deep. / دو گوشهٔ فضایی با عرض و طول حداقل یک متر را بزن.');
+ if(!spec||width<.8||depth<.8)throw Error('Choose a room at least 80 cm wide and deep. / دو گوشهٔ فضایی با عرض و طول حداقل ۸۰ سانتی‌متر را بزن.');
  const furnitureLayer=doc.layers.find(l=>l.id==='furniture');
  if(!furnitureLayer?.visible||furnitureLayer.locked)throw Error('Show and unlock the furniture layer. / لایهٔ مبلمان را روشن و باز کن.');
  const polygon=[{x,y},{x:x+width,y},{x:x+width,y:y+depth},{x,y:y+depth}],room={id:'arrange-room',polygon};
@@ -68,23 +83,57 @@ export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
  };
  const fits=c=>!placementProblem(c,scene,{manualFurniturePlacement:true})&&pdfFurnitureClear(c,scene)&&
   !swingLines.some(leaf=>furnitureOverlaps(c,leaf,scene))&&!hitsBand(c);
- const group=id(),placed=[];
- const make=model=>({id:id(),type:model.type,catalogId:model.id,roomId:room.id,width:model.width,depth:model.depth,height:model.height,zMeters:z});
- for(const catalogId of spec[3]){
-  const model=models.get(catalogId),candidate=make(model);
-  let chairs;
-  const best=placePdfFurniture(scene,room,candidate,c=>{
-   if(!fits(c))return false;
-   if(kind!=='dining')return true;
-   const chair=models.get('chair'),dx=c.width/2+chair.depth/2+.06,dy=c.depth/2+chair.depth/2+.06;
-   const t=c.rotation*Math.PI/180;
-   chairs=[[-dx,0,-90],[dx,0,90],[0,-dy,0],[0,dy,180]].map(([u,v,rotation])=>({...make(chair),
-    xMeters:c.xMeters+u*Math.cos(t)-v*Math.sin(t),yMeters:c.yMeters+u*Math.sin(t)+v*Math.cos(t),rotation:c.rotation+rotation}));
-   return chairs.every(fits);
-  });
-  if(!best)throw Error('Not enough clear space for this layout. / فضای آزاد کافی برای این چیدمان وجود ندارد.');
-  placed.push(best,...(chairs||[]));scene.assets.push(best,...(chairs||[]));
+ const group=id();
+ const make=(entry)=>{
+  const [catalogId,w,d]=Array.isArray(entry)?entry:[entry];
+  const model=models.get(catalogId);
+  return {id:id(),type:model.type,catalogId,roomId:room.id,width:w??model.width,depth:d??model.depth,height:model.height,zMeters:z};
+ };
+ const compactCandidates=candidate=>[0,90,180,270].flatMap(rotation=>{
+  const swapped=rotation%180!==0;
+  const hx=(swapped?candidate.depth:candidate.width)/2+.026;
+  const hy=(swapped?candidate.width:candidate.depth)/2+.026;
+  if(hx*2>width||hy*2>depth)return [];
+  const fractions=[0,1,.5,.25,.75];
+  return fractions.flatMap(fx=>fractions.map(fy=>({...candidate,rotation,
+   xMeters:x+hx+(width-2*hx)*fx,yMeters:y+hy+(depth-2*hy)*fy})));
+ });
+ function attemptLayout({items,chairs:chairCount,compact}){
+  const before=scene.assets.length,placed=[];
+  for(const entry of items){
+   const candidate=make(entry);
+   let chairs=[];
+   const withChairs=c=>{
+    if(!fits(c))return false;
+    if(!chairCount)return true;
+    const chair=compact?['chair',.42,.44]:'chair',prototype=make(chair);
+    const gap=compact ? .04 : .06;
+    const dx=c.width/2+prototype.depth/2+gap,dy=c.depth/2+prototype.depth/2+gap;
+    const t=c.rotation*Math.PI/180;
+    const targets=chairCount===2?[[0,-dy,0],[0,dy,180]]:[[-dx,0,-90],[dx,0,90],[0,-dy,0],[0,dy,180]];
+    chairs=targets.map(([u,v,rotation])=>({...make(chair),
+     xMeters:c.xMeters+u*Math.cos(t)-v*Math.sin(t),yMeters:c.yMeters+u*Math.sin(t)+v*Math.cos(t),rotation:c.rotation+rotation}));
+    return chairs.every(fits);
+   };
+   const best=placePdfFurniture(scene,room,candidate,withChairs)||
+    (compact&&compactCandidates(candidate).find(withChairs));
+   if(!best){scene.assets.length=before;return null;}
+   placed.push(best,...chairs);scene.assets.push(best,...chairs);
+  }
+  return placed;
  }
+ let status='',placed=attemptLayout({items:spec[3],chairs:kind==='dining'?4:0});
+ if(!placed){
+  for(const preset of compactLayouts[kind]){
+   placed=attemptLayout({...preset,compact:true});
+   if(!placed)continue;
+   status=preset.essential?
+    'Only essential items fit here. / فقط وسایل ضروری در این فضا جا شدند.':
+    'Compact room layout applied. / چیدمان جمع‌وجور درج شد.';
+   break;
+  }
+ }
+ if(!placed)throw Error('Not enough clear space even for the compact layout. / حتی چیدمان جمع‌وجور هم با فضای آزاد و بازشوی در جا نمی‌شود.');
  const output=placed.map(e=>({id:e.id,type:'asset',catalogId:e.catalogId,layer:'furniture',center:{x:e.xMeters,y:e.yMeters},
   width:e.width,depth:e.depth,height:e.height,rotation:e.rotation,z,color:'bylayer',modelColor:models.get(e.catalogId).color,setId:group}));
  if(tiles&&['kitchen','bathroom'].includes(kind)){
@@ -97,5 +146,5 @@ export function arrangePlanRoom(doc,a,b,{kind,z,tiles}){
    output.push({id:id(),type:'polyline',role:'floor',layer:'architecture',points:outline,closed:true,height:autoFloor ? .003 : .12,z:z+(autoFloor ? .003 : 0),roomFinish:Boolean(autoFloor),hatch:'tile',hatchScale:.3,color:'bylayer',surfaceColor:'#dcd7cb'});
   }
  }
- return {doc:{...doc,entities:[...doc.entities,...output]},selection:output.map(e=>e.id)};
+ return {doc:{...doc,entities:[...doc.entities,...output]},selection:output.map(e=>e.id),status};
 }

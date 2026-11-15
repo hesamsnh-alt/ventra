@@ -160,6 +160,22 @@ test('DPL accumulates a mouse marquee and click selection, ignoring existing dim
  assert.deepEqual(s.selection,['horizontal','duplicate','open']);
  assert.deepEqual(s.doc,original.doc);
  s=submit(s,'');
- assert.deepEqual(spaces(s.doc.entities.slice(4)),[3,2,5]);
+ assert.deepEqual(spaces(s.doc.entities.slice(4)),[2,5]);
  assert.deepEqual(startCommand(s,'U').doc,original.doc);
+});
+
+
+test('DPL spaces dimensions on overlapping parallel wall faces and leaves distant lines on the first lane',()=>{
+ const source=[
+  line('outer',p(0,0),p(10,0)),line('inner',p(.2,.2),p(9.8,.2)),
+  line('far',p(18,0),p(25,0)),
+ ];
+ const original=state(source);
+ const s=submit(startCommand({...original,selection:source.map(e=>e.id)},'DPL'),'');
+ const [first,second,distant]=outlines(s.doc.entities);
+ assert.equal(first.offsetDistance,.45);
+ assert.equal(distant.offsetDistance,.45);
+ assert.ok(second.a.y+second.offsetDistance-first.a.y-first.offsetDistance>=.45);
+ assert.deepEqual(spaces(s.doc.entities),[10,9.6,7]);
+ assert.deepEqual(submit(startCommand({...s,selection:source.map(e=>e.id)},'DPL'),'').doc,s.doc);
 });
