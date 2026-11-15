@@ -179,3 +179,60 @@ test('DPL spaces dimensions on overlapping parallel wall faces and leaves distan
  assert.deepEqual(spaces(s.doc.entities),[10,9.6,7]);
  assert.deepEqual(submit(startCommand({...s,selection:source.map(e=>e.id)},'DPL'),'').doc,s.doc);
 });
+
+test('LM sections closed ML walls and the automatic slab at their existing level',()=>{
+ let s=startCommand(editorState(),'ML');
+ s={...s,options:{...s.options,wallHeight:2.7,z:.5}};
+ for(const p of [[0,-2],[8,-2],[8,2],[0,2]])s=click(s,...p);
+ s=submit(s,'C');
+ const geometry=section(s.doc.entities,{cutDepth:3});
+ const cut=geometry.filter(e=>e.detailKind==='section-cut');
+ const walls=cut.filter(e=>e.hatch==='diagonal');
+ assert.equal(walls.length,2);
+ for(const wall of walls){
+  assert.ok(Math.abs(wall.points[1].x-wall.points[0].x-.2)<EPS);
+  assert.equal(wall.points[0].y,.5);
+  assert.equal(wall.points[2].y,3.2);
+ }
+ assert.ok(!walls.some(wall=>inside(p(5,2),wall.points)));
+ const [slab]=cut.filter(e=>e.hatch==='concrete');
+ assert.equal(slab.points[0].y,.38);
+ assert.equal(slab.points[2].y,.5);
+ const projected=geometry.filter(e=>e.detailKind==='section-projection');
+ assert.ok(projected.some(e=>inside(p(5,2),e.points)));
+});
+
+test('LM uses recovered ML walls from legacy trimmed pairs, with no section across the room interior',()=>{
+ const faces=[
+  {...line('l',p(0,-2),p(0,2)),mlGroup:'old',mlSide:0},
+  {...line('r',p(3,-2),p(3,2)),mlGroup:'old',mlSide:1},
+  line('l-edge',p(-.2,-2),p(-.2,2)),
+  line('r-edge',p(3.2,-2),p(3.2,2)),
+ ];
+ const cuts=section(faces,{cutDepth:0}).filter(e=>e.detailKind==='section-cut');
+ assert.equal(cuts.length,2);
+ assert.ok(cuts.every(cut=>Math.abs(cut.points[1].x-cut.points[0].x-.2)<EPS));
+ assert.ok(!cuts.some(cut=>inside(p(2,1.5),cut.points)));
+});
+
+test('LM4 uses an existing cut line, rejects occupied insertion, and creates four sections in one undo',()=>{
+ let s=startCommand(editorState(),'ML');
+ for(const p of [[0,0],[8,0],[8,4],[0,4]])s=click(s,...p);
+ s=submit(s,'C');
+ const guide=line('section-axis',p(-1,2),p(9,2));
+ s=state([...s.doc.entities,guide]);
+ const source=structuredClone(s.doc.entities);
+ s=click(startCommand(s,'LM4'),4,2);
+ assert.deepEqual(s.selection,[guide.id]);
+ assert.equal(s.points.length,2);
+ assert.throws(()=>click(s,4,1),/clear area/);
+ s=click(s,20,10);
+ const sections=s.doc.entities.slice(source.length);
+ const titles=sections.filter(e=>e.type==='text'&&e.detailKind!=='section-marker');
+ assert.deepEqual(titles.map(e=>e.text),['A1-A1','A2-A2','A3-A3','A4-A4']);
+ assert.ok(titles[0].position.y>titles[2].position.y);
+ assert.ok(titles[1].position.x>titles[0].position.x);
+ assert.equal(sections.filter(e=>e.detailKind==='section-marker'&&e.dash==='center').length,2);
+ assert.equal(sections.filter(e=>e.detailKind==='section-cut'&&e.hatch==='diagonal').length,8);
+ assert.deepEqual(startCommand(s,'UNDO').doc.entities,source);
+});

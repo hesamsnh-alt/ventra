@@ -11,6 +11,12 @@ export function sectionPrompt(command,count,t){
         t('Pick a corner around the axes, or press Enter to apply to preselected lines.','گوشهٔ کادر آکس‌ها را بزن یا برای اعمال به خطوط انتخاب‌شده اینتر بزن.');
     case 'PERIMETERDIMENSIONS':
       return t('Click or drag to select lines and outlines. Click a selected object to remove it. Press Enter to dimension the selection.','با کلیک یا کادر، خط‌ها و پلی‌لاین‌ها را انتخاب کن. کلیک دوباره انتخاب را برمی‌دارد. برای اندازه‌گذاری همه، اینتر بزن.');
+    case 'PLANSECTIONFOUR':
+      return [
+        t('Select a straight cut line, or pick its first endpoint.','خط مستقیم برش را انتخاب کن یا ابتدای آن را بزن.'),
+        t('Pick the other endpoint.','انتهای خط برش را بزن.'),
+        t('Pick the lower corner of a clear area for the four sections.','گوشهٔ پایینِ فضای خالی برای درج چهار برش را بزن.'),
+      ][count];
     case 'PLANSECTIONCUT':
       return [
         t('Pick the first endpoint of the cut across the plan.','ابتدای خط برش روی پلان را بزن.'),
@@ -66,7 +72,8 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
       {[
         ['ZZBZ','GRIDCOLUMNS','Columns at grid crossings','ستون‌گذاری تقاطع آکس‌ها'],
         ['AZH','GRIDLABELS','Grid labels and dimensions','شماره و اندازهٔ آکس‌ها'],
-        ['LM','PLANSECTIONCUT','Section from plan','برش از پلان'],
+        ['LM4','PLANSECTIONFOUR','Four sections','چهار برش از پلان'],
+        ['LM','PLANSECTIONCUT','Single section','تک‌برش از پلان'],
         ['DPL','PERIMETERDIMENSIONS','Dimension selection','اندازه‌گذاری انتخاب'],
         ['WW','SECTIONWALL','Wall section','ضخامت دیوار'],
         ['SSL','SECTIONSLAB','Slab section','ضخامت دال'],
@@ -86,9 +93,9 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
       {size('gridLabelOffset','Dimension offset','فاصلهٔ خط اندازه',.1)}
       {size('gridBubbleRadius','Bubble radius','شعاع دایرهٔ آکس',.04)}
     </fieldset>}
-    {command==='PLANSECTIONCUT'&&<fieldset><legend>{t('Plan section settings','تنظیمات برش از پلان')}</legend>
-      {size('cutDepth','Projection depth (0 for cut only)','عمق نمایش پشت برش (صفر برای خود برش)',0)}
-      <label>{t('Section label','عنوان برش')}<input maxLength={4} dir="ltr" value={settings.cutLabel}
+    {['PLANSECTIONCUT','PLANSECTIONFOUR'].includes(command)&&<fieldset><legend>{t('Plan section settings','تنظیمات برش از پلان')}</legend>
+      {command==='PLANSECTIONCUT'&&size('cutDepth','Projection depth (0 for cut only)','عمق نمایش پشت برش (صفر برای خود برش)',0)}
+      <label>{t('Section label','عنوان برش')}<input maxLength={command==='PLANSECTIONFOUR'?3:4} dir="ltr" value={settings.cutLabel}
         onChange={event=>onChange('cutLabel',event.target.value.toUpperCase())}/></label>
     </fieldset>}
     {command==='PERIMETERDIMENSIONS'&&size('perimeterDimOffset','Dimension offset','فاصلهٔ خط اندازه',.05)}

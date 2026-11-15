@@ -11,6 +11,7 @@ import {shaftOutline,shaftSize} from '@/lib/planStudio/structures.mjs';
 import {slideOpening,openingProblem} from '@/lib/planStudio/openings.mjs';
 import PlanLengthControl from './PlanLengthControl';
 import PlanProjectTransfer from './PlanProjectTransfer';
+import PlanHistory from './PlanHistory';
 import {DXF_UNIT_OPTIONS,importDxf,readDxf} from '@/lib/planStudio/importDxf.mjs';
 import {inspectPlanGlb,PLAN_MODEL_MAX_BYTES} from '@/lib/planStudio/modelFile.mjs';
 import {APS_PLAN_FILE_TYPES} from '@/lib/planStudio/projectTransfer.mjs';
@@ -21,7 +22,7 @@ import {ALIASES,moveOpening,removeHatch,LENGTH_COMMANDS,setSegmentLength,preview
 import {newDocument,validateDocument,id,displayLength,lengthValue,styleFor,HATCHES,visibleEntities} from '@/lib/planStudio/document.mjs';
 import {dist,arc3} from '@/lib/planStudio/geometry.mjs';
 import {entitySVG,pathData,hatchPattern} from '@/lib/planStudio/render2d.mjs';
-import {savePlan,loadPlan,loadPlanModel,listPlans} from '@/lib/planStudio/storage.mjs';
+import {savePlan,loadPlan,loadPlanModel,listPlans,restorePlanRevision} from '@/lib/planStudio/storage.mjs';
 import {download,exportDXF,exportJPG,exportPDF} from '@/lib/planStudio/export.mjs';
 import {FURNITURE_CATALOG} from '@/lib/furnitureEditor.mjs';
 import {FURNITURE_CATEGORIES,filterFurniture} from '@/lib/furnitureCategories.mjs';
@@ -42,7 +43,7 @@ export default function PlanStudio(){
  const[s,setState]=useState(null),[view,setView]=useState({x:-1,y:-1,width:12}),[size,setSize]=useState({width:900,height:600}),[input,setInput]=useState(''),[error,setError]=useState(''),[saved,setSaved]=useState(''),[plans,setPlans]=useState([]),[mode,setMode]=useState('split'),[catalog,setCatalog]=useState(null),[category,setCategory]=useState('sofas'),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[ready,setReady]=useState(false),[cursor,setCursor]=useState(null),[finish,setFinish]=useState('wood-oak'),[touchPan,setTouchPan]=useState(false),[mobileCommand,setMobileCommand]=useState(false),[marquee,setMarquee]=useState(null),[openingMotion,setOpeningMotion]=useState(null);
  const [importedModel,setImportedModel]=useState(null),[pendingDxf,setPendingDxf]=useState(null),
   [cadUnits,setCadUnits]=useState(''),[cadFile,setCadFile]=useState(null),[importNotice,setImportNotice]=useState('');
- const [stairSweep,setStairSweep]=useState(null);
+ const [stairSweep,setStairSweep]=useState(null),[historyOpen,setHistoryOpen]=useState(false);
  const touch=useRef(null),panRef=useRef(touchPan),catalogRef=useRef(catalog),lastPointer=useRef(null);panRef.current=touchPan;catalogRef.current=catalog;
  const stateRef=useRef(s),viewRef=useRef(view),sizeRef=useRef(size),svg=useRef(null),stage=useRef(null),root=useRef(null),commandInput=useRef(null),file=useRef(null),drag=useRef(null),space=useRef(false),autosave=useRef(0);viewRef.current=view;sizeRef.current=size;
  const update=value=>{stateRef.current=typeof value==='function'?value(stateRef.current):value;setState(stateRef.current);};
@@ -82,7 +83,7 @@ export default function PlanStudio(){
   initialize();
   return()=>{live=false;};
  },[]);
- useEffect(()=>{if(!ready||!s)return;setSaved(t('Unsaved changes…','تغییرات ذخیره نشده…'));const version=++autosave.current,doc=s.doc;const timer=setTimeout(async()=>{try{await savePlan(doc);if(version===autosave.current){localStorage.setItem('ventra-plan-studio:last',doc.id);setSaved(t('Saved locally · export JSON for backup','ذخیرهٔ محلی · برای نسخهٔ پشتیبان JSON بگیر'));setPlans(await listPlans());}}catch(e){if(version===autosave.current){setSaved(t('Save failed','ذخیره ناموفق'));setError(e.message);}}},650);return()=>clearTimeout(timer);},[s?.doc,ready]);
+ useEffect(()=>{if(!ready||!s)return;setSaved(t('Unsaved changes…','تغییرات ذخیره نشده…'));const version=++autosave.current,doc=s.doc;const timer=setTimeout(async()=>{try{if(version!==autosave.current)return;await savePlan(doc);if(version===autosave.current){localStorage.setItem('ventra-plan-studio:last',doc.id);setSaved(t('Saved locally · export JSON for backup','ذخیرهٔ محلی · برای نسخهٔ پشتیبان JSON بگیر'));setPlans(await listPlans());}}catch(e){if(version===autosave.current){setSaved(t('Save failed','ذخیره ناموفق'));setError(e.message);}}},650);return()=>clearTimeout(timer);},[s?.doc,ready]);
  useEffect(()=>{const node=stage.current;if(!node)return;const resize=new ResizeObserver(([entry])=>setSize({width:entry.contentRect.width,height:entry.contentRect.height}));resize.observe(node);return()=>resize.disconnect();},[ready,mode]);
  function toWorld(e){const r=svg.current.getBoundingClientRect(),v=viewRef.current,h=v.width*r.height/r.width;return{x:v.x+(e.clientX-r.left)/r.width*v.width,y:v.y+(1-(e.clientY-r.top)/r.height)*h};}
  useEffect(()=>{const node=svg.current;if(!node)return;const wheel=e=>{e.preventDefault();const p=toWorld(e),v=viewRef.current,f=Math.exp(Math.max(-.2,Math.min(.2,e.deltaY*.001))),next=zoomPlanView(v,sizeRef.current,f,p);viewRef.current=next;setView(next);};node.addEventListener('wheel',wheel,{passive:false});return()=>node.removeEventListener('wheel',wheel);},[ready,mode]);
@@ -120,6 +121,28 @@ export default function PlanStudio(){
   if(e.code==='Space'){e.preventDefault();space.current=true;return;}if(e.key==='Delete'){e.preventDefault();run('E');return;}if(e.key==='Enter'){e.preventDefault();attempt(s=>submit(s,''));return;}if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();setInput(e.key);commandInput.current?.focus();}
  }
  async function manualSave(){try{await savePlan(stateRef.current.doc);setSaved(t('Saved on this device','روی همین دستگاه ذخیره شد'));setPlans(await listPlans());}catch(e){setError(e.message);}}
+ async function openHistory(){
+  if(busy||historyOpen)return;
+  setBusy(true);setError('');
+  try{
+   const doc=await savePlan(stateRef.current.doc);
+   // An edit while storage was opening is handled by its own autosave.
+   if(stateRef.current.doc.id!==doc.id)return;
+   setHistoryOpen(true);
+  }catch(error){setError(error.message);}
+  finally{setBusy(false);}
+ }
+ async function restoreHistory(savedAt){
+  const current=stateRef.current;
+  ++autosave.current;
+  const doc=await restorePlanRevision(current.doc.id,savedAt,current.doc);
+  const next=commitDocument(startCommand(current,'SELECT'),doc,t('Restored a plan version','نسخهٔ پلان بازیابی شد'));
+  const activeLayer=doc.layers.some(layer=>layer.id===next.activeLayer)?next.activeLayer:doc.layers[0].id;
+  touch.current?.cancel();drag.current=null;setStairSweep(null);setMarquee(null);
+  setOpeningMotion(null);catalogRef.current=null;setCatalog(null);
+  setCursor(null);setInput('');setError('');
+  update({...next,activeLayer,selection:[],cursor:null});fit(doc);
+ }
  function activateDrawing(doc,model=null){
   setImportedModel(model);setMode(model?'3d':'2d');setCatalog(null);
   setPendingDxf(null);setCadFile(null);setImportNotice('');setError('');
@@ -195,10 +218,10 @@ export default function PlanStudio(){
  if(stairSweep&&s.command===STAIR_NUMBER_COMMAND){
   try{stairPreview=stairPlanNumbers(doc,stairSweep.a,stairSweep.b,s.options.section).geometry;}catch{}
  }
- let rubber='';if(drawCursor&&s.points.length){if(s.command==='ROOMLAYOUT'||GRID_COMMANDS.includes(s.command)){const first=s.points[0];rubber=pathData({type:'polyline',closed:true,points:[first,{x:drawCursor.x,y:first.y},drawCursor,{x:first.x,y:drawCursor.y}]});}else if(s.command==='MULTILINE'||s.command==='WALL'&&s.options.wallAlignment!=='center'){try{const wall=s.command==='WALL';const path=[...s.points,drawCursor],spacing=wall?s.options.thickness*2:s.options.section.multilineWidth;const sides=parallelLines(path,spacing);rubber=(wall?[{type:'polyline',points:path},sides[s.options.wallAlignment==='left'?1:0]]:sides).map(pathData).join(' ');}catch{}}else if(s.command==='ARC'&&s.points.length===2){try{rubber=pathData({type:'arc',...arc3(s.points[0],s.points[1],drawCursor)});}catch{}}else if(s.command==='POLYGON'){try{rubber=pathData(regularPolygonShape(s.points[0],drawCursor,s.options.polygonSides));}catch{}}else if(s.command==='TRIANGLE'&&s.points.length===2)rubber='M'+[...s.points,drawCursor].map(p=>`${p.x},${p.y}`).join('L')+'Z';else if(s.command==='CIRCLE')rubber=pathData({type:'circle',center:s.points[0],radius:dist(s.points[0],drawCursor),start:0,sweep:Math.PI*2});else rubber='M'+[...s.points,drawCursor].map(p=>`${p.x},${p.y}`).join('L');}
+ let rubber='';if(drawCursor&&s.points.length){if(s.command==='PLANSECTIONFOUR'&&s.points.length===2){rubber=pathData({type:'line',a:s.points[0],b:s.points[1]});}else if(s.command==='ROOMLAYOUT'||GRID_COMMANDS.includes(s.command)){const first=s.points[0];rubber=pathData({type:'polyline',closed:true,points:[first,{x:drawCursor.x,y:first.y},drawCursor,{x:first.x,y:drawCursor.y}]});}else if(s.command==='MULTILINE'||s.command==='WALL'&&s.options.wallAlignment!=='center'){try{const wall=s.command==='WALL';const path=[...s.points,drawCursor],spacing=wall?s.options.thickness*2:s.options.section.multilineWidth;const sides=parallelLines(path,spacing);rubber=(wall?[{type:'polyline',points:path},sides[s.options.wallAlignment==='left'?1:0]]:sides).map(pathData).join(' ');}catch{}}else if(s.command==='ARC'&&s.points.length===2){try{rubber=pathData({type:'arc',...arc3(s.points[0],s.points[1],drawCursor)});}catch{}}else if(s.command==='POLYGON'){try{rubber=pathData(regularPolygonShape(s.points[0],drawCursor,s.options.polygonSides));}catch{}}else if(s.command==='TRIANGLE'&&s.points.length===2)rubber='M'+[...s.points,drawCursor].map(p=>`${p.x},${p.y}`).join('L')+'Z';else if(s.command==='CIRCLE')rubber=pathData({type:'circle',center:s.points[0],radius:dist(s.points[0],drawCursor),start:0,sweep:Math.PI*2});else rubber='M'+[...s.points,drawCursor].map(p=>`${p.x},${p.y}`).join('L');}
  return <main ref={root} className={`ps-app ${mobileCommand?'ps-mobile-command-open':''}`} dir={fa?'rtl':'ltr'} tabIndex={-1} onKeyDown={keyboard} onKeyUp={e=>{if(e.code==='Space')space.current=false;}} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))space.current=false;}}>
   <header className="ps-header"><Link href="/" className="ps-brand"><b>V</b> Ventra <span>PLAN STUDIO</span></Link><div className="ps-title"><input aria-label={t('Drawing name','نام پلان')} maxLength={160} value={doc.name} onChange={e=>editDoc({name:e.target.value},'Drawing name')}/><small>{saved}</small></div><Link href="/tools/model3d">{t('Existing project 3D','سه‌بعدی پروژه‌های فعلی')}</Link><Link href="/dashboard">{t('Dashboard','داشبورد')}</Link><Link href="/support">{t('Help','راهنما')}</Link><select aria-label="Plan language" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option></select></header>
-  <nav className="ps-filebar" aria-label="Drawing controls"><button disabled={busy} onClick={newDrawing}>{t('New blank plan','پلان خالی جدید')}</button><select aria-label={t('Saved plans','پلان‌های ذخیره‌شده')} value={plans.some(p=>p.id===doc.id)?doc.id:''} disabled={busy} onChange={e=>openDrawing(e.target.value)}><option value="">{t('Plans on this device','پلان‌های این دستگاه')}</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={manualSave}>{t('Save','ذخیره')} <kbd>Ctrl S</kbd></button><button disabled={busy} onClick={()=>file.current?.click()}>{t('Open file','باز کردن فایل')}</button>
+  <nav className="ps-filebar" aria-label="Drawing controls"><button disabled={busy} onClick={newDrawing}>{t('New blank plan','پلان خالی جدید')}</button><select aria-label={t('Saved plans','پلان‌های ذخیره‌شده')} value={plans.some(p=>p.id===doc.id)?doc.id:''} disabled={busy} onChange={e=>openDrawing(e.target.value)}><option value="">{t('Plans on this device','پلان‌های این دستگاه')}</option>{plans.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button onClick={manualSave}>{t('Save','ذخیره')} <kbd>Ctrl S</kbd></button><button disabled={busy} onKeyDown={e=>{if(e.key==='Enter'||e.code==='Space')e.stopPropagation();}} onClick={openHistory}>{t('History','تاریخچه')}</button>{historyOpen&&<PlanHistory doc={doc} language={language} onRestore={restoreHistory} onClose={()=>setHistoryOpen(false)}/>}<button disabled={busy} onClick={()=>file.current?.click()}>{t('Open file','باز کردن فایل')}</button>
   <input type="file" ref={file} hidden accept=".json,.dxf,.dwg,.ifc,.rvt,.glb" onChange={e=>{openFile(e.target.files?.[0]);e.target.value='';}}/>
   {cadFile&&<PlanProjectTransfer key={`cad-${cadFile.name}`} doc={doc} fa={fa} cadFile={cadFile} onCloseCad={()=>setCadFile(null)}/>}
   {pendingDxf&&<div className="ps-transfer"><section className="ps-transfer-panel" aria-label={t('DXF units','واحد فایل DXF')}>

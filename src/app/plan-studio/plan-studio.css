@@ -85,3 +85,11 @@
 @media(max-width:480px){.ps-room-picker{padding:12px}.ps-room-options{grid-template-columns:repeat(2,minmax(0,1fr))}.ps-room-thumbnail{max-block-size:64px}}
 
 .ps-import-notice{margin:3px 0;color:var(--ps-muted);max-block-size:3em;overflow:auto;overflow-wrap:anywhere}
+
+.ps-history{width:min(440px,calc(100% - 24px));max-height:85dvh;overflow:auto;padding:16px;color:inherit;background:var(--ps-panel);border:1px solid #60788e;border-radius:8px}
+.ps-history::backdrop{background:#080d16bb}
+.ps-history header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ps-history h2{margin:0;font-size:16px;color:var(--ps-accent)}
+.ps-history p{margin:8px 0;color:#c8d6e3}
+.ps-history .ps-history-name{overflow-wrap:anywhere;font-weight:700;color:inherit}
+.ps-history select,.ps-history button{min-height:40px}
