@@ -2,7 +2,7 @@ import {planAssetSymbol} from './furnitureSymbols.mjs';
 import {shaftOuter} from './structures.mjs';
 import {openingPlanGeometry,wallOpeningSegments} from './openings.mjs';
 import {LINE_TYPES,lineType} from './lineTypes.mjs';
-import {validateDocument,visibleEntities,styleFor,displayLength} from './document.mjs';
+import {validateDocument,visibleEntities,styleFor,displayLength,transformEntity} from './document.mjs';
 import {drawingSVG,dimensionGeometry,plateHoles} from './render2d.mjs';
 import {bounds,at,TAU} from './geometry.mjs';
 const clean=s=>String(s).replace(/[\r\n]/g,' ').replace(/[^\x20-\x7e]/g,c=>'\\U+'+c.charCodeAt(0).toString(16).padStart(4,'0').toUpperCase());
@@ -29,6 +29,9 @@ export function exportDXF(document){
    if(e.hatch!=='solid'){pair(52,0);pair(41,1);pair(77,0);const k=e.hatchScale||.2,styles=e.hatch==='tile'?[[0,0,0,0,k,[]],[90,0,0,0,k,[]]]:e.hatch==='interlock'?[[0,0,0,0,k,[.6*k,-.4*k]],[0,.6*k,.3*k,0,k,[.4*k,-.6*k]],[0,0,.5*k,0,k,[.6*k,-.4*k]],[0,.6*k,.7*k,0,k,[.4*k,-.6*k]],[90,.6*k,0,k,0,[.7*k,-.3*k]],[90,.3*k,.5*k,k,0,[.5*k,-.5*k]]]:e.hatch==='brick'?[[0,0,0,0,k/2,[]],[90,k/2,0,k,0,[k/2,-k/2]],[90,0,k/2,k,0,[k/2,-k/2]]]:e.hatch==='cross'?[[45,0,0,0,k,[]],[135,0,0,0,k,[]]]:[[45,0,0,0,k,[]]];pair(78,styles.length);for(const[a,x,y,dx,dy,dashes]of styles){pair(53,a);pair(43,x);pair(44,y);pair(45,dx);pair(46,dy);pair(79,dashes.length);for(const dash of dashes)pair(49,dash);}}
    pair(98,0);
   }
+ }
+ if(Number.isFinite(doc.cadOriginMeters?.x)&&Number.isFinite(doc.cadOriginMeters?.y)){
+  doc.entities=doc.entities.map(e=>transformEntity(e,'move',{x:0,y:0},doc.cadOriginMeters));
  }
  doc.entities.forEach(emit);pair(0,'ENDSEC');pair(0,'EOF');return out.join('\n')+'\n';
 }

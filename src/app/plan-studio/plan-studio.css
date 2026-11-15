@@ -83,3 +83,5 @@
 .ps-room-tiles{display:flex;align-items:center;gap:8px;margin-top:12px}
 .ps-room-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 @media(max-width:480px){.ps-room-picker{padding:12px}.ps-room-options{grid-template-columns:repeat(2,minmax(0,1fr))}.ps-room-thumbnail{max-block-size:64px}}
+
+.ps-import-notice{margin:3px 0;color:var(--ps-muted);max-block-size:3em;overflow:auto;overflow-wrap:anywhere}
