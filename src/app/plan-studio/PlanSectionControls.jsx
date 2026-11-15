@@ -1,7 +1,10 @@
-import {GRID_COMMANDS} from '@/lib/planStudio/sections.mjs';
+import {GRID_COMMANDS,STAIR_NUMBER_COMMAND} from '@/lib/planStudio/sections.mjs';
 
 export function sectionPrompt(command,count,t){
   switch(command){
+    case STAIR_NUMBER_COMMAND:
+      return count?t('Pick just past the last riser.','کمی بعد از آخرین پله بزن.'):
+        t('Drag across the stair lines from the bottom step to the top. You can also pick both ends.','از کمی قبل از اولین پله تا کمی بعد از آخرین پله درگ کن، یا هر دو سر مسیر را بزن.');
     case 'GRIDCOLUMNS':
     case 'GRIDLABELS':
       return count?t('Pick the opposite corner around the axes.','گوشهٔ مقابل کادرِ آکس‌ها را بزن.'):
@@ -92,6 +95,13 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
     {command==='SECTIONWALL'&&thickness('wallThickness','Wall thickness','ضخامت دیوار')}
     {command==='SECTIONSLAB'&&thickness('slabThickness','Slab thickness','ضخامت دال')}
     {command==='MULTILINE'&&size('multilineWidth','Distance between lines','فاصلهٔ بین دو خط',.01)}
+    {['SECTIONSTAIR','STEPSSECTION',STAIR_NUMBER_COMMAND].includes(command)&&<fieldset>
+      <legend>{t('Stair numbering','شماره‌گذاری پله')}</legend>
+      {command!==STAIR_NUMBER_COMMAND&&choice('stairNumbering','Number steps on creation','شماره‌گذاری هنگام ترسیم',
+        [['yes','On','روشن'],['no','Off','خاموش']])}
+      {integer('stairFirstNumber','First step number','شمارهٔ اولین پله',1,9999)}
+      {size('stairNumberSize','Number height','ارتفاع شماره',.025)}
+    </fieldset>}
     {command==='SECTIONSTAIR'&&<fieldset><legend>{t('Stair section settings','تنظیمات مقطع پله')}</legend>
       {choice('stairStyle','Stair type','نوع پله',[
         ['straight','Straight','مستقیم'],['return','Return with landing','رفت‌وبرگشت با پاگرد'],['scissor','Scissor projection','قیچی در برش'],

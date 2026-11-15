@@ -1,19 +1,19 @@
 import {planAssetSymbol} from './furnitureSymbols.mjs';
 import {shaftOuter} from './structures.mjs';
-import {openingPlanGeometry,wallOpeningSegments} from './openings.mjs';
+import {openingPlanGeometry,wallFaceLines,wallOpeningSegments} from './openings.mjs';
 import {LINE_TYPES,lineType} from './lineTypes.mjs';
 import {validateDocument,visibleEntities,styleFor,displayLength,transformEntity} from './document.mjs';
 import {drawingSVG,dimensionGeometry,plateHoles} from './render2d.mjs';
 import {bounds,at,TAU} from './geometry.mjs';
 const clean=s=>String(s).replace(/[\r\n]/g,' ').replace(/[^\x20-\x7e]/g,c=>'\\U+'+c.charCodeAt(0).toString(16).padStart(4,'0').toUpperCase());
 export function exportDXF(document){
- const doc=validateDocument(document),out=[],nextHandle={value:256},pair=(c,v)=>out.push(String(c),typeof v==='number'?(Math.abs(v)<1e-12?'0':Number(v.toFixed(10)).toString()):String(v)),entity=(kind,e)=>{pair(0,kind);pair(5,(nextHandle.value++).toString(16));pair(8,clean(e.layer));if(e.dash&&e.dash!=='bylayer')pair(6,lineType(e.dash).dxf);if(e.color&&e.color!=='bylayer')pair(420,parseInt(e.color.slice(1),16));pair(370,Math.round((e.weight||doc.layers.find(l=>l.id===e.layer).weight)*100));},line=(a,b,e)=>{entity('LINE',e);pair(10,a.x);pair(20,a.y);pair(30,e.z||0);pair(11,b.x);pair(21,b.y);pair(31,e.z||0);},text=(p,value,height,rotation,e)=>{entity('TEXT',e);pair(10,p.x);pair(20,p.y);pair(30,e.z||0);pair(40,height);pair(1,clean(value));pair(50,rotation||0);};
+ const doc=validateDocument(document),out=[],nextHandle={value:256},pair=(c,v)=>out.push(String(c),typeof v==='number'?(Math.abs(v)<1e-12?'0':Number(v.toFixed(10)).toString()):String(v)),entity=(kind,e)=>{pair(0,kind);pair(5,(nextHandle.value++).toString(16));pair(8,clean(e.layer));if(e.dash&&e.dash!=='bylayer')pair(6,lineType(e.dash).dxf);if(e.color&&e.color!=='bylayer')pair(420,parseInt(e.color.slice(1),16));pair(370,Math.round((e.weight||doc.layers.find(l=>l.id===e.layer).weight)*100));},line=(a,b,e)=>{entity('LINE',e);pair(10,a.x);pair(20,a.y);pair(30,e.z||0);pair(11,b.x);pair(21,b.y);pair(31,e.z||0);},text=(p,value,height,rotation,e)=>{entity('TEXT',e);pair(10,p.x);pair(20,p.y);pair(30,e.z||0);pair(40,height);pair(1,clean(value));pair(50,rotation||0);if(e.detailKind==='stair-number'){pair(72,1);pair(11,p.x);pair(21,p.y);pair(31,e.z||0);}};
  pair(0,'SECTION');pair(2,'HEADER');pair(9,'$ACADVER');pair(1,'AC1015');pair(9,'$INSUNITS');pair(70,6);pair(9,'$MEASUREMENT');pair(70,1);pair(0,'ENDSEC');pair(0,'SECTION');pair(2,'TABLES');
  pair(0,'TABLE');pair(2,'LTYPE');pair(5,'1');pair(330,'0');pair(100,'AcDbSymbolTable');pair(70,LINE_TYPES.length);for(const{name,dashes}of LINE_TYPES.map(t=>({name:t.dxf,dashes:t.cad}))){pair(0,'LTYPE');pair(5,(nextHandle.value++).toString(16));pair(2,name);pair(70,0);pair(3,name);pair(72,65);pair(73,dashes.length);pair(40,dashes.reduce((s,n)=>s+Math.abs(n),0));for(const d of dashes){pair(49,d);pair(74,0);}}pair(0,'ENDTAB');
  pair(0,'TABLE');pair(2,'LAYER');pair(5,'2');pair(330,'0');pair(100,'AcDbSymbolTable');pair(70,doc.layers.length);for(const l of doc.layers){pair(0,'LAYER');pair(5,(nextHandle.value++).toString(16));pair(2,clean(l.id));pair(70,l.locked?4:0);pair(62,l.visible?7:-7);pair(420,parseInt(l.color.slice(1),16));pair(6,lineType(l.dash).dxf);pair(370,Math.round(l.weight*100));}pair(0,'ENDTAB');pair(0,'ENDSEC');pair(0,'SECTION');pair(2,'ENTITIES');
  function polygon(points,e,closed=true){entity('LWPOLYLINE',e);pair(100,'AcDbEntity');pair(100,'AcDbPolyline');pair(90,points.length);pair(70,closed?1:0);pair(38,e.z||0);for(const p of points){pair(10,p.x);pair(20,p.y);}}
  function emit(e){
-  if(e.type==='line'){if(e.role==='wall')wallOpeningSegments(doc,e).forEach(p=>line(p.a,p.b,e));else line(e.a,e.b,e);}
+  if(e.type==='line'){if(e.role==='wall')(e.wallFromEdges?wallFaceLines(doc,e):wallOpeningSegments(doc,e)).forEach(p=>line(p.a,p.b,e));else line(e.a,e.b,e);}
   if(e.type==='polyline'&&e.role!=='hatch')polygon(e.points,e,e.closed);
   if(e.type==='circle'||e.type==='arc'){entity(e.type==='circle'?'CIRCLE':'ARC',e);pair(10,e.center.x);pair(20,e.center.y);pair(30,e.z||0);pair(40,e.radius);if(e.type==='arc'){pair(50,(e.start+(e.sweep<0?e.sweep:0))*180/Math.PI);pair(51,(e.start+(e.sweep>0?e.sweep:0))*180/Math.PI);}}
   if(e.type==='text')text(e.position,e.text,e.textHeight,e.rotation,e);

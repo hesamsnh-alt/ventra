@@ -3,7 +3,7 @@ export default function PlanTouchToolbar({fa,command,pointCount,pan,tools,onComm
  const text=(en,ps)=>fa?ps:en,closing=['LINE','WALL','PLINE','FLOOR','PIPE'].includes(command);
  return <div className="ps-touch-toolbar" aria-label={text('Touch drawing tools','ابزارهای رسم لمسی')}>
   <div className="ps-touch-primary">
-   {[['L','LINE','Line','خط'],['W','WALL','Wall','دیوار'],['PL','PLINE','Polyline','پلی‌لاین'],['FLOOR','FLOOR','Floor','کف']].map(([code,c,en,ps])=><button type="button" key={code} aria-pressed={!pan&&command===c} onClick={()=>onCommand(code)}><b>{code}</b>{text(en,ps)}</button>)}
+   {[['L','LINE','Line','خط'],['PL','PLINE','Polyline','پلی‌لاین'],['FLOOR','FLOOR','Floor','کف']].map(([code,c,en,ps])=><button type="button" key={code} aria-pressed={!pan&&command===c} onClick={()=>onCommand(code)}><b>{code}</b>{text(en,ps)}</button>)}
    <button type="button" aria-pressed={pan} onClick={onPan}>{text('Hand / pan','حرکت صفحه')}</button>
    <details className="ps-touch-more"><summary>{text('More tools','ابزارها')}</summary><div>{tools.map(([code,en,ps])=><button type="button" key={code} onClick={e=>{onCommand(code);e.currentTarget.closest('details').open=false;}}><kbd>{code}</kbd> {text(en,ps)}</button>)}</div></details>
   </div>

@@ -38,3 +38,12 @@ export function wallOpeningSegments(doc,wall){
  for(const gap of gaps){if(gap.a>cursor+1e-8)pieces.push({...wall,a:at(wall,cursor/length),b:at(wall,gap.a/length)});cursor=Math.max(cursor,gap.b);}
  if(cursor<length-1e-8)pieces.push({...wall,a:at(wall,cursor/length),b:wall.b});return pieces;
 }
+
+export function wallFaceLines(doc,wall){
+ const length=dist(wall.a,wall.b),dx=(wall.b.y-wall.a.y)/length*wall.thickness/2;
+ const dy=(wall.a.x-wall.b.x)/length*wall.thickness/2;
+ return wallOpeningSegments(doc,wall).flatMap(piece=>[-1,1].map(side=>{
+  const offset=p=>({x:p.x+side*dx,y:p.y+side*dy});
+  return {type:'line',a:offset(piece.a),b:offset(piece.b)};
+ }));
+}

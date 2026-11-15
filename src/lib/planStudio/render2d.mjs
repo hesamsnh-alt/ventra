@@ -1,6 +1,6 @@
 import {planAssetSymbol} from './furnitureSymbols.mjs';
 import {shaftOuter,shaftSize,shaftFitsFloor} from './structures.mjs';
-import {openingPlanGeometry,wallOpeningSegments} from './openings.mjs';
+import {openingPlanGeometry,wallFaceLines,wallOpeningSegments} from './openings.mjs';
 import {lineDash} from './lineTypes.mjs';
 import {segments,at,bounds,dist} from './geometry.mjs';
 import {styleFor,visibleEntities,displayLength} from './document.mjs';
@@ -33,15 +33,18 @@ export function wallOutlineData(e){
  return '';
 }
 function renderEntitySVG(doc,e,{print=false,selected=false,screen=false}={}){
- const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&(e.role==='section'||st.color.toLowerCase()==='#dce6ed')?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=lineDash(st.dash,screen),attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+ const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&(e.role==='section'||st.color.toLowerCase()==='#dce6ed')?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'&&!e.wallFromEdges?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=lineDash(st.dash,screen),attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
  if(e.role==='shaft'){const outer=pathData({type:'polyline',points:shaftOuter(e),closed:true}),inner=pathData(e),g=shaftSize(e);return `<g data-shaft="true"><path d="${outer+inner}" ${attrs.replace(' fill="none"','')} fill="${color}" fill-opacity=".18" fill-rule="evenodd"/><path d="M${e.points[0].x},${e.points[0].y}L${e.points[2].x},${e.points[2].y}M${e.points[1].x},${e.points[1].y}L${e.points[3].x},${e.points[3].y}" ${attrs} stroke-dasharray="${screen?'5 4':'.08 .06'}"/><text transform="translate(${g.center.x},${g.center.y}) scale(1,-1)" text-anchor="middle" fill="${color}" font-size=".15">LIFT PIT</text></g>`;}
+ if(e.role==='wall'&&e.type==='line'&&e.wallFromEdges){
+  return wallFaceLines(doc,e).map(face=>`<path d="${pathData(face)}" ${attrs}/>`).join('');
+ }
  if(e.role==='wall'&&e.type==='line'&&doc.entities.some(o=>o.type==='opening'&&o.wall===e.id)){
   return wallOpeningSegments(doc,e).map(piece=>screen?`<path d="${wallOutlineData(piece)}" ${attrs.replace(' fill="none"','')} fill="${escapeXML(color)}" fill-opacity="${e.structure==='shear'?.32:.08}"/>`:`<path d="${pathData(piece)}" ${attrs.replace('stroke-linecap="round"','stroke-linecap="butt"')}/>`).join('');
  }
  const outline=screen&&e.role==='wall'&&e.thickness?wallOutlineData(e):'';if(outline)return `<path d="${outline}" ${attrs.replace(' fill="none"','')} fill="${escapeXML(color)}" fill-opacity="${e.structure==='shear'?.32:.08}"/>`;
  const floorVoids=e.role==='floor'?doc.entities.filter(x=>x.role==='shaft'&&Math.abs((x.z||0)-(e.z||0))<1e-6&&shaftFitsFloor(x,e)).map(shaftOuter):[];
  const path=pathData(e)+[...(e.hatchHoles||[]),...floorVoids].map(points=>pathData({type:'polyline',points,closed:true})).join('');if(path)return `<path d="${path}" fill-rule="evenodd" ${attrs.replace(' fill="none"','').replace(e.role==='hatch'&&!selected?`stroke="${escapeXML(color)}"`:'__never__','stroke="none"')} fill="${e.hatch?`url(#hatch-${escapeXML(e.id)})`:'none'}"/>`;
- if(e.type==='text')return `<text transform="translate(${e.position.x},${e.position.y}) rotate(${e.rotation||0}) scale(1,-1)" fill="${color}" font-size="${e.textHeight}" font-family="Arial,sans-serif" direction="${/[\u0600-\u06ff]/.test(e.text)?'rtl':'ltr'}">${escapeXML(e.text)}</text>`;
+ if(e.type==='text')return `<text ${e.detailKind==='stair-number'?'text-anchor="middle"':''} transform="translate(${e.position.x},${e.position.y}) rotate(${e.rotation||0}) scale(1,-1)" fill="${color}" font-size="${e.textHeight}" font-family="Arial,sans-serif" direction="${/[\u0600-\u06ff]/.test(e.text)?'rtl':'ltr'}">${escapeXML(e.text)}</text>`;
  if(e.type==='dimension'){const d=dimensionGeometry(e),size=Math.max(.09,.0025*(print?doc.printScale:50));return`<g ${attrs}><path d="M${e.a.x},${e.a.y}L${d.a.x+d.normal.x*.1},${d.a.y+d.normal.y*.1}M${e.b.x},${e.b.y}L${d.b.x+d.normal.x*.1},${d.b.y+d.normal.y*.1}M${d.a.x},${d.a.y}L${d.b.x},${d.b.y}"/>${[d.a,d.b].map(p=>`<path d="M${p.x-size*.3},${p.y-size*.3}l${size*.6},${size*.6}"/>`).join('')}<text transform="translate(${d.mid.x},${d.mid.y+size*.3}) scale(1,-1)" text-anchor="middle" fill="${color}" stroke="none" font-family="Arial,sans-serif" font-size="${size}">${displayLength(d.length,doc.units)}</text></g>`;}
  if(e.type==='plate')return `<g transform="translate(${e.center.x},${e.center.y}) rotate(${e.rotation||0})" ${attrs}><rect x="${-e.width/2}" y="${-e.depth/2}" width="${e.width}" height="${e.depth}" fill="${color}" fill-opacity=".12"/>${plateHoles(e).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="${e.boltDiameter/2}"/>`).join('')}</g>`;
  if(e.type==='asset'){

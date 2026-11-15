@@ -1,7 +1,9 @@
+import {stairNumberLabel} from './stairDetails.mjs';
 import {id} from './document.mjs';
 import {at,dist,point,EPS,validPolygon} from './geometry.mjs';
 
 export const SECTION_LAYER='section-details';
+export const STAIR_NUMBER_COMMAND='STAIRNUMBERS';
 export const GRID_COMMANDS=['GRIDCOLUMNS','GRIDLABELS'];
 export const SECTION_COMMANDS=['PLANSECTIONCUT','PERIMETERDIMENSIONS',...GRID_COMMANDS,'SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
 export const SECTION_DEFAULTS=Object.freeze({
@@ -9,6 +11,7 @@ export const SECTION_DEFAULTS=Object.freeze({
  perimeterDimOffset:.45,cutDepth:6,cutLabel:'A',
  wallThickness:.2,slabThickness:.3,multilineWidth:.2,
  stairStyle:'return',firstRun:'right',risers:18,landing:.95,waist:.16,beamWidth:.2,beamHeight:.35,stories:1,
+ stairNumbering:'yes',stairFirstNumber:1,stairNumberSize:.12,
  stepRiseMode:'step',stepRise:.175,stepTotal:1.575,stepDirection:'up',stepRun:'right',
  stepStartLanding:0,stepEndLanding:0,stepWaist:.3,stepHatch:'concrete',
  railHeight:.95,handrailSize:.05,handrailExtension:0,railBottomGap:.08,railTopGap:.08,
@@ -103,7 +106,7 @@ export function windowElevation(entity,{windowStyle,sashes,frame,sash,transom}){
  return curves.map(curve=>({...curve,points:curve.points.map(p=>moved(moved(origin,u,p.x),v,p.y))}));
 }
 
-export function staircaseSection(a,b,{stairStyle,firstRun,risers,landing,waist,beamWidth,beamHeight,stories}){
+export function staircaseSection(a,b,{stairStyle,firstRun,risers,landing,waist,beamWidth,beamHeight,stories,stairNumbering,stairFirstNumber,stairNumberSize}){
  const left=Math.min(a.x,b.x),bottom=Math.min(a.y,b.y),width=Math.abs(a.x-b.x),height=Math.abs(a.y-b.y);
  if(!['straight','return','scissor'].includes(stairStyle)||!['left','right'].includes(firstRun)||
   !Number.isInteger(risers)||!between(risers,3,40)||!Number.isInteger(stories)||!between(stories,1,12)||
@@ -113,21 +116,26 @@ export function staircaseSection(a,b,{stairStyle,firstRun,risers,landing,waist,b
  const first=reversed?Math.ceil(risers/2):risers,last=risers-first;
  if(run/first<.1||beamHeight<=waist||!between(riser,.075,.3))throw Error('The bay does not fit this tread and riser count. / تعداد پله با عرض و ارتفاع کادر سازگار نیست.');
  const result=[];
- function flight(x,y,sign,count,dashed=false){
+ function flight(x,y,sign,count,startNumber,dashed=false){
   const tread=run/count,top=[{x:x-sign*landing,y},{x,y}];
   for(let i=0;i<count;i++)top.push({x:x+sign*i*tread,y:y+(i+1)*riser},{x:x+sign*(i+1)*tread,y:y+(i+1)*riser});
   const end=top.at(-1),outer={x:end.x+sign*landing,y:end.y};
   const profile=poly([...top,outer,{x:outer.x,y:outer.y-waist},{x:end.x,y:end.y-waist},{x,y:y-waist},{x:top[0].x,y:y-waist}],true);
   result.push(dashed?{...profile,dash:'dashed'}:profile);
+  if(stairNumbering==='yes'&&!dashed){
+   const size=Math.max(.025,Math.min(stairNumberSize,riser*.62,tread*.52));
+   for(let i=0;i<count;i++) result.push(stairNumberLabel(
+    {x:x+sign*(i+.5)*tread,y:y+(i+1)*riser+size*.28},startNumber+i,size));
+  }
  }
  const start=firstRun==='right'?landing:width-landing,sign=firstRun==='right'?1:-1;
  for(let story=0;story<stories;story++){
-  const base=story*height;
+  const base=story*height,startNumber=stairFirstNumber+story*risers;
   if(stairStyle==='scissor'){
-   flight(width-start,base,-sign,risers,true);
+   flight(width-start,base,-sign,risers,startNumber,true);
   }
-  flight(start,base,sign,first);
-  if(reversed)flight(width-start,base+first*riser,-sign,last);
+  flight(start,base,sign,first,startNumber);
+  if(reversed)flight(width-start,base+first*riser,-sign,last,startNumber+first);
   const levels=reversed?[[width-start,base+first*riser],[start,base+height]]:[[width-start,base+height]];
   for(const [x,y] of levels){
    const toward=x<width/2?-1:1;
@@ -135,7 +143,9 @@ export function staircaseSection(a,b,{stairStyle,firstRun,risers,landing,waist,b
    result.push(rect(Math.min(x,x2),y-beamHeight,Math.max(x,x2),y-waist));
   }
  }
- return result.map(curve=>({...curve,points:curve.points.map(p=>({x:p.x+left,y:p.y+bottom}))}));
+ const translate=p=>({x:p.x+left,y:p.y+bottom});
+ return result.map(curve=>curve.type==='text'?{...curve,position:translate(curve.position)}:
+  {...curve,points:curve.points.map(translate)});
 }
 
 export function ceilingSection(a,b,soffit,{board,hangerSpacing}){
@@ -171,7 +181,7 @@ export function saveSectionGeometry(doc,geometry,command,replaced=new Set()){
  if(layer?.locked||layer?.visible===false)throw Error('Show and unlock the section layer first. / ابتدا لایهٔ برش را روشن و باز کن.');
  if(geometry.length>2000||geometry.some(e=>[...(e.points||[]),...[e.a,e.b,e.center].filter(Boolean)].some(p=>!point(p))))
   throw Error('Section exceeds the drawing limits. / برش از محدودهٔ ترسیم خارج است.');
- const colors={GRIDCOLUMNS:'#f3aa9b',GRIDLABELS:'#9dd6a5',PERIMETERDIMENSIONS:'#b9d9a4',PLANSECTIONCUT:'#cecdba',SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',STEPSSECTION:'#e7ce93',RAILINGELEVATION:'#a8c5dc',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
+ const colors={STAIRNUMBERS:'#f0d291',GRIDCOLUMNS:'#f3aa9b',GRIDLABELS:'#9dd6a5',PERIMETERDIMENSIONS:'#b9d9a4',PLANSECTIONCUT:'#cecdba',SECTIONWALL:'#e5e9ec',SECTIONSLAB:'#daa197',SECTIONSTAIR:'#e7ce93',STEPSSECTION:'#e7ce93',RAILINGELEVATION:'#a8c5dc',WINDOWELEVATION:'#e1d77f',CEILINGSECTION:'#9adbd6'};
  const items=geometry.map(e=>({id:id(),layer:SECTION_LAYER,role:'section',color:colors[command],...e}));
  return {doc:{...doc,layers:layer?doc.layers:[...doc.layers,{id:SECTION_LAYER,name:'Sections / برش‌ها',color:'#bccfdd',dash:'solid',weight:.25,visible:true,locked:false}],
   entities:[...doc.entities.filter(e=>!replaced.has(e.id)),...items]},selection:items.map(e=>e.id)};

@@ -4,7 +4,7 @@ const point = (x, y) => ({x, y});
 const polyline = (points, closed = false) => ({type: 'polyline', points, closed});
 const range = (value, min, max) => Number.isFinite(value) && value >= min && value <= max;
 
-export function stairStations(doc, start, end) {
+function stairCrossings(doc, start, end) {
   const length = dist(start, end);
   if (length < EPS) throw Error('Pick two different points across the treads. / دو نقطهٔ مجزا در امتداد بازوی پله بزن.');
   const axis = {type: 'line', a: start, b: end};
@@ -20,18 +20,46 @@ export function stairStations(doc, start, end) {
       // The pick line should run along the flight, crossing the tread edges.
       if (Math.abs(projection) > dist(segment.a, segment.b) * .5) continue;
       for (const p of curveIntersections(axis, segment)) {
-        crossings.push((p.x - start.x) * ux + (p.y - start.y) * uy);
+        crossings.push({distance:(p.x - start.x)*ux+(p.y-start.y)*uy, point:p,
+          guideId:entity.id, segment:segment.segment??0});
       }
     }
   }
   const stations = [];
-  for (const crossing of crossings.sort((a, b) => a - b)) {
-    if (!stations.length || crossing - stations.at(-1) > .003) stations.push(crossing);
+  for (const crossing of crossings.sort((a, b) => a.distance-b.distance)) {
+    if (!stations.length || crossing.distance-stations.at(-1).distance>.003) stations.push(crossing);
   }
   if (stations.length < 2 || stations.length > 40) {
     throw Error('Cross 2–40 tread lines on one flight. / خط انتخاب باید از ۲ تا ۴۰ خط پله در یک بازو عبور کند.');
   }
-  return stations.map(station => station - stations[0]);
+  return stations;
+}
+
+export function stairStations(doc,start,end){
+  const stations=stairCrossings(doc,start,end);
+  return stations.map(station=>station.distance-stations[0].distance);
+}
+
+export function stairNumberLabel(position,number,size){
+  if(!Number.isInteger(number)||number<1||!range(size,.025,.5)){
+    throw Error('Check the first stair number and label height. / شمارهٔ شروع و ارتفاع نوشته را بررسی کن.');
+  }
+  return {type:'text',position,text:String(number),textHeight:size,detailKind:'stair-number'};
+}
+
+export function stairPlanNumbers(doc,start,end,{stairFirstNumber,stairNumberSize}){
+  const stations=stairCrossings(doc,start,end);
+  const length=dist(start,end),ux=(end.x-start.x)/length,uy=(end.y-start.y)/length;
+  const geometry=stations.map((crossing,i)=>{
+    const previous=stations[i-1],next=stations[i+1];
+    const gap=Math.min(previous?crossing.distance-previous.distance:Infinity,next?next.distance-crossing.distance:Infinity);
+    const size=Math.max(.025,Math.min(stairNumberSize,gap*.55));
+    const position=point(crossing.point.x+ux*gap*.28,crossing.point.y+uy*gap*.28);
+    return {...stairNumberLabel(position,stairFirstNumber+i,size),stairGuideId:crossing.guideId,stairGuideSegment:crossing.segment};
+  });
+  const keys=new Set(geometry.map(e=>`${e.stairGuideId}:${e.stairGuideSegment}`));
+  const replace=new Set(doc.entities.filter(e=>e.detailKind==='stair-number'&&keys.has(`${e.stairGuideId}:${e.stairGuideSegment}`)).map(e=>e.id));
+  return {geometry,replace};
 }
 
 export function projectedStairSection(stations, origin, options) {
@@ -61,7 +89,13 @@ export function projectedStairSection(stations, origin, options) {
     append(lower, point(last.x + stepEndLanding, last.y - stepWaist));
   }
   const toSection = p => point(origin.x + p.x * xSign, origin.y + p.y);
-  if (!stepWaist) return [polyline(upper.map(toSection))];
+  const numbers=options.stairNumbering==='yes'?stations.map((x,i)=>{
+    const gap=stations[i+1]===undefined?stepEndLanding:stations[i+1]-x;
+    const size=Math.max(.025,Math.min(options.stairNumberSize,rise*.62,gap?gap*.52:Infinity));
+    const label=options.stairFirstNumber+(ySign>0?i:stations.length-1-i);
+    return stairNumberLabel(toSection(point(x+gap*.47,(i+1)*rise*ySign+size*.28)),label,size);
+  }):[];
+  if (!stepWaist) return [polyline(upper.map(toSection)),...numbers];
 
   // A terminal riser without a landing shares the vertical edge of the waist.
   // Keep the visible extension as a separate segment to avoid a self-overlapping ring.
@@ -72,6 +106,7 @@ export function projectedStairSection(stations, origin, options) {
   return [
     stepHatch === 'concrete' ? {...profile, hatch: 'concrete', hatchScale: .1} : profile,
     ...edges.map(([a, b]) => ({type: 'line', a: toSection(a), b: toSection(b)})),
+    ...numbers,
   ];
 }
 

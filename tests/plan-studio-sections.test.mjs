@@ -64,7 +64,7 @@ for(const stairStyle of ['straight','return','scissor']){
   let s=startCommand(state([]),'LTP');
   s={...s,options:{...s.options,section:{...SECTION_DEFAULTS,stairStyle,firstRun:'left',stories:3}}};
   s=point(point(s,2,0),7,3.15);
-  const all=s.doc.entities.flatMap(e=>e.points);
+  const all=s.doc.entities.flatMap(e=>e.points??[]);
   assert.ok(all.every(pt=>pt.x>=2-1e-7&&pt.x<=7+1e-7));
   assert.ok(Math.abs(Math.max(...all.map(pt=>pt.y))-9.45)<1e-7);
   assert.equal(s.history.length,1);
