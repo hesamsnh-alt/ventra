@@ -166,6 +166,15 @@ export function planSectionCut(doc,start,end,side,origin,{cutDepth,cutLabel},pre
         projection.push(projectionStyle(rect(left,band.z,right,top)));
     }
   }
+  for(const tread of entities.filter(e=>e.role==='stair')) {
+    const rings=[tread.points.map(local)];
+    const bottom=tread.z-tread.height;
+    add(ringIntervals(rings,length),bottom,tread.z,'concrete');
+    if(cutDepth) {
+      for(const [left,right] of projectedBandSpans(rings,length,cutDepth))
+        projection.push(projectionStyle(rect(left,bottom,right,tread.z)));
+    }
+  }
   const shafts=entities.filter(e=>e.role==='shaft');
   for(const floor of [...entities.filter(e=>e.role==='floor'),...floors]) {
     const z=floor.z??0;
@@ -202,7 +211,7 @@ export function fourPlanSections(doc,start,end,origin,{cutLabel}) {
   const entities=visibleEntities(doc);
   const {bands,floors}=multilinePreview(entities);
   const solids=[...bands,...floors,...entities.flatMap(e=>{
-    if(e.role==='floor')return [e];
+    if(e.role==='floor'||e.role==='stair')return [e];
     if(e.role==='shaft')return [{points:shaftOuter(e)}];
     if(e.role!=='wall')return [];
     return e.type==='line'?[{points:strip(e.a,e.b,e.thickness/2)}]:[{...e,radius:e.radius+e.thickness/2}];

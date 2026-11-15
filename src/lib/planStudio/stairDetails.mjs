@@ -1,4 +1,5 @@
 import {curveIntersections, dist, EPS, segments} from './geometry.mjs';
+import {basis, unit} from './draftingGeometry.mjs';
 
 const point = (x, y) => ({x, y});
 const polyline = (points, closed = false) => ({type: 'polyline', points, closed});
@@ -150,4 +151,41 @@ export function railingElevation(a, b, options) {
     }
   }
   return geometry;
+}
+
+
+export function returnStairPlan(origin,direction,z,settings){
+ const {stepRise,stairGoing,stairWidth,stairWell,flightRisers,stairLanding,waist,
+  stairNumbering,stairFirstNumber,stairNumberSize}=settings;
+ if(dist(origin,direction)<.01)throw Error('Pick the direction of the first flight. / جهت بازوی اول را مشخص کن.');
+ if(!range(stepRise,.075,.3)||!range(stairGoing,.1,1)||!range(stairWidth,.4,5)
+   ||!range(stairWell,.05,5)||!range(stairLanding,.4,5)||!range(waist,.04,1)
+   ||!Number.isInteger(flightRisers)||!range(flightRisers,2,20))
+  throw Error('Check the stair dimensions and riser count. / ابعاد پله و تعداد ارتفاع‌ها را بررسی کن.');
+
+ const {world}=basis(origin,unit(origin,direction));
+ const run=(flightRisers-1)*stairGoing, second=stairWidth+stairWell;
+ const depth=waist+stepRise, output=[];
+ const slab=(left,right,near,far,level,detailKind)=>{
+  const outline=[point(left,near),point(right,near),point(right,far),point(left,far)].map(world);
+  output.push({...polyline(outline,true),role:'stair',z:level,height:Math.min(depth,level-z),detailKind});
+ };
+ const label=(x,y,number)=>{
+  if(stairNumbering==='yes')output.push({
+   ...stairNumberLabel(world(point(x,y)),stairFirstNumber+number,Math.min(stairNumberSize,stairGoing*.45)),
+   role:'line',
+  });
+ };
+ for(let i=0;i<flightRisers-1;i++){
+  const x=i*stairGoing, back=run-x;
+  slab(x,x+stairGoing,0,stairWidth,z+(i+1)*stepRise,'stair-tread');
+  slab(back-stairGoing,back,second,second+stairWidth,z+(flightRisers+i+1)*stepRise,'stair-tread');
+  label(x+stairGoing/2,stairWidth/2,i);
+  label(back-stairGoing/2,second+stairWidth/2,flightRisers+i);
+ }
+ slab(run,run+stairLanding,0,second+stairWidth,z+flightRisers*stepRise,'stair-landing');
+ label(run+stairLanding/2,stairWidth/2,flightRisers-1);
+ slab(-stairLanding,0,second,second+stairWidth,z+2*flightRisers*stepRise,'stair-landing');
+ label(-stairLanding/2,second+stairWidth/2,2*flightRisers-1);
+ return output;
 }

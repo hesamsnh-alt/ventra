@@ -35,6 +35,8 @@ export function validateDocument(input){
   else if(['asset','plate','light'].includes(e.type)){if(!point(e.center))throw Error('Invalid object position.');if(e.type==='asset'&&(typeof e.catalogId!=='string'||![e.width,e.depth,e.height].every(n=>Number.isFinite(n)&&n>0&&n<=50)))throw Error('Invalid furniture size.');if(e.type==='plate'){if(![e.width,e.depth,e.thickness,e.boltDiameter,e.edge].every(n=>Number.isFinite(n)&&n>0)||e.width>20||e.depth>20||e.thickness>1||e.edge<=e.boltDiameter/2||e.edge+e.boltDiameter/2>=Math.min(e.width,e.depth)/2)throw Error('Base plate holes do not fit within the plate. / ابعاد سوراخ‌ها یا فاصلهٔ لبهٔ بیس‌پلیت معتبر نیست.');}}
   else if(e.type==='opening'){if(!d.entities.some(w=>w.id===e.wall&&w.role==='wall'&&w.type==='line')||!Number.isFinite(e.offset)||e.offset<0||e.offset>1||![e.width,e.height].every(n=>Number.isFinite(n)&&n>0)||!['door','window','arched'].includes(e.kind))throw Error('Invalid wall opening.');}
   else throw Error('Unsupported plan entity.');
+  if(e.role==='stair'&&(e.type!=='polyline'||!e.closed||!Number.isFinite(e.z)||!(e.height>0&&e.height<=2)))
+   throw Error('Invalid stair tread or landing.');
   if(e.role==='shaft'){const problem=shaftProblem(e);if(problem)throw Error(problem);}
   if(e.structure!==undefined&&!(e.structure==='shear'&&e.role==='wall'))throw Error('Invalid structural wall.');
   if(e.type==='opening'){const problem=openingProblem(d,e,{overlap:false});if(problem)throw Error(problem);}

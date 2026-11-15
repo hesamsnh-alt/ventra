@@ -5,14 +5,15 @@ import {at,dist,point,EPS,validPolygon} from './geometry.mjs';
 export const SECTION_LAYER='section-details';
 export const STAIR_NUMBER_COMMAND='STAIRNUMBERS';
 export const GRID_COMMANDS=['GRIDCOLUMNS','GRIDLABELS'];
-export const SECTION_COMMANDS=['PLANSECTIONCUT','PLANSECTIONFOUR','PERIMETERDIMENSIONS',...GRID_COMMANDS,'SECTIONWALL','SECTIONSLAB','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
+export const SECTION_COMMANDS=['PLANSECTIONCUT','PLANSECTIONFOUR','PERIMETERDIMENSIONS',...GRID_COMMANDS,'SECTIONWALL','SECTIONSLAB','STAIRPLAN','SECTIONSTAIR','STEPSSECTION','RAILINGELEVATION','WINDOWELEVATION','CEILINGSECTION'];
 export const SECTION_DEFAULTS=Object.freeze({
  gridColumnWidth:.4,gridColumnDepth:.4,gridLabelOffset:.35,gridBubbleRadius:.13,
  perimeterDimOffset:.45,cutDepth:6,cutLabel:'A',
  wallThickness:.2,slabThickness:.3,multilineWidth:.2,multilinePurpose:'wall',
  stairStyle:'return',firstRun:'right',risers:18,landing:.95,waist:.16,beamWidth:.2,beamHeight:.35,stories:1,
  stairNumbering:'yes',stairFirstNumber:1,stairNumberSize:.12,
- stepRiseMode:'step',stepRise:.175,stepTotal:1.575,stepDirection:'up',stepRun:'right',
+ stairGoing:.30,stairWidth:1.05,stairWell:.50,stairLanding:1.05,flightRisers:9,
+ stepRiseMode:'step',stepRise:.18,stepTotal:1.62,stepDirection:'up',stepRun:'right',
  stepStartLanding:0,stepEndLanding:0,stepWaist:.3,stepHatch:'concrete',
  railHeight:.95,handrailSize:.05,handrailExtension:0,railBottomGap:.08,railTopGap:.08,
  railBar:.016,railPost:.04,railSpacing:.12,railPostSpacing:1.2,railEndPosts:'yes',

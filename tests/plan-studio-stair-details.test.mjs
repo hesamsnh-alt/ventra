@@ -6,6 +6,7 @@ import {drawingSVG} from '../src/lib/planStudio/render2d.mjs';
 import {newDocument} from '../src/lib/planStudio/document.mjs';
 import {exportDXF} from '../src/lib/planStudio/export.mjs';
 import {EPS, validPolygon} from '../src/lib/planStudio/geometry.mjs';
+import {planSectionCut} from '../src/lib/planStudio/planSectionCut.mjs';
 import {SECTION_DEFAULTS} from '../src/lib/planStudio/sections.mjs';
 import {stairStations, projectedStairSection, railingElevation} from '../src/lib/planStudio/stairDetails.mjs';
 
@@ -174,4 +175,50 @@ test('one-finger stair sweep numbers on release, and a two-finger pan never comm
  input.up(finger(1,10));
  assert.equal(preview.at(-1),null);
  assert.equal(calls.length,1);
+});
+
+test('ST places return stairs at the requested 18/30/105/50 defaults in plan and 3D',async()=>{
+ const {Box3}=await import('three');
+ const {createPlanScene,disposePlanScene}=await import('../src/lib/planStudio/scene.mjs');
+ const initial=editorState();
+ let state=click(startCommand(initial,'ST'),0,0);
+ state=click(state,2,0);
+ const parts=state.doc.entities.filter(e=>e.role==='stair');
+ const treads=parts.filter(e=>e.detailKind==='stair-tread');
+ assert.equal(treads.length,16);
+ near(treads[0].z,.18);
+ near(treads[2].z-treads[0].z,.18);
+ near(treads[0].points[1].x-treads[0].points[0].x,.30);
+ near(treads[0].points[2].y-treads[0].points[1].y,1.05);
+ near(treads[1].points[0].y-treads[0].points[2].y,.50);
+ const [middle,top]=parts.filter(e=>e.detailKind==='stair-landing');
+ near(middle.z,1.62);
+ near(top.z,3.24);
+ const labels=state.doc.entities.filter(e=>e.detailKind==='stair-number').map(e=>Number(e.text));
+ assert.deepEqual(labels.sort((a,b)=>a-b),Array.from({length:18},(_,i)=>i+1));
+ const scene=createPlanScene(state.doc);
+ try{
+  const meshes=scene.children.filter(group=>group.children.length>0);
+  assert.equal(meshes.length,18);
+  const extents=new Box3().setFromObject(scene);
+  assert.ok(Math.abs(extents.max.y-extents.min.y-2.60)<1e-6);
+  assert.ok(Math.abs(extents.max.z-3.24)<1e-6);
+ }finally{disposePlanScene(scene);}
+ const cut=planSectionCut(state.doc,p(-.5,.5),p(4,.5),p(0,1),p(0,0),settings({cutDepth:0}));
+ assert.equal(cut.filter(e=>e.detailKind==='section-cut').length,9);
+ assert.deepEqual(startCommand(state,'UNDO').doc,initial.doc);
+});
+
+test('ST respects orientation, level, custom sizing and the numbering switch',()=>{
+ let state=editorState();
+ state={...state,options:{...state.options,z:2,section:settings({stairNumbering:'no',stairWidth:1.2,stairWell:.6,stairGoing:.32,flightRisers:4})}};
+ state=click(startCommand(state,'ST'),0,0);
+ assert.throws(()=>click(state,0,0),/direction of the first flight/);
+ state=click(state,0,2);
+ assert.equal(state.doc.entities.length,8);
+ const [first,opposite]=state.doc.entities;
+ near(first.points[1].y-first.points[0].y,.32);
+ near(first.points[1].x-first.points[2].x,1.2);
+ near(first.points[2].x-opposite.points[0].x,.6);
+ near(first.z,2.18);
 });

@@ -29,6 +29,9 @@ export function sectionPrompt(command,count,t){
       return t('Select guide lines, arcs or polylines, then press Enter.','خط، قوس یا پلی‌لاین‌های راهنما را انتخاب کن و اینتر بزن.');
     case 'WINDOWELEVATION':
       return t('Select window rectangles, then press Enter.','مستطیل‌های پنجره را انتخاب کن و اینتر بزن.');
+    case 'STAIRPLAN':
+      return count?t('Pick along the ascending direction of the first flight.','در امتداد بالارفتنِ بازوی اول نقطه بزن.'):
+        t('Pick the lower outside corner of the stair.','گوشهٔ بیرونیِ پایین پله را بزن.');
     case 'SECTIONSTAIR':
       return count?t('Pick the opposite corner at the next floor level.','گوشهٔ مقابل را روی تراز طبقهٔ بعد انتخاب کن.'):t('Pick a lower corner of the stair bay.','گوشهٔ پایین دهانهٔ پله را انتخاب کن.');
     case 'STEPSSECTION':
@@ -77,6 +80,7 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
         ['DPL','PERIMETERDIMENSIONS','Dimension selection','اندازه‌گذاری انتخاب'],
         ['WW','SECTIONWALL','Wall section','ضخامت دیوار'],
         ['SSL','SECTIONSLAB','Slab section','ضخامت دال'],
+        ['ST','STAIRPLAN','Draw return stair','ترسیم پلهٔ رفت‌وبرگشت'],
         ['LTP','SECTIONSTAIR','Stair section','مقطع پله'],
         ['LXTB','STEPSSECTION','Section from treads','مقطع از خطوط پله'],
         ['LG','RAILINGELEVATION','Railing elevation','نمای نرده'],
@@ -108,12 +112,20 @@ export default function PlanSectionControls({LengthInput,t,units,command,setting
       ])}
       {size('multilineWidth','Distance between lines','فاصلهٔ بین دو خط',.01)}
     </fieldset>}
-    {['SECTIONSTAIR','STEPSSECTION',STAIR_NUMBER_COMMAND].includes(command)&&<fieldset>
+    {['STAIRPLAN','SECTIONSTAIR','STEPSSECTION',STAIR_NUMBER_COMMAND].includes(command)&&<fieldset>
       <legend>{t('Stair numbering','شماره‌گذاری پله')}</legend>
       {command!==STAIR_NUMBER_COMMAND&&choice('stairNumbering','Number steps on creation','شماره‌گذاری هنگام ترسیم',
         [['yes','On','روشن'],['no','Off','خاموش']])}
       {integer('stairFirstNumber','First step number','شمارهٔ اولین پله',1,9999)}
       {size('stairNumberSize','Number height','ارتفاع شماره',.025)}
+    </fieldset>}
+    {command==='STAIRPLAN'&&<fieldset><legend>{t('Return stair dimensions','ابعاد پلهٔ رفت‌وبرگشت')}</legend>
+      {size('stepRise','Riser height','ارتفاع هر پله',.075)}
+      {size('stairGoing','Tread depth','کف پله',.1)}
+      {size('stairWidth','Clear flight width','عرض هر بازو',.4)}
+      {size('stairWell','Stairwell gap','چشم پله',.05)}
+      {size('stairLanding','Landing depth','عمق پاگرد',.4)}
+      {integer('flightRisers','Risers per flight','تعداد ارتفاع در هر بازو',2,20)}
     </fieldset>}
     {command==='SECTIONSTAIR'&&<fieldset><legend>{t('Stair section settings','تنظیمات مقطع پله')}</legend>
       {choice('stairStyle','Stair type','نوع پله',[
