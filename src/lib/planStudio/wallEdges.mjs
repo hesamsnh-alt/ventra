@@ -102,6 +102,7 @@ export function useWallEdges(doc,pair,options){
  if(mlGroup){
   wall.mlGroup=mlGroup;
   wall.mlInner=mlInner;
+  wall.mlThickness=legacy?.thickness??first.mlThickness??thickness;
   if(mlInner!==null&&mlInner!==undefined){
    const expected=edgeEnds[sources.findIndex(source=>faceSide(source)===mlInner)][0];
    const [f0,f1]=wallFaceLines({entities:[]},wall);
@@ -111,7 +112,7 @@ export function useWallEdges(doc,pair,options){
  const entities=doc.entities.flatMap(entity=>{
   const index=sources.findIndex(edge=>edge.id===entity.id);
   if(index<0)return [entity];
-  const face=mlGroup?{...entity,mlGroup,mlInner,mlSide:faceSide(entity),height:wall.height,z:wall.z}:entity;
+  const face=mlGroup?{...entity,mlGroup,mlInner,mlSide:faceSide(entity),mlThickness:wall.mlThickness,height:wall.height,z:wall.z}:entity;
   return withoutWallSpan(face,sources[index].segment,edgeEnds[index]);
  });
  return {wall,doc:{...doc,entities:[...entities,wall]}};

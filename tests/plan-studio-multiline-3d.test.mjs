@@ -86,3 +86,42 @@ test('editing one ML face height updates both faces and copies get a separate wa
  assert.equal(new Set(s.doc.entities.map(e=>e.mlGroup)).size,2);
  assert.equal(multilinePreview(s.doc.entities).floors.length,2);
 });
+
+test('legacy ML fragments recover walls from their nearby faces without filling the space between them',()=>{
+ const edge=(id,x,y1,y2,metadata={})=>({id,layer:'architecture',role:'line',type:'line',a:p(x,y1),b:p(x,y2),...metadata});
+ const doc=newDocument();
+ doc.entities=[
+  edge('left',0,0,4,{mlGroup:'partition',mlSide:0,height:2.8}),
+  edge('right',3,0,4,{mlGroup:'partition',mlSide:1,height:2.8}),
+  edge('left-trimmed',-.2,0,4),
+  edge('right-trimmed',3.2,0,4),
+  edge('guide-a',8,0,4),edge('guide-b',8.2,0,4),
+ ];
+ const before=structuredClone(doc.entities);
+ const scene=createPlanScene(doc);
+ try{
+  const walls=scene.children.filter(e=>e.userData.planRole==='multiline-wall').map(e=>new Box3().setFromObject(e));
+  assert.equal(walls.length,2);
+  for(const wall of walls){
+   assert.ok(Math.abs(wall.max.x-wall.min.x-.2)<1e-6);
+   assert.ok(Math.abs(wall.max.z-2.8)<1e-6);
+  }
+  assert.deepEqual(doc.entities,before);
+ }finally{disposePlanScene(scene);}
+});
+
+test('recovered drafting edges do not cover an opening in a native wall host',()=>{
+ const edge=(id,y,metadata={})=>({id,layer:'architecture',role:'line',type:'line',a:p(0,y),b:p(6,y),...metadata});
+ const host={id:'host',layer:'architecture',role:'wall',type:'line',a:p(2,0),b:p(4,0),wallFromEdges:true,thickness:.2,height:3};
+ const doc=newDocument();
+ doc.entities=[
+  host,
+  {id:'door',layer:'architecture',type:'opening',kind:'door',wallId:'host',t:.5,width:.9,height:2.1},
+  edge('remaining-face',-.1,{mlGroup:'partition',mlSide:0,mlThickness:.2}),
+  edge('trimmed-face',.104),
+ ];
+ const {bands}=multilinePreview(doc.entities);
+ assert.equal(bands.length,2);
+ const intervals=bands.map(band=>[Math.min(...band.points.map(v=>v.x)),Math.max(...band.points.map(v=>v.x))]);
+ assert.deepEqual(intervals,[[0,2],[4,6]]);
+});

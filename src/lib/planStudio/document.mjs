@@ -55,6 +55,6 @@ export function validateDocument(input){
 export function transformEntity(e,kind,base,value){
  const convert=p=>{const v=sub(p,base);if(kind==='move'||kind==='copy')return{x:p.x+value.x,y:p.y+value.y};if(kind==='rotate'){const a=value*Math.PI/180;return{x:base.x+v.x*Math.cos(a)-v.y*Math.sin(a),y:base.y+v.x*Math.sin(a)+v.y*Math.cos(a)};}return{x:base.x+v.x*value,y:base.y+v.y*value};};
  const n=structuredClone(e);for(const key of ['a','b','center','position'])if(n[key])n[key]=convert(n[key]);if(n.points)n.points=n.points.map(convert);if(n.hatchHoles)n.hatchHoles=n.hatchHoles.map(r=>r.map(convert));if(kind==='rotate'){n.rotation=(n.rotation||0)+value;if(['arc','circle'].includes(n.type))n.start+=value*Math.PI/180;}
- if(kind==='scale'){if(!Number.isFinite(value)||value<=.001||value>1000)throw Error('Use a positive scale factor.');for(const key of ['radius','width','depth','height','pitDepth','thickness','boltDiameter','edge','diameter','textHeight','offsetDistance','hatchScale'])if(n[key]!==undefined)n[key]*=value;}
+ if(kind==='scale'){if(!Number.isFinite(value)||value<=.001||value>1000)throw Error('Use a positive scale factor.');for(const key of ['radius','width','depth','height','pitDepth','thickness','mlThickness','boltDiameter','edge','diameter','textHeight','offsetDistance','hatchScale'])if(n[key]!==undefined)n[key]*=value;}
  return n;
 }

@@ -1,3 +1,4 @@
+import {recoverWallBands} from './recoverWallBands.mjs';
 import {id} from './document.mjs';
 import {curveIntersections,dist,inside,polygonArea,segments,sub,validPolygon} from './geometry.mjs';
 import {dot,normal,unit} from './draftingGeometry.mjs';
@@ -34,7 +35,7 @@ export function createWallMultiline(points,closed,{section,wallHeight,z}){
   throw Error('Wall thickness does not fit this outline. / ضخامت دیوار در این مسیر جا نمی‌شود.');
  const group=id();
  const inner=closed?(polygonArea(faces[0].points)<polygonArea(faces[1].points)?0:1):null;
- return faces.map((face,i)=>({...face,role:'line',mlGroup:group,mlSide:i,mlInner:inner,height:wallHeight,z}));
+ return faces.map((face,i)=>({...face,role:'line',mlGroup:group,mlSide:i,mlInner:inner,mlThickness:section.multilineWidth,height:wallHeight,z}));
 }
 
 const edgesOf=points=>segments({type:'polyline',closed:true,points});
@@ -65,7 +66,7 @@ function openBand(a,b){
  const perimeter=[...a,...b.slice().reverse()];
  return validPolygon(perimeter)?perimeter:null;
 }
-function remainingWallBands(sides){
+function remainingWallBands(sides,known){
  const [first,second]=sides.map(items=>items.flatMap(segments));
  const output=[];
  for(const a of first){
@@ -74,7 +75,7 @@ function remainingWallBands(sides){
    if(Math.abs(dot(perp,unit(b.a,b.b)))>TOL)continue;
    const vectors=[sub(b.a,a.a),sub(b.b,a.a)];
    const thickness=Math.abs(dot(vectors[0],perp));
-   if(thickness<.01-TOL||thickness>3+TOL)continue;
+   if(thickness<.01-TOL||(known?Math.abs(thickness-known)>.004:thickness>.65+TOL))continue;
    const [left,right]=vectors.map(v=>dot(v,axis)).sort((x,y)=>x-y);
    if(Math.min(length,right)-Math.max(0,left)<TOL)continue;
    const oriented=dot(sub(b.b,b.a),axis)>0?[b.a,b.b]:[b.b,b.a];
@@ -103,7 +104,7 @@ export function legacyMultilinePair(doc,idA,idB){
 }
 
 export function multilinePreview(entities){
- const groups=new Map(), floorCandidates=[], bands=[];
+ const groups=new Map(), floorCandidates=[], bands=[], fragmentedLayers=new Set();
  const add=e=>{
   if(!groups.has(e.mlGroup))groups.set(e.mlGroup,[]);
   groups.get(e.mlGroup).push(e);
@@ -136,8 +137,10 @@ export function multilinePreview(entities){
     const ring=openBand(a,b);
     if(ring)bands.push({...style,points:ring,holes:[]});
    }
-  }else if(walls.length||sides.every(side=>side.length)){
-   remainingWallBands(sides).forEach(points=>bands.push({...style,points,holes:[]}));
+  }else{
+   if(sides.some(side=>side.length))fragmentedLayers.add(front.layer);
+   const thickness=front.mlThickness??walls[0]?.thickness;
+   remainingWallBands(sides,thickness).forEach(points=>bands.push({...style,points,holes:[]}));
    if(walls.length&&inner!==null&&inner!==undefined){
     const segmentsOfInner=sides[inner].flatMap(segments);
     const completed=walls.filter(w=>[0,1].includes(w.mlInnerFace)).map(w=>
@@ -153,5 +156,5 @@ export function multilinePreview(entities){
   if([...explicit,...floors].some(other=>Math.abs(level(other)-floor.z)<.01&&overlaps(other.points,floor.points)))continue;
   floors.push({...floor,type:'polyline',closed:true,height:.12});
  }
- return {bands,floors};
+ return {bands:[...bands,...recoverWallBands(entities,bands,fragmentedLayers)],floors};
 }
