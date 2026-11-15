@@ -31,7 +31,7 @@ export function planWallGeometry(e,openings=[]){
 }
 export function createPlanScene(doc){
  const root=new T.Group(),entities=visibleEntities(doc),b=bounds(entities),matCache=new Map();const mat=(color,metal=false)=>{const k=color+metal;if(!matCache.has(k))matCache.set(k,material(color,metal));return matCache.get(k);};
- for(const e of entities){if(e.role==='hatch')continue;const group=new T.Group();group.userData={planEntityId:e.id};root.add(group);const color=styleFor(doc,e).color;
+ for(const e of entities){if(e.role==='hatch'||e.role==='section')continue;const group=new T.Group();group.userData={planEntityId:e.id};root.add(group);const color=styleFor(doc,e).color;
   if(e.role==='floor'&&e.type==='polyline'&&e.closed){const floor=shapeFromPoints(e.points);for(const shaft of entities.filter(x=>x.role==='shaft'&&Math.abs((x.z||0)-(e.z||0))<1e-6&&shaftFitsFloor(x,e)))floor.holes.push(new T.Path(shaftOuter(shaft).map(p=>new T.Vector2(p.x,p.y))));const mesh=addMesh(group,new T.ExtrudeGeometry(floor,{depth:e.height||.12,bevelEnabled:false}),floorMaterial(e));mesh.position.z=(e.z||0)-(e.height||.12);}
   if(e.role==='shaft'){const ring=shapeFromPoints(shaftOuter(e));ring.holes.push(new T.Path(e.points.map(p=>new T.Vector2(p.x,p.y))));const walls=addMesh(group,new T.ExtrudeGeometry(ring,{depth:e.height+e.pitDepth,bevelEnabled:false}),mat(e.surfaceColor||'#929795'));walls.position.z=(e.z||0)-e.pitDepth;const slab=addMesh(group,new T.ExtrudeGeometry(shapeFromPoints(shaftOuter(e)),{depth:e.thickness,bevelEnabled:false}),mat(e.surfaceColor||'#929795'));slab.position.z=(e.z||0)-e.pitDepth-e.thickness;}
   if(e.role==='wall'&&e.type==='line'){
