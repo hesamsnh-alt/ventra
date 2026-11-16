@@ -25,8 +25,8 @@ test('kitchen includes equipment, aerial hood and dining chairs with safe footpr
  const r=applyDesignDefaults(scene('Kitchen'));
  for(const type of ['kitchen_counter','sink','stove','range_hood','washing_machine','refrigerator','kitchen_island','chair'])assert.ok(r.assets.some(a=>a.type===type),type);
  const hood=r.assets.find(a=>a.type==='range_hood'),stove=r.assets.find(a=>a.type==='stove');
- assert.equal(hood.mountedAboveId,stove.id);assert.equal(hood.zMeters,1.95);
- assert.equal(r.assets.filter(a=>a.type==='chair').length,4);
+ assert.equal(hood.mountedAboveId,stove.id);assert.ok(hood.zMeters>stove.height+.55);
+ assert.equal(r.assets.filter(a=>a.type==='chair').length,3);
 });
 test('explicit heights and materials are preserved; compact or invalid rooms warn, never expand',()=>{
  const s={...scene('Bedroom'),height:4.1,heightSource:'source_dimension'};s.rooms[0].floorFinish='wet_tile';
@@ -92,4 +92,40 @@ test('existing kitchens can upgrade while preserving source fixtures and prior d
  assert.deepEqual(upgraded.assets[0],old.assets[0]);
  assert.ok(!upgraded.assets.some(a=>a.type==='washing_machine'));
  assert.equal(applyDesignDefaults(upgraded),upgraded);
+});
+
+test('a saved JPG kitchen repairs unsupported fixtures and keeps the authored furniture and plan',()=>{
+ const original=scene('Kitchen');
+ const asset=(id,type,xMeters,yMeters,width,depth,height,extra={})=>({
+  id,type,xMeters,yMeters,width,depth,height,roomId:'room',rotation:0,...extra,
+ });
+ const counter=asset('center-counter','kitchen_counter',6,5,1.6,.6,.92,{placementSource:'manual_furniture_editor'});
+ const source={placementSource:'source_image_observation_v1'};
+ const sink=asset('source-sink','sink',8,6,.55,.4,.85,source);
+ const stove=asset('source-stove','stove',8,4,.6,.5,.9,source);
+ const washer=asset('source-washer','washing_machine',5,7,.6,.57,.86,source);
+ const chair=asset('default_room_chair_0','chair',1.5,2,.42,.45,.88,{placementSource:'design_default_not_measured'});
+ const input={...original,assets:[counter,sink,stove,washer,chair],
+  designDefaults:{version:'room-design-defaults-v65',addedAssetIds:[chair.id]}};
+ const result=applyDesignDefaults(input);
+ assert.deepEqual(result.walls,input.walls);
+ assert.deepEqual(result.rooms,input.rooms);
+ assert.deepEqual(result.assets.find(a=>a.id===counter.id),counter);
+ assert.ok(result.assets.filter(a=>a.variant==='kitchen-base').length>=2);
+ for(const fixture of [sink,stove]){
+  const fitted=result.assets.find(a=>a.id===fixture.id);
+  assert.ok(fitted.embeddedInCounter);
+  assert.ok(result.assets.some(a=>a.id===fitted.layoutAnchorId&&a.variant==='kitchen-base'));
+  assert.notEqual(fitted.xMeters,fixture.xMeters);
+ }
+ assert.ok(result.assets.find(a=>a.id===washer.id).underCounter);
+ assert.ok(result.assets.some(a=>a.worktopOnly&&a.layoutAnchorId===washer.id));
+ assert.ok(result.assets.some(a=>a.variant==='kitchen-upper'&&a.fittedKitchen&&a.underCabinetLight));
+ assert.ok(result.assets.every(a=>a.layoutAnchorId!==counter.id||a.variant!=='kitchen-upper'));
+ assert.ok(result.assets.filter(a=>a.type==='chair').every(a=>a.groupId&&
+  result.assets.some(b=>b.id===a.groupId&&['kitchen_island','dining_table'].includes(b.type))));
+ assert.ok(!result.assets.some(a=>a.id===chair.id&&a.xMeters===chair.xMeters&&a.yMeters===chair.yMeters));
+ const hood=result.assets.find(a=>a.type==='range_hood');
+ assert.equal(hood.mountedAboveId,stove.id);
+ assert.equal(hood.xMeters,result.assets.find(a=>a.id===stove.id).xMeters);
 });

@@ -5662,6 +5662,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     } catch { return null; }
   };
   const designVariant=asset.variant||palette.designPreset||'classic';
+  const fitted=interactiveKitchen&&asset.fittedKitchen===true;
   const upholstery = assetType === 'sofa' || assetType === 'armchair';
   const finish = (kind) => {
     const map = surfaceTexture(kind);
@@ -5670,14 +5671,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const OpaqueMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const GlassMaterial = THREE.MeshPhongMaterial || THREE.MeshLambertMaterial || THREE.MeshBasicMaterial;
   const accent = upholstery ? ventraTextileMaterial(THREE,asset?.color||palette?.upholstery||'#b8afa2',w,d) : new OpaqueMaterial({
-    color: hexNumber(asset?.color || (upholstery ? palette?.upholstery : palette?.furniture || palette?.accent), upholstery ? 0xb8afa2 : 0x815a3f),
+    color: hexNumber(asset?.color || (upholstery ? palette?.upholstery : (fitted?'#a9a299':palette?.furniture || palette?.accent)), upholstery ? 0xb8afa2 : 0x815a3f),
     side: THREE.DoubleSide,
     shininess: upholstery ? 5 : 36,
     specular: upholstery ? 0x121212 : 0x302b25,
-    ...finish(upholstery ? 'fabric' : 'wood'),
+    ...(fitted?{}:finish(upholstery ? 'fabric' : 'wood')),
   });
   const light = upholstery ? ventraTextileMaterial(THREE,asset?.color||palette?.upholstery||'#d9d0c4',w,d) : new OpaqueMaterial({ color: hexNumber(asset?.color || palette?.upholstery, 0xd9d0c4), side: THREE.DoubleSide, shininess: ['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 20 : 3, specular: 0x222222, ...finish(['cabinet','wardrobe','kitchen_counter','dining_table','desk'].includes(assetType) ? 'wood' : 'fabric') });
-  const white = new OpaqueMaterial({ color: hexNumber(asset?.color, 0xe8e2da), side: THREE.DoubleSide, shininess: 38, specular: 0x444444, ...finish('stone') });
+  const white = new OpaqueMaterial({ color: hexNumber(fitted?null:asset?.color, fitted?0xf5efe3:0xe8e2da), side: THREE.DoubleSide, shininess: 38, specular: 0x444444, ...finish('stone') });
   const dark = new OpaqueMaterial({ color: 0x4d433b, side: THREE.DoubleSide, shininess: 9 });
   const sage = new OpaqueMaterial({ color: hexNumber(palette?.textileAccent, 0x8e9b78), side: THREE.DoubleSide, shininess: 3, ...finish('fabric') });
   const rugMat = new OpaqueMaterial({ color: 0xc7bbaa, side: THREE.DoubleSide, shininess: 1, ...finish('fabric') });
@@ -5687,7 +5688,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
   const metal = new OpaqueMaterial({ color: hexNumber(palette?.metal, 0x817a72), side: THREE.DoubleSide, shininess: 110, specular:0xb8b6b1 });
 
   if (interactiveKitchen) {
-    applyPresentationFinish(accent, "satinWood");
+    applyPresentationFinish(accent, fitted?"satinLacquer":"satinWood");
     applyPresentationFinish(white, "polishedStone");
     applyPresentationFinish(metal, "brushedSteel");
   }
@@ -5739,6 +5740,13 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     meshes.push(mesh);
     return mesh;
   };
+
+  const kitchenLight=(controls,source,intensity,distance)=>{
+    const light={color:new THREE.Color(0xffddb0),intensity,distance,decay:2};
+    source.userData={...source.userData,demoLight:light};
+    controls.forEach(mesh=>registerSceneInteraction([mesh],()=>{light.intensity=light.intensity?0:intensity;}));
+  };
+  const warmDiffuser=()=>new OpaqueMaterial({color:0xffedcc,emissive:0xffcc83,shininess:12});
 
   const traditionalSeat=()=>{
     addBox(w*.93,d*.82,h*.1,0,0,h*.19,dark);
@@ -5971,7 +5979,41 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'cabinet': {
       if(interactiveKitchen){
-        buildKitchenStorage({type:assetType,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        const storage={type:assetType,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,fitted};
+        if(fitted&&designVariant==='kitchen-tall'){
+          const lower=h*.32,oven=h*.32,upper=h-lower-oven;
+          buildKitchenStorage({...storage,h:lower});
+          buildKitchenStorage({...storage,h:upper,addBox:(width,depth,height,x,y,level,finish)=>
+            addBox(width,depth,height,x,y,level+lower+oven,finish)});
+          addBox(w,d,oven,0,0,lower+oven/2,dark);
+          const ovenGlass=new OpaqueMaterial({color:0x141719,shininess:90,specular:0x77716d});
+          addBox(w*.91,.016,oven*.67,0,-d/2,lower+oven*.42,ovenGlass);
+          addBox(w*.72,.03,.016,0,-d/2-.012,lower+oven*.70,metal);
+          addBox(w*.22,.009,.023,0,-d/2-.011,lower+oven*.88,new OpaqueMaterial({color:0x181b1c,emissive:0x445226}));
+        }else if(fitted&&asset.displayShelves){
+          addBox(w,.019,h,0,d/2-.010,h/2,dark);
+          for(const sign of [-1,1])addBox(.020,d,h,sign*(w/2-.010),0,h/2,dark);
+          const diffuser=warmDiffuser();
+          for(const level of [0,h*.34,h*.67,h-.025]){
+            addBox(w,d,.02,0,0,level+.01,dark);
+            if(level>0)addBox(w*.94,.012,.007,0,-d*.34,level-.006,diffuser);
+          }
+          for(const x of [-.26,0,.26])addBox(.13,.13,.058,x*w,0,.051,white);
+        }else buildKitchenStorage(storage);
+        if(fitted&&designVariant==='kitchen-upper'){
+          const splash=Number(asset.backsplashHeight)||0;
+          if(splash>.05){
+            const grout=new OpaqueMaterial({color:0xa9a29a,shininess:5});
+            const tile=new OpaqueMaterial({color:0xe5ded1,shininess:42,specular:0x605b56});
+            addBox(w,.012,splash,0,d/2-.008,-splash/2,grout);
+            const columns=Math.ceil(w/.23),rows=Math.ceil(splash/.19);
+            for(let row=0;row<rows;row++)for(let column=0;column<columns;column++)
+              addBox(w/columns-.003,.008,splash/rows-.003,((column+.5)/columns-.5)*w,d/2-.016,
+                -splash+(row+.5)*splash/rows,tile);
+          }
+          const strip=addBox(w*.96,.018,.008,0,-d*.32,-.007,warmDiffuser());
+          if(asset.underCabinetLight)kitchenLight([strip],strip,12,2.4);
+        }
         break;
       }
       addBox(w, d, Math.min(h, assetType === 'tv_unit' ? 0.52 : h), 0, 0, Math.min(h, assetType === 'tv_unit' ? 0.52 : h) / 2, accent);
@@ -5990,6 +6032,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'range_hood': {
+      if(fitted){
+        addBox(w,d,h,0,0,h/2,dark);
+        addBox(w*.98,.016,h*.67,0,-d/2-.003,h/2,metal);
+        addBox(w*.80,d*.49,.007,0,.02,.004,metal);
+        const led=addBox(w*.84,.017,.008,0,-d*.34,-.001,warmDiffuser());
+        kitchenLight([led],led,9,1.6);
+        break;
+      }
       addBox(w,d,h*.24,0,0,h*.12,metal);
       addBox(w*.35,d*.45,h*.76,0,d*.2,h*.62,metal);
       addBox(w*.65,d*.55,.012,0,0,.012,dark);
@@ -5998,7 +6048,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     case 'kitchen_counter': {
       if(asset.worktopOnly){addBox(w,d,h,0,0,h/2,white);break;}
       if(interactiveKitchen){
-        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,fitted,seatingSide:asset.seatingSide,apertures:kitchenFixtures?.openings.get(asset)});
         break;
       }
       if(designVariant==='l-shape'){
@@ -6018,7 +6068,18 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
     }
     case 'kitchen_island': {
       if(interactiveKitchen){
-        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
+        buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,fitted,seatingSide:asset.seatingSide,apertures:kitchenFixtures?.openings.get(asset)});
+        if(fitted&&asset.pendantCeiling>=2.5){
+          const ceiling=asset.pendantCeiling,shade=2.05,drop=ceiling-shade;
+          for(const x of [-w*.30,0,w*.30]){
+            addCylinder(.024,.026,x,0,ceiling-.014,dark);
+            addCylinder(.003,drop,x,0,(ceiling+shade)/2,dark);
+            const glass=new GlassMaterial({color:0xffe7ca,transparent:true,opacity:.25,depthWrite:false,shininess:68});
+            const shell=addCylinder(.048,.16,x,0,shade-.035,glass);
+            const bulb=addCylinder(.016,.044,x,0,shade-.058,warmDiffuser());
+            kitchenLight([shell,bulb],bulb,16,3);
+          }
+        }
         break;
       }
       addBox(w * 0.92, d * 0.86, Math.min(h, 0.88), 0, 0, Math.min(h, 0.88) / 2, accent);

@@ -1,5 +1,5 @@
 import {canonicalRoomType} from './roomSemantics.mjs';
-export const PDF_INTERIOR_VERSION='pdf-interior-defaults-v168';
+export const PDF_INTERIOR_VERSION='pdf-interior-defaults-v169';
 const palette={wall:'#f2eee7',externalWall:'#d5cfc4',floor:'#ded6c8',bathroomTile:'#e5e8e5',door:'#8b6848',furniture:'#a27d55',upholstery:'#c8b9a5',glass:'#9fbfcf',metal:'#545d62',accent:'#9c8061'};
 const signature=a=>JSON.stringify(['id','roomId','type','xMeters','yMeters','rotation','width','depth','height','zMeters','color','variant','embeddedInCounter','mountedAboveId'].map(k=>a[k]??null));
 // Proposed design only. This module never imports catalog, prices or BOQ services.

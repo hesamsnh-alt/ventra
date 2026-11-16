@@ -31,7 +31,7 @@ export function bindKitchenSwitch(control, effect, ...additionalControls) {
   for (const mesh of [control, effect, ...additionalControls]) interactions.set(mesh, toggle);
 }
 
-export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshes, addBox, wood, liner, stone, metal, apertures = [] }) {
+export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshes, addBox, wood, liner, stone, metal, apertures = [], fitted = false, seatingSide = 0 }) {
   const wall = Math.min(0.019, w * 0.06, d * 0.08, h * 0.08);
   const counter = type !== "cabinet";
   const top = counter ? Math.min(0.045, h * 0.08) : 0;
@@ -55,7 +55,7 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
     }
   }
 
-  function run(width, depth, x, y, frontDirection) {
+  function run(width, depth, x, y, frontDirection, fullTop=true) {
     const columns = Math.min(10, Math.max(1, Math.ceil(width / 0.62)));
     const front = y + frontDirection * (depth / 2 - wall / 2);
     addBox(width, wall, body, x, y - frontDirection * (depth - wall) / 2, body / 2, liner);
@@ -79,10 +79,15 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
       const edge = center + hinge * (leaf - wall) / 2;
       movingParts(meshes, () => {
         addBox(leaf, wall, doorHeight, center, front, doorHeight / 2 + wall * 0.24, wood);
-        addBox(leaf * 0.73, wall * 0.33, doorHeight * 0.78, center,
-          front + frontDirection * wall * 0.49, doorHeight / 2 + wall * 0.24, wood);
-        addBox(wall, wall * 1.7, Math.min(0.12, doorHeight * 0.26), center - hinge * leaf * 0.32,
-          front + frontDirection * wall * 1.14, doorHeight * 0.76, metal);
+        if(fitted){
+          addBox(leaf*.76,wall*.44,.012,center,front+frontDirection*wall*.55,
+            type==='cabinet'?.027:doorHeight-.018,liner);
+        }else{
+          addBox(leaf * 0.73, wall * 0.33, doorHeight * 0.78, center,
+            front + frontDirection * wall * 0.49, doorHeight / 2 + wall * 0.24, wood);
+          addBox(wall, wall * 1.7, Math.min(0.12, doorHeight * 0.26), center - hinge * leaf * 0.32,
+            front + frontDirection * wall * 1.14, doorHeight * 0.76, metal);
+        }
       }, (pose, opened) => {
         const angle = opened ? -frontDirection * hinge * 1.45 : 0;
         const px = cx + edge * c - front * s;
@@ -99,7 +104,8 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
       const drawerZ = body - drawerHeight / 2;
       movingParts(meshes, () => {
         addBox(leaf, wall, drawerHeight - wall * 0.63, center, front, drawerZ, wood);
-        addBox(leaf * 0.55, wall * 1.45, wall, center, front + frontDirection * wall * 1.1, drawerZ, metal);
+        addBox(leaf*.55,fitted?wall*.44:wall*1.45,fitted?.012:wall,center,
+          front+frontDirection*wall*(fitted?.55:1.1),drawerZ+(fitted?drawerHeight*.35:0),fitted?liner:metal);
         addBox(leaf - wall, slideDepth, wall * 0.52, center, drawerY, drawerZ - drawerHeight * 0.35, liner);
         for (const side of [-1, 1]) {
           addBox(wall * 0.53, slideDepth, drawerHeight * 0.53, center + side * (leaf - wall * 2.2) / 2, drawerY, drawerZ, liner);
@@ -110,7 +116,7 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
         pose.mesh.position.set(pose.x - s * slide, pose.y + c * slide, pose.z);
       });
     }
-    if (counter) addPanel(width,depth,top,x,y,h-top/2,stone);
+    if (counter&&fullTop) addPanel(width,depth,top,x,y,h-top/2,stone);
   }
 
   if (type === "kitchen_counter" && variant === "l-shape") {
@@ -127,9 +133,16 @@ export function buildKitchenStorage({ type, variant, w, d, h, rot, cx, cy, meshe
     buildKitchenStorage({
       type: "kitchen_counter", w: d - corner, d: corner, h, rot: rot + Math.PI / 2,
       cx: cx + across * c - along * s, cy: cy + across * s + along * c, meshes, addBox: localAdd,
-      wood, liner, stone, metal,
+      wood, liner, stone, metal, fitted,
       apertures:apertures.map(hole=>({x:hole.y-along,y:across-hole.x,width:hole.depth,depth:hole.width})),
     });
+    return;
+  }
+  if(type==='kitchen_island'&&fitted&&seatingSide){
+    const overhang=Math.min(.28,d*.30);
+    run(w-.07,d-overhang,0,-seatingSide*overhang/2,-seatingSide,false);
+    addPanel(w,d,top,0,0,h-top/2,stone);
+    for(const sign of [-1,1])addBox(.035,d,body,sign*(w-.035)/2,0,body/2,stone);
     return;
   }
   run(w, d, 0, 0, -1);

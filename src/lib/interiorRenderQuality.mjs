@@ -23,6 +23,7 @@ export function physicalSurfaceKind(source){
 // Keep material response independent from the selected pigment and geometry.
 const finishProfiles = Object.freeze({
  polishedStone: Object.freeze({roughness:.16,metalness:0,clearcoat:.86,clearcoatRoughness:.10}),
+ satinLacquer: Object.freeze({roughness:.31,metalness:0,clearcoat:.52,clearcoatRoughness:.24}),
  satinWood: Object.freeze({roughness:.37,metalness:0,clearcoat:.44,clearcoatRoughness:.24}),
  chrome: Object.freeze({roughness:.10,metalness:1,clearcoat:.12,clearcoatRoughness:.1}),
  brushedSteel: Object.freeze({roughness:.28,metalness:.94,anisotropy:.65}),

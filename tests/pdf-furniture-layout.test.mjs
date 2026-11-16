@@ -27,7 +27,7 @@ test('sink and hob occupy separate positions in one counter and every proposed d
 test('released v166 defaults migrate while preserving actual architecture, manual changes and deletions',()=>{
  const old=JSON.parse(readFileSync(new URL('./fixtures/pdf-v166-interior-layout.json',import.meta.url))),original=structuredClone(old);
  const moved=old.assets.find(a=>a.type==='plant');moved.xMeters+=.1;const removed=old.assets.find(a=>a.type==='washing_machine');old.assets=old.assets.filter(a=>a.id!==removed.id);
- const result=applyDesignDefaults(old);assert.equal(result.pdfInteriorDefaults.version,'pdf-interior-defaults-v168');assert.deepEqual(result.assets.find(a=>a.id===moved.id),moved);assert.ok(!result.assets.some(a=>a.roomId===removed.roomId&&a.type===removed.type));
+ const result=applyDesignDefaults(old);assert.equal(result.pdfInteriorDefaults.version,'pdf-interior-defaults-v169');assert.deepEqual(result.assets.find(a=>a.id===moved.id),moved);assert.ok(!result.assets.some(a=>a.roomId===removed.roomId&&a.type===removed.type));
  for(let i=0;i<2;i++)for(const key of ['walls','openings','holes','footprint','floorPlates','height','width','depth'])assert.deepEqual(result.pdfStoreys[i][key],old.pdfStoreys[i][key]);
  assert.notDeepEqual(result.assets.find(a=>a.type==='sofa'),original.assets.find(a=>a.type==='sofa'));assert.equal(applyDesignDefaults(result),result);
 });

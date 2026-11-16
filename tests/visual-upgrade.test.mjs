@@ -380,3 +380,23 @@ test('saved bedroom defaults show wardrobe handles and vanity mirror on the room
   assert.ok(xMeters>7?detail.position.x<reference.position.x:detail.position.y>reference.position.y);
  }
 });
+
+test('the default fitted kitchen renders working warm lights and keeps cabinet doors operable',()=>{
+ const meshes=(type,extra)=>context.buildSchematicAssetMeshes({
+  THREE,asset:{id:type,type,width:1,depth:.62,height:1.06,xMeters:4,yMeters:4,fittedKitchen:true,...extra},
+  palette:{},roomWidth:8,roomDepth:8,interactiveKitchen:true,
+ });
+ const upper=meshes('cabinet',{variant:'kitchen-upper',zMeters:1.63,backsplashHeight:.71,underCabinetLight:true});
+ const strip=upper.find(mesh=>mesh.userData.demoLight);
+ assert.ok(strip.userData.demoLight.intensity>0);
+ assert.ok(upper.some(mesh=>mesh.position.z<1.6&&mesh.position.z>.92));
+ assert.ok(kitchenModel.toggleKitchenPart(strip));
+ assert.equal(strip.userData.demoLight.intensity,0);
+ const doors=upper.filter(mesh=>mesh!==strip);
+ assert.ok(doors.some(mesh=>kitchenModel.toggleKitchenPart(mesh)&&Math.abs(mesh.rotation.z)>1));
+
+ const island=meshes('kitchen_island',{width:2.12,depth:1.02,height:.92,seatingSide:1,pendantCeiling:3.2});
+ assert.equal(island.filter(mesh=>mesh.userData.demoLight).length,3);
+ assert.ok(island.some(mesh=>mesh.material.userData?.presentationFinish==='polishedStone'));
+ assert.ok(island.some(mesh=>mesh.material.userData?.presentationFinish==='satinLacquer'));
+});
