@@ -6,6 +6,7 @@ import {dimensionGeometry} from './render2d.mjs';
 import {hatchContains} from './hatchBoundary.mjs';
 function geometry(e,doc){
  let curves=segments(e),points=[],fill=null;
+ if(e.type==='point')points.push(e.position);
  if(e.role==='wall'&&e.type==='line'&&e.thickness){const length=Math.hypot(e.b.x-e.a.x,e.b.y-e.a.y),nx=-(e.b.y-e.a.y)/length*e.thickness/2,ny=(e.b.x-e.a.x)/length*e.thickness/2,ring=[{x:e.a.x+nx,y:e.a.y+ny},{x:e.b.x+nx,y:e.b.y+ny},{x:e.b.x-nx,y:e.b.y-ny},{x:e.a.x-nx,y:e.a.y-ny}];curves=segments({type:'polyline',points:ring,closed:true});fill=p=>inside(p,ring);}
  if(e.role==='wall'&&e.type==='arc'&&e.thickness){const outer={...e,radius:e.radius+e.thickness/2},inner={...e,radius:e.radius-e.thickness/2};curves=[outer,inner,{type:'line',a:at(outer,0),b:at(inner,0)},{type:'line',a:at(outer,1),b:at(inner,1)}];fill=p=>{const radius=Math.hypot(p.x-e.center.x,p.y-e.center.y);return radius>=inner.radius&&radius<=outer.radius&&param(e,p)<=1+EPS;};}
  if(e.role==='shaft'){curves=segments({type:'polyline',points:shaftOuter(e),closed:true});fill=p=>inside(p,shaftOuter(e));}

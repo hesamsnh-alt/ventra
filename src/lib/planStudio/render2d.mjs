@@ -32,8 +32,17 @@ export function wallOutlineData(e){
  }
  return '';
 }
-function renderEntitySVG(doc,e,{print=false,selected=false,screen=false}={}){
+function renderEntitySVG(doc,e,{print=false,selected=false,screen=false,unitsPerPixel}={}){
  const st=styleFor(doc,e),color=selected?'#ffdb4e':print&&(e.role==='section'||st.color.toLowerCase()==='#dce6ed')?'#202832':st.color,w=screen?Math.max(.8,Math.min(3,st.weight*4)):(e.role==='wall'&&!e.wallFromEdges?e.thickness:st.weight*.001*(print?doc.printScale:35)),dash=lineDash(st.dash,screen),attrs=`stroke="${escapeXML(color)}" stroke-width="${w}" ${screen?'vector-effect="non-scaling-stroke"':''} ${dash?`stroke-dasharray="${dash}"`:''} fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+ if(e.type==='point'){
+  const {x,y}=e.position,style=doc.pointStyle??'cross';
+  const radius=(unitsPerPixel??.008)*5;
+  if(style==='dot')return `<circle cx="${x}" cy="${y}" r="${radius*.42}" fill="${color}"/>`;
+  const cross=style==='plus'?`M${x-radius},${y}h${2*radius}M${x},${y-radius}v${2*radius}`:
+   `M${x-radius},${y-radius}l${2*radius},${2*radius}M${x-radius},${y+radius}l${2*radius},${-2*radius}`;
+  const ring=style==='circle-cross'?`<circle cx="${x}" cy="${y}" r="${radius*1.45}" ${attrs}/>`:'';
+  return `<g data-plan-point="${style}"><path d="${cross}" ${attrs}/>${ring}</g>`;
+ }
  if(e.role==='shaft'){const outer=pathData({type:'polyline',points:shaftOuter(e),closed:true}),inner=pathData(e),g=shaftSize(e);return `<g data-shaft="true"><path d="${outer+inner}" ${attrs.replace(' fill="none"','')} fill="${color}" fill-opacity=".18" fill-rule="evenodd"/><path d="M${e.points[0].x},${e.points[0].y}L${e.points[2].x},${e.points[2].y}M${e.points[1].x},${e.points[1].y}L${e.points[3].x},${e.points[3].y}" ${attrs} stroke-dasharray="${screen?'5 4':'.08 .06'}"/><text transform="translate(${g.center.x},${g.center.y}) scale(1,-1)" text-anchor="middle" fill="${color}" font-size=".15">LIFT PIT</text></g>`;}
  if(e.role==='wall'&&e.type==='line'&&e.wallFromEdges){
   return wallFaceLines(doc,e).map(face=>`<path d="${pathData(face)}" ${attrs}/>`).join('');
@@ -70,5 +79,5 @@ export function entitySVG(doc,e,options={}){
 export function drawingSVG(doc,{print=false,width=1800,height=1200,viewport=null}={}){
  const entities=visibleEntities(doc),b=viewport||bounds(entities),pad=viewport?0:Math.max(.3,Math.max(b.width,b.height)*.04);let w=b.width+2*pad,h=b.height+2*pad;if(w/h>width/height)h=w*height/width;else w=h*width/height;
  const defs=entities.filter(e=>e.hatch).map(e=>`<pattern id="hatch-${escapeXML(e.id)}" patternUnits="userSpaceOnUse" width="${e.hatchScale||.2}" height="${e.hatchScale||.2}">${hatchPattern(e.hatch,e.hatchScale,print&&styleFor(doc,e).color.toLowerCase()==='#dce6ed'?'#202832':styleFor(doc,e).color)}</pattern>`).join('');
- return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${b.x-pad} ${-b.y-b.height-pad} ${w} ${h}"><rect x="${b.x-pad}" y="${-b.y-b.height-pad}" width="${w}" height="${h}" fill="${print?'white':'#111923'}"/><defs>${defs}</defs><g transform="scale(1,-1)">${entities.map(e=>entitySVG(doc,e,{print})).join('')}</g></svg>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${b.x-pad} ${-b.y-b.height-pad} ${w} ${h}"><rect x="${b.x-pad}" y="${-b.y-b.height-pad}" width="${w}" height="${h}" fill="${print?'white':'#111923'}"/><defs>${defs}</defs><g transform="scale(1,-1)">${entities.map(e=>entitySVG(doc,e,{print,unitsPerPixel:w/width})).join('')}</g></svg>`;
 }

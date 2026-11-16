@@ -1,3 +1,4 @@
+import {POINT_STYLES} from './dividePath.mjs';
 import {id,newDocument,validateDocument} from './document.mjs';
 import {at,dist,EPS,norm,TAU,validPolygon} from './geometry.mjs';
 
@@ -47,7 +48,9 @@ export function readDxf(text){
  const entities=sections.get('ENTITIES'), locations=sections.get('TABLES')??[];
  if(!entities)throw Error('DXF has no ENTITIES section. / بخش هندسه در فایل DXF پیدا نشد.');
  const units=pairs.findIndex(([k,v])=>k===9&&v==='$INSUNITS');
- return {scale:units<0?undefined:headerScale[pairs[units+1]?.[1]],entities,
+ const pointMode=pairs.findIndex(([k,v])=>k===9&&v==='$PDMODE');
+ const pointStyle=pointMode<0?undefined:Object.keys(POINT_STYLES).find(style=>POINT_STYLES[style]===Number(pairs[pointMode+1]?.[1]));
+ return {...(pointStyle?{pointStyle}:{}),scale:units<0?undefined:headerScale[pairs[units+1]?.[1]],entities,
   layers:locations.filter(record=>record.type==='LAYER').map(record=>record.groups)};
 }
 
@@ -83,6 +86,8 @@ function tessellate(vertices,closed){
 function toGeometry(type,g,scale,legacy){
  const atPoint=(x,y)=>({x:num(g,x)*scale,y:num(g,y)*scale});
  const base=atPoint(10,20);
+ if(type==='POINT'&&Number.isFinite(base.x)&&Number.isFinite(base.y))
+  return {type:'point',position:base,z:num(g,30,0)*scale};
  if(type==='LINE'){
   const b=atPoint(11,21);
   if(dist(base,b)>EPS)return {type:'line',a:base,b};
@@ -142,9 +147,10 @@ export function importDxf(source,name,unit){
   const normal=[num(g,210,0),num(g,220,0),num(g,230,1)];
   const entity=normal.every((value,index)=>value===(index===2?1:0))?toGeometry(type,g,scale,vertices):null;
   if(!entity){omit(type);continue;}
-  doc.entities.push({...entity,role:entity.type==='text'?undefined:'line',id:id(),layer:layerFor(group(g,8)||'0'),color:style(g)});
+  doc.entities.push({...entity,role:['text','point'].includes(entity.type)?undefined:'line',id:id(),layer:layerFor(group(g,8)||'0'),color:style(g)});
   if(doc.entities.length>2000)throw Error('DXF exceeds the 2,000 editable entities in a Plan Studio drawing. / فایل بیش از ۲۰۰۰ جزء قابل ویرایش دارد.');
  }
+ if(doc.entities.some(e=>e.type==='point'))doc.pointStyle=source.pointStyle??'cross';
  if(!doc.entities.length)throw Error('No supported 2D model-space geometry found in this DXF. / هندسهٔ دوبعدی قابل ویرایش در فضای مدل DXF پیدا نشد.');
  // CAD survey coordinates can exceed the editor's drawing range. Translate only when needed.
  const locations=doc.entities.flatMap(e=>e.points??[e.a,e.b,e.center,e.position].filter(Boolean));
