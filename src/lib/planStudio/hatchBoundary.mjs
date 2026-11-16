@@ -45,14 +45,14 @@ export function findHatchBoundary(doc,p){
  for(const e of visible.filter(e=>e.type==='circle'&&dist(e.center,p)<=e.radius+TOL))candidates.push({type:'circle',entity:e,area:Math.PI*e.radius**2,sources:[e.id],component:null});
  candidates.sort((a,b)=>a.area-b.area);const selected=candidates[0];if(!selected)return null;
  const outer=selected.type==='circle'?Array.from({length:128},(_,i)=>at({...selected.entity,start:0,sweep:TAU},i/128)):selected.points;
- const holes=[];
- for(const face of exteriors){if(face.component===selected.component||face.area>=selected.area-TOL)continue;if(face.points.every(q=>inside(q,outer)))holes.push(face.points.slice().reverse());}
+ const holes=[],holeAreas=[];
+ for(const face of exteriors){if(face.component===selected.component||face.area>=selected.area-TOL)continue;if(face.points.every(q=>inside(q,outer))){holes.push(face.points.slice().reverse());holeAreas.push(face.area);}}
  for(const e of visible.filter(e=>e.type==='circle'&&e.id!==selected.entity?.id)){
-  const ring=Array.from({length:128},(_,i)=>at({...e,start:0,sweep:TAU},i/128));if(Math.PI*e.radius**2<selected.area&&ring.every(q=>inside(q,outer)))holes.push(ring);
+  const ring=Array.from({length:128},(_,i)=>at({...e,start:0,sweep:TAU},i/128));if(Math.PI*e.radius**2<selected.area&&ring.every(q=>inside(q,outer))){holes.push(ring);holeAreas.push(Math.PI*e.radius**2);}
  }
  if(holes.length>32||holes.reduce((sum,r)=>sum+r.length,0)>2000)throw Error('Too many hatch islands. / تعداد جزیره‌های هچ بیش از حد است.');
  const existing=selected.entity||visible.find(e=>e.type==='polyline'&&e.closed&&key(e.points)===key(outer));
- return{...selected,points:outer,holes,existingId:existing?.id||null};
+ return{...selected,points:outer,holes,holeAreas,existingId:existing?.id||null};
 }
 
 // A clicked edge in a separately drafted outline should follow its endpoint
