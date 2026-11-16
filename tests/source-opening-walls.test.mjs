@@ -56,3 +56,45 @@ test('actual route retains all eight source doors and four windows without movin
  assert.equal(scene.geometryValidation.openings.syntheticCount,0);
  assert.equal(scene.geometryValidation.openings.observations.length,12);
 });
+
+test('visible fixtures correct an unlabelled kitchen and WC before inferred room walls are built',()=>{
+ const source=fs.readFileSync(new URL('../src/lib/serverPreviewAnalysis.js',import.meta.url),'utf8');
+ const context=vm.createContext({createPrintedDimensionAlignment,mapPrintedDimensionPoint,process:{env:{}},
+  prepareObservedOpeningWalls,canonicalRoomType,compileSourceFurniture,repairOverlappingWalls,
+  filterOpenPlanPartitions,outdoorBoundaries,observedDoorOrientation});
+ vm.runInContext(source.replace(/^import .*;\n/gm,'').split('function parseJson')[0]+'\nthis.normalize=normalizeScene;',context);
+ const p=(x,y)=>({x:x/10,y:1-y/8});
+ const polygon=(x0,y0,x1,y1)=>[p(x0,y0),p(x1,y0),p(x1,y1),p(x0,y1)];
+ const zone=(id,type,name,labelVisible,points)=>({id,type,name,labelVisible,polygon:points});
+ const item=(id,roomId,type,x,y)=>({id,roomId,type,confidence:.95,
+  backLeft:p(x,y),backRight:p(x+.75,y),frontCenter:p(x+.375,y+.55)});
+ const trace={coordinateMode:'image_normalized',widthMeters:10,depthMeters:8,footprint:polygon(0,0,10,8),
+  rooms:[
+   zone('living','living','Living',true,polygon(0,0,7,5)),
+   zone('kitchen','balcony','Terrace',false,polygon(7,0,10,5)),
+   zone('bath','room','Room 3',false,polygon(3,5,5,8)),
+   zone('terrace','balcony','تراس',true,polygon(7,5,10,8)),
+  ],
+  partitions:[{id:'wc-wall',start:p(3,5),end:p(5,5)}],
+  relationships:[{roomAId:'living',roomBId:'kitchen',relation:'wall',confidence:.9}],
+  openings:[{id:'wc-door',type:'door',center:p(4,5),widthMeters:.8,wallAxis:'horizontal',wallIdHint:'wc-wall'}],
+  furniture:[item('counter','kitchen','kitchen_counter',8,.7),item('stove','kitchen','stove',8,2.4),
+   item('wc','bath','toilet',3.5,6.5)],
+ };
+ const image={width:1000,height:800};
+ const scene=context.normalize(trace,image);
+ assert.equal(scene.rooms.find(r=>r.id==='kitchen').semanticType,'kitchen');
+ assert.equal(scene.rooms.find(r=>r.id==='bath').semanticType,'bathroom');
+ assert.equal(scene.rooms.find(r=>r.id==='terrace').semanticType,'balcony');
+ assert.ok(scene.relationships.some(r=>r.roomAId==='kitchen'&&r.roomBId==='living'&&r.relation==='open'));
+ assert.ok(!scene.walls.some(w=>w.type==='internal'&&Math.abs(w.start.x-7)<.03&&Math.abs(w.end.x-7)<.03));
+ assert.ok(scene.walls.some(w=>w.type==='railing'&&Math.min(w.start.y,w.end.y)>=5));
+ assert.ok(!scene.walls.some(w=>w.type==='railing'&&Math.min(w.start.y,w.end.y)<5));
+ assert.ok(scene.openings.some(o=>o.id==='wc-door'&&o.wallId==='wc-wall'));
+ assert.ok(scene.assets.some(a=>a.id==='counter')&&scene.assets.some(a=>a.id==='stove'));
+ const divider={id:'observed-divider',start:p(7,0),end:p(7,5)};
+ const enclosed=context.normalize({...trace,partitions:[...trace.partitions,divider]},image);
+ assert.ok(enclosed.walls.some(w=>w.id===divider.id));
+ const unlabelled=context.normalize({...trace,furniture:trace.furniture.filter(f=>f.id!=='wc')},image);
+ assert.ok(unlabelled.openings.some(o=>o.id==='wc-door'&&o.wallId==='wc-wall'));
+});

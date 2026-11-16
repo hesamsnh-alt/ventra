@@ -15,7 +15,7 @@ import { getOpenAIClient } from "@/services/openaiClient";
 import { prepareRasterImageEvidence, rasterEvidencePrompt } from "@/lib/rasterImageEvidence.mjs";
 import { createPreviewWireCodec, readCompletedPreview } from '@/lib/previewSceneWire.mjs';
 
-const VERSION = "preview-compact-response-v133-20261015";
+const VERSION = "preview-compact-response-v134-20261116";
 const MODEL = process.env.OPENAI_3D_PREVIEW_MODEL || "gpt-5.6-sol";
 const requestedReasoning = process.env.OPENAI_3D_PREVIEW_REASONING || "low";
 const REASONING_EFFORT = ["low", "medium", "high"].includes(requestedReasoning) ? requestedReasoning : "low";
@@ -2513,6 +2513,58 @@ function snapRawSceneToPixelGuides(raw, evidence) {
   };
 }
 
+function roomUseFromVisibleFixtures(room, furniture) {
+  if (room.labelVisible !== false) return room;
+  const current = canonicalRoomType(room);
+  if (!["room", "balcony", "kitchen"].includes(current)) return room;
+  const inRoom = furniture.filter(item => {
+    if (item.roomId !== room.id || !(Number(item.confidence) >= 0.72)) return false;
+    const { backLeft: a, backRight: b, frontCenter: f } = item;
+    if (![a, b, f].every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y)) || dist(a, b) < 0.12) return false;
+    const center = {x: (a.x + b.x + 2*f.x)/4, y: (a.y + b.y + 2*f.y)/4};
+    return pointInPolygon(center, room.polygon);
+  });
+  const has = type => inRoom.some(item => item.type === type);
+  const counter = has("kitchen_counter");
+  const kitchen = (counter && (has("stove") || has("refrigerator") ||
+    inRoom.some(item => item.type === "sink" && item.embeddedInCounter))) ||
+    (has("stove") && inRoom.some(item => item.type === "sink" && item.embeddedInCounter));
+  const bathroom = has("toilet") || (has("shower") && has("sink"));
+  if (kitchen === bathroom) return room;
+  const type = kitchen ? "kitchen" : "bathroom";
+  if (type === current) return room;
+  return { ...room, name: kitchen ? "Kitchen" : "Bathroom", type, roomUseSource: "source_fixtures", previousRoomUse: current };
+}
+
+function wallSupportsDrawnDoor(wall, observations) {
+  const angle = wallAngle(wall);
+  return observations.some(o => {
+    if (o.type !== "door" || !(Number(o.widthMeters) > 0)) return false;
+    if (o.wallAxis === "horizontal" && Math.abs(Math.sin(angle)) > 0.2) return false;
+    if (o.wallAxis === "vertical" && Math.abs(Math.cos(angle)) > 0.2) return false;
+    return pointToSegmentDistance(o.center, wall.start, wall.end) <= 0.12;
+  });
+}
+
+function correctKitchenConnectivity(rooms, relationships, drawnWalls, openings) {
+  const openPairs = new Map();
+  for (const kitchen of rooms) {
+    if (kitchen.semanticType !== "kitchen" || kitchen.roomUseSource !== "source_fixtures" || kitchen.previousRoomUse !== "balcony") continue;
+    for (const other of rooms) {
+      if (!["living", "dining", "kitchen_dining"].includes(other.semanticType)) continue;
+      const edge = sharedBoundaryForRelationship(kitchen, other);
+      if (!edge || wallSupportsDrawnDoor(edge, openings)) continue;
+      if (drawnWalls.some(wall => angleDeltaModuloPi(wallAngle(edge), wallAngle(wall)) <= 0.18 &&
+        (pointToSegmentDistance(wallMidpoint(wall), edge.start, edge.end) <= 0.15 ||
+         pointToSegmentDistance(wallMidpoint(edge), wall.start, wall.end) <= 0.15))) continue;
+      openPairs.set(pairKey(kitchen.id, other.id), {
+        roomAId: kitchen.id, roomBId: other.id, relation: "open", direction: "overlap", confidence: 0.85,
+      });
+    }
+  }
+  return [...relationships.filter(rel => !openPairs.has(pairKey(rel.roomAId, rel.roomBId))), ...openPairs.values()];
+}
+
 function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   const guideSnap = snapRawSceneToPixelGuides(inputRaw, imageEvidence);
   const sourceProjection = projectImageNormalizedSceneToMeters(guideSnap.raw, imageMeta);
@@ -2554,7 +2606,11 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   const roomsBeforeLock = observedRooms.map(room => ({...room, polygon:room.polygon.map(alignedPoint)}));
   const dimensionDiagnostic = dimensionLockRooms(roomsBeforeLock, width, depth);
   const dimensionLock = {...dimensionDiagnostic, rooms:roomsBeforeLock, applied:dimensionAlignment.applied, reason:dimensionAlignment.applied?'shared_printed_dimension_alignment_v54':'source_dimensions_preserved'};
-  const relationships = normalizeRelationships(raw?.relationships, roomsBeforeLock.map((r) => r.id));
+  const furnitureObservations = (raw.furniture || []).map(item => ({...item,
+    backLeft:sourceScenePoint(item.backLeft),backRight:sourceScenePoint(item.backRight),frontCenter:sourceScenePoint(item.frontCenter)
+  }));
+  const sourceOpeningObservations = (raw.openings || []).map(opening => ({...opening, center:sourceScenePoint(opening.center)}));
+  let relationships = normalizeRelationships(raw?.relationships, roomsBeforeLock.map((r) => r.id));
   const topology = {
     rooms: roomsBeforeLock,
     diagnostics: {
@@ -2566,7 +2622,8 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   };
   const overlapCleanup = { rooms: topology.rooms, adjustments: 0 };
   let roomContainmentAdjustments = 0;
-  const rooms = overlapCleanup.rooms.map((room) => {
+  const rooms = overlapCleanup.rooms.map((zone) => {
+    const room = roomUseFromVisibleFixtures(zone, furnitureObservations);
     const semanticType = canonicalRoomType(room);
     const normalized = {
       ...room,
@@ -2616,9 +2673,11 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
     type: "internal",
     start: sourceScenePoint(wall?.start),
     end: sourceScenePoint(wall?.end),
-  }, rooms)).filter((wall) => dist(wall.start, wall.end) > 0.15 && !partitionCrossesRoomInterior(wall, rooms));
+  }, rooms)).filter((wall) => dist(wall.start, wall.end) > 0.15 &&
+    (!partitionCrossesRoomInterior(wall, rooms) || wallSupportsDrawnDoor(wall, sourceOpeningObservations)));
+  relationships = correctKitchenConnectivity(rooms, relationships, rawPartitions, sourceOpeningObservations);
   const synthesizedRoomWalls = synthesizeRoomBoundaryPartitions(rawPartitions, rooms, externalWalls);
-  const openPlanFiltered = filterOpenPlanPartitions(synthesizedRoomWalls.partitions, rooms, relationships, (raw.openings || []).map((opening) => ({ ...opening, center: sourceScenePoint(opening.center) })));
+  const openPlanFiltered = filterOpenPlanPartitions(synthesizedRoomWalls.partitions, rooms, relationships, sourceOpeningObservations);
   const relationshipWalls = ensureRelationshipWalls(openPlanFiltered.partitions, rooms, relationships);
   let partitions = relationshipWalls.partitions;
 
@@ -2632,7 +2691,6 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
 
   walls = cleanupWallStubs(closeAlignedWallGaps(walls));
 
-  const sourceOpeningObservations = (raw.openings || []).map(opening => ({...opening, center:sourceScenePoint(opening.center)}));
   const openingSupport = prepareObservedOpeningWalls(walls, rooms, sourceOpeningObservations, relationships);
   walls = openingSupport.walls;
   const detectedOpenings = [];
@@ -2679,9 +2737,6 @@ function normalizeScene(inputRaw, imageMeta = {}, imageEvidence = null) {
   const finalOpenings = outdoor.openings;
 
 
-  const furnitureObservations = (raw.furniture || []).map(item => ({...item,
-    backLeft:sourceScenePoint(item.backLeft),backRight:sourceScenePoint(item.backRight),frontCenter:sourceScenePoint(item.frontCenter)
-  }));
   const sourceFurniture = compileSourceFurniture(furnitureObservations,footprint,rooms,walls);
   // Source furniture has already passed oriented geometry checks. Generic
   // room profiles inflate adjacent L legs and relocate rejected beds/fixtures.
@@ -2932,7 +2987,7 @@ THIS IS NOT A DESIGN TASK. Do not redesign, improve, simplify, mirror, rotate, a
 
 READ THE WHOLE PLAN BEFORE TRACING:
 First understand the building layout, entrance, connected spaces, room labels, furniture symbols and outdoor areas together. Then trace architecture and furniture as separate evidence layers. Do not let the stroke guides replace your visual understanding.
-For handwritten sketches, room labels may be generic ("Room") and the photograph may be rotated. Read text in its readable orientation to understand meaning, but return ALL coordinates in the original image orientation. A bed symbol can identify a bedroom even when the label is generic. A sofa/TV pair identifies a living use. Counters with a sink or cooker identify kitchen use. Persian/Arabic labels for balcony or terrace identify an outdoor zone; preserve its actual drawn location.
+For handwritten sketches, room labels may be generic ("Room") and the photograph may be rotated. Read text in its readable orientation to understand meaning, but return ALL coordinates in the original image orientation. A bed symbol can identify a bedroom even when the label is generic. A sofa/TV pair identifies a living use. Counters with a sink or cooker identify kitchen use. Tile hatches and floor-finish changes are never partitions or evidence of a terrace. For an unlabelled wet room, a recognizable WC fixture is evidence of bathroom use. Preserve a drawn door and its wall irrespective of whether the room use can be identified. Persian/Arabic labels for balcony or terrace identify an outdoor zone; preserve its actual drawn location.
 Distinguish physical partitions from furniture edges, leader arrows, handwriting, dimension lines, door leaves and window strokes. An L-shaped sofa or kitchen counter is furniture, never a room boundary. A terrace separator follows the drawn boundary, never a conventional layout you expect.
 If a living area and kitchen are visibly one connected open space, represent them as one non-overlapping room of type kitchen_dining or living, or as adjacent use zones with an open relationship. Never add a wall between them. Each observed furniture item belongs to its containing zone regardless of whether that zone's label names the object.
 Use room.type for the understood use (bedroom, living, kitchen, kitchen_dining, bathroom, balcony, circulation, storage, laundry); preserve the actual source label in room.name. Do not erase generic or non-English labels.
