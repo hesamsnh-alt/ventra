@@ -1,3 +1,4 @@
+import {breakPath,canBreakPath,isClosedPath} from './breakPath.mjs';
 import {roomArea} from './roomArea.mjs';
 import {canDivide,dividePath,isPointStyle} from './dividePath.mjs';
 import {dimensionGeometry} from './render2d.mjs';
@@ -17,7 +18,8 @@ import {triangleShape,regularPolygonShape} from './shapes.mjs';
 import {id,newDocument,validateDocument,parsePoint,lengthValue,visibleEntities} from './document.mjs';
 import {dist,point,segments,nearest,curveIntersections,arc3,inside,trimCurve,extendCurve,extrimCurve,boundarySide,offsetCurve,at,TAU,EPS} from './geometry.mjs';
 import {transformEntity} from './document.mjs';
-export const ALIASES={MJ:'AREA',AREA:'AREA',DIV:'DIVIDE',DIVIDE:'DIVIDE',PTYPE:'PTYPE',W2:'WALLEDGES',WALLEDGES:'WALLEDGES',ST:'STAIRPLAN',STAIRPLAN:'STAIRPLAN',SN:STAIR_NUMBER_COMMAND,STAIRNUMBERS:STAIR_NUMBER_COMMAND,ZZBZ:'GRIDCOLUMNS',GRIDCOLUMNS:'GRIDCOLUMNS',AZH:'GRIDLABELS',GRIDLABELS:'GRIDLABELS',LM:'PLANSECTIONCUT',LM4:'PLANSECTIONFOUR',PLANSECTIONFOUR:'PLANSECTIONFOUR',PLANSECTIONCUT:'PLANSECTIONCUT',DPL:'PERIMETERDIMENSIONS',PERIMETERDIMENSIONS:'PERIMETERDIMENSIONS',ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LXTB:'STEPSSECTION',STEPSSECTION:'STEPSSECTION',LG:'RAILINGELEVATION',RAIL:'RAILINGELEVATION',RAILINGELEVATION:'RAILINGELEVATION',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
+const pathEditCommands=['CUT','SPLIT'];
+export const ALIASES={CUT:'CUT',BR:'CUT',BREAK:'CUT',SPLIT:'SPLIT',BREAKATPOINT:'SPLIT',MJ:'AREA',AREA:'AREA',DIV:'DIVIDE',DIVIDE:'DIVIDE',PTYPE:'PTYPE',W2:'WALLEDGES',WALLEDGES:'WALLEDGES',ST:'STAIRPLAN',STAIRPLAN:'STAIRPLAN',SN:STAIR_NUMBER_COMMAND,STAIRNUMBERS:STAIR_NUMBER_COMMAND,ZZBZ:'GRIDCOLUMNS',GRIDCOLUMNS:'GRIDCOLUMNS',AZH:'GRIDLABELS',GRIDLABELS:'GRIDLABELS',LM:'PLANSECTIONCUT',LM4:'PLANSECTIONFOUR',PLANSECTIONFOUR:'PLANSECTIONFOUR',PLANSECTIONCUT:'PLANSECTIONCUT',DPL:'PERIMETERDIMENSIONS',PERIMETERDIMENSIONS:'PERIMETERDIMENSIONS',ADT:'DOORRUN',WD:'WINDOWSPAN',AF:'ROOMLAYOUT',ML:'MULTILINE',MULTILINE:'MULTILINE',AD:'DOOR',WW:'SECTIONWALL',SWALL:'SECTIONWALL',SECTIONWALL:'SECTIONWALL',SSL:'SECTIONSLAB',SECTIONSLAB:'SECTIONSLAB',LXTB:'STEPSSECTION',STEPSSECTION:'STEPSSECTION',LG:'RAILINGELEVATION',RAIL:'RAILINGELEVATION',RAILINGELEVATION:'RAILINGELEVATION',LTP:'SECTIONSTAIR',SECTIONSTAIR:'SECTIONSTAIR',WDE:'WINDOWELEVATION',WINDOWELEVATION:'WINDOWELEVATION',SGB:'CEILINGSECTION',CEILINGSECTION:'CEILINGSECTION',SHAFT:'SHAFT',SW:'SHEARWALL',SHEARWALL:'SHEARWALL',TRI:'TRIANGLE',TRIANGLE:'TRIANGLE',POL:'POLYGON',POLYGON:'POLYGON',L:'LINE',LINE:'LINE',PL:'PLINE',PLINE:'PLINE',W:'WALL',WALL:'WALL',FLOOR:'FLOOR',PIPE:'PIPE',REC:'RECTANG',RECTANG:'RECTANG',C:'CIRCLE',CIRCLE:'CIRCLE',A:'ARC',ARC:'ARC',TR:'TRIM',TRIM:'TRIM',EX:'EXTEND',EXTEND:'EXTEND',EXTRIM:'EXTRIM',O:'OFFSET',OFFSET:'OFFSET',M:'MOVE',MOVE:'MOVE',CO:'COPY',CP:'COPY',COPY:'COPY',RO:'ROTATE',ROTATE:'ROTATE',SC:'SCALE',SCALE:'SCALE',E:'ERASE',ERASE:'ERASE',H:'HATCH',HATCH:'HATCH',T:'TEXT',TEXT:'TEXT',MT:'TEXT',MTEXT:'TEXT',DLI:'DIMLINEAR',DIM:'DIMLINEAR',DIMLINEAR:'DIMLINEAR',DI:'DIST',DIST:'DIST',BP:'BASEPLATE',BASEPLATE:'BASEPLATE',DOOR:'DOOR',WINDOW:'WINDOW',ARCHDOOR:'ARCHDOOR',LIGHT:'LIGHT',U:'UNDO',UNDO:'UNDO',REDO:'REDO',SELECT:'SELECT',ESC:'SELECT',Z:'ZOOM',ZOOM:'ZOOM'};
 export function editorState(doc=newDocument()){return{doc:validateDocument(doc),activeLayer:doc.layers.some(l=>l.id==='architecture')?'architecture':doc.layers[0].id,selection:[],command:'SELECT',phase:'',points:[],boundary:[],history:[],future:[],log:['Ventra Plan Studio · L / PL / TR / EX / EXTRIM · Enter / Esc'],options:{section:SECTION_DEFAULTS,wallAlignment:'center',roomLayout:null,roomTiles:true,shaftWidth:2,shaftDepth:2,shaftPitDepth:1.5,shaftThickness:.2,shaftHeight:3,shearThickness:.25,polygonSides:6,wallHeight:DEFAULT_MULTILINE_HEIGHT,thickness:.15,z:0,color:'bylayer',hatch:'diagonal',hatchScale:.2,text:'Text',textHeight:.2,plateWidth:.4,plateDepth:.4,plateThickness:.02,boltDiameter:.02,edge:.06,openingWidth:.9,openingHeight:2.1,windowWidth:1.2,windowHeight:1.2,windowSill:.9,doorBase:0,doorHinge:'left',doorSwing:1,doorAngle:90,diameter:.05},ortho:false,snap:true,grid:.1,cursor:null};}
 export function commitDocument(s,doc,message='Saved edit'){
  const next=validateDocument(doc);if(JSON.stringify(next)===JSON.stringify(s.doc))return s;return{...s,doc:next,history:[...s.history,s.doc].slice(-80),future:[],log:[...s.log,message].slice(-50)};
@@ -39,6 +41,12 @@ export function startCommand(s,raw){
   const ids=new Set(s.selection),selected=s.doc.entities.filter(e=>ids.has(e.id)&&e.type==='line'&&guides(e)&&
    s.doc.layers.find(layer=>layer.id===e.layer)?.visible!==false);
   if(selected.length===2)return applyWallEdges(s,chosenWallPair(...selected.map(e=>({...e,segment:0}))));
+ }
+ if(pathEditCommands.includes(command)){
+  const candidates=visibleEntities(s.doc).filter(e=>s.selection.includes(e.id)&&canBreakPath(e));
+  const target=candidates.length===1?candidates[0]:null;
+  const phase=!target?'object':command==='CUT'||isClosedPath(target)?'first':'split-point';
+  return note({...finish(s),command,phase,selection:target?[target.id]:[],lastCommand:command},command+' → '+phase);
  }
  if(command==='DIVIDE'){
   const candidates=visibleEntities(s.doc).filter(e=>s.selection.includes(e.id)&&canDivide(e));
@@ -68,7 +76,7 @@ function exactEndpoint(s,p){
  return{x:from.x+(p.x-from.x)/d*length,y:from.y+(p.y-from.y)/d*length};
 }
 export function snappedPoint(s,p,{shift=false,tolerance=.12}={}){
- const freePick=(s.command==='STEPSSECTION'||s.command==='PLANSECTIONCUT')&&s.points.length>=2||GRID_COMMANDS.includes(s.command)||s.command==='ROOMLAYOUT';
+ const freePick=pathEditCommands.includes(s.command)||(s.command==='STEPSSECTION'||s.command==='PLANSECTIONCUT')&&s.points.length>=2||GRID_COMMANDS.includes(s.command)||s.command==='ROOMLAYOUT';
  const from=freePick?null:s.points.at(-1);if((shift||s.ortho)&&from){const dx=Math.abs(p.x-from.x),dy=Math.abs(p.y-from.y);p=dx>=dy?{x:p.x,y:from.y}:{x:from.x,y:p.y};}
  if(!s.snap)return exactEndpoint(s,p);let candidates=[];const visible=s.doc.entities.filter(e=>s.doc.layers.find(l=>l.id===e.layer)?.visible!==false);
  for(const e of visible)if(e.type==='point')candidates.push(e.position);
@@ -151,6 +159,29 @@ export function clickPoint(s,raw,event={}){
  if(cmd==='AREA'){
   const {label,rings}=roomArea(s.doc,raw);
   return {...finish(add(s,[label],'AREA · '+label.text)),selection:[],areaOutline:rings};
+ }
+ if(pathEditCommands.includes(cmd)){
+  const candidates=visibleEntities(s.doc).filter(canBreakPath);
+  if(s.phase==='object'){
+   const target=event.entityId?candidates.find(e=>e.id===event.entityId):
+    hitEntity({...s,doc:{...s.doc,entities:candidates}},raw,event.tolerance);
+   if(!target)throw Error('Select a line, polyline, circle or arc. / خط، پلی‌لاین، دایره یا قوس را انتخاب کن.');
+   layerGuard(s,[target.id]);
+   return {...s,selection:[target.id],phase:cmd==='CUT'||isClosedPath(target)?'first':'split-point'};
+  }
+  const target=candidates.find(e=>e.id===s.selection[0]);
+  if(!target)throw Error('Select the path again. / مسیر را دوباره انتخاب کن.');
+  layerGuard(s,[target.id]);
+  const point=nearest(target,p).point;
+  if(s.phase==='first')return {...s,phase:'second',points:[point]};
+  const pieces=breakPath(target,s.points[0]??point,s.phase==='second'?point:null,{remove:cmd==='CUT'});
+  if(cmd==='SPLIT'){
+   const openings=s.doc.entities.filter(e=>e.type==='opening'&&e.wall===target.id);
+   if(openings.length!==reboundOpenings(target,pieces,openings).length)
+    throw Error('Split outside the door or window opening. / نقطهٔ جداسازی را بیرون بازشوی در یا پنجره انتخاب کن.');
+   if(pieces.length<2)throw Error('Pick a point farther from the end. / نقطه‌ای دورتر از سر مسیر انتخاب کن.');
+  }
+  return finish(replace({...s,selection:[]},target,pieces,cmd));
  }
  if(cmd==='DIVIDE'){
   const candidates=visibleEntities(s.doc).filter(canDivide);
