@@ -117,15 +117,60 @@ const fail=m=>{throw new Error(m);};
 export function furniturePlacementScale(value=1){
  if(!Number.isFinite(value)||value<.5||value>1.25)fail('Placement size must be between 50% and 125%. / اندازه باید بین ۵۰ تا ۱۲۵ درصد باشد.');return value;
 }
-export function furnitureSetBounds(model,scale=1){
- furniturePlacementScale(scale);if(!model?.layout)return null;
- const boxes=model.layout.map(p=>{
-  const child=FURNITURE_CATALOG.find(m=>m.id===p.catalogId);if(!child)fail('Unknown set component.');
-  const a=p.rotation*Math.PI/180,rx=(Math.abs(Math.cos(a))*child.width+Math.abs(Math.sin(a))*child.depth)/2,ry=(Math.abs(Math.sin(a))*child.width+Math.abs(Math.cos(a))*child.depth)/2;
-  return {minX:p.x-rx,maxX:p.x+rx,minY:p.y-ry,maxY:p.y+ry,height:child.height};
+function setAxes(value={width:1,depth:1}){
+ return {width:furniturePlacementScale(value.width),depth:furniturePlacementScale(value.depth)};
+}
+function scaledSetSize(part,rotation,axes){
+ const weight=Math.cos(rotation*Math.PI/180)**2;
+ return {width:part.width*(axes.width*weight+axes.depth*(1-weight)),
+  depth:part.depth*(axes.depth*weight+axes.width*(1-weight)),height:part.height};
+}
+function setBounds(parts){
+ const boxes=parts.map(p=>{
+  const a=p.rotation*Math.PI/180,c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a));
+  const rx=(c*p.width+s*p.depth)/2,ry=(s*p.width+c*p.depth)/2;
+  return {minX:p.x-rx,maxX:p.x+rx,minY:p.y-ry,maxY:p.y+ry};
  });
- const minX=Math.min(...boxes.map(b=>b.minX))*scale,maxX=Math.max(...boxes.map(b=>b.maxX))*scale,minY=Math.min(...boxes.map(b=>b.minY))*scale,maxY=Math.max(...boxes.map(b=>b.maxY))*scale;
- return {width:maxX-minX,depth:maxY-minY,height:Math.max(...boxes.map(b=>b.height))*scale,centerX:(minX+maxX)/2,centerY:(minY+maxY)/2};
+ const minX=Math.min(...boxes.map(b=>b.minX)),maxX=Math.max(...boxes.map(b=>b.maxX));
+ const minY=Math.min(...boxes.map(b=>b.minY)),maxY=Math.max(...boxes.map(b=>b.maxY));
+ return {width:maxX-minX,depth:maxY-minY,height:Math.max(...parts.map(p=>p.height)),centerX:(minX+maxX)/2,centerY:(minY+maxY)/2};
+}
+function sizedSetPiece(piece,scale,axes){
+ const child=FURNITURE_CATALOG.find(m=>m.id===piece.catalogId);
+ if(!child)fail('Unknown set component.');
+ return {x:piece.x*scale*axes.width,y:piece.y*scale*axes.depth,rotation:piece.rotation,
+  ...scaledSetSize({width:child.width*scale,depth:child.depth*scale,height:child.height*scale},piece.rotation,axes)};
+}
+export function furnitureSetBounds(model,scale=1,axes){
+ furniturePlacementScale(scale);if(!model?.layout)return null;
+ const factors=setAxes(axes);
+ return setBounds(model.layout.map(piece=>sizedSetPiece(piece,scale,factors)));
+}
+function resizePlacedSet(scene,edit){
+ const selected=scene.assets.find(a=>a.id===edit.assetId);
+ const parts=selected?.furnitureSetId?scene.assets.filter(a=>a.furnitureSetId===selected.furnitureSetId):[];
+ if(parts.length<2)fail('Select a furniture set. / یک ست مبلمان انتخاب کن.');
+ const axes=setAxes(edit.axes);
+ const heading=Number(selected.furnitureSetRotation)||0,angle=heading*Math.PI/180;
+ const c=Math.cos(angle),s=Math.sin(angle);
+ const local=parts.map(a=>({...a,x:a.xMeters*c+a.yMeters*s,y:-a.xMeters*s+a.yMeters*c,rotation:a.rotation-heading}));
+ const {centerX,centerY}=setBounds(local);
+ const actions=local.map(a=>{
+  const x=centerX+(a.x-centerX)*axes.width,y=centerY+(a.y-centerY)*axes.depth;
+  const xMeters=x*c-y*s,yMeters=x*s+y*c;
+  const anchor=furnitureAnchorAtPoint(scene,{x:xMeters,y:yMeters},edit.allowOutdoor===true);
+  if(!anchor)fail('The resized set extends outside the placement area. / ست از محدودهٔ چیدمان بیرون می‌زند.');
+  return {action:'update',assetId:a.id,roomId:anchor.id,xMeters,yMeters,...scaledSetSize(a,a.rotation,axes)};
+ });
+ const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
+ const originals=new Map(parts.map(a=>[a.id,a]));
+ next.assets=next.assets.map(a=>{
+  const before=originals.get(a.id);
+  return before?{...a,placementSource:'manual_furniture_editor',provenance:'proposed',excludeFromTakeoff:true,
+   renderingBaseDimensions:before.renderingBaseDimensions||{width:before.width,depth:before.depth,height:before.height}}:a;
+ });
+ next.furnitureEditor={version:'furniture-editor-v67',lastOperation:'resize-set'};
+ return next;
 }
 export function resolveFurnitureCatalog(edit){
  const builtIn=FURNITURE_CATALOG.find(a=>a.id===edit.catalogId);if(builtIn)return builtIn;
@@ -202,7 +247,10 @@ export function furnitureDraft(scene,edit){
  if(!anchor)fail(edit.allowOutdoor?'Choose a room or open ground outside the building. / اتاق یا فضای آزاد بیرون ساختمان را انتخاب کن.':'Choose a point inside one unambiguous room. / نقطه‌ای داخل یک اتاق مشخص انتخاب کن.');
  const model=edit.kind==='add'||edit.kind==='replace'?catalog:null;
  const draft={...original,...(model?{type:model.type,width:model.width,depth:model.depth,height:model.height,variant:model.variant,color:model.color,catalogId:model.id}:{}),id:original?.id||'furniture-preview',roomId:anchor.id,xMeters:p.x,yMeters:p.y,rotation:edit.rotation??original?.rotation??0};
- if(edit.kind==='add'&&model){const scale=furniturePlacementScale(edit.scale??1);for(const k of ['width','depth','height'])draft[k]*=scale;}
+ if(edit.kind==='add'&&model){
+  const scale=furniturePlacementScale(edit.scale??1);
+  for(const k of ['width','depth','height'])draft[k]=edit.setPieceSize?.[k]??draft[k]*scale;
+ }
  if(draft.type==='range_hood')draft.zMeters=1.95;
  else if(['picture_frame','wall_tv'].includes(draft.type))draft.zMeters=1.1;
  else if(model)delete draft.zMeters;
@@ -213,17 +261,18 @@ export function furnitureDraft(scene,edit){
  }
  if(edit.kind==='resize'){
   const ratios=['width','depth','height'].map(key=>draft[key]/original[key]);
-  if(!ratios.every(n=>Number.isFinite(n)&&Math.abs(n-ratios[0])<.000001))fail('Resize must preserve furniture proportions.');
+  const independent=(draft.type==='curtain'&&draft.depth===original.depth)||(draft.type==='rug'&&draft.height===original.height);
+  if(!independent&&!ratios.every(n=>Number.isFinite(n)&&Math.abs(n-ratios[0])<.000001))fail('Resize must preserve furniture proportions.');
   if(Number.isFinite(scene.height)&&(Number(draft.zMeters)||0)+draft.height>scene.height)fail('Furniture would exceed the room height. / ارتفاع وسیله از سقف بیشتر می‌شود.');
  }
- return snapFurnitureToWall(draft,scene);
+ return edit.kind==='resize'&&draft.type==='curtain'?draft:snapFurnitureToWall(draft,scene);
 }
 export function previewFurnitureEdit(scene,edit){
  let candidate;
  try{
   candidate={...furnitureDraft(scene,edit),previewOperation:edit.kind};
   if(edit.kind==='add'&&resolveFurnitureCatalog(edit)?.layout){
-   const b=furnitureSetBounds(resolveFurnitureCatalog(edit),edit.scale??1),angle=candidate.rotation*Math.PI/180;
+   const b=furnitureSetBounds(resolveFurnitureCatalog(edit),edit.scale??1,edit.axes),angle=candidate.rotation*Math.PI/180;
    candidate={...candidate,width:b.width,depth:b.depth,height:b.height,xMeters:candidate.xMeters+b.centerX*Math.cos(angle)-b.centerY*Math.sin(angle),yMeters:candidate.yMeters+b.centerX*Math.sin(angle)+b.centerY*Math.cos(angle)};
    applyFurnitureEdit(scene,edit);return {candidate,valid:true};
   }
@@ -235,18 +284,20 @@ export function previewFurnitureEdit(scene,edit){
  }catch(error){return {candidate,valid:false,error:error.message};}
 }
 export function applyFurnitureEdit(scene,edit){
+ if(edit.kind==='resize-set')return resizePlacedSet(scene,edit);
  if(edit.kind==='material')return applyFurnitureFinish(scene,edit.assetId,edit.materialId,edit.target);
  if(!['add','move','rotate','resize','color','replace','remove'].includes(edit.kind))fail('Unsupported furniture operation.');
  const chosen=resolveFurnitureCatalog(edit);
  if(chosen?.layout&&edit.kind==='replace')fail('Place a complete set on the floor; it cannot replace one object. / ست کامل را روی کف قرار بده؛ جایگزین یک وسیله نمی‌شود.');
  if(chosen?.layout&&edit.kind==='add'){
   if(!Number.isFinite(edit.point?.x)||!Number.isFinite(edit.point?.y))fail('Choose a point on the floor.');
-  const scale=furniturePlacementScale(edit.scale??1),angle=(edit.rotation||0)*Math.PI/180,groupId=`sofa-set-${globalThis.crypto.randomUUID()}`,originalCount=scene.assets.length;
+  const scale=furniturePlacementScale(edit.scale??1),axes=setAxes(edit.axes),heading=edit.rotation||0,angle=heading*Math.PI/180,groupId=`sofa-set-${globalThis.crypto.randomUUID()}`,originalCount=scene.assets.length;
   let next=scene;
   try{for(const piece of chosen.layout){
-   const before=next.assets.length;
-   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,scale,freePlacement:edit.freePlacement,allowOutdoor:edit.allowOutdoor,point:{x:edit.point.x+scale*(piece.x*Math.cos(angle)-piece.y*Math.sin(angle)),y:edit.point.y+scale*(piece.x*Math.sin(angle)+piece.y*Math.cos(angle))},rotation:(edit.rotation||0)+piece.rotation});
-   next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,furnitureSetScale:scale,seatingCapacity:piece.seats}:a);
+   const before=next.assets.length,{x,y,rotation,...size}=sizedSetPiece(piece,scale,axes);
+   next=applyFurnitureEdit(next,{kind:'add',catalogId:piece.catalogId,scale,setPieceSize:size,freePlacement:edit.freePlacement,allowOutdoor:edit.allowOutdoor,
+    point:{x:edit.point.x+x*Math.cos(angle)-y*Math.sin(angle),y:edit.point.y+x*Math.sin(angle)+y*Math.cos(angle)},rotation:heading+rotation});
+   next.assets=next.assets.map((a,i)=>i>=before?{...a,furnitureSetId:groupId,furnitureSetCatalogId:chosen.id,furnitureSetScale:scale,furnitureSetRotation:heading,seatingCapacity:piece.seats}:a);
   }}catch(error){fail('Not enough clear space for the complete set; nothing was added. / فضای آزاد کافی برای ست کامل نیست؛ هیچ وسیله‌ای اضافه نشد. '+error.message);}
   if(next.assets.length!==originalCount+chosen.layout.length)fail('Incomplete furniture set.');
   next.furnitureEditor={version:'furniture-editor-v67',lastOperation:'add-set',setCatalogId:chosen.id};return next;
@@ -269,7 +320,7 @@ export function applyFurnitureEdit(scene,edit){
  const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&(edit.scale??1)!==1?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:['picture_frame','wall_tv'].includes(model.type)?{zMeters:1.1}:{zMeters:0})};});
+  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&['width','depth','height'].some(key=>a[key]!==model[key])?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:['picture_frame','wall_tv'].includes(model.type)?{zMeters:1.1}:{zMeters:0})};});
  }
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.furnitureFinishes?{...a,furnitureFinishes:Object.fromEntries(Object.entries(a.furnitureFinishes).map(([key,value])=>[key,{...value,color:edit.color}]))}:a);
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);

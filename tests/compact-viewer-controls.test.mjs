@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';impo
 test('63 viewer, furniture and render buttons retain reviewed handlers after tray reorganization',()=>{
  for(const [file,count,hash] of [
   ['Project3DViewer.jsx',48,'e0c125a6a9ceba32f5e5eee4b4538805af4818686798f6532fdc1699eb699211'],
-  ['FurnitureEditorPanel.jsx',13,'c51fd97980474d13af7e853d84bc2f2e6082a9ec1fff35d2dcbbb3355867ddcb'],
+  ['FurnitureEditorPanel.jsx',13,'5988a8380a0133dbdb34d34e351e9c84b357063d4af133dbd4152fa57b022f6b'],
   ['PlanRenderPanel.jsx',2,'57b966f2577d4157446aa5ae91e4571a286be25fe3870f70ca643e7d4119e69e'],
  ]){
   const source=readFileSync(`src/app/projects/[id]/${file}`,'utf8'),ast=parser.parse(source,{sourceType:'module',plugins:['jsx']}),buttons=[];

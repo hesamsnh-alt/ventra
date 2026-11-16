@@ -97,3 +97,63 @@ test('actual set-size slider updates floor preview and places resized components
  ui.openDrawer(tree,'Windows');tree=ui.render();assert.ok(ui.nodes(ui.drawer(tree,'Windows'),'select')[0].props.children.every(o=>o.props.value.includes('window')));
  ui.openDrawer(tree,'Doors');tree=ui.render();assert.ok(ui.nodes(ui.drawer(tree,'Doors'),'select')[0].props.children.every(o=>!o.props.value.includes('window')));
 });
+
+test('selected curtain and rug expose separate dimension fields and save one changed axis',async()=>{
+ for(const [drawer,model,legend,axis] of [
+  ['Curtains & blinds','Pleated curtain','Curtain dimensions','height'],
+  ['Rugs','Persian rug','Rug dimensions','depth'],
+ ]){
+  const ui=await panel();let tree=ui.render();
+  ui.button(ui.drawer(tree,drawer),model).props.onClick();tree=ui.render();
+  await ui.getTool().commit({x:3,y:3},null,false,{});tree=ui.render();
+  const [old]=ui.getScene().assets;
+  const selection=ui.drawer(tree,'Selection & editing');
+  ui.nodes(selection,'select').find(select=>select.props.children.flat().some(o=>o?.props?.value===old.id)).props.onChange({target:{value:old.id}});
+  tree=ui.render();
+  const fieldset=ui.nodes(tree,'fieldset').find(f=>ui.nodes(f,'legend').some(l=>l.props.children===legend));
+  ui.nodes(fieldset,'input')[1].props.onChange({target:{value:'1.8'}});
+  tree=ui.render();
+  await ui.button(tree,'Apply dimensions').props.onClick();
+  const [asset]=ui.getScene().assets;
+  assert.equal(asset[axis],1.8);
+  assert.equal(asset.width,old.width);
+  assert.equal(asset[axis==='height'?'depth':'height'],old[axis==='height'?'depth':'height']);
+ }
+});
+
+test('separate plan axes resize a placed furniture set as one edit, retaining piece heights',async()=>{
+ const ui=await panel();let tree=ui.render();
+ const catalog=ui.drawer(tree,'Complete sofa sets');
+ ui.button(catalog,'Modern set · 6').props.onClick();tree=ui.render();
+ await ui.getTool().commit({x:3.4,y:3},null,false,{});tree=ui.render();
+ const before=ui.getScene().assets;
+ const selection=ui.drawer(tree,'Selection & editing');
+ ui.nodes(selection,'select').find(select=>select.props.children.flat().some(o=>o?.props?.value===before[0].id)).props.onChange({target:{value:before[0].id}});
+ tree=ui.render();
+ const fieldset=ui.nodes(tree,'fieldset').find(f=>ui.nodes(f,'legend').some(l=>l.props.children==='Resize furniture set'));
+ ui.nodes(fieldset,'input')[0].props.onChange({target:{value:'110'}});tree=ui.render();
+ await ui.button(tree,'Apply set size').props.onClick();
+ const after=ui.getScene().assets;
+ assert.ok(Math.abs(after[0].width-before[0].width*1.1)<1e-8);
+ assert.deepEqual(after.map(a=>a.id),before.map(a=>a.id));
+ assert.deepEqual(after.map(a=>a.height),before.map(a=>a.height));
+ assert.deepEqual(after.map(a=>a.yMeters),before.map(a=>a.yMeters));
+});
+
+test('pre-placement depth control changes the set preview and the saved footprint independently',async()=>{
+ const ui=await panel();let tree=ui.render();
+ ui.button(ui.drawer(tree,'Complete sofa sets'),'Modern set · 6').props.onClick();tree=ui.render();
+ const point={x:3.4,y:3};
+ const normal=ui.getTool().preview(point,{},{}).candidate;
+ const ranges=ui.nodes(tree,'input').filter(n=>n.props.type==='range');
+ ranges[2].props.onChange({target:{value:'110'}});tree=ui.render();
+ const resized=ui.getTool().preview(point,{},{});
+ assert.equal(resized.valid,true);
+ assert.ok(Math.abs(resized.candidate.width-normal.width)<1e-8);
+ assert.ok(Math.abs(resized.candidate.depth-normal.depth*1.1)<1e-8);
+ await ui.getTool().commit(point,null,false,{});
+ const [sofa]=ui.getScene().assets;
+ assert.ok(Math.abs(sofa.depth-.9*1.1)<1e-8);
+ assert.equal(sofa.width,2.2);
+ assert.equal(sofa.height,.85);
+});

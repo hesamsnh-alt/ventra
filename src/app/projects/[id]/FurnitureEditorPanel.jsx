@@ -17,7 +17,8 @@ const words={en:{title:'Furniture studio',note:'Lightweight models · Furniture 
 export default function FurnitureEditorPanel({projectId,scene,getRenderer,onCommit,onCommitOpenings,onCommitWalls,getCanvasHost,onCameraMode,wallsTransparent,onToggleWalls,renderMaterials,exteriorPanel,disabled=false}){
  const {language}=useLanguage(),lang=words[language]?language:'en',t=words[lang];
  const [category,setCategory]=useState('all'),[query,setQuery]=useState('');
- const [placementScale,setPlacementScale]=useState(1),[sizeText,setSizeText]=useState({});
+ const [placementScale,setPlacementScale]=useState(1),[placementAxes,setPlacementAxes]=useState({width:1,depth:1});
+ const [dimensionDraft,setDimensionDraft]=useState({}),[setDraft,setSetDraft]=useState({});
  const [finishId,setFinishId]=useState('wood-oak'),[finishTarget,setFinishTarget]=useState('body');
  const [personalModel,setPersonalModel]=useState(null);
  const open=true;
@@ -30,9 +31,16 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  const wallStart=useRef(null),wallHistory=useRef([]);const [wallUndoCount,setWallUndoCount]=useState(0),[wallThickness,setWallThickness]=useState(.12);
  const latest=useRef(null),history=useRef([]),openingHistory=useRef([]),working=useRef(false);
  const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
- const selectedModel=FURNITURE_CATALOG.find(m=>m.id===catalogId),setBounds=selectedModel?.layout?furnitureSetBounds(selectedModel,placementScale):null;
- const changePlacementScale=value=>{if(Number.isFinite(value)){setPlacementScale(Math.min(1.25,Math.max(.5,value)));setSizeText({});}};
- const editPlacementDimension=(key,value)=>{setSizeText({[key]:value});const n=Number(value),ratio=n/furnitureSetBounds(selectedModel)[key];if(value!==''&&Number.isFinite(ratio)&&ratio>=.5&&ratio<=1.25)setPlacementScale(ratio);};
+ const selectedModel=FURNITURE_CATALOG.find(m=>m.id===catalogId);
+ const setBounds=selectedModel?.layout?furnitureSetBounds(selectedModel,placementScale,placementAxes):null;
+ const changePlacementScale=value=>{setPlacementScale(value);setPlacementAxes({width:1,depth:1});};
+ const axisInputs=(axes,update,withMeters=false)=>Object.entries({
+  width:text('Horizontal scale (%)','مقیاس افقی (%)','المقياس الأفقي (%)'),
+  depth:text('Vertical scale on plan (%)','مقیاس عمودی روی پلان (%)','المقياس الرأسي على المخطط (%)'),
+ }).map(([key,name])=><label key={key}>{name}
+  <input type="range" min="50" max="125" step="1" value={Math.round(axes[key]*100)} onChange={e=>update(key,Number(e.target.value)/100)}/>
+  <output>{Math.round(axes[key]*100)}%{withMeters?' · '+setBounds[key].toFixed(2)+' m':''}</output>
+ </label>);
  const openingConfig={catalogId:openingModel,wallId:wallId||undefined,width:openingWidth,height:openingHeight,sillHeight:sill,offset:offset/100,replaceOverlapping:replaceOpenings};
  async function saveOpening(edit,undo=false){
   const state=latest.current;if(working.current||state.disabled||!state.onCommitOpenings)return;
@@ -59,6 +67,14 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  }
  function wallMode(value){wallStart.current=null;setMode(value);getRenderer()?.setNamedView?.('top');}
  const object=scene.assets.find(a=>a.id===selected);
+ const independent=!object?.customModelId&&['curtain','rug'].includes(object?.type);
+ const vertical=object?.type==='curtain'?'height':'depth';
+ const dimensionKey=independent?JSON.stringify([object.id,object.width,object[vertical]]):'';
+ const dimensions=dimensionDraft.key===dimensionKey?dimensionDraft:{width:object?.width,vertical:object?.[vertical]};
+ const dimensionValid=Number(dimensions.width)>=.1&&Number(dimensions.width)<=6&&
+  Number(dimensions.vertical)>=(vertical==='height'?.01:.04)&&Number(dimensions.vertical)<=(vertical==='height'?3:4);
+ const groupSize=object?.furnitureSetId&&scene.assets.filter(a=>a.furnitureSetId===object.furnitureSetId).length>1;
+ const selectedAxes=setDraft.id===object?.furnitureSetId?setDraft.axes:{width:1,depth:1};
  const label=a=>a.customModelName||FURNITURE_CATALOG.find(m=>m.id===a.catalogId||(!a.catalogId&&m.type===a.type))?.[lang]||a.type;
  async function save(edit,undo=false){
   const state=latest.current;if(working.current||state.disabled)return;
@@ -71,11 +87,11 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    if(!undo&&edit?.kind==='add'&&state.personalModel&&edit.catalogId==='personal:'+state.personalModel.id)await linkPersonalAsset(projectId,state.personalModel.id);
    await state.onCommit(next,state.scene);
    if(undo)history.current.pop();else{history.current.push(state.scene);if(history.current.length>20)history.current.shift();}
-   setUndoCount(history.current.length);setMessage(state.t.saved);
+   setUndoCount(history.current.length);setMessage(state.t.saved);setDimensionDraft({});setSetDraft({});
    const remaining=(next.furnitureEditor?.copiedIds?.length?next.furnitureEditor.copiedIds:state.selectedIds).filter(id=>next.assets.some(a=>a.id===id));setSelectedIds(remaining);setSelected(remaining[0]||'');if(edit?.kind==='copy-many')setMode('select');
   }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
  }
- useEffect(()=>{latest.current={scene,personalModel,disabled:disabled||busy,mode,catalogId,placementScale,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
+ useEffect(()=>{latest.current={scene,personalModel,disabled:disabled||busy,mode,catalogId,placementScale,placementAxes,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
  useEffect(()=>{
   const renderer=getRenderer();if(!renderer)return;
   renderer.setWallEditMode?.(mode==='wall-add'&&!disabled&&!busy);
@@ -84,7 +100,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    const s=latest.current;
    if(s.mode==='rotate')return data?{kind:'rotate',assetId:data.id,rotation:furnitureRotationFromDrag(data.rotation,data.startX,event)}:null;
    if(s.mode==='resize')return data?{kind:'resize',assetId:data.id,size:furnitureSizeFromDrag(data.dimensions,data.startX,event)}:null;
-   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,scale:FURNITURE_CATALOG.find(m=>m.id===s.catalogId)?.layout?s.placementScale:1,personalModel:s.personalModel,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
+   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,scale:FURNITURE_CATALOG.find(m=>m.id===s.catalogId)?.layout?s.placementScale:1,axes:s.placementAxes,personalModel:s.personalModel,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
   };
   renderer.setFurnitureTool?.({
    start:(id,point,event)=>{
@@ -113,7 +129,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  },[host,lang]);
  useEffect(()=>{const failed=e=>{if(e.detail?.projectId===projectId)setMessage(text('Personal model failed to load; the wireframe is only its placement bounds.','مدل شخصی بارگذاری نشد؛ کادر سیمی فقط محدوده جای‌گذاری است.','تعذر تحميل النموذج؛ الإطار يوضح الحدود فقط.'));};window.addEventListener('ventra:personal-model-error',failed);return()=>window.removeEventListener('ventra:personal-model-error',failed);},[projectId,lang]);
  const blocked=disabled||busy;
- const renderCatalogItem=m=>(<button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);setSizeText({});setMode('add');}} onClick={()=>{setPersonalModel(null);setCatalogId(m.id);setSizeText({});setMode('add');}}>
+ const renderCatalogItem=m=>(<button key={m.id} type="button" draggable={!blocked} disabled={blocked} aria-pressed={catalogId===m.id} onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);e.dataTransfer.effectAllowed='copy';setCatalogId(m.id);if(catalogId!==m.id)changePlacementScale(1);setMode('add');}} onClick={()=>{setPersonalModel(null);setCatalogId(m.id);if(catalogId!==m.id)changePlacementScale(1);setMode('add');}}>
     <span className={styles.swatch} style={{background:m.color}} aria-hidden="true"/>{m[lang]}<small>{m.layout?text('Complete set · one floor click','ست کامل · یک کلیک روی کف','طقم كامل · ضغطة واحدة'):null}{m.layout?' · ':''}{m.layout?furnitureSetBounds(m).width.toFixed(2):m.width} × {m.layout?furnitureSetBounds(m).depth.toFixed(2):m.depth} m</small>
    </button>);
  return <section ref={panelRef} className={styles.panel} dir={lang==='en'?'ltr':'rtl'} aria-label={text('3D modeling tray','پنل ابزارهای سه‌بعدی','لوحة أدوات النمذجة')}>
@@ -137,6 +153,26 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    <button type="button" disabled={blocked||!object||FURNITURE_CATALOG.find(m=>m.id===catalogId)?.type!==object.type} onClick={()=>save({kind:'replace',assetId:selected,catalogId})}>{t.replace}</button>
    <button type="button" disabled={blocked||!object} onClick={()=>save({kind:'remove-many',assetIds:selectedIds})}>{t.remove}</button>
   </div>
+    {independent&&<fieldset disabled={blocked}><legend>{object.type==='curtain'?text('Curtain dimensions','ابعاد پرده','أبعاد الستارة'):text('Rug dimensions','ابعاد فرش','أبعاد السجادة')}</legend>
+     <div className={styles.tools}>
+      <label>{text('Width (m)','عرض (متر)','العرض (متر)')}<input type="number" min=".1" max="6" step=".01" value={dimensions.width} onChange={e=>setDimensionDraft({...dimensions,key:dimensionKey,width:e.target.value})}/></label>
+      <label>{vertical==='height'?text('Height (m)','ارتفاع (متر)','الارتفاع (متر)'):text('Length (m)','طول (متر)','الطول (متر)')}
+       <input type="number" min={vertical==='height'?'.01':'.04'} max={vertical==='height'?3:4} step=".01" value={dimensions.vertical} onChange={e=>setDimensionDraft({...dimensions,key:dimensionKey,vertical:e.target.value})}/>
+      </label>
+      <button type="button" data-model-tool="apply-object-dimensions" disabled={blocked||!dimensionValid||
+       (Number(dimensions.width)===object.width&&Number(dimensions.vertical)===object[vertical])}
+       onClick={()=>save({kind:'resize',assetId:object.id,size:{width:Number(dimensions.width),depth:object.depth,height:object.height,[vertical]:Number(dimensions.vertical)}})}>
+       {text('Apply dimensions','اعمال ابعاد','تطبيق الأبعاد')}
+      </button>
+     </div>
+    </fieldset>}
+    {groupSize&&<fieldset disabled={blocked}><legend>{text('Resize furniture set','تغییر ابعاد ست مبلمان','تغيير أبعاد طقم الأثاث')}</legend>
+     <div className={styles.tools}>
+      {axisInputs(selectedAxes,(key,value)=>setSetDraft({id:object.furnitureSetId,axes:{...selectedAxes,[key]:value}}))}
+      <button type="button" data-model-tool="apply-set-dimensions" disabled={blocked||(selectedAxes.width===1&&selectedAxes.depth===1)}
+       onClick={()=>save({kind:'resize-set',assetId:object.id,axes:selectedAxes})}>{text('Apply set size','اعمال اندازهٔ ست','تطبيق حجم الطقم')}</button>
+     </div>
+    </fieldset>}
     {supportsFurnitureFinish(object)&&<fieldset className={styles.finishChoices}><legend>{text('Furniture materials','متریال مبلمان','مواد الأثاث')}</legend>
       <div className={styles.tools}>
        <label>{text('Apply to','اعمال روی','تطبيق على')}<select value={furnitureHasUpholstery(object)?finishTarget:'body'} onChange={e=>setFinishTarget(e.target.value)}><option value="body">{text('Body / frame','بدنه / اسکلت','الجسم / الإطار')}</option>{furnitureHasUpholstery(object)&&<option value="upholstery">{text('Fabric / cushions','پارچه / کوسن','القماش / الوسائد')}</option>}</select></label>
@@ -155,11 +191,10 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
         <div className={styles.catalog}>{items.map(renderCatalogItem)}</div>
         {c.id==='sets'&&selectedModel?.layout&&<div className={styles.setPlacement}>
 {setBounds&&<fieldset disabled={blocked}><legend>{text('Set size before adding','اندازه ست قبل از افزودن','حجم الطقم قبل الإضافة')}</legend><div className={styles.tools}>
-   <label>{text('Scale (%)','اندازه (%)','المقياس (%)')}<input type="range" min="50" max="125" step="5" value={Math.round(placementScale*100)} onChange={e=>changePlacementScale(Number(e.target.value)/100)}/><output>{Math.round(placementScale*100)}%</output></label>
-   <label>{text('Layout width (m)','عرض چیدمان (متر)','عرض التوزيع (متر)')}<input type="number" min={(furnitureSetBounds(selectedModel).width*.5).toFixed(2)} max={(furnitureSetBounds(selectedModel).width*1.25).toFixed(2)} step=".05" value={sizeText.width??Number(setBounds.width.toFixed(2))} onChange={e=>editPlacementDimension('width',e.target.value)} onBlur={()=>{if(sizeText.width!==undefined&&sizeText.width!==''&&Number.isFinite(Number(sizeText.width)))changePlacementScale(Number(sizeText.width)/furnitureSetBounds(selectedModel).width);else setSizeText({});}}/></label>
-   <label>{text('Layout depth (m)','عمق چیدمان (متر)','عمق التوزيع (متر)')}<input type="number" min={(furnitureSetBounds(selectedModel).depth*.5).toFixed(2)} max={(furnitureSetBounds(selectedModel).depth*1.25).toFixed(2)} step=".05" value={sizeText.depth??Number(setBounds.depth.toFixed(2))} onChange={e=>editPlacementDimension('depth',e.target.value)} onBlur={()=>{if(sizeText.depth!==undefined&&sizeText.depth!==''&&Number.isFinite(Number(sizeText.depth)))changePlacementScale(Number(sizeText.depth)/furnitureSetBounds(selectedModel).depth);else setSizeText({});}}/></label>
+   <label>{text('Overall scale (%)','مقیاس کلی (%)','المقياس الكلي (%)')}<input type="range" min="50" max="125" step="5" value={Math.round(placementScale*100)} onChange={e=>changePlacementScale(Number(e.target.value)/100)}/><output>{Math.round(placementScale*100)}%</output></label>
+   {axisInputs(placementAxes,(key,value)=>{setPlacementScale(1);setPlacementAxes({...placementAxes,[key]:value});},true)}
    <button type="button" onClick={()=>changePlacementScale(1)}>{text('Original size','اندازه اصلی','الحجم الأصلي')}</button>
-  </div><p>{text('All pieces, heights and spacing scale together. The floor preview checks the adjusted set before adding.','ابعاد همه اجزا، ارتفاع و فاصله‌ها متناسب تغییر می‌کنند. پیش‌نمایش کف، ست با اندازهٔ جدید را قبل از افزودن کنترل می‌کند.','تتغير أبعاد القطع وارتفاعاتها والمسافات معاً؛ تفحص المعاينة الطقم قبل الإضافة.')}</p><p dir="ltr">{setBounds.width.toFixed(2)} × {setBounds.depth.toFixed(2)} m · H {setBounds.height.toFixed(2)} m</p></fieldset>}
+  </div><p>{text('The preview checks the resized set before placement.','پیش‌نمایش، ست با اندازهٔ جدید را قبل از جای‌گذاری بررسی می‌کند.','تتحقق المعاينة من أبعاد الطقم قبل وضعه.')}</p><p dir="ltr">{setBounds.width.toFixed(2)} × {setBounds.depth.toFixed(2)} m · H {setBounds.height.toFixed(2)} m</p></fieldset>}
         </div>}
       </ToolDrawer>;
     })}
@@ -172,7 +207,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
   </div>
     <p className={styles.hint}>{text('Choose a model or a complete set, then click an indoor floor or the outdoor ground. Adjust set size inside Complete sofa sets before placing it.','مدل یا ست را انتخاب کن، سپس روی کف داخل یا محوطهٔ بیرون بزن. اندازه ست قبل از افزودن، داخل دسته ست کامل تنظیم می‌شود.','اختر نموذجاً أو طقماً ثم اضغط على الأرضية الداخلية أو الأرض الخارجية. عدّل حجم الطقم في فئته قبل الإضافة.')}</p>
     <ToolDrawer title={text('My models & uploads','مدل‌های شخصی و آپلود','نماذجي والرفع')}>
-<PersonalAssetLibrary kind="model" projectId={projectId} disabled={blocked} onChoose={row=>{if(!getRenderer()?.supportsPersonalModels)throw new Error(text('Personal GLB needs the modern 3D renderer.','مدل GLB به نمایشگر سه‌بعدی جدید نیاز دارد؛ نمایشگر جایگزین فعال است.','يتطلب GLB العارض الحديث.'));const m=personalFurnitureModel(row);setPersonalModel(row);setCatalogId(m.id);setSizeText({});setMode('add');}}/>
+<PersonalAssetLibrary kind="model" projectId={projectId} disabled={blocked} onChoose={row=>{if(!getRenderer()?.supportsPersonalModels)throw new Error(text('Personal GLB needs the modern 3D renderer.','مدل GLB به نمایشگر سه‌بعدی جدید نیاز دارد؛ نمایشگر جایگزین فعال است.','يتطلب GLB العارض الحديث.'));const m=personalFurnitureModel(row);setPersonalModel(row);setCatalogId(m.id);if(catalogId!==m.id)changePlacementScale(1);setMode('add');}}/>
     </ToolDrawer>
     <ToolDrawer title={text('Placement options','تنظیمات جای‌گذاری','خيارات الوضع')}>
 {scene.source==='dwg-engineering-interior'&&<label><input type="checkbox" disabled={blocked} checked={freePlacement} onChange={e=>setFreePlacement(e.target.checked)}/>{text('Ignore uncertain DWG wall lines for manual furniture','نادیده گرفتن خطوط دیوار نامطمئن برای چیدمان دستی','تجاهل خطوط جدران DWG غير المؤكدة للأثاث اليدوي')}</label>}{freePlacement&&<p role="status">{text('Wall and doorway clearance is unverified in this mode. Check the placement against your plan.','در این حالت فاصله از دیوار و مسیر در تأیید نمی‌شود؛ جای وسیله را با نقشه کنترل کن.','في هذا الوضع لا يتم التحقق من الجدران ومسار الأبواب؛ راجع موضع الأثاث مع المخطط.')}</p>}
