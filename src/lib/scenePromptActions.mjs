@@ -20,6 +20,17 @@ const points=a=>{const t=a.rotation*Math.PI/180;return [-1,0,1].flatMap(x=>[-1,0
 const segment=(a,b,depth=.001)=>({xMeters:(a.x+b.x)/2,yMeters:(a.y+b.y)/2,width:Math.hypot(b.x-a.x,b.y-a.y),depth,rotation:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI});
 const crossing=(asset,poly,scene)=>poly.some((p,i)=>furnitureOverlaps(asset,segment(p,poly[(i+1)%poly.length]),scene,-.002));
 
+function supportedCounterInsert(a,b){
+ const counter=a.type==='kitchen_counter'?a:b.type==='kitchen_counter'?b:null;
+ const insert=counter===a?b:a;
+ if(!counter||!insert.embeddedInCounter||insert.layoutAnchorId!==counter.id||!['sink','stove'].includes(insert.type))return false;
+ const angle=counter.rotation*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
+ return points(insert).every(p=>{
+  const x=p.x-counter.xMeters,y=p.y-counter.yMeters;
+  return Math.abs(x*c+y*s)<=counter.width/2-.01&&Math.abs(-x*s+y*c)<=counter.depth/2-.01;
+ });
+}
+
 export function preparePromptScene(scene){
  if(!scene||!Array.isArray(scene.rooms)||!scene.rooms.length||!Array.isArray(scene.assets)||scene.rooms.length>200||scene.assets.length>300||!Number.isFinite(scene.width)||!Number.isFinite(scene.depth)||scene.width<=0||scene.depth<=0)fail('The model needs valid room geometry before editing. / هندسه اتاق‌ها برای ویرایش آماده نیست.');
  const next=structuredClone(scene),seen=new Set();
@@ -50,7 +61,7 @@ export function placementProblem(a,s,{manualDwgPlacement=false,manualFurniturePl
  }else if(s.footprint?.length&&(!ps.every(p=>contained(p,s.footprint,manualFurniturePlacement))||crossing(a,s.footprint,s)))return 'outside building';
  if((s.holes||[]).some(h=>ps.some(p=>inside(p,h.polygon))||(h.polygon||[]).some(p=>inside(p,corners))||crossing(a,h.polygon||[],s)))return 'inside shaft or void';
  if(!relaxed&&(s.walls||[]).some(w=>furnitureOverlaps(a,segment(w.start,w.end,Number(w.thickness)||.12),s,manualFurniturePlacement?-.002:.03)))return 'intersects wall';
- if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,manualFurniturePlacement?-.002:.03)))return 'overlaps furniture';
+ if(a.type!=='rug'&&(s.assets||[]).some(b=>b.id!==a.id&&b.type!=='rug'&&!supportedCounterInsert(a,b)&&(Number(a.zMeters)||0)<(Number(b.zMeters)||0)+(Number(b.height)||.8)&&(Number(b.zMeters)||0)<(Number(a.zMeters)||0)+(Number(a.height)||.8)&&furnitureOverlaps(a,b,s,manualFurniturePlacement?-.002:.03)))return 'overlaps furniture';
  if(!relaxed&&(s.openings||[]).some(o=>{
   if(o.type!=='door')return false;const w=s.walls?.find(w=>w.id===o.wallId);if(!w)return false;
   const x=w.start.x+(w.end.x-w.start.x)*o.offset,y=w.start.y+(w.end.y-w.start.y)*o.offset,r=Math.max(.8,Number(o.width)||.8);
@@ -92,12 +103,16 @@ export function applyPromptActions(input,plan,{manualDwgPlacement=false,manualFu
   if(!existing){let suffix=0;const base=a.id;while(next.assets.some(b=>b.id===a.id))a.id=`${base}-${++suffix}`;if(type==='range_hood')a.zMeters=1.95;else if(['picture_frame','wall_tv'].includes(type))a.zMeters=1.1;}
   // Only allow visual furniture fields; never spread model output into a scene.
   for(const key of ['roomId','xMeters','yMeters','width','depth','height','rotation','color'])if(op[key]!=null)a[key]=op[key];
+  if(manualFurniturePlacement&&op.zMeters!=null){
+   if(!Number.isFinite(op.zMeters)||op.zMeters<0||op.zMeters+a.height>(next.height??3.2))fail('Furniture would exceed the room height.');
+   a.zMeters=op.zMeters;
+  }
   if(op.type!=null)a.type=op.type;
   if(a.color!=null&&!color(a.color))fail('Invalid furniture color.');
   if(op.color!=null)appearance.colors.push({id:a.id,color:op.color});
   for(const key of ['xMeters','yMeters','rotation','width','depth','height'])if(!Number.isFinite(a[key]))fail(`Invalid ${key} for ${a.id}.`);
   if(a.width<.1||a.width>6||a.depth<.04||a.depth>4||a.height<.01||a.height>3)fail('Furniture dimensions exceed supported limits.');
-  const moved=op.action==='add'||['roomId','xMeters','yMeters','width','depth','height','rotation','type'].some(key=>op[key]!=null&&op[key]!==existing?.[key]);
+  const moved=op.action==='add'||(manualFurniturePlacement&&op.zMeters!=null&&op.zMeters!==existing?.zMeters)||['roomId','xMeters','yMeters','width','depth','height','rotation','type'].some(key=>op[key]!=null&&op[key]!==existing?.[key]);
   if(moved){a.userPlaced=true;a.placementSource='user_prompt_ai';a.wallSupported=false;delete a.againstWallId;delete a._presentationOmit;spatial.add(a.id);}
   if(existing)next.assets=next.assets.map(b=>b.id===a.id?a:b);else next.assets.push(a);
   changes.push(`${op.action}:${a.id}`);

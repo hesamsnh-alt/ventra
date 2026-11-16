@@ -11,5 +11,5 @@ export const FURNITURE_CATEGORIES=[
 ].map(([id,en,fa,types])=>({id,en,fa,ar:en,types}));
 export function filterFurniture(catalog,category='all',query=''){
  const c=FURNITURE_CATEGORIES.find(c=>c.id===category);if(!c)return [];
- const q=query.trim().toLocaleLowerCase();return catalog.filter(m=>(!c.types||(c.id==='sets'?!!m.layout:!m.layout&&c.types.includes(m.type)))&&(!q||[m.en,m.fa,m.ar].some(s=>s?.toLocaleLowerCase().includes(q))));
+ const q=query.trim().toLocaleLowerCase();return catalog.filter(m=>(!c.types||(c.id==='sets'?!!m.layout:!m.layout&&(m.variant==='kitchen-upper'?c.id==='kitchen':c.types.includes(m.type))))&&(!q||[m.en,m.fa,m.ar].some(s=>s?.toLocaleLowerCase().includes(q))));
 }

@@ -1,5 +1,5 @@
 import {canonicalRoomType} from './roomSemantics.mjs';
-export const PDF_INTERIOR_VERSION='pdf-interior-defaults-v167';
+export const PDF_INTERIOR_VERSION='pdf-interior-defaults-v168';
 const palette={wall:'#f2eee7',externalWall:'#d5cfc4',floor:'#ded6c8',bathroomTile:'#e5e8e5',door:'#8b6848',furniture:'#a27d55',upholstery:'#c8b9a5',glass:'#9fbfcf',metal:'#545d62',accent:'#9c8061'};
 const signature=a=>JSON.stringify(['id','roomId','type','xMeters','yMeters','rotation','width','depth','height','zMeters','color','variant','embeddedInCounter','mountedAboveId'].map(k=>a[k]??null));
 // Proposed design only. This module never imports catalog, prices or BOQ services.
@@ -28,6 +28,7 @@ export function applyPdfInteriorDefaults(input,applySingle,{force=false}={}){
    const currentIds=new Set(prepared.assets.map(a=>a.id));
    for(const a of expected.values())if(!currentIds.has(a.id)&&!prepared.assets.some(b=>b.roomId===a.roomId&&b.type===a.type))suppressedDefaultKeys.push(`${a.roomId}:${a.type}`);
    prepared.assets=prepared.assets.filter(a=>!expected.has(a.id)||signature(a)!==signature(expected.get(a.id)));
+   prepared.designDefaults=undefined;
   }
   const designed=applySingle(prepared,{force:true,pdfInterior:true,suppressedDefaultKeys});
   const assignments={...designed.surfaceFinishes?.assignments};

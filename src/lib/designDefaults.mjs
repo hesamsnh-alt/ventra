@@ -1,11 +1,12 @@
-import {placePdfFurniture} from './pdfFurnitureLayout.mjs';
+import {proposeKitchen} from './defaultKitchenLayout.mjs';
+import {placePdfFurniture,pdfFurnitureClear} from './pdfFurnitureLayout.mjs';
 import {applyPdfInteriorDefaults} from './pdfInteriorDefaults.mjs';
 import {canonicalRoomType} from './roomSemantics.mjs';
 import {placementProblem} from './scenePromptActions.mjs';
 import {restoreWallContactFurniture} from './sourceFurniture.mjs';
 
 // Visual policy only. Never imported by takeoff, BOQ or cost calculations.
-export const DESIGN_DEFAULTS=Object.freeze({version:'room-design-defaults-v64',wallHeightMeters:3.2,floorLevelMeters:0,origin:'plan_center',wetFloor:'wet_tile',dryFloor:'light_oak'});
+export const DESIGN_DEFAULTS=Object.freeze({version:'room-design-defaults-v65',wallHeightMeters:3.2,floorLevelMeters:0,origin:'plan_center',wetFloor:'wet_tile',dryFloor:'light_oak'});
 const sizes={toilet:[.55,.75,.78],sink:[.65,.45,.85],shower:[.85,.85,2.1],bed:[1.4,2,.65],dressing_table:[.9,.42,1.6],sofa:[2,.85,.85],tv_unit:[1.4,.35,.65],plant:[.35,.35,.9],kitchen_counter:[1.8,.6,.92],stove:[.6,.6,.9],range_hood:[.6,.48,.45],washing_machine:[.6,.65,.88],refrigerator:[.7,.7,1.85],dining_table:[1.2,.75,.76],chair:[.42,.45,.88],wardrobe:[1.6,.6,2.1],nightstand:[.5,.45,.5],coffee_table:[1.1,.65,.42],rug:[2.2,1.6,.025],desk:[1.3,.65,.76],cabinet:[1.2,.55,.9],armchair:[.85,.85,.9]};
 const uses=room=>{
  const canonical=canonicalRoomType(room),text=`${room.name||''} ${room.type||''} ${room.semanticType||''}`.toLowerCase();
@@ -13,6 +14,21 @@ const uses=room=>{
  return {canonical,kitchen,living};
 };
 const make=(room,type,index)=>({id:`default_${room.id}_${type}_${index}`,roomId:room.id,type,width:sizes[type][0],depth:sizes[type][1],height:sizes[type][2],rotation:0,placementSource:'design_default_not_measured',provenance:'proposed',excludeFromTakeoff:true});
+const kitchenTypes=['kitchen_counter','sink','stove','range_hood','washing_machine','refrigerator','dining_table','chair'];
+const defaultTypes=Object.keys(sizes);
+function upgradeOldDefaults(s,suppressed){
+ if(s.designDefaults?.version!=='room-design-defaults-v64')return;
+ const current=new Set(s.assets.map(a=>a.id));
+ for(const room of s.rooms)for(const type of defaultTypes){
+  const prefix=`default_${room.id}_${type}_`;
+  if(s.designDefaults.addedAssetIds?.some(id=>id.startsWith(prefix)&&!current.has(id))&&
+    !s.assets.some(a=>a.roomId===room.id&&a.type===type))suppressed.add(room.id+':'+type);
+ }
+ const kitchens=new Set(s.rooms.filter(r=>uses(r).kitchen).map(r=>r.id));
+ if(!kitchens.size)return;
+ s.assets=s.assets.filter(a=>!kitchens.has(a.roomId)||!kitchenTypes.includes(a.type)||
+  a.placementSource!=='design_default_not_measured'||!String(a.id).startsWith('default_'));
+}
 const groundScene=s=>({...s,assets:s.assets.filter(a=>a.type!=='range_hood')});
 const valid=(a,s,parent)=>!placementProblem(a,{...groundScene(s),assets:groundScene(s).assets.filter(b=>b.id!==parent)});
 const diningChairs=(table,room)=>{
@@ -48,8 +64,11 @@ export function applyDesignDefaults(input,options={}){
 }
 function applySingleDesignDefaults(input,{force=false,pdfInterior=false,pdfLayoutLegacy=false,suppressedDefaultKeys=[]}={}){
  if(!input||input.designDefaults?.version===DESIGN_DEFAULTS.version&&!force)return input;
+ if(!force&&input.designDefaults?.version==='room-design-defaults-v64'&&!input.rooms?.some(r=>uses(r).kitchen))return input;
  if(!Number.isFinite(input.width)||!Number.isFinite(input.depth)||!Array.isArray(input.rooms)||!input.rooms.length||!Array.isArray(input.assets)||!Array.isArray(input.walls)||input.rooms.length>200||input.assets.length>300)return input;
  const s=structuredClone(restoreWallContactFurniture(input).scene),added=[],warnings=[];
+ const suppressed=new Set([...suppressedDefaultKeys,...(s.designDefaults?.suppressedDefaultKeys||[])]);
+ if(!pdfLayoutLegacy)upgradeOldDefaults(s,suppressed);
  const measured=['source_dimension','source_annotation','measured'].includes(s.heightSource);
  if(!measured){s.height=DESIGN_DEFAULTS.wallHeightMeters;s.cutawayHeight=s.height;s.heightSource='design_default_not_measured';}
  s.rooms=s.rooms.map(r=>{
@@ -58,15 +77,16 @@ function applySingleDesignDefaults(input,{force=false,pdfInterior=false,pdfLayou
  });
  const has=(room,type)=>s.assets.some(a=>a.roomId===room.id&&a.type===type);
  const add=(room,type)=>{
-  if(suppressedDefaultKeys.includes(`${room.id}:${type}`))return null;
+  if(suppressed.has(`${room.id}:${type}`))return null;
   if(has(room,type))return s.assets.find(a=>a.roomId===room.id&&a.type===type);
   if(s.assets.length>=300){warnings.push({roomId:room.id,type,reason:'asset_limit'});return null;}
   let candidate;
+  const kitchenSink=type==='sink'&&uses(room).kitchen&&!pdfLayoutLegacy;
   if(type==='sink'||type==='stove'){
    for(const counter of s.assets.filter(a=>a.roomId===room.id&&a.type==='kitchen_counter')){
     const t=(counter.rotation||0)*Math.PI/180;
-    for(const offset of (pdfInterior&&!pdfLayoutLegacy?(type==='sink'?[-.45,-.5]:[.45,.5]):[0,-.25,.25])){
-     const a={...make(room,type,s.assets.length),xMeters:counter.xMeters+Math.cos(t)*offset,yMeters:counter.yMeters+Math.sin(t)*offset,rotation:counter.rotation||0,width:Math.min(sizes[type][0],counter.width-.08),depth:Math.min(sizes[type][1],counter.depth-.08),embeddedInCounter:true};
+    for(const offset of (kitchenSink?[0]:pdfInterior&&!pdfLayoutLegacy?(type==='sink'?[-.45,-.5]:[.45,.5]):[0,-.25,.25])){
+     const a={...make(room,type,s.assets.length),xMeters:counter.xMeters+Math.cos(t)*offset,yMeters:counter.yMeters+Math.sin(t)*offset,rotation:counter.rotation||0,width:Math.min(sizes[type][0],counter.width-.08),depth:Math.min(sizes[type][1],counter.depth-.08),embeddedInCounter:true,...(kitchenSink?{layoutAnchorId:counter.id}:{})};
      if(a.width>=.4&&a.depth>=.3&&Math.abs(offset)+a.width/2<=counter.width/2-.025&&valid(a,s,counter.id)){candidate=a;break;}
     }
     if(candidate)break;
@@ -75,12 +95,13 @@ function applySingleDesignDefaults(input,{force=false,pdfInterior=false,pdfLayou
   if(type==='range_hood'){
    const stove=s.assets.find(a=>a.roomId===room.id&&a.type==='stove');
    if(stove&&Number(s.height)>=2.5)candidate={...make(room,type,s.assets.length),xMeters:stove.xMeters,yMeters:stove.yMeters,rotation:stove.rotation||0,zMeters:1.95,mountedAboveId:stove.id};
-  }else candidate ||= place(s,room,type,s.assets.length,pdfInterior&&!pdfLayoutLegacy);
+   if(candidate&&!pdfLayoutLegacy&&(!valid(candidate,s)||!pdfFurnitureClear(candidate,s)))candidate=null;
+  }else if(!kitchenSink)candidate ||= place(s,room,type,s.assets.length,pdfInterior&&!pdfLayoutLegacy);
   if(!candidate){warnings.push({roomId:room.id,type,reason:'no_safe_space'});return null;}
   s.assets.push(candidate);added.push(candidate.id);return candidate;
  };
  const addChairs=(table,room)=>{
-  if(!table||has(room,'chair')||suppressedDefaultKeys.includes(`${room.id}:chair`))return;
+  if(!table||has(room,'chair')||suppressed.has(`${room.id}:chair`))return;
   for(const chair of diningChairs(table,room)){
    if(s.assets.length<300&&valid(chair,s)){s.assets.push(chair);added.push(chair.id);}else warnings.push({roomId:room.id,type:'chair',reason:'no_safe_space'});
   }
@@ -103,6 +124,15 @@ function applySingleDesignDefaults(input,{force=false,pdfInterior=false,pdfLayou
    if(u.canonical==='storage')required.push('cabinet');
    if(u.canonical==='balcony')required.push('dining_table','plant');
   }
+  if(u.kitchen&&!pdfLayoutLegacy){
+   const proposal=proposeKitchen(s,room,{suppressed:[...suppressed],laundry:!(pdfInterior&&s.rooms.some(r=>uses(r).canonical==='laundry'))&&!s.assets.some(a=>a.type==='washing_machine'&&a.roomId!==room.id)});
+   s.assets.push(...proposal.added);added.push(...proposal.added.map(a=>a.id));
+   for(const type of ['washing_machine'])if(!has(room,type)&&required.includes(type)&&!suppressed.has(room.id+':'+type))
+    warnings.push({roomId:room.id,type,reason:'no_supported_counter_space'});
+   for(const type of ['washing_machine',...(proposal.hasSeatedIsland?['dining_table']:[])]){
+    const at=required.indexOf(type);if(at>=0)required.splice(at,1);
+   }
+  }
   for(const type of required){const asset=add(room,type);if(pdfInterior&&!pdfLayoutLegacy&&type==='dining_table')addChairs(asset,room);}
   // Add four proposed chairs only for a newly proposed table, not a traced set.
   const table=s.assets.find(a=>a.roomId===room.id&&a.type==='dining_table');
@@ -110,6 +140,6 @@ function applySingleDesignDefaults(input,{force=false,pdfInterior=false,pdfLayou
  }
  const points=s.footprint||[],validPoints=points.length>=3&&points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
  const origin=validPoints?{x:(Math.min(...points.map(p=>p.x))+Math.max(...points.map(p=>p.x)))/2,y:(Math.min(...points.map(p=>p.y))+Math.max(...points.map(p=>p.y)))/2,z:0}:{x:s.width/2,y:s.depth/2,z:0};
- s.designDefaults={...DESIGN_DEFAULTS,viewOriginMeters:origin,addedAssetIds:added,warnings,engineeringQuantitiesUnchanged:true};
+ s.designDefaults={...DESIGN_DEFAULTS,viewOriginMeters:origin,addedAssetIds:added,warnings,...(suppressed.size?{suppressedDefaultKeys:[...suppressed]}:{}),engineeringQuantitiesUnchanged:true};
  return s;
 }

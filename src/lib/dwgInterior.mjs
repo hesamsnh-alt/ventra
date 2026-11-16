@@ -37,7 +37,7 @@ export function upgradeDwgInterior(scene,takeoff={}){
  if(!rooms.some(room=>room.scopeOnly)&&scene.footprint?.length>=3){
   rooms.push({id:`dwg-floor-scope-${scene.dwgRegion}`,name:'Unassigned floor area',type:'unknown',polygon:structuredClone(scene.footprint),scopeOnly:true});addedScope=true;
  }
- if(!changed.size&&!addedScope&&!audit.rejected.length&&!needsDefaults)return scene;
+ if(!changed.size&&!addedScope&&!audit.rejected.length&&!needsDefaults)return applyDesignDefaults(scene);
  const assets=scene.assets.filter(asset=>!(changed.has(asset.roomId)&&asset.placementSource==='design_default_not_measured'));
  return applyDesignDefaults({...scene,rooms,assets,openings:audit.openings,designDefaults:undefined,dwgReview:{...scene.dwgReview,defaultsVersion:81,manualFloorScope:true,openingConflicts:[...(scene.dwgReview?.openingConflicts||[]),...audit.rejected]}},{force:true});
 }

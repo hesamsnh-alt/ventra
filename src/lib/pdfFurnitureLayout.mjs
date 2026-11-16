@@ -17,7 +17,7 @@ function windowBlocked(a,s){
   const t=(a.rotation||0)*Math.PI/180,ax={x:Math.cos(t),y:Math.sin(t)},ay={x:-Math.sin(t),y:Math.cos(t)};
   const alongHalf=Math.abs(ax.x*ux+ax.y*uy)*a.width/2+Math.abs(ay.x*ux+ay.y*uy)*a.depth/2;
   const normalHalf=Math.abs(ax.x*uy-ax.y*ux)*a.width/2+Math.abs(ay.x*uy-ay.y*ux)*a.depth/2;
-  return normal<normalHalf+Number(w.thickness)/2+.25&&Math.abs(along-o.offset*len)<alongHalf+o.width/2+.05;
+  return normal<normalHalf+(Number(w.thickness)||.12)/2+.25&&Math.abs(along-o.offset*len)<alongHalf+o.width/2+.05;
  });
 }
 export function pdfFurnitureClear(a,s){return !windowBlocked(a,s);}

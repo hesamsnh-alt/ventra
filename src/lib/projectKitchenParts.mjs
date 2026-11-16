@@ -127,7 +127,7 @@ export function countertopFixtures(assets,placement){
  const openings=new Map(),heights=new Map();
  for(const asset of assets){
   const pose=placement(asset);
-  if(['kitchen_counter','kitchen_island'].includes(pose.assetType))counters.push({asset,pose});
+  if(!asset.worktopOnly&&['kitchen_counter','kitchen_island'].includes(pose.assetType))counters.push({asset,pose});
  }
  for(const asset of assets){
   if(!asset.embeddedInCounter)continue;

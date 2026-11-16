@@ -123,3 +123,15 @@ test('manual objects may touch polygon edges while significant boundary escape r
  assert.equal(placementProblem(a,s,{manualFurniturePlacement:true}),null);
  assert.equal(placementProblem({...a,xMeters:9.53},s,{manualFurniturePlacement:true}),'outside target room');
 });
+
+test('manual base and wall kitchen cabinets have independent dimensions and can stack vertically',()=>{
+ const base=applyFurnitureEdit(scene(),add('cabinet-base-modular'));
+ let next=applyFurnitureEdit(base,add('cabinet-upper-modular'));
+ const upper=next.assets.at(-1),lower=next.assets[0];
+ assert.equal(upper.zMeters,1.5);
+ next=applyFurnitureEdit(next,{kind:'resize',assetId:upper.id,size:{width:1.3,depth:.37,height:.65}});
+ assert.deepEqual(next.assets[0],lower);
+ assert.equal(next.assets[1].zMeters,1.5);
+ assert.equal(next.assets[1].width,1.3);
+ assert.equal(next.assets[1].height,.65);
+});

@@ -23,7 +23,7 @@ test('bedroom and living defaults are persistent, parquet floors and no duplicat
 });
 test('kitchen includes equipment, aerial hood and dining chairs with safe footprints',()=>{
  const r=applyDesignDefaults(scene('Kitchen'));
- for(const type of ['kitchen_counter','sink','stove','range_hood','washing_machine','refrigerator','dining_table','chair'])assert.ok(r.assets.some(a=>a.type===type),type);
+ for(const type of ['kitchen_counter','sink','stove','range_hood','washing_machine','refrigerator','kitchen_island','chair'])assert.ok(r.assets.some(a=>a.type===type),type);
  const hood=r.assets.find(a=>a.type==='range_hood'),stove=r.assets.find(a=>a.type==='stove');
  assert.equal(hood.mountedAboveId,stove.id);assert.equal(hood.zMeters,1.95);
  assert.equal(r.assets.filter(a=>a.type==='chair').length,4);
@@ -45,7 +45,7 @@ test('combined living kitchens recognize Persian and Arabic and center irregular
  for(const name of ['آشپزخانه و پذیرایی','مطبخ ومعيشة']){
   const s=scene(name);s.footprint=rect(1,0,10,8);
   const r=applyDesignDefaults(s);
-  for(const type of ['sofa','tv_unit','plant','stove','range_hood','dining_table'])assert.ok(r.assets.some(a=>a.type===type),`${name}: ${type}`);
+  for(const type of ['sofa','tv_unit','plant','stove','range_hood','kitchen_island'])assert.ok(r.assets.some(a=>a.type===type),`${name}: ${type}`);
   assert.deepEqual(r.designDefaults.viewOriginMeters,{x:6,y:4,z:0});
  }
 });
@@ -55,4 +55,41 @@ test('a new bedroom vanity places the mirror face inward',()=>{
  const vanity=result.assets.find(a=>a.type==='dressing_table');
  assert.ok(vanity.yMeters<.5);
  assert.ok(Math.cos(vanity.rotation*Math.PI/180)>.99);
+});
+
+test('a full kitchen uses three supported rows, a centered sink, a washer under a worktop and stools around the island',()=>{
+ const model=applyDesignDefaults(scene('Kitchen'));
+ const assets=model.assets,base=assets.filter(a=>a.variant==='kitchen-base');
+ assert.equal(base.length,3);
+ assert.equal(new Set(base.map(a=>a.rotation)).size,3);
+ for(const run of base)assert.ok(assets.some(a=>a.variant==='kitchen-upper'&&a.layoutAnchorId===run.id&&a.zMeters>run.height));
+ const sink=assets.find(a=>a.type==='sink'),host=base.find(a=>a.id===sink.layoutAnchorId);
+ assert.ok(sink.embeddedInCounter);assert.equal(sink.xMeters,host.xMeters);assert.equal(sink.yMeters,host.yMeters);
+ const stove=assets.find(a=>a.type==='stove'),hood=assets.find(a=>a.type==='range_hood');
+ assert.equal(hood.mountedAboveId,stove.id);assert.equal(hood.xMeters,stove.xMeters);assert.equal(hood.yMeters,stove.yMeters);
+ const washer=assets.find(a=>a.type==='washing_machine'),top=assets.find(a=>a.worktopOnly);
+ assert.ok(washer.underCounter);assert.equal(top.layoutAnchorId,washer.id);assert.equal(top.zMeters,washer.height);assert.equal(top.xMeters,washer.xMeters);assert.equal(top.yMeters,washer.yMeters);
+ const island=assets.find(a=>a.type==='kitchen_island'),stools=assets.filter(a=>a.variant==='bar-stool');
+ assert.ok(stools.length>=2&&stools.every(a=>a.groupId===island.id));
+ assert.equal(placementProblem({...island,width:island.width+2.14,depth:island.depth+2.14},{...model,assets:assets.filter(a=>a.groupId!==island.id)}),null);
+});
+
+test('compact open kitchens use only supported rows and never force an island or a freestanding sink',()=>{
+ const input=scene('Kitchen');input.rooms[0].polygon=rect(0,0,4.2,2.35);
+ input.walls=[{id:'back',start:{x:0,y:0},end:{x:4.2,y:0},thickness:.2}];
+ const designed=applyDesignDefaults(input);
+ assert.equal(designed.assets.filter(a=>a.variant==='kitchen-base').length,1);
+ assert.ok(designed.assets.filter(a=>a.type==='sink').every(a=>a.embeddedInCounter));
+ assert.ok(!designed.assets.some(a=>a.type==='kitchen_island'));assert.deepEqual(designed.walls,input.walls);
+});
+
+test('existing kitchens can upgrade while preserving source fixtures and prior deliberate deletions',()=>{
+ const input=scene('Kitchen'),design=applyDesignDefaults(input);
+ const old={...input,designDefaults:{version:'room-design-defaults-v64',addedAssetIds:['default_room_washing_machine_2']},assets:[
+  {...design.assets.find(a=>a.type==='sink'),id:'observed_sink',placementSource:'source_image_observation_v1'},
+ ]};
+ const upgraded=applyDesignDefaults(old);
+ assert.deepEqual(upgraded.assets[0],old.assets[0]);
+ assert.ok(!upgraded.assets.some(a=>a.type==='washing_machine'));
+ assert.equal(applyDesignDefaults(upgraded),upgraded);
 });

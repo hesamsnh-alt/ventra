@@ -36,6 +36,8 @@ export const FURNITURE_CATALOG=Object.freeze([
  ['basin','sink','Vanity basin','روشویی کابینت‌دار','حوض وخزانة',.65,.45,.85,'modern','#bca487'],
  ['shower','shower','Shower','دوش','دش',.85,.85,2.1,'modern','#c8d4d6'],
  ['dresser','dressing_table','Dressing table','میز آرایش','طاولة زينة',.9,.42,1.6,'modern','#bca487'],
+ ['cabinet-base-modular','kitchen_counter','Base kitchen cabinet','کابینت زمینی آشپزخانه','خزانة مطبخ أرضية',.9,.62,.92,'kitchen-base','#bca487'],
+ ['cabinet-upper-modular','cabinet','Wall kitchen cabinet','کابینت هوایی آشپزخانه','خزانة مطبخ علوية',.9,.33,.72,'kitchen-upper','#bca487'],
  ['counter','kitchen_counter','Kitchen counter','کابینت آشپزخانه','خزانة مطبخ',1.8,.6,.92,'modern','#bca487'],
  ['cooker','stove','Cooker','اجاق','موقد',.6,.6,.9,'modern','#d0d0cb'],
  ['hood','range_hood','Extractor hood','هود','شفاط',.6,.48,.45,'modern','#c1c1bc'],
@@ -251,9 +253,12 @@ export function furnitureDraft(scene,edit){
   const scale=furniturePlacementScale(edit.scale??1);
   for(const k of ['width','depth','height'])draft[k]=edit.setPieceSize?.[k]??draft[k]*scale;
  }
- if(draft.type==='range_hood')draft.zMeters=1.95;
+ if(draft.variant==='kitchen-upper')draft.zMeters=1.5;
+ else if(draft.type==='range_hood')draft.zMeters=1.95;
  else if(['picture_frame','wall_tv'].includes(draft.type))draft.zMeters=1.1;
  else if(model)delete draft.zMeters;
+ if(edit.kind==='add'&&['kitchen-base','kitchen-upper'].includes(draft.variant)&&Number.isFinite(scene.height)&&
+  (Number(draft.zMeters)||0)+draft.height>scene.height)fail('Furniture would exceed the room height. / ارتفاع وسیله از سقف بیشتر می‌شود.');
  if(edit.color)draft.color=edit.color;
  if(edit.kind==='resize')for(const key of ['width','depth','height']){
   if(!Number.isFinite(edit.size?.[key])||edit.size[key]<=0)fail('Invalid furniture size.');
@@ -261,11 +266,11 @@ export function furnitureDraft(scene,edit){
  }
  if(edit.kind==='resize'){
   const ratios=['width','depth','height'].map(key=>draft[key]/original[key]);
-  const independent=(draft.type==='curtain'&&draft.depth===original.depth)||(draft.type==='rug'&&draft.height===original.height);
+  const independent=(draft.type==='curtain'&&draft.depth===original.depth)||(draft.type==='rug'&&draft.height===original.height)||['kitchen-base','kitchen-upper'].includes(draft.variant);
   if(!independent&&!ratios.every(n=>Number.isFinite(n)&&Math.abs(n-ratios[0])<.000001))fail('Resize must preserve furniture proportions.');
   if(Number.isFinite(scene.height)&&(Number(draft.zMeters)||0)+draft.height>scene.height)fail('Furniture would exceed the room height. / ارتفاع وسیله از سقف بیشتر می‌شود.');
  }
- return edit.kind==='resize'&&draft.type==='curtain'?draft:snapFurnitureToWall(draft,scene);
+ return edit.kind==='resize'&&(draft.type==='curtain'||draft.variant==='kitchen-base')?draft:snapFurnitureToWall(draft,scene);
 }
 export function previewFurnitureEdit(scene,edit){
  let candidate;
@@ -310,7 +315,7 @@ export function applyFurnitureEdit(scene,edit){
  else{
   candidate=furnitureDraft(scene,edit);model=resolveFurnitureCatalog(edit);
   if(edit.kind==='replace'&&model.type!==original.type)fail('Choose a model of the same furniture type. / مدل هم‌نوع انتخاب کن.');
-  plan={action:edit.kind==='add'?'add':'update',assetId:edit.kind==='add'?null:edit.assetId,type:candidate.type,roomId:candidate.roomId,xMeters:candidate.xMeters,yMeters:candidate.yMeters,width:candidate.width,depth:candidate.depth,height:candidate.height,rotation:candidate.rotation,color:candidate.color};
+  plan={action:edit.kind==='add'?'add':'update',assetId:edit.kind==='add'?null:edit.assetId,type:candidate.type,roomId:candidate.roomId,xMeters:candidate.xMeters,yMeters:candidate.yMeters,width:candidate.width,depth:candidate.depth,height:candidate.height,rotation:candidate.rotation,color:candidate.color,...(candidate.variant==='kitchen-upper'?{zMeters:candidate.zMeters}:{})};
  }
  const actions=[plan];
  if(edit.kind==='add'&&model.chairs){
@@ -320,7 +325,7 @@ export function applyFurnitureEdit(scene,edit){
  const next=applyPromptActions(scene,{status:'apply',actions},{manualDwgPlacement:edit.freePlacement===true,manualFurniturePlacement:true}).scene;
  if(model){
   const id=edit.kind==='add'?next.assets[scene.assets.length].id:original.id;
-  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&['width','depth','height'].some(key=>a[key]!==model[key])?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.type==='range_hood'?{zMeters:1.95}:['picture_frame','wall_tv'].includes(model.type)?{zMeters:1.1}:{zMeters:0})};});
+  next.assets=next.assets.map(a=>{if(a.id!==id)return a;const {renderingBaseDimensions,customModelId,customModelName,preserveModelColors,...reset}=a;return {...reset,variant:model.variant,catalogId:model.id,...(edit.kind==='add'&&['width','depth','height'].some(key=>a[key]!==model[key])?{renderingBaseDimensions:{width:model.width,depth:model.depth,height:model.height}}:{}),...(model.customModelId?{customModelId:model.customModelId,customModelName:model.en,preserveModelColors:true}:{}),...(model.variant==='kitchen-upper'?{zMeters:1.5}:model.type==='range_hood'?{zMeters:1.95}:['picture_frame','wall_tv'].includes(model.type)?{zMeters:1.1}:{zMeters:0})};});
  }
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.furnitureFinishes?{...a,furnitureFinishes:Object.fromEntries(Object.entries(a.furnitureFinishes).map(([key,value])=>[key,{...value,color:edit.color}]))}:a);
  if(edit.kind==='color')next.assets=next.assets.map(a=>a.id===original.id&&a.customModelId?{...a,preserveModelColors:false}:a);

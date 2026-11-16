@@ -18,7 +18,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  const {language}=useLanguage(),lang=words[language]?language:'en',t=words[lang];
  const [category,setCategory]=useState('all'),[query,setQuery]=useState('');
  const [placementScale,setPlacementScale]=useState(1),[placementAxes,setPlacementAxes]=useState({width:1,depth:1});
- const [dimensionDraft,setDimensionDraft]=useState({}),[setDraft,setSetDraft]=useState({});
+ const [dimensionDraft,setDimensionDraft]=useState({}),[setDraft,setSetDraft]=useState({}),[newCabinetDraft,setNewCabinetDraft]=useState({});
  const [finishId,setFinishId]=useState('wood-oak'),[finishTarget,setFinishTarget]=useState('body');
  const [personalModel,setPersonalModel]=useState(null);
  const open=true;
@@ -32,6 +32,10 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  const latest=useRef(null),history=useRef([]),openingHistory=useRef([]),working=useRef(false);
  const text=(en,fa,ar)=>lang==='fa'?fa:lang==='ar'?ar:en;
  const selectedModel=FURNITURE_CATALOG.find(m=>m.id===catalogId);
+ const cabinetModel=['kitchen-base','kitchen-upper'].includes(selectedModel?.variant);
+ const newCabinetSize=cabinetModel?Object.fromEntries(['width','depth','height'].map(key=>[key,
+  newCabinetDraft.id===catalogId?newCabinetDraft[key]:selectedModel[key],
+ ])):null;
  const setBounds=selectedModel?.layout?furnitureSetBounds(selectedModel,placementScale,placementAxes):null;
  const changePlacementScale=value=>{setPlacementScale(value);setPlacementAxes({width:1,depth:1});};
  const axisInputs=(axes,update,withMeters=false)=>Object.entries({
@@ -67,12 +71,13 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
  }
  function wallMode(value){wallStart.current=null;setMode(value);getRenderer()?.setNamedView?.('top');}
  const object=scene.assets.find(a=>a.id===selected);
- const independent=!object?.customModelId&&['curtain','rug'].includes(object?.type);
- const vertical=object?.type==='curtain'?'height':'depth';
- const dimensionKey=independent?JSON.stringify([object.id,object.width,object[vertical]]):'';
- const dimensions=dimensionDraft.key===dimensionKey?dimensionDraft:{width:object?.width,vertical:object?.[vertical]};
+ const cabinet=['kitchen-base','kitchen-upper'].includes(object?.variant)&&!object?.worktopOnly;
+ const independent=!object?.customModelId&&(['curtain','rug'].includes(object?.type)||cabinet);
+ const vertical=object?.type==='rug'?'depth':'height';
+ const dimensionKey=independent?JSON.stringify([object.id,object.width,object[vertical],object.depth]):'';
+ const dimensions=dimensionDraft.key===dimensionKey?dimensionDraft:{width:object?.width,vertical:object?.[vertical],depth:object?.depth};
  const dimensionValid=Number(dimensions.width)>=.1&&Number(dimensions.width)<=6&&
-  Number(dimensions.vertical)>=(vertical==='height'?.01:.04)&&Number(dimensions.vertical)<=(vertical==='height'?3:4);
+  Number(dimensions.vertical)>=(vertical==='height'?.01:.04)&&Number(dimensions.vertical)<=(vertical==='height'?3:4)&&(!cabinet||(Number(dimensions.depth)>=.04&&Number(dimensions.depth)<=4));
  const groupSize=object?.furnitureSetId&&scene.assets.filter(a=>a.furnitureSetId===object.furnitureSetId).length>1;
  const selectedAxes=setDraft.id===object?.furnitureSetId?setDraft.axes:{width:1,depth:1};
  const label=a=>a.customModelName||FURNITURE_CATALOG.find(m=>m.id===a.catalogId||(!a.catalogId&&m.type===a.type))?.[lang]||a.type;
@@ -91,7 +96,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    const remaining=(next.furnitureEditor?.copiedIds?.length?next.furnitureEditor.copiedIds:state.selectedIds).filter(id=>next.assets.some(a=>a.id===id));setSelectedIds(remaining);setSelected(remaining[0]||'');if(edit?.kind==='copy-many')setMode('select');
   }catch(error){setMessage(error.message);}finally{working.current=false;setBusy(false);}
  }
- useEffect(()=>{latest.current={scene,personalModel,disabled:disabled||busy,mode,catalogId,placementScale,placementAxes,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
+ useEffect(()=>{latest.current={scene,personalModel,disabled:disabled||busy,mode,catalogId,placementScale,placementAxes,newCabinetSize,selected,selectedIds,multiSelect,onCommit,onCommitOpenings,onCommitWalls,wallThickness,openingConfig,freePlacement,t,save,saveOpening,saveWall};});
  useEffect(()=>{
   const renderer=getRenderer();if(!renderer)return;
   renderer.setWallEditMode?.(mode==='wall-add'&&!disabled&&!busy);
@@ -100,7 +105,7 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    const s=latest.current;
    if(s.mode==='rotate')return data?{kind:'rotate',assetId:data.id,rotation:furnitureRotationFromDrag(data.rotation,data.startX,event)}:null;
    if(s.mode==='resize')return data?{kind:'resize',assetId:data.id,size:furnitureSizeFromDrag(data.dimensions,data.startX,event)}:null;
-   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,scale:FURNITURE_CATALOG.find(m=>m.id===s.catalogId)?.layout?s.placementScale:1,axes:s.placementAxes,personalModel:s.personalModel,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
+   return s.mode==='add'?{kind:'add',catalogId:s.catalogId,scale:FURNITURE_CATALOG.find(m=>m.id===s.catalogId)?.layout?s.placementScale:1,axes:s.placementAxes,...(s.newCabinetSize?{setPieceSize:Object.fromEntries(Object.entries(s.newCabinetSize).map(([key,value])=>[key,Number(value)]))}:{}),personalModel:s.personalModel,point}:{kind:'move',assetId:data?.id||s.selected,point:{x:point.x+(data?.dx||0),y:point.y+(data?.dy||0)}};
   };
   renderer.setFurnitureTool?.({
    start:(id,point,event)=>{
@@ -153,15 +158,16 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
    <button type="button" disabled={blocked||!object||FURNITURE_CATALOG.find(m=>m.id===catalogId)?.type!==object.type} onClick={()=>save({kind:'replace',assetId:selected,catalogId})}>{t.replace}</button>
    <button type="button" disabled={blocked||!object} onClick={()=>save({kind:'remove-many',assetIds:selectedIds})}>{t.remove}</button>
   </div>
-    {independent&&<fieldset disabled={blocked}><legend>{object.type==='curtain'?text('Curtain dimensions','ابعاد پرده','أبعاد الستارة'):text('Rug dimensions','ابعاد فرش','أبعاد السجادة')}</legend>
+    {independent&&<fieldset disabled={blocked}><legend>{object.type==='curtain'?text('Curtain dimensions','ابعاد پرده','أبعاد الستارة'):cabinet?text('Kitchen cabinet dimensions','ابعاد کابینت آشپزخانه','أبعاد خزانة المطبخ'):text('Rug dimensions','ابعاد فرش','أبعاد السجادة')}</legend>
      <div className={styles.tools}>
       <label>{text('Width (m)','عرض (متر)','العرض (متر)')}<input type="number" min=".1" max="6" step=".01" value={dimensions.width} onChange={e=>setDimensionDraft({...dimensions,key:dimensionKey,width:e.target.value})}/></label>
       <label>{vertical==='height'?text('Height (m)','ارتفاع (متر)','الارتفاع (متر)'):text('Length (m)','طول (متر)','الطول (متر)')}
        <input type="number" min={vertical==='height'?'.01':'.04'} max={vertical==='height'?3:4} step=".01" value={dimensions.vertical} onChange={e=>setDimensionDraft({...dimensions,key:dimensionKey,vertical:e.target.value})}/>
       </label>
+      {cabinet&&<label>{text('Depth (m)','عمق (متر)','العمق (متر)')}<input type="number" min=".04" max="4" step=".01" value={dimensions.depth} onChange={e=>setDimensionDraft({...dimensions,key:dimensionKey,depth:e.target.value})}/></label>}
       <button type="button" data-model-tool="apply-object-dimensions" disabled={blocked||!dimensionValid||
-       (Number(dimensions.width)===object.width&&Number(dimensions.vertical)===object[vertical])}
-       onClick={()=>save({kind:'resize',assetId:object.id,size:{width:Number(dimensions.width),depth:object.depth,height:object.height,[vertical]:Number(dimensions.vertical)}})}>
+       (Number(dimensions.width)===object.width&&Number(dimensions.vertical)===object[vertical]&&(!cabinet||Number(dimensions.depth)===object.depth))}
+       onClick={()=>save({kind:'resize',assetId:object.id,size:{width:Number(dimensions.width),depth:cabinet?Number(dimensions.depth):object.depth,height:object.height,[vertical]:Number(dimensions.vertical)}})}>
        {text('Apply dimensions','اعمال ابعاد','تطبيق الأبعاد')}
       </button>
      </div>
@@ -189,6 +195,14 @@ export default function FurnitureEditorPanel({projectId,scene,getRenderer,onComm
       const items=filterFurniture(FURNITURE_CATALOG,c.id,query);if(query.trim()&&!items.length)return null;
       return <ToolDrawer key={c.id} title={`${c[lang]} (${items.length})`} name={query.trim()?undefined:`${trayGroup}-catalog`} open={query.trim()?items.length>0:undefined} onOpen={()=>{setCategory(c.id);cameraMode();}}>
         <div className={styles.catalog}>{items.map(renderCatalogItem)}</div>
+        {['kitchen','cabinets'].includes(c.id)&&newCabinetSize&&items.some(item=>item.id===catalogId)&&<fieldset disabled={blocked}><legend>{text('Cabinet size before placement','ابعاد کابینت قبل از افزودن','أبعاد الخزانة قبل الإضافة')}</legend>
+         <div className={styles.tools}>{[
+          ['width',.1,6,text('Width (m)','عرض (متر)','العرض (متر)')],
+          ['depth',.04,4,text('Depth (m)','عمق (متر)','العمق (متر)')],
+          ['height',.01,3,text('Height (m)','ارتفاع (متر)','الارتفاع (متر)')],
+         ].map(([key,min,max,name])=><label key={key}>{name}<input type="number" min={min} max={max} step=".01"
+          value={newCabinetSize[key]} onChange={e=>setNewCabinetDraft({...newCabinetSize,id:catalogId,[key]:e.target.value})}/></label>)}</div>
+        </fieldset>}
         {c.id==='sets'&&selectedModel?.layout&&<div className={styles.setPlacement}>
 {setBounds&&<fieldset disabled={blocked}><legend>{text('Set size before adding','اندازه ست قبل از افزودن','حجم الطقم قبل الإضافة')}</legend><div className={styles.tools}>
    <label>{text('Overall scale (%)','مقیاس کلی (%)','المقياس الكلي (%)')}<input type="range" min="50" max="125" step="5" value={Math.round(placementScale*100)} onChange={e=>changePlacementScale(Number(e.target.value)/100)}/><output>{Math.round(placementScale*100)}%</output></label>

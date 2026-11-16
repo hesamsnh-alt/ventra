@@ -157,3 +157,15 @@ test('pre-placement depth control changes the set preview and the saved footprin
  assert.equal(sofa.width,2.2);
  assert.equal(sofa.height,.85);
 });
+
+test('kitchen cabinet dimensions can be entered before placing a new wall cabinet',async()=>{
+ const ui=await panel();let tree=ui.render();
+ ui.button(ui.drawer(tree,'Kitchen & appliances'),'Wall kitchen cabinet').props.onClick();tree=ui.render();
+ const drawer=ui.drawer(tree,'Kitchen & appliances');
+ const fieldset=ui.nodes(drawer,'fieldset').find(f=>ui.nodes(f,'legend').some(l=>l.props.children==='Cabinet size before placement'));
+ ui.nodes(fieldset,'input')[0].props.onChange({target:{value:'1.2'}});tree=ui.render();
+ const preview=ui.getTool().preview({x:3,y:3},{},{});
+ assert.equal(preview.valid,true);assert.equal(preview.candidate.width,1.2);
+ await ui.getTool().commit({x:3,y:3},null,false,{});
+ assert.equal(ui.getScene().assets[0].width,1.2);assert.equal(ui.getScene().assets[0].zMeters,1.5);
+});

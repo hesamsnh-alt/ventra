@@ -5939,6 +5939,14 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'chair': {
+      if(designVariant==='bar-stool'){
+        const seat=h*.68;
+        addBox(w*.92,d*.9,.06,0,0,seat,accent);
+        addBox(w*.84,.055,h*.35,0,-d*.4,h*.825,accent);
+        for(const sx of [-1,1])for(const sy of [-1,1])addBox(.035,.035,seat,sx*w*.35,sy*d*.34,seat/2,dark);
+        addBox(w*.72,.035,.035,0,d*.35,h*.30,metal);
+        break;
+      }
       addBox(w * 0.92, d * 0.92, 0.08, 0, 0, 0.46, accent);
       addBox(w * 0.88, 0.08, 0.50, 0, -d * 0.40, 0.69, accent);
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) addBox(0.04, 0.04, 0.44, sx * w * 0.30, sy * d * 0.30, 0.22, dark);
@@ -5988,6 +5996,7 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
       break;
     }
     case 'kitchen_counter': {
+      if(asset.worktopOnly){addBox(w,d,h,0,0,h/2,white);break;}
       if(interactiveKitchen){
         buildKitchenStorage({type:assetType,variant:designVariant,w,d,h,rot,cx,cy,meshes,addBox,wood:accent,liner:dark,stone:white,metal,apertures:kitchenFixtures?.openings.get(asset)});
         break;

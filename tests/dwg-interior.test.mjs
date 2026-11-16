@@ -100,7 +100,7 @@ test('partially extracted rooms no longer lock uncovered floor areas or create a
  assert.throws(()=>applyFurnitureEdit(colliding,{kind:'add',catalogId:'plant',point:{x:6,y:3}}),/wall/);
 });
 test('verified polygon IDs connect stored WC/kitchen/bedroom semantics to DWG default furniture',()=>{
- for(const [type,expected] of [['bathroom',['toilet','sink','shower']],['bedroom',['bed','dressing_table']],['kitchen',['kitchen_counter','stove','range_hood','washing_machine','dining_table']]]){
+ for(const [type,expected] of [['bathroom',['toilet','sink','shower']],['bedroom',['bed','dressing_table']],['kitchen',['kitchen_counter','stove','range_hood','washing_machine','kitchen_island']]]){
   const data=fixture();data.runtime.geometry.roomPolygons[0].name='Room';
   const input=dwgInteriorScene(data);
   const scene=upgradeDwgInterior(input,{object_details:{rooms:[{name:type,roomType:type,geometryPolygonId:'room-0'}]}});
