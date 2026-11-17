@@ -63,10 +63,15 @@ test('standalone editor ray-picks the floor and furniture with actual r71 and pr
   focus(){}setPointerCapture(){}releasePointerCapture(){}
   send(type,p={}){let stopped=false;const e={type,pointerId:1,clientX:400,clientY:300,button:0,preventDefault(){},stopImmediatePropagation(){stopped=true;},...p};for(const a of this.listeners.filter(a=>a.type===type).sort((a,b)=>Number(!!b.options?.capture)-Number(!!a.options?.capture))){if(stopped)break;a.fn(e);}}
  }
- class Renderer{constructor({canvas}){this.domElement=canvas;}setPixelRatio(){}setSize(){}setClearColor(){}render(){}dispose(){}}
+ const frames=new Map(),timers=new Map(),draws=[];
+ let nextId=0;
+ const schedule=(queue,fn)=>{queue.set(++nextId,fn);return nextId;};
+ const flush=queue=>{const callbacks=[...queue.values()];queue.clear();callbacks.forEach(fn=>fn());};
+ class Renderer{constructor({canvas}){this.domElement=canvas;}setPixelRatio(){}setSize(){}setClearColor(){}render(_scene,_camera,moving){draws.push(moving);}dispose(){}}
  const oldRenderer=THREE.WebGLRenderer,oldRenderScene=context.renderSchematicScene;
  THREE.WebGLRenderer=Renderer;
- Object.assign(context,{window:{THREE,devicePixelRatio:1,requestAnimationFrame:fn=>fn(),addEventListener(){},removeEventListener(){}},bindFurnitureInputs,bindProjectCameraInputs,cameraFitDistance,namedCameraOffset,orbitOffset,configureSchematicLighting:()=>{}});
+ Object.assign(context,{window:{THREE,devicePixelRatio:1,requestAnimationFrame:fn=>schedule(frames,fn),cancelAnimationFrame:id=>frames.delete(id),
+  setTimeout:fn=>schedule(timers,fn),clearTimeout:id=>timers.delete(id),addEventListener(){},removeEventListener(){}},bindFurnitureInputs,bindProjectCameraInputs,cameraFitDistance,namedCameraOffset,orbitOffset,configureSchematicLighting:()=>{}});
  let previewMesh;
  context.renderSchematicScene=adapter=>{
   const root=new THREE.Object3D();root.position.set(-2,-2,0);adapter.impl.scene.add(root);
@@ -77,7 +82,14 @@ test('standalone editor ray-picks the floor and furniture with actual r71 and pr
  try{
   const canvas=new Canvas(),container={clientWidth:800,clientHeight:600,isConnected:true},scene={width:10,depth:8,assets:[{id:'plant-1',xMeters:5,yMeters:4,rotation:0,width:.8,depth:.8,height:1}],designDefaults:{viewOriginMeters:{x:7,y:6}}};
   let selected,point;
-  const viewer=context.mountStandaloneSchematicRenderer(container,scene,canvas);viewer.setNamedView('top');
+  const viewer=context.mountStandaloneSchematicRenderer(container,scene,canvas);
+  flush(frames);flush(frames);
+  draws.length=0;
+  for(let i=0;i<10;i++)viewer.orbitBy(.01);
+  assert.equal(frames.size,1);assert.equal(timers.size,1);assert.equal(draws.length,0);
+  flush(frames);assert.deepEqual(draws,[true]);
+  flush(timers);flush(frames);assert.deepEqual(draws,[true,false]);
+  viewer.setNamedView('top');
   viewer.setFurnitureTool({start:id=>{selected=id;return {};},commit:p=>{point=p;}});
   canvas.send('pointerdown');canvas.send('pointerup');assert.equal(selected,'plant-1');assert.ok(Math.abs(point.x-5)<1e-7&&Math.abs(point.y-4)<1e-7);
   viewer.setFurnitureTool({start:()=>({}),preview:()=>({valid:true,candidate:{...scene.assets[0],rotation:90,width:.8,depth:.8,previewOperation:'rotate'}})});
@@ -389,7 +401,8 @@ test('the default fitted kitchen renders working warm lights and keeps cabinet d
  const upper=meshes('cabinet',{variant:'kitchen-upper',zMeters:1.63,backsplashHeight:.71,underCabinetLight:true});
  const strip=upper.find(mesh=>mesh.userData.demoLight);
  assert.ok(strip.userData.demoLight.intensity>0);
- assert.ok(upper.some(mesh=>mesh.position.z<1.6&&mesh.position.z>.92));
+  const splash=upper.filter(mesh=>mesh.position.z<1.6&&mesh.position.z>.92);
+ assert.equal(splash.length,1);assert.ok(splash[0].material.map.repeat.x>1);
  assert.ok(kitchenModel.toggleKitchenPart(strip));
  assert.equal(strip.userData.demoLight.intensity,0);
  const doors=upper.filter(mesh=>mesh!==strip);

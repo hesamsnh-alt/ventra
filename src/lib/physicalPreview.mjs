@@ -73,6 +73,9 @@ export function createPhysicalPreview(options){
  const nativeSize=renderer.setSize.bind(renderer);
  renderer.setSize=(w,h,style)=>{nativeSize(w,h,style);if(w>0&&h>0&&!renderer.xr.enabled)post?.resize(w,h);};
  renderer.shadowMap.enabled=true;
+ // A directional light's shadow map is independent of the viewer's camera.
+ renderer.shadowMap.autoUpdate=false;
+ renderer.shadowMap.needsUpdate=true;
  function texture(old,color){
   if(!old?.image)return null;
   const cacheKey=old.uuid+':'+color;if(textures.has(cacheKey)){const cached=textures.get(cacheKey);if(!textureSourceResized(cached,old)){syncTextureSource(cached,old);return cached;}cached.dispose();textures.delete(cacheKey);}
@@ -87,6 +90,7 @@ export function createPhysicalPreview(options){
   if(Array.isArray(old))return old.map(material);
   if(old?.materials)return old.materials.map(material);
   if(!old)return new T.MeshStandardMaterial();
+  if(activeMaterials.has(old))return materials.get(old);
   activeMaterials.add(old);
   if(old.map)activeTextures.add(old.map.uuid+':true');
   if(old.bumpMap)activeTextures.add(old.bumpMap.uuid+':false');
@@ -119,15 +123,18 @@ export function createPhysicalPreview(options){
   textiles.apply(old,next);
   return next;
  }
- let lastSource=null,lastCamera=null;
- const surfaces=createDetailedSurfaces(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
- const textiles=createDetailedTextiles(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
- const detailed=createDetailedFurniture(scene,options.sceneData,()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera);});
+ let lastSource=null,lastCamera=null,lastDuringMotion=false;
+ const surfaces=createDetailedSurfaces(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera,lastDuringMotion);});
+ const textiles=createDetailedTextiles(()=>{if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera,lastDuringMotion);});
+ const detailed=createDetailedFurniture(scene,options.sceneData,()=>{
+  renderer.shadowMap.needsUpdate=true;
+  if(lastSource&&lastCamera)renderer.render(lastSource,lastCamera,lastDuringMotion);
+ });
  renderer.readyResources=()=>Promise.all([detailed.ready(),surfaces.ready(),textiles.ready()]);
- renderer.render=(oldScene,oldCamera)=>{
+ renderer.render=(oldScene,oldCamera,duringMotion=false)=>{
   if(oldCamera.isCamera)return nativeRender(oldScene,oldCamera);
   if(renderer.xr.isPresenting){renderer.shadowMap.needsUpdate=true;return;}
-  lastSource=oldScene;lastCamera=oldCamera;
+  lastSource=oldScene;lastCamera=oldCamera;lastDuringMotion=duringMotion;
   oldScene.updateMatrixWorld(true);const active=new Set(),activeGeometry=new Set();activeMaterials=new Set();activeTextures=new Set();relief.begin();
   oldScene.traverse(old=>{
    if(old.userData?.demoLight){
@@ -143,26 +150,46 @@ export function createPhysicalPreview(options){
    }
    if(!old.geometry||!old.material)return;
    active.add(old);activeGeometry.add(old.geometry);let mesh=objects.get(old);
-   if(!mesh){let g=geometries.get(old.geometry);if(!g){g=physicalGeometry(old.geometry);geometries.set(old.geometry,g);}mesh=old.type==='Line'?new (old.mode===1?T.LineSegments:T.Line)(g,new T.LineBasicMaterial({color:old.material.color?.getHex?.()||0x444444})):new T.Mesh(g,material(old.material));mesh.matrixAutoUpdate=false;objects.set(old,mesh);scene.add(mesh);}
-   if(old.geometry.userData?.ventraDynamic){
-    const target=mesh.geometry.attributes.position;
-    target.array.set(old.geometry.attributes.position.array);
-    target.needsUpdate=true;
+   const isNew=!mesh;
+   if(isNew){
+    let g=geometries.get(old.geometry);
+    if(!g){g=physicalGeometry(old.geometry);geometries.set(old.geometry,g);}
+    mesh=old.type==='Line'?new (old.mode===1?T.LineSegments:T.Line)(g,new T.LineBasicMaterial({color:old.material.color?.getHex?.()||0x444444})):new T.Mesh(g,material(old.material));
+    mesh.matrixAutoUpdate=false;
+    objects.set(old,mesh);
+    scene.add(mesh);
    }
-   if(old.type!=='Line')mesh.material=material(old.material);mesh.matrix.fromArray(old.matrixWorld.elements);mesh.matrixWorldNeedsUpdate=true;
+   const positions=old.geometry.attributes?.position;
+   const version=old.geometry.userData?.ventraPositionVersion??positions?.version;
+   const geometryChanged=old.geometry.userData?.ventraDynamic&&
+    (version===undefined||mesh.userData.sourcePositionVersion!==version);
+   if(geometryChanged){
+    const target=mesh.geometry.attributes.position;
+    target.array.set(positions.array);
+    target.needsUpdate=true;
+    mesh.userData.sourcePositionVersion=version;
+   }
+   if(old.type!=='Line'&&!isNew)mesh.material=material(old.material);
+   const moved=isNew||!mesh.matrix.equals(old.matrixWorld);
+   if(moved){mesh.matrix.copy(old.matrixWorld);mesh.matrixWorldNeedsUpdate=true;}
    let visible=true;for(let parent=old;parent;parent=parent.parent)if(!parent.visible){visible=false;break;}
-   mesh.visible=visible;mesh.castShadow=interiorShadowCaster(old,lighting.isInterior());mesh.receiveShadow=old.receiveShadow;
+   const casts=interiorShadowCaster(old,lighting.isInterior());
+   const wasVisible=mesh.userData.sourceVisible;
+   if((casts&&visible||mesh.castShadow&&wasVisible)&&
+    (moved||geometryChanged||wasVisible!==visible||mesh.castShadow!==casts))renderer.shadowMap.needsUpdate=true;
+   mesh.userData.sourceVisible=visible;
+   mesh.visible=visible;mesh.castShadow=casts;mesh.receiveShadow=old.receiveShadow;
   });
   for(const [old,light] of demoLights)if(!active.has(old)){scene.remove(light);demoLights.delete(old);}
-  for(const [old,mesh] of objects)if(!active.has(old)){scene.remove(mesh);if(old.type==='Line')mesh.material.dispose();objects.delete(old);}
+  for(const [old,mesh] of objects)if(!active.has(old)){scene.remove(mesh);if(mesh.castShadow&&mesh.visible)renderer.shadowMap.needsUpdate=true;if(old.type==='Line')mesh.material.dispose();objects.delete(old);}
   for(const [old,g] of geometries)if(!activeGeometry.has(old)){g.dispose();geometries.delete(old);}
   for(const [old,m] of materials)if(!activeMaterials.has(old)){m.dispose();materials.delete(old);}
   for(const [id,t] of textures)if(!activeTextures.has(id)){t.dispose();textures.delete(id);}
   relief.end();
-  detailed.sync(oldScene,objects);
+  if(detailed.sync(oldScene,objects))renderer.shadowMap.needsUpdate=true;
   if(oldScene.background)scene.background=new T.Color().setRGB(oldScene.background.r,oldScene.background.g,oldScene.background.b,T.SRGBColorSpace);
   camera.position.copy(oldCamera.position);camera.quaternion.copy(oldCamera.quaternion);camera.up.copy(oldCamera.up);
-  camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(post&&!renderer.xr.enabled)post.render();else nativeRender(scene,camera);
+  camera.fov=oldCamera.fov;camera.aspect=oldCamera.aspect;camera.near=oldCamera.near;camera.far=oldCamera.far;camera.updateProjectionMatrix();if(post&&!duringMotion&&!renderer.xr.enabled)post.render();else nativeRender(scene,camera);
  };
  let shadowBeforeVR=null;
  const vr=createVRWalkthrough({renderer,scene,sceneData:options.sceneData,draw:nativeRender,onState:state=>{if(state==='starting'){shadowBeforeVR=renderer.shadowMap.autoUpdate;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;}if(state==='idle'&&shadowBeforeVR!==null){renderer.shadowMap.autoUpdate=shadowBeforeVR;shadowBeforeVR=null;}renderer.onVRState?.(state);if(state==='idle'&&lastSource&&lastCamera)renderer.render(lastSource,lastCamera);}});

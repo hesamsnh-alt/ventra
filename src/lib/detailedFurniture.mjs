@@ -32,7 +32,9 @@ function releaseModel(root,includeTextures=true){
 }
 export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFLoader(),resolvePersonalUrl=(...args)=>import('../services/personalAssetService.js').then(m=>m.getPersonalAssetUrl(...args))){
  const assets=new Map((sceneData?.assets||[]).filter(a=>a.id).map(a=>[a.id,a]));
- const cache=new Map(),instances=new Map(),failed=new Set();let disposed=false;
+ const cache=new Map(),instances=new Map(),failed=new Set();
+ const transform=new T.Matrix4();
+ let disposed=false;
  function load(key){
   if(!cache.has(key))cache.set(key,Promise.resolve(key.startsWith('personal:')?resolvePersonalUrl(key.slice(9),sceneData?.projectId):'/realistic-assets/'+key+'/model.gltf').then(url=>loader.loadAsync(url)).then(gltf=>{
    if(disposed){releaseModel(gltf.scene);return null;}refresh();return gltf.scene;
@@ -40,7 +42,8 @@ export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFL
   return cache.get(key);
  }
  function sync(source,mirrors){
-  if(disposed)return;
+  if(disposed)return false;
+  let shadowsChanged=false;
   const groups=new Map();source.traverse(o=>{const id=o.userData?.assetId;if(id&&o.geometry&&assets.has(id)){if(!groups.has(id))groups.set(id,[]);groups.get(id).push(o);}});
   for(const [id,parts] of groups){
    const asset=assets.get(id),key=detailedFurnitureKey(asset);if(!key||failed.has(key))continue;
@@ -77,11 +80,16 @@ export function createDetailedFurniture(scene,sceneData,refresh,loader=new GLTFL
     continue;
    }
    if(instance.pending)continue;
-   instance.root.matrix.copy(new T.Matrix4().fromArray(instance.first.matrixWorld.elements).multiply(instance.inverse).multiply(instance.base));instance.root.matrixWorldNeedsUpdate=true;
-   instance.root.visible=parts.some(o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true;});
+   transform.fromArray(instance.first.matrixWorld.elements).multiply(instance.inverse).multiply(instance.base);
+   const moved=!instance.root.matrix.equals(transform);
+   if(moved){instance.root.matrix.copy(transform);instance.root.matrixWorldNeedsUpdate=true;}
+   const visible=parts.some(o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true;});
+   shadowsChanged ||= instance.root.visible!==visible||visible&&moved;
+   instance.root.visible=visible;
    for(const part of parts){const mirror=mirrors.get(part);if(mirror)mirror.visible=false;}
   }
-  for(const [id,entry] of instances)if(!groups.has(id)&&!entry.pending){scene.remove(entry.root);for(const m of entry.ownMaterials)m.dispose();instances.delete(id);}
+  for(const [id,entry] of instances)if(!groups.has(id)&&!entry.pending){scene.remove(entry.root);for(const m of entry.ownMaterials)m.dispose();instances.delete(id);shadowsChanged=true;}
+  return shadowsChanged;
  }
  return {sync,ready:async()=>{
   let timer;try{await Promise.race([Promise.all([...cache.values()]),new Promise(resolve=>{timer=setTimeout(resolve,15000);})]);}finally{clearTimeout(timer);}

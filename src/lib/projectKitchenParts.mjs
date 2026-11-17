@@ -9,6 +9,7 @@ export function buildProjectKitchenPart({THREE,type,w,d,h,cx,cy,rot,z,embedded,s
  const glass=material(0x1c211c,.19,{metalness:.42});
  let anchor,scale,update=()=>false;
  const actions=new Map();
+ let dirty=true;
  if(type==='sink'){
   const model=buildSink(source,steel,dark);
   anchor=[-.30,1.037,-.0385];
@@ -82,7 +83,7 @@ export function buildProjectKitchenPart({THREE,type,w,d,h,cx,cy,rot,z,embedded,s
     part.userData={demoPart:true};
     group.add(part);
     parts.push([part,start,count]);
-    if(nextAction)registerSceneInteraction([part],nextAction);
+    if(nextAction)registerSceneInteraction([part],()=>{nextAction();dirty=true;});
    }
    if(flat!==original)flat.dispose();
    if(node.parent?.name==='faucet-water'&&original.type==='CylinderGeometry'){
@@ -97,6 +98,7 @@ export function buildProjectKitchenPart({THREE,type,w,d,h,cx,cy,rot,z,embedded,s
       target.needsUpdate=true;
       part.geometry.userData ||= {};
       part.geometry.userData.ventraDynamic=true;
+      part.geometry.userData.ventraPositionVersion=(part.geometry.userData.ventraPositionVersion||0)+1;
      }
     });
    }
@@ -110,7 +112,11 @@ export function buildProjectKitchenPart({THREE,type,w,d,h,cx,cy,rot,z,embedded,s
  for(const child of source.children)copy(child,offset);
  for(const unused of [steel,dark,glass])if(!usedMaterials.has(unused))unused.dispose();
  root.userData={
-  updateDemoPart(time){const moving=update(time);for(const sync of mapped)sync();return moving;},
+  updateDemoPart(time){
+   const moving=update(time);
+   if(dirty||moving){for(const sync of mapped)sync();dirty=false;}
+   return moving;
+  },
   disposeDemoPart(){for(const object of usedGeometries)object.dispose();for(const finish of usedMaterials)finish.dispose();},
  };
  root.userData.updateDemoPart(0);

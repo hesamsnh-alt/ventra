@@ -6003,13 +6003,22 @@ function buildSchematicAssetMeshes({ THREE, asset, palette, roomWidth, roomDepth
         if(fitted&&designVariant==='kitchen-upper'){
           const splash=Number(asset.backsplashHeight)||0;
           if(splash>.05){
-            const grout=new OpaqueMaterial({color:0xa9a29a,shininess:5});
-            const tile=new OpaqueMaterial({color:0xe5ded1,shininess:42,specular:0x605b56});
-            addBox(w,.012,splash,0,d/2-.008,-splash/2,grout);
-            const columns=Math.ceil(w/.23),rows=Math.ceil(splash/.19);
-            for(let row=0;row<rows;row++)for(let column=0;column<columns;column++)
-              addBox(w/columns-.003,.008,splash/rows-.003,((column+.5)/columns-.5)*w,d/2-.016,
-                -splash+(row+.5)*splash/rows,tile);
+            // Tile pattern is one surface rather than a separate draw for each tile.
+            const size=64,pixels=new Uint8Array(size*size*4);
+            for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+              const seam=x===0||y===0,value=seam?168:Math.min(x,y)===1?218:246;
+              const i=(y*size+x)*4;
+              pixels.set([value,value,value,255],i);
+            }
+            const map=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);
+            map.wrapS=map.wrapT=THREE.RepeatWrapping;
+            map.repeat.set(Math.ceil(w/.23),Math.ceil(splash/.19));
+            map.generateMipmaps=true;
+            map.minFilter=THREE.LinearMipmapLinearFilter||THREE.LinearMipMapLinearFilter;
+            map.magFilter=THREE.LinearFilter;
+            map.needsUpdate=true;
+            const tile=new OpaqueMaterial({color:0xe5ded1,map,bumpMap:map,bumpScale:.001,shininess:42,specular:0x605b56});
+            addBox(w,.016,splash,0,d/2-.012,-splash/2,tile);
           }
           const strip=addBox(w*.96,.018,.008,0,-d*.32,-.007,warmDiffuser());
           if(asset.underCabinetLight)kitchenLight([strip],strip,12,2.4);
@@ -7989,16 +7998,31 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     for(const view of gardenViews)view.visible=active;
     renderer.setWalkthroughActive?.(active);
   };
-  let demoFrame = null;
-  const render = () => {
+  let renderFrame = null, qualityTimer = null, moving = false, disposed = false;
+  const draw = (duringMotion = false, capture = false) => {
     let animating = false;
     const now = globalThis.performance?.now() ?? Date.now();
     for (const part of demoParts) animating = part.userData.updateDemoPart(now) || animating;
     camera.lookAt(target);
-    renderer.render(threeScene, camera);
-    if (animating && demoFrame === null && !renderer.isVRActive?.()) {
-      demoFrame = window.requestAnimationFrame(() => { demoFrame = null; render(); });
-    }
+    renderer.render(threeScene, camera, !capture && (duringMotion || animating));
+    if (animating) render();
+  };
+  const render = () => {
+    if (disposed || renderFrame !== null || renderer.isVRActive?.()) return;
+    renderFrame = window.requestAnimationFrame(() => {
+      renderFrame = null;
+      draw(moving);
+    });
+  };
+  const renderMotion = () => {
+    if (disposed) return;
+    moving = true;
+    window.clearTimeout(qualityTimer);
+    qualityTimer = window.setTimeout(() => {
+      moving = false;
+      render();
+    }, 150);
+    render();
   };
 
   const adapter = {
@@ -8095,7 +8119,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     camera.up.set(0,0,1);
     const offset = orbitOffset(camera.position.clone().sub(target), -dx, dy);
     camera.position.set(target.x+offset.x,target.y+offset.y,target.z+offset.z);
-    camera.lookAt(target); render();
+    camera.lookAt(target); renderMotion();
   };
 
   const pan = (dx, dy) => {
@@ -8106,7 +8130,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     const delta = right.multiplyScalar(-dx * distance).add(up.multiplyScalar(dy * distance));
     target.add(delta);
     camera.position.add(delta);
-    render();
+    renderMotion();
   };
 
   const zoomBy = (direction) => {
@@ -8116,7 +8140,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     const nextLength = Math.max(fit * 0.025, Math.min(fit * 20, offset.length() * factor));
     offset.setLength(nextLength);
     camera.position.copy(target).add(offset);
-    render();
+    renderMotion();
   };
 
   const surfaceResource=event=>{if(event.detail?.projectId===projectId)render();};
@@ -8184,7 +8208,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   const pickInteractive = event => rayFor(event)
     ? meshHits().find(hit => !hit.object.userData?.nonSelectable)?.object : null;
   let interiorRequested=false;
-  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render,onTap:event=>{
+  const walker=createWalkthrough({canvas:renderer.domElement,scene:sceneData,camera,target,render:renderMotion,onTap:event=>{
     if(toggleKitchenPart(pickInteractive(event)))render();
   },onExit:()=>{
     enterInterior(false);setInteriorView(interiorRequested);render();window.dispatchEvent(new CustomEvent('ventra:walkthrough-exit',{detail:{projectId}}));
@@ -8198,7 +8222,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   const unbindInputs=bindProjectCameraInputs(renderer.domElement,{
     orbit,pan,getMode:()=>controlMode,home:()=>setNamedView('iso'),
     zoom:factor=>{const offset=camera.position.clone().sub(target),fit=getBoundsInfo().distance;
-      offset.setLength(Math.max(fit*.025,Math.min(fit*20,offset.length()*factor)));camera.position.copy(target).add(offset);render();}
+      offset.setLength(Math.max(fit*.025,Math.min(fit*20,offset.length()*factor)));camera.position.copy(target).add(offset);renderMotion();}
   });
 
   const unbindKitchen = bindKitchenInputs(renderer.domElement, {
@@ -8208,7 +8232,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
   });
 
   const resize = () => {
-    if (!container.isConnected || renderer.isVRActive?.()) return;
+    if (disposed || !container.isConnected || renderer.isVRActive?.()) return;
     const nextWidth = Math.max(1, container.clientWidth || width);
     const nextHeight = Math.max(1, container.clientHeight || height);
     camera.aspect = nextWidth / nextHeight;
@@ -8240,7 +8264,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
       const ratio=renderer.getPixelRatio?.()||1,logical={width:size.width/ratio,height:size.height/ratio};
       const scale=Math.max(1,2048/Math.max(size.width,size.height)),selectedVisible=selectionGroup.visible,wallPointsVisible=wallPointsGroup.visible;selectionGroup.visible=false;wallPointsGroup.visible=false;
       try{
-        if(scale>1){renderer.setPixelRatio(1);renderer.setSize(Math.round(size.width*scale),Math.round(size.height*scale),false);}render();
+        if(scale>1){renderer.setPixelRatio(1);renderer.setSize(Math.round(size.width*scale),Math.round(size.height*scale),false);}draw(false, true);
         const copy=document.createElement('canvas');copy.width=renderer.domElement.width;copy.height=renderer.domElement.height;copy.getContext('2d').drawImage(renderer.domElement,0,0);return copy;
       }finally{if(scale>1){renderer.setPixelRatio(ratio);renderer.setSize(logical.width,logical.height,false);}selectionGroup.visible=selectedVisible;wallPointsGroup.visible=wallPointsVisible;render();}
     },
@@ -8258,8 +8282,10 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
     zoomIn: () => {stopMotion();zoomBy(1);},
     zoomOut: () => {stopMotion();zoomBy(-1);},
     dispose: () => {
+      disposed = true;
       walker.dispose();
-      if (demoFrame !== null) window.cancelAnimationFrame(demoFrame);
+      if (renderFrame !== null) window.cancelAnimationFrame(renderFrame);
+      window.clearTimeout(qualityTimer);
       window.removeEventListener('ventra:surface-resource',surfaceResource);
       clearSelection();clearWallPoints();
       unbindFurniture();
@@ -8267,6 +8293,7 @@ function mountStandaloneSchematicRenderer(container, sceneData, canvasElement, i
       unbindKitchen();
       resizeObserver?.disconnect();
       threeScene.traverse?.((object) => {
+        object.userData?.disposeDemoPart?.();
         try { object.geometry?.dispose?.(); } catch {}
         const materials = surfaceMaterialList(object.material);
         for (const material of materials) {
