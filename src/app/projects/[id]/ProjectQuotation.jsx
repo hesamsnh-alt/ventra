@@ -95,6 +95,11 @@ export default function ProjectQuotation({ projectId }) {
       }
 
       const latest = JSON.parse(raw);
+      if(latest?.calculationReady===false){
+        setEstimate(null);
+        if(!automatic)markError("The estimate needs measured quantities or a positive floor area before a quotation can be prepared.");
+        return false;
+      }
 
       if (!latest || !Number.isFinite(Number(latest.finalTender)) || Number(latest.finalTender) <= 0) {
         setEstimate(null);
@@ -461,7 +466,7 @@ export default function ProjectQuotation({ projectId }) {
         <LocalizedElement as="strong">
           {busyAction
             ? `${busyAction.toUpperCase()}...`
-            : statusMessage || errorMessage || "Quotation ready."}
+            : statusMessage || errorMessage || (canUseQuotation ? "Quotation ready." : "Prepare a valid estimate or add manual quotation items to continue.")}
         </LocalizedElement>
         {lastActionAt && (
           <LocalizedElement as="span" style={{ marginLeft: 12, opacity: 0.75 }}>

@@ -100,7 +100,7 @@ export default function EditProjectPage() {
           name: project.name || "",
 
           client_name:
-            project.client_name || "",
+            project.client_name || project.client || "",
 
           location:
             project.location || "",

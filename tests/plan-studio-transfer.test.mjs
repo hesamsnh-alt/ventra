@@ -12,3 +12,14 @@ test('an in-flight export takes a validated immutable snapshot rather than later
 test('empty and oversize image export fails before storage calls',async()=>{for(const size of [0,101*1024*1024]){const deps=dependencies();deps.exportImage=async()=>({size});await assert.rejects(()=>transferPlanToProject({doc:doc(),projectId:'project-1'},deps));assert.equal(deps.calls.length,0);}});
 test('unconfirmed/missing upload result cannot select an old or undefined document',async()=>{const deps=dependencies();deps.upload=async()=>({document:{}});await assert.rejects(()=>transferPlanToProject({doc:doc(),projectId:'project-1'},deps));assert.ok(!deps.calls.some(c=>c[0]==='select'));});
 test('a mismatched upload response never switches the selected project source',async()=>{const deps=dependencies();deps.upload=async()=>({document:{id:'wrong-drawing',project_id:'other-project'}});await assert.rejects(()=>transferPlanToProject({doc:doc(),projectId:'project-1'},deps),/does not match/);assert.ok(!deps.calls.some(c=>c[0]==='select'));});
+
+test('project JPG transfer requests the authored measurement schedule',async()=>{
+ const deps=dependencies();
+ deps.exportImage=async (snapshot,options)=>{
+  assert.equal(snapshot.entities[0].height,3);
+  assert.deepEqual(options,{forAnalysis:true});
+  return new Blob(['jpeg-fixture'],{type:'image/jpeg'});
+ };
+ await transferPlanToProject({doc:doc(),projectId:'project-1'},deps);
+ assert.equal(deps.calls.filter(c=>c[0]==='upload').length,1);
+});

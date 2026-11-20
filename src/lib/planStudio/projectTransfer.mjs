@@ -9,7 +9,7 @@ export async function transferPlanToProject({doc,projectId,format='jpg'}, {expor
  const url=planProjectURL(projectId),snapshot=validateDocument(doc);
  if(!visibleEntities(snapshot).length)throw Error('Draw a plan before sending it. / ابتدا پلان را ترسیم کن.');
  if(!['jpg','dxf'].includes(format))throw Error('Unsupported drawing format.');
- const blob=format==='jpg'?await exportImage(snapshot):new Blob([exportDXF(snapshot)],{type:'application/dxf'});
+ const blob=format==='jpg'?await exportImage(snapshot,{forAnalysis:true}):new Blob([exportDXF(snapshot)],{type:'application/dxf'});
  if(!blob?.size||blob.size>100*1024*1024)throw Error('Drawing must be non-empty and smaller than 100 MB.');
  const stem=(snapshot.name||'Ventra-plan').replace(/[^\p{L}\p{N}_-]/gu,'-').slice(0,70)||'Ventra-plan';
  const file=new File([blob],`${stem}-PlanStudio-${now()}.${format}`,{type:format==='jpg'?'image/jpeg':'application/dxf'});

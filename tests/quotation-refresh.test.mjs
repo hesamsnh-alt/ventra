@@ -46,3 +46,13 @@ test('a legacy priced estimate cannot refresh from translation-only CAD source',
  assert.equal(h.refresh(),false);assert.match(h.errors[0],/quantity extraction is incomplete/);
  assert.equal(h.estimates.at(-1),null);assert.equal(h.success.length,0);assert.equal(h.writes.length,0);
 });
+
+test('an incomplete preliminary calculation explains the missing inputs without reporting a refresh failure',()=>{
+ const h=harness(JSON.stringify({projectId:'qa-project',calculationReady:false,finalTender:0}));
+ assert.equal(h.refresh({automatic:true}),false);
+ assert.deepEqual(h.errors,[]);
+ assert.equal(h.estimates.at(-1),null);
+ assert.equal(h.refresh(),false);
+ assert.match(h.errors.at(-1),/needs measured quantities/);
+ assert.equal(h.writes.length,0);
+});

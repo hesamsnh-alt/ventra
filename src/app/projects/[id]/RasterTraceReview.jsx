@@ -47,7 +47,7 @@ export default function RasterTraceReview({ report, imageUrl, fileName }) {
         </LocalizedElement>)}
       </LocalizedElement>}
       {report.accepted && report.validation?.omittedOpeningCount > 0 && <LocalizedElement as="p" role="status">{report.validation.omittedOpeningCount} uncertain opening(s) were omitted because their traced jambs did not lie on the stated wall. They were not moved or guessed.</LocalizedElement>}
-      {!report.trace && <LocalizedElement as="p">No complete geometry was received. Download the report below for request timing and error details.</LocalizedElement>}
+      {!report.trace && !report.accepted && !analyzing && <LocalizedElement as="p">No complete geometry was received. Download the report below for request timing and error details.</LocalizedElement>}
       <LocalizedElement as="div" style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "12px 0" }}>
         {report.trace && <><LocalizedElement as="label"><LocalizedElement as="input" type="checkbox" checked={showTrace} onChange={(e) => setShowTrace(e.target.checked)} /> Show extracted geometry</LocalizedElement>
         <LocalizedElement as="label"><LocalizedElement as="input" type="checkbox" checked={showMeasurements} onChange={(e) => setShowMeasurements(e.target.checked)} /> Show dimension reference spans</LocalizedElement></>}

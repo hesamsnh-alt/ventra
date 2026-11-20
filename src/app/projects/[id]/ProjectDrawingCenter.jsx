@@ -5312,7 +5312,7 @@ async function handleApsGeometryExtracted(analysis) {
       effectiveRoomArea <= 0
     ) {
       problems.push(
-        "room areas are not matched to Autodesk geometry"
+        "room areas are not established by the selected drawing; add internal dimensions or confirm the measured geometry"
       );
     }
 

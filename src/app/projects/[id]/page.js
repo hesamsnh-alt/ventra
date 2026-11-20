@@ -357,7 +357,7 @@ export default function ProjectWorkspacePage() {
           </LocalizedElement>
 
           <LocalizedElement as="p">
-            {project.client_name ||
+            {project.client_name || project.client ||
               "Client not set"}
             {" · "}
             {project.location ||
@@ -626,7 +626,7 @@ export default function ProjectWorkspacePage() {
 
               <LocalizedElement as="li">
                 Client:{" "}
-                {project.client_name ||
+                {project.client_name || project.client ||
                   "Not set"}
               </LocalizedElement>
             </LocalizedElement>
