@@ -1,3 +1,4 @@
+import {measureAuthoredPlan} from './authoredTakeoff.mjs';
 import {validateDocument,visibleEntities} from './document.mjs';
 import {exportDXF} from './export.mjs';
 export function planProjectURL(projectId){
@@ -5,7 +6,7 @@ export function planProjectURL(projectId){
  return `/projects/${encodeURIComponent(projectId)}?tab=drawings`;
 }
 // Uses the existing authenticated document upload; never launches analysis or APS.
-export async function transferPlanToProject({doc,projectId,format='jpg'}, {exportImage,upload,selectDocument,selectSource,now=Date.now}){
+export async function transferPlanToProject({doc,projectId,format='jpg'}, {exportImage,upload,selectDocument,selectSource,saveMeasurements,now=Date.now}){
  const url=planProjectURL(projectId),snapshot=validateDocument(doc);
  if(!visibleEntities(snapshot).length)throw Error('Draw a plan before sending it. / ابتدا پلان را ترسیم کن.');
  if(!['jpg','dxf'].includes(format))throw Error('Unsupported drawing format.');
@@ -13,7 +14,16 @@ export async function transferPlanToProject({doc,projectId,format='jpg'}, {expor
  if(!blob?.size||blob.size>100*1024*1024)throw Error('Drawing must be non-empty and smaller than 100 MB.');
  const stem=(snapshot.name||'Ventra-plan').replace(/[^\p{L}\p{N}_-]/gu,'-').slice(0,70)||'Ventra-plan';
  const file=new File([blob],`${stem}-PlanStudio-${now()}.${format}`,{type:format==='jpg'?'image/jpeg':'application/dxf'});
- return saveProjectDrawing({projectId,file,source:format==='jpg'?'schematic':'aps',url},{upload,selectDocument,selectSource});
+ const result=await saveProjectDrawing({projectId,file,source:format==='jpg'?'schematic':'aps',url},{upload,selectDocument,selectSource});
+ if(format==='jpg'&&saveMeasurements){
+  try{
+   const measurements=measureAuthoredPlan(snapshot);
+   if(measurements)await saveMeasurements(projectId,result.document.id,measurements);
+  }catch{
+   result.warning=[result.warning,'Original measurements could not be saved. Image analysis is available.'].filter(Boolean).join(' ');
+  }
+ }
+ return result;
 }
 export const APS_PLAN_FILE_TYPES=['dwg','ifc','rvt'];
 export async function openProjectCadFile({projectId,file}, services){

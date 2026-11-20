@@ -95,6 +95,13 @@ export default function ProjectQuotation({ projectId }) {
       }
 
       const latest = JSON.parse(raw);
+      const source=sourceBoq?.boqSource?.documentId||sourceBoq?.takeoff?.document_id;
+      if(source && (latest?.sourceDocumentId ? latest.sourceDocumentId!==source :
+          latest?.boqSourceUpdatedAt!== (sourceBoq?.updatedAt||null))){
+        setEstimate(null);
+        markError("Open Estimate to calculate the current drawing before preparing its quotation.");
+        return false;
+      }
       if(latest?.calculationReady===false){
         setEstimate(null);
         if(!automatic)markError("The estimate needs measured quantities or a positive floor area before a quotation can be prepared.");
@@ -178,7 +185,10 @@ export default function ProjectQuotation({ projectId }) {
           "Authority fees, design changes, and works not listed in the verified BOQ are excluded."
       );
       setLastSavedDraft(draft);
-      setLineItems(Array.isArray(draft.lineItems) ? draft.lineItems : null);
+      const boq=readJson(`ventra:project-boq:${projectId}`);
+      const source=boq?.boqSource?.documentId||boq?.takeoff?.document_id;
+      const matches=!draft.sourceDocumentId||draft.sourceDocumentId===source;
+      setLineItems(matches && Array.isArray(draft.lineItems) ? draft.lineItems : null);
       setCustomVat(draft.lineItems ? draft.vatPct ?? 5 : null);
     } catch {
       // Old/corrupt draft must not block quotation.
@@ -296,6 +306,7 @@ export default function ProjectQuotation({ projectId }) {
       includedProvisionalCost: Number(estimate?.includedProvisionalCost) || 0,
       estimateUpdatedAt: estimate?.updatedAt || null,
 
+      sourceDocumentId:estimate?.sourceDocumentId||null,
       status,
       updatedAt: new Date().toISOString(),
     };

@@ -36,6 +36,7 @@ import ProjectActivity from "./ProjectActivity";
 import ProjectPhotos from "./ProjectPhotos";
 import ProjectDocuments from "./ProjectDocuments";
 import ProjectBOQ from "./ProjectBOQ";
+import CommercialDrawingGuard from "./CommercialDrawingGuard";
 import ProjectEstimate from "./ProjectEstimate";
 import ProjectQuotation from "./ProjectQuotation";
 import MaterialSelectionPanel from "./MaterialSelectionPanel";
@@ -528,15 +529,11 @@ export default function ProjectWorkspacePage() {
 )}</OriginalText>
 
 {activeTab === "estimate" && (
-  <ProjectEstimate
-    projectId={project.id}
-  />
+  <CommercialDrawingGuard projectId={project.id}><ProjectEstimate projectId={project.id} /></CommercialDrawingGuard>
 )}
 
         {activeTab === "quotation" && (
-          <ProjectQuotation
-            projectId={project.id}
-          />
+          <CommercialDrawingGuard projectId={project.id}><ProjectQuotation projectId={project.id} /></CommercialDrawingGuard>
         )}
 
         {activeTab === "selections" && <MaterialSelectionPanel key={project.id} projectId={project.id}/>}

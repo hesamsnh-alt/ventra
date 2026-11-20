@@ -5,6 +5,7 @@ import {getCurrentUser} from '@/services/authService';
 import {getProjects} from '@/services/projectService';
 import {uploadProjectDocument} from '@/services/documentService';
 import {selectDrawingDocument,saveActiveSource} from '@/lib/schematicStorage.mjs';
+import {indexedTakeoffRecords} from '@/lib/takeoffStorage.mjs';
 import {exportJPG} from '@/lib/planStudio/export.mjs';
 import {openProjectCadFile,transferPlanToProject} from '@/lib/planStudio/projectTransfer.mjs';
 export default function PlanProjectTransfer({doc,fa,cadFile,onCloseCad}){
@@ -12,7 +13,7 @@ export default function PlanProjectTransfer({doc,fa,cadFile,onCloseCad}){
  const sending=useRef(false),latest=useRef(doc);latest.current=doc;
  const t=(en,ps)=>fa?ps:en;
  useEffect(()=>{if(!open)return;let live=true;setLoading(true);setError('');(async()=>{try{const auth=await getCurrentUser();if(auth.error&&auth.error.name!=='AuthSessionMissingError')throw auth.error;if(!live)return;setSignedIn(!!auth.user);if(!auth.user)return;const result=await getProjects();if(result.error)throw result.error;if(!live)return;const rows=result.projects||[];setProjects(rows);const requested=new URLSearchParams(window.location.search).get('project');setProjectId(current=>rows.some(p=>p.id===current)?current:rows.some(p=>p.id===requested)?requested:rows.length===1?rows[0].id:'');}catch(e){if(live)setError(e.message);}finally{if(live)setLoading(false);}})();return()=>{live=false};},[open]);
- async function send(){if(sending.current)return;setError('');setSent(null);if(!projects.some(p=>p.id===projectId)){setError(t('Choose a project.','پروژه را انتخاب کن.'));return;}sending.current=true;setBusy(true);try{const version=latest.current;const services={exportImage:exportJPG,upload:uploadProjectDocument,selectDocument:selectDrawingDocument,selectSource:saveActiveSource};
+ async function send(){if(sending.current)return;setError('');setSent(null);if(!projects.some(p=>p.id===projectId)){setError(t('Choose a project.','پروژه را انتخاب کن.'));return;}sending.current=true;setBusy(true);try{const version=latest.current;const services={exportImage:exportJPG,upload:uploadProjectDocument,selectDocument:selectDrawingDocument,selectSource:saveActiveSource,saveMeasurements:(project,document,result)=>indexedTakeoffRecords.put(`plan-studio:${project}:${document}`,result)};
  const result=cadFile?await openProjectCadFile({projectId,file:cadFile},services):await transferPlanToProject({doc:version,projectId,format},services);setSent({...result,version});}catch(e){setError(e.message);}finally{sending.current=false;setBusy(false);}}
  function close(){setOpen(false);if(cadFile)onCloseCad();}
  return <div className="ps-transfer">

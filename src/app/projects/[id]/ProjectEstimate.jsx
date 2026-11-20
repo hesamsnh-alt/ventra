@@ -146,6 +146,7 @@ export default function ProjectEstimate({ projectId }) {
         method: basis === "benchmark" ? "floor_area_benchmark" : "priced_boq_scope",
         basis, includeProvisional, includedProvisionalCost, coveredBoqCost,
         benchmarkBase, benchmarkDifference, scenarioPct, rangeBasis: "user_scenario_not_confidence_interval",
+        sourceDocumentId:boq?.boqSource?.documentId||boq?.takeoff?.document_id||null,
         boqSourceUpdatedAt: boq?.updatedAt || null, scopeCoverage: "not_confirmed",
         classificationVersion: 3,
         benchmarkBasis: "editable_assumption_not_live_market_rate",

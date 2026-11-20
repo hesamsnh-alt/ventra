@@ -10,7 +10,7 @@ function simple(points){
  return result;
 }
 function key(points){const values=simple(points).map(p=>`${Math.round(p.x/TOL)},${Math.round(p.y/TOL)}`),start=values.indexOf(values.slice().sort()[0]),forward=values.map((_,i)=>values[(start+i)%values.length]).join(';'),backward=values.map((_,i)=>values[(start-i+values.length)%values.length]).join(';');return forward<backward?forward:backward;}
-export function findHatchBoundary(doc,p){
+export function findHatchBoundary(doc,p,{allFaces=false}={}){
  const visible=doc.entities.filter(e=>doc.layers.find(l=>l.id===e.layer)?.visible!==false),source=visible.filter(e=>e.role!=='hatch'&&['line','polyline'].includes(e.type)),lines=source.flatMap(e=>segments(e).map(s=>({...s,sourceId:e.id}))).filter(e=>dist(e.a,e.b)>TOL);
  if(lines.length>MAX_SEGMENTS)throw Error('Too many boundary edges; use a smaller drawing or hide unrelated layers. / برای تشخیص هچ، لایه‌های اضافی را مخفی کن.');
  const cuts=lines.map(e=>[{p:e.a,t:0},{p:e.b,t:1}]);
@@ -41,6 +41,7 @@ export function findHatchBoundary(doc,p){
   const signed=points.reduce((sum,q,i)=>sum+q.x*points[(i+1)%points.length].y-points[(i+1)%points.length].x*q.y,0)/2,face={points,area:Math.abs(signed),sources:[...sources],component:nodes[a].component};
   (signed>0?faces:exteriors).push(face);
  }
+ if(allFaces)return faces;
  const candidates=faces.filter(f=>inside(p,f.points)||(nearest({type:'polyline',points:f.points,closed:true},p)?.distance??Infinity)<=TOL).map(f=>({...f,type:'polyline'}));
  for(const e of visible.filter(e=>e.type==='circle'&&dist(e.center,p)<=e.radius+TOL))candidates.push({type:'circle',entity:e,area:Math.PI*e.radius**2,sources:[e.id],component:null});
  candidates.sort((a,b)=>a.area-b.area);const selected=candidates[0];if(!selected)return null;

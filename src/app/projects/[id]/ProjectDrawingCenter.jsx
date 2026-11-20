@@ -15,7 +15,7 @@ import {applyDesignDefaults} from "@/lib/designDefaults.mjs";
 import DwgUnitConfirmation from "./DwgUnitConfirmation";
 import LocalizedElement, {OriginalText} from "@/app/components/i18n/LocalizedElement";
 
-import {persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
+import {indexedTakeoffRecords,persistTakeoff,readTakeoffSync,clearPersistedTakeoff} from "@/lib/takeoffStorage.mjs";
 import {rememberEngineeringTakeoff} from "@/lib/sceneStyle.mjs";
 import { collectDrawingText } from "@/lib/drawingEvidence.mjs";
 import {commercialFetch} from '@/lib/commercialFetch';
@@ -2501,7 +2501,14 @@ export default function ProjectDrawingCenter({
         if(localPdfRecoveryOnly)setMessage(language==='fa'?'بازمحاسبه از PDF و صفحات ذخیره‌شده؛ بدون درخواست به مدل AI.':'Recalculating original PDF and saved pages without AI model requests.');
         takeoffResultRef.current = null;
         setTakeoffResult(null);
-        const { takeoff, error } =
+        const authored = /-PlanStudio-\d+\.jpg$/i.test(selectedDocument.file_name)
+          ? await indexedTakeoffRecords.get(`plan-studio:${projectId}:${selectedDocument.id}`).catch(()=>null)
+          : null;
+        const { takeoff, error } = authored ? {takeoff:{
+          ...authored, project_id:projectId, document_id:selectedDocument.id,
+          document_name:selectedDocument.file_name, document_type:extension,
+          analyzed_at:new Date().toISOString(),
+        }} :
           await analyzeProjectDrawing({
             projectId,
             document: selectedDocument,
@@ -2603,7 +2610,7 @@ const finalTakeoff = {
 
   wall_length_source:
     originalWallLength > 0
-      ? "ai_analysis"
+      ? authored ? "authored_source" : "ai_analysis"
       : "floor_area_room_estimate",
 
   wall_height_source:
@@ -2611,7 +2618,7 @@ const finalTakeoff = {
 
   wall_area_source:
     originalWallArea > 0
-      ? "ai_analysis"
+      ? authored ? "authored_source" : "ai_analysis"
       : "wall_length_x_default_height",
 };
 
@@ -2646,7 +2653,7 @@ if (extension === "pdf" && ["failed", "pending"].includes(measurementReview?.sta
   setMessage("PDF requests finished. Measured quantities are incomplete.");
   setErrorMessage("Some source quantities are missing, excluded or withheld. Download the PDF report to review the gaps before using the BOQ.");
 } else {
-  setMessage("AI quantity takeoff completed successfully.");
+  setMessage(authored ? "Takeoff measured from the original Plan Studio geometry." : "AI quantity takeoff completed successfully.");
 }
         if(buildImageAfterAnalysis && ["jpg","jpeg","png","webp"].includes(extension)) {
           const scene = await generateImageSchematic3D(selectedDocument,{quiet:false});
